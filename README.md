@@ -16,6 +16,31 @@
 
 公开模型权重已发布到 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。模型卡记录了加载方式、训练口径和限制。
 
+## 市值桶如何接入原版 Kronos
+
+市值桶不是 OHLCVA 之外的第七个连续行情字段，也不是十个分别训练的模型。项目保留原版 tokenizer 的六维输入和归一化方式，在同一个 `Kronos-base` 中增加一个市值类别 Embedding：
+
+```text
+原版：归一化 OHLCVA → Tokenizer → K线 Token + 时间编码 → 12层 Transformer → 预测
+当前：归一化 OHLCVA → Tokenizer → 前10层 Transformer
+                                       + 市值桶 Embedding
+                                     → 后2层 Transformer → 预测
+```
+
+### 数据侧
+
+BaoStock 不提供稳定的历史流通市值字段，因此数据准备阶段使用 `收盘价 × 成交量 ÷ 换手率` 估算流通市值。这个代理值只用于同一交易日的横截面排名，不作为精确财务市值使用。每天将可用股票从小到大划分为十个近似等量分组，`0` 表示最小的约 10%，`9` 表示最大的约 10%。
+
+每个训练样本使用其 90 日观察窗口最后一个交易日对应的桶，不使用预测窗口中的未来市值信息。具体实现见 [`finetune/prepare_a_share.py`](finetune/prepare_a_share.py) 和 [`finetune/dataset.py`](finetune/dataset.py)。
+
+### 模型侧
+
+增训模型增加一张 `11 × 832` 的 Embedding 表：十个有效市值桶加一个未知桶，每个桶对应一个与模型隐藏维度相同的向量。该向量会广播到序列的所有时间步，并在 12 层 Transformer 的第 10 层之后注入，使顶部两层能够针对不同市值风格调整预测。
+
+新增 Embedding 从全零初始化，因此刚加载原始 `Kronos-base` 权重时不会改变原始输出。增训时冻结 tokenizer 和底部十层，只训练市值 Embedding、顶部两层、归一化层、依赖层和输出头。这样可以保留基础模型已经学到的通用 K 线规律，同时让顶部网络学习小盘股与大盘股在波动、流动性和走势持续性方面的差异。实现位于 [`model/kronos.py`](model/kronos.py) 和 [`finetune/train_predictor.py`](finetune/train_predictor.py)。
+
+市值条件解决的是归一化造成的体量信息缺失：两只绝对市值差异很大的股票可能具有相似的归一化 K 线，而桶标签可以让模型区分它们所属的规模风格。当前 `6.082%` 的验证 loss 改善来自“市值条件 + 顶部两层增训”的整体效果；若要单独量化市值桶的贡献，还需要训练一个数据和参数完全相同、但关闭市值条件的消融对照模型。
+
 ## 快速部署
 
 环境要求：Python 3.10+。Apple Silicon 建议安装支持 MPS 的 PyTorch；NVIDIA 机器安装对应 CUDA 版本的 PyTorch；没有加速设备时使用 CPU。
