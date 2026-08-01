@@ -193,9 +193,11 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         resid_dropout_p (float): Dropout probability for residual connections.
         token_dropout_p (float): Dropout probability for token embeddings.
         learn_te (bool): Whether to use learnable temporal embeddings.
+        num_sectors (int): Number of sector IDs; zero disables sector conditioning.
+        num_size_buckets (int): Number of size buckets; zero disables size conditioning.
     """
 
-    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te):
+    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te, num_sectors=0, num_size_buckets=0, context_layer=0):
         super().__init__()
         self.s1_bits = s1_bits
         self.s2_bits = s2_bits
@@ -208,11 +210,18 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         self.attn_dropout_p = attn_dropout_p
         self.resid_dropout_p = resid_dropout_p
         self.token_dropout_p = token_dropout_p
+        self.num_sectors = int(num_sectors)
+        self.num_size_buckets = int(num_size_buckets)
+        self.context_layer = int(context_layer)
+        if not 0 <= self.context_layer <= self.n_layers:
+            raise ValueError(f"context_layer must be in [0, {self.n_layers}], got {self.context_layer}")
 
         self.s1_vocab_size = 2 ** self.s1_bits
         self.token_drop = nn.Dropout(self.token_dropout_p)
         self.embedding = HierarchicalEmbedding(self.s1_bits, self.s2_bits, self.d_model)
         self.time_emb = TemporalEmbedding(self.d_model, self.learn_te)
+        self.sector_emb = nn.Embedding(self.num_sectors + 1, self.d_model) if self.num_sectors > 0 else None
+        self.size_emb = nn.Embedding(self.num_size_buckets + 1, self.d_model) if self.num_size_buckets > 0 else None
         self.transformer = nn.ModuleList([
             TransformerBlock(self.d_model, self.n_heads, self.ff_dim, self.ffn_dropout_p, self.attn_dropout_p, self.resid_dropout_p)
             for _ in range(self.n_layers)
@@ -221,6 +230,12 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         self.dep_layer = DependencyAwareLayer(self.d_model)
         self.head = DualHead(self.s1_bits, self.s2_bits, self.d_model)
         self.apply(self._init_weights)
+        # Start conditioning as a no-op so a pretrained checkpoint retains its
+        # original behavior while the new embeddings learn during fine-tuning.
+        if self.sector_emb is not None:
+            nn.init.zeros_(self.sector_emb.weight)
+        if self.size_emb is not None:
+            nn.init.zeros_(self.size_emb.weight)
 
     def _init_weights(self, module):
 
@@ -236,7 +251,23 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         elif isinstance(module, RMSNorm):
             nn.init.ones_(module.weight)
 
-    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None):
+    def _add_context(self, x, sector_id=None, size_bucket=None):
+        """Add static asset metadata to every timestep in a token sequence."""
+        if sector_id is not None:
+            if self.sector_emb is None:
+                raise ValueError("sector_id was provided but num_sectors is 0")
+            if sector_id.ndim != 1 or sector_id.shape[0] != x.shape[0]:
+                raise ValueError(f"sector_id must have shape [batch], got {tuple(sector_id.shape)}")
+            x = x + self.sector_emb(sector_id.long()).unsqueeze(1)
+        if size_bucket is not None:
+            if self.size_emb is None:
+                raise ValueError("size_bucket was provided but num_size_buckets is 0")
+            if size_bucket.ndim != 1 or size_bucket.shape[0] != x.shape[0]:
+                raise ValueError(f"size_bucket must have shape [batch], got {tuple(size_bucket.shape)}")
+            x = x + self.size_emb(size_bucket.long()).unsqueeze(1)
+        return x
+
+    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None):
         """
         Args:
             s1_ids (torch.Tensor): Input tensor of s1 token IDs. Shape: [batch_size, seq_len]
@@ -255,10 +286,16 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         if stamp is not None:
             time_embedding = self.time_emb(stamp)
             x = x + time_embedding
+        if self.context_layer == 0:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
         x = self.token_drop(x)
 
-        for layer in self.transformer:
+        for layer_idx, layer in enumerate(self.transformer):
+            if self.context_layer > 0 and layer_idx == self.context_layer:
+                x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
             x = layer(x, key_padding_mask=padding_mask)
+        if self.context_layer == self.n_layers:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
 
         x = self.norm(x)
 
@@ -275,7 +312,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         s2_logits = self.head.cond_forward(x2)
         return s1_logits, s2_logits
 
-    def decode_s1(self, s1_ids, s2_ids, stamp=None, padding_mask=None):
+    def decode_s1(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None):
         """
         Decodes only the s1 tokens.
 
@@ -297,10 +334,16 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         if stamp is not None:
             time_embedding = self.time_emb(stamp)
             x = x + time_embedding
+        if self.context_layer == 0:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
         x = self.token_drop(x)
 
-        for layer in self.transformer:
+        for layer_idx, layer in enumerate(self.transformer):
+            if self.context_layer > 0 and layer_idx == self.context_layer:
+                x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
             x = layer(x, key_padding_mask=padding_mask)
+        if self.context_layer == self.n_layers:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
 
         x = self.norm(x)
 
@@ -386,7 +429,7 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
     return x
 
 
-def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False):
+def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, return_samples=False):
     with torch.no_grad():
         x = torch.clip(x, -clip, clip)
 
@@ -394,6 +437,18 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         x = x.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x.size(1), x.size(2)).to(device)
         x_stamp = x_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x_stamp.size(1), x_stamp.size(2)).to(device)
         y_stamp = y_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, y_stamp.size(1), y_stamp.size(2)).to(device)
+
+        def repeat_condition(condition, name):
+            if condition is None:
+                return None
+            if condition.ndim == 0:
+                condition = condition.reshape(1)
+            if condition.ndim != 1:
+                raise ValueError(f"{name} must have shape [batch], got {tuple(condition.shape)}")
+            return condition.unsqueeze(1).repeat(1, sample_count).reshape(-1).to(device).long()
+
+        sector_id = repeat_condition(sector_id, "sector_id")
+        size_bucket = repeat_condition(size_bucket, "size_bucket")
 
         x_token = tokenizer.encode(x, half=True)
         
@@ -433,7 +488,10 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
             context_start = max(0, context_end - max_context)
             current_stamp = full_stamp[:, context_start:context_end, :].contiguous()
 
-            s1_logits, context = model.decode_s1(input_tokens[0], input_tokens[1], current_stamp)
+            s1_logits, context = model.decode_s1(
+                input_tokens[0], input_tokens[1], current_stamp,
+                sector_id=sector_id, size_bucket=size_bucket
+            )
             s1_logits = s1_logits[:, -1, :]
             sample_pre = sample_from_logits(s1_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True)
 
@@ -463,10 +521,8 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         ]
         z = tokenizer.decode(input_tokens, half=True)
         z = z.reshape(-1, sample_count, z.size(1), z.size(2))
-        preds = z.cpu().numpy()
-        preds = np.mean(preds, axis=1)
-
-        return preds
+        samples = z.cpu().numpy()
+        return samples if return_samples else np.mean(samples, axis=1)
 
 
 def calc_time_stamps(x_timestamp):
@@ -505,18 +561,25 @@ class KronosPredictor:
         self.tokenizer = self.tokenizer.to(self.device)
         self.model = self.model.to(self.device)
 
-    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose):
+    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, sector_id=None, size_bucket=None, return_samples=False):
 
         x_tensor = torch.from_numpy(np.array(x).astype(np.float32)).to(self.device)
         x_stamp_tensor = torch.from_numpy(np.array(x_stamp).astype(np.float32)).to(self.device)
         y_stamp_tensor = torch.from_numpy(np.array(y_stamp).astype(np.float32)).to(self.device)
 
+        sector_tensor = None if sector_id is None else torch.as_tensor(sector_id, device=self.device)
+        size_tensor = None if size_bucket is None else torch.as_tensor(size_bucket, device=self.device)
         preds = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
-                                          self.clip, T, top_k, top_p, sample_count, verbose)
-        preds = preds[:, -pred_len:, :]
+                                          self.clip, T, top_k, top_p, sample_count, verbose,
+                                          sector_id=sector_tensor, size_bucket=size_tensor,
+                                          return_samples=return_samples)
+        if return_samples:
+            preds = preds[:, :, -pred_len:, :]
+        else:
+            preds = preds[:, -pred_len:, :]
         return preds
 
-    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True):
+    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, return_samples=False):
 
         if not isinstance(df, pd.DataFrame):
             raise ValueError("Input must be a pandas DataFrame.")
@@ -550,9 +613,15 @@ class KronosPredictor:
         x_stamp = x_stamp[np.newaxis, :]
         y_stamp = y_stamp[np.newaxis, :]
 
-        preds = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose)
+        preds = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose,
+                              sector_id=sector_id, size_bucket=size_bucket,
+                              return_samples=return_samples)
 
         preds = preds.squeeze(0)
+        if return_samples:
+            preds = preds * (x_std[None, None, :] + 1e-5) + x_mean[None, None, :]
+            return preds
+
         preds = preds * (x_std + 1e-5) + x_mean
 
         pred_df = pd.DataFrame(preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp)
@@ -659,4 +728,3 @@ class KronosPredictor:
             pred_dfs.append(pred_df)
 
         return pred_dfs
-

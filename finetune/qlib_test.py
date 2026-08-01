@@ -23,6 +23,7 @@ from qlib.utils.time import Freq
 sys.path.append("../")
 from config import Config
 from model.kronos import Kronos, KronosTokenizer, auto_regressive_inference
+from asset_metadata import AssetMetadata
 
 
 # =================================================================================
@@ -45,6 +46,17 @@ class QlibTestDataset(Dataset):
         self.symbols = list(self.data.keys())
         self.feature_list = config.feature_list
         self.time_feature_list = config.time_feature_list
+        self.use_sector_features = bool(getattr(config, 'use_sector_features', True))
+        self.use_size_features = bool(getattr(config, 'use_size_features', True))
+        self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
+        metadata_path = getattr(config, 'asset_metadata_path', '')
+        if self.has_inline_size and not self.use_sector_features:
+            metadata_path = ''
+        self.asset_metadata = AssetMetadata(
+            metadata_path,
+            getattr(config, 'num_sectors', 0),
+            getattr(config, 'num_size_buckets', 0),
+        )
         self.indices = []
 
         print("Preprocessing and building indices for test dataset...")
@@ -86,7 +98,15 @@ class QlibTestDataset(Dataset):
         x = (x - x_mean) / (x_std + 1e-5)
         x = np.clip(x, -self.config.clip, self.config.clip)
 
-        return torch.from_numpy(x), torch.from_numpy(x_stamp), torch.from_numpy(y_stamp), symbol, timestamp
+        sector_value, size_value = self.asset_metadata.get(symbol, asof=timestamp)
+        if 'size_bucket' in context_df.columns and pd.notna(context_df['size_bucket'].iloc[-1]):
+            size_value = int(context_df['size_bucket'].iloc[-1])
+        return (
+            torch.from_numpy(x), torch.from_numpy(x_stamp), torch.from_numpy(y_stamp),
+            torch.tensor(sector_value, dtype=torch.long),
+            torch.tensor(size_value, dtype=torch.long),
+            symbol, timestamp
+        )
 
 
 # =================================================================================
@@ -209,7 +229,12 @@ def load_models(config: dict) -> tuple[KronosTokenizer, Kronos]:
     device = torch.device(config['device'])
     print(f"Loading models onto device: {device}...")
     tokenizer = KronosTokenizer.from_pretrained(config['tokenizer_path']).to(device).eval()
-    model = Kronos.from_pretrained(config['model_path']).to(device).eval()
+    model_kwargs = {}
+    if 'num_sectors' in config:
+        model_kwargs['num_sectors'] = int(config['num_sectors'])
+    if 'num_size_buckets' in config:
+        model_kwargs['num_size_buckets'] = int(config['num_size_buckets'])
+    model = Kronos.from_pretrained(config['model_path'], **model_kwargs).to(device).eval()
     return tokenizer, model
 
 
@@ -225,7 +250,7 @@ def collate_fn_for_inference(batch):
         A single tuple containing the batched data.
     """
     # Unzip the list of samples into separate lists for each data type
-    x, x_stamp, y_stamp, symbols, timestamps = zip(*batch)
+    x, x_stamp, y_stamp, sector_ids, size_buckets, symbols, timestamps = zip(*batch)
 
     # Stack the tensors to create a batch
     x_batch = torch.stack(x, dim=0)
@@ -233,7 +258,11 @@ def collate_fn_for_inference(batch):
     y_stamp_batch = torch.stack(y_stamp, dim=0)
 
     # Return the strings and timestamps as lists
-    return x_batch, x_stamp_batch, y_stamp_batch, list(symbols), list(timestamps)
+    return (
+        x_batch, x_stamp_batch, y_stamp_batch,
+        torch.stack(sector_ids), torch.stack(size_buckets),
+        list(symbols), list(timestamps)
+    )
 
 
 def generate_predictions(config: dict, test_data: dict) -> dict[str, pd.DataFrame]:
@@ -263,11 +292,13 @@ def generate_predictions(config: dict, test_data: dict) -> dict[str, pd.DataFram
 
     results = defaultdict(list)
     with torch.no_grad():
-        for x, x_stamp, y_stamp, symbols, timestamps in tqdm(loader, desc="Inference"):
+        for x, x_stamp, y_stamp, sector_ids, size_buckets, symbols, timestamps in tqdm(loader, desc="Inference"):
             preds = auto_regressive_inference(
                 tokenizer, model, x.to(device), x_stamp.to(device), y_stamp.to(device),
                 max_context=config['max_context'], pred_len=config['pred_len'], clip=config['clip'],
-                T=config['T'], top_k=config['top_k'], top_p=config['top_p'], sample_count=config['sample_count']
+                T=config['T'], top_k=config['top_k'], top_p=config['top_p'], sample_count=config['sample_count'],
+                sector_id=sector_ids.to(device) if config.get('use_sector_features', True) else None,
+                size_bucket=size_buckets.to(device) if config.get('use_size_features', True) else None
             )
             # You can try commenting on this line to keep the history data
             preds = preds[:, -config['pred_len']:, :]
@@ -302,7 +333,10 @@ def generate_predictions(config: dict, test_data: dict) -> dict[str, pd.DataFram
 def main():
     """Main function to set up config, run inference, and execute backtesting."""
     parser = argparse.ArgumentParser(description="Run Kronos Inference and Backtesting")
-    parser.add_argument("--device", type=str, default="cuda:1", help="Device for inference (e.g., 'cuda:0', 'cpu')")
+    default_device = "cuda:0" if torch.cuda.is_available() else (
+        "mps" if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() else "cpu"
+    )
+    parser.add_argument("--device", type=str, default=default_device, help="Device for inference (e.g., 'cuda:0', 'mps', 'cpu')")
     args = parser.parse_args()
 
     # --- 1. Configuration Setup ---
@@ -324,6 +358,10 @@ def main():
         'top_p': base_config.inference_top_p,
         'sample_count': base_config.inference_sample_count,
         'batch_size': base_config.backtest_batch_size,
+        'num_sectors': base_config.num_sectors,
+        'num_size_buckets': base_config.num_size_buckets,
+        'use_sector_features': base_config.use_sector_features,
+        'use_size_features': base_config.use_size_features,
     }
 
     print("--- Running with Configuration ---")

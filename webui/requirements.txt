@@ -1,7 +1,8 @@
-flask==2.3.3
-flask-cors==4.0.0
-pandas==2.2.2
+flask>=2.3.3
+flask-cors>=4.0.0
+pandas>=2.3.0,<3
 numpy>=1.26.0
-plotly==5.17.0
+plotly>=5.17.0
 torch>=2.1.0
 huggingface_hub==0.33.1
+baostock==0.9.3

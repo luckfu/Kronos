@@ -11,11 +11,11 @@ class Config:
         # =================================================================
         # TODO: Update this path to your Qlib data directory.
         self.qlib_data_path = "~/.qlib/qlib_data/cn_data"
-        self.instrument = 'csi300'
+        self.instrument = 'csi800'
 
         # Overall time range for data loading from Qlib.
-        self.dataset_begin_time = "2011-01-01"
-        self.dataset_end_time = '2025-06-05'
+        self.dataset_begin_time = "2020-01-01"
+        self.dataset_end_time = '2026-12-31'
 
         # Sliding window parameters for creating samples.
         self.lookback_window = 90  # Number of past time steps for input.
@@ -23,40 +23,55 @@ class Config:
         self.max_context = 512  # Maximum context length for the model.
 
         # Features to be used from the raw data.
-        self.feature_list = ['open', 'high', 'low', 'close', 'vol', 'amt']
+        self.feature_list = ['open', 'high', 'low', 'close', 'volume', 'amount']
         # Time-based features to be generated.
         self.time_feature_list = ['minute', 'hour', 'weekday', 'day', 'month']
+
+        # Optional static asset metadata used to condition the predictor.
+        # The metadata CSV should contain: symbol, sector, size_bucket.
+        # Leave empty to run the original model without conditioning.
+        self.asset_metadata_path = os.getenv("KRONOS_METADATA_PATH", "./data/a_share/asset_metadata.csv")
+        self.use_context_features = True
+        self.use_sector_features = False
+        self.use_size_features = True
+        self.num_sectors = 0
+        self.num_size_buckets = 10
 
         # =================================================================
         # Dataset Splitting & Paths
         # =================================================================
         # Note: The validation/test set starts earlier than the training/validation set ends
         # to account for the `lookback_window`.
-        self.train_time_range = ["2011-01-01", "2022-12-31"]
-        self.val_time_range = ["2022-09-01", "2024-06-30"]
-        self.test_time_range = ["2024-04-01", "2025-06-05"]
-        self.backtest_time_range = ["2024-07-01", "2025-06-05"]
+        self.train_time_range = ["2020-01-01", "2025-12-31"]
+        self.val_time_range = ["2026-01-01", "2026-12-31"]
+        self.test_time_range = ["2027-01-01", "2027-12-31"]
+        self.backtest_time_range = ["2026-01-01", "2026-12-31"]
 
         # TODO: Directory to save the processed, pickled datasets.
-        self.dataset_path = "./data/processed_datasets"
+        self.dataset_path = os.getenv("KRONOS_DATASET_PATH", "./data/a_share/processed_datasets")
 
         # =================================================================
         # Training Hyperparameters
         # =================================================================
         self.clip = 5.0  # Clipping value for normalized data to prevent outliers.
 
-        self.epochs = 30
+        self.epochs = int(os.getenv("KRONOS_EPOCHS", "50"))
+        self.early_stopping_patience = 2
         self.log_interval = 100  # Log training status every N batches.
-        self.batch_size = 50  # Batch size per GPU.
+        self.batch_size = 4  # Conservative default for Kronos-base on Apple MPS.
+        self.num_workers = 0
 
         # Number of samples to draw for one "epoch" of training/validation.
         # This is useful for large datasets where a true epoch is too long.
-        self.n_train_iter = 2000 * self.batch_size
-        self.n_val_iter = 400 * self.batch_size
+        self.n_train_iter = 200 * self.batch_size
+        self.n_val_iter = 50 * self.batch_size
 
         # Learning rates for different model components.
         self.tokenizer_learning_rate = 2e-4
-        self.predictor_learning_rate = 4e-5
+        self.predictor_learning_rate = 1e-5
+        self.condition_learning_rate = 1e-3
+        self.trainable_transformer_layers = 2
+        self.context_layer = 10
 
         # Gradient accumulation to simulate a larger batch size.
         self.accumulation_steps = 1
@@ -72,7 +87,7 @@ class Config:
         # =================================================================
         # Experiment Logging & Saving
         # =================================================================
-        self.use_comet = True # Set to False if you don't want to use Comet ML
+        self.use_comet = False # Set to True only when Comet ML is configured
         self.comet_config = {
             # It is highly recommended to load secrets from environment variables
             # for security purposes. Example: os.getenv("COMET_API_KEY")
@@ -87,7 +102,9 @@ class Config:
         # Using a general 'outputs' directory is a common practice.
         self.save_path = "./outputs/models"
         self.tokenizer_save_folder_name = 'finetune_tokenizer_demo'
-        self.predictor_save_folder_name = 'finetune_predictor_demo'
+        self.predictor_save_folder_name = os.getenv(
+            "KRONOS_PREDICTOR_SAVE_FOLDER", "a_share_size_kronos_base"
+        )
         self.backtest_save_folder_name = 'finetune_backtest_demo'
 
         # Path for backtesting results.
@@ -98,8 +115,10 @@ class Config:
         # =================================================================
         # TODO: Update these paths to your pretrained model locations.
         # These can be local paths or Hugging Face Hub model identifiers.
-        self.pretrained_tokenizer_path = "path/to/your/Kronos-Tokenizer-base"
-        self.pretrained_predictor_path = "path/to/your/Kronos-small"
+        self.pretrained_tokenizer_path = "NeoQuasar/Kronos-Tokenizer-base"
+        self.pretrained_predictor_path = os.getenv(
+            "KRONOS_PREDICTOR_PATH", "./Kronos-base"
+        )
 
         # Paths to the fine-tuned models, derived from the save_path.
         # These will be generated automatically during training.

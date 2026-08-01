@@ -3,200 +3,524 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kronos Financial Prediction Web UI</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <title>Kronos A股预测台</title>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
+        :root {
+            --bg: #f3f5f2;
+            --surface: #ffffff;
+            --surface-soft: #f8faf8;
+            --border: #dfe5df;
+            --text: #18221d;
+            --muted: #68766e;
+            --accent: #167451;
+            --accent-dark: #0f5a3e;
+            --accent-soft: #e8f4ee;
+            --danger: #bd3b3b;
+            --warning: #9a6418;
+            --shadow: 0 12px 30px rgba(35, 54, 43, 0.08);
+            --radius: 14px;
+        }
+
         * {
-            margin: 0;
-            padding: 0;
             box-sizing: border-box;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
             min-height: 100vh;
-            color: #333;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
         }
 
-        .container {
-            max-width: 1400px;
+        button,
+        input,
+        textarea {
+            font: inherit;
+        }
+
+        .topbar {
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 max(24px, calc((100vw - 1440px) / 2));
+            background: #17251e;
+            color: #fff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 9px;
+            background: #2b9a6d;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        .brand-copy strong {
+            display: block;
+            font-size: 17px;
+            letter-spacing: 0.01em;
+        }
+
+        .brand-copy span {
+            display: block;
+            margin-top: 2px;
+            color: #aab8b0;
+            font-size: 11px;
+        }
+
+        .runtime-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ced8d2;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #d89a3b;
+            box-shadow: 0 0 0 4px rgba(216, 154, 59, 0.14);
+        }
+
+        .runtime-status.ready .status-dot {
+            background: #56c58a;
+            box-shadow: 0 0 0 4px rgba(86, 197, 138, 0.14);
+        }
+
+        .runtime-status.error .status-dot {
+            background: #eb6a6a;
+            box-shadow: 0 0 0 4px rgba(235, 106, 106, 0.14);
+        }
+
+        .page {
+            max-width: 1440px;
             margin: 0 auto;
+            padding: 28px 24px 40px;
+        }
+
+        .page-heading {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 20px;
+        }
+
+        .page-heading h1 {
+            margin: 0;
+            font-size: 25px;
+            line-height: 1.25;
+            letter-spacing: -0.03em;
+        }
+
+        .page-heading p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .model-caption {
+            color: var(--muted);
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .view-tabs {
+            display: inline-grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px;
+            margin-bottom: 18px;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #e8ece8;
+        }
+
+        .view-tab {
+            min-width: 132px;
+            min-height: 38px;
+            padding: 0 16px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 750;
+        }
+
+        .view-tab.active {
+            background: #fff;
+            color: var(--text);
+            box-shadow: 0 1px 4px rgba(35, 54, 43, 0.1);
+        }
+
+        .view-panel {
+            display: none;
+        }
+
+        .view-panel.active {
+            display: block;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 350px minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .sidebar {
+            display: grid;
+            gap: 14px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .control-card {
             padding: 20px;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            color: white;
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
-        .control-panel {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            height: fit-content;
-        }
-
-        .control-panel h2 {
-            color: #4a5568;
-            margin-bottom: 20px;
-            font-size: 1.5rem;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 10px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #4a5568;
-        }
-
-        .form-group select,
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group select:focus,
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        /* Prediction quality parameter styles */
-        .form-group input[type="range"] {
-            width: 70%;
-            margin-right: 10px;
-        }
-
-        .form-group input[type="number"] {
-            width: 100%;
-        }
-
-        .form-group span {
-            display: inline-block;
-            min-width: 40px;
-            font-weight: 600;
-            color: #667eea;
-        }
-
-        .form-text {
+        .section-label {
+            margin: 0 0 13px;
+            color: var(--muted);
             font-size: 12px;
-            color: #718096;
-            margin-top: 5px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        .stock-input {
             width: 100%;
-            margin-bottom: 10px;
+            height: 48px;
+            padding: 0 14px;
+            border: 1px solid #cbd5ce;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            font-size: 17px;
+            font-weight: 650;
+            letter-spacing: 0.04em;
+            outline: none;
+            transition: border-color 0.18s, box-shadow 0.18s;
         }
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        .stock-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(22, 116, 81, 0.12);
         }
 
-        .btn:disabled {
-            opacity: 0.6;
+        .field-help {
+            min-height: 18px;
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .stock-summary {
+            display: none;
+            margin-top: 18px;
+            padding-top: 17px;
+            border-top: 1px solid var(--border);
+        }
+
+        .stock-summary.visible {
+            display: block;
+        }
+
+        .summary-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .summary-title strong {
+            font-size: 18px;
+        }
+
+        .bucket-pill {
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent-dark);
+            font-size: 11px;
+            font-weight: 750;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .summary-item span {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .summary-item strong {
+            display: block;
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        .plan-list {
+            display: grid;
+            gap: 0;
+            margin: 0 0 18px;
+            padding: 0;
+            list-style: none;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .plan-list li {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 11px 12px;
+            background: var(--surface-soft);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .plan-list li:last-child {
+            border-bottom: 0;
+        }
+
+        .plan-list span {
+            color: var(--muted);
+        }
+
+        .plan-list strong {
+            font-weight: 700;
+        }
+
+        .predict-button {
+            width: 100%;
+            min-height: 48px;
+            padding: 12px 16px;
+            border: 0;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 750;
+            transition: background 0.18s, transform 0.18s;
+        }
+
+        .predict-button:hover:not(:disabled) {
+            background: var(--accent-dark);
+            transform: translateY(-1px);
+        }
+
+        .predict-button:disabled {
             cursor: not-allowed;
-            transform: none;
+            background: #aeb9b2;
         }
 
-        .btn-secondary {
-            background: linear-gradient(135deg, #718096 0%, #4a5568 100%);
+        .predict-button.loading {
+            position: relative;
+            color: transparent;
         }
 
-        .btn-success {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        .predict-button.loading::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 18px;
+            height: 18px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid rgba(255, 255, 255, 0.42);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
         }
 
-        .btn-warning {
-            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
-        .status {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: 500;
+        .predict-note {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.55;
         }
 
-        .status.success {
-            background: #c6f6d5;
-            color: #22543d;
-            border: 1px solid #9ae6b4;
+        .result-card {
+            min-height: 720px;
+            overflow: hidden;
         }
 
-        .status.error {
-            background: #fed7d7;
-            color: #742a2a;
-            border: 1px solid #feb2b2;
+        .result-toolbar {
+            min-height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
         }
 
-        .status.info {
-            background: #bee3f8;
-            color: #2a4365;
-            border: 1px solid #90cdf4;
+        .result-title h2 {
+            margin: 0;
+            font-size: 17px;
+            letter-spacing: -0.01em;
         }
 
-        .status.warning {
-            background: #fef5e7;
-            color: #744210;
-            border: 1px solid #fbd38d;
+        .result-title p {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: 12px;
         }
 
-        .chart-container {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        .source-badge {
+            padding: 6px 10px;
+            border: 1px solid #cfe0d7;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent-dark);
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
         }
 
-        .chart-container h2 {
-            color: #4a5568;
-            margin-bottom: 20px;
-            font-size: 1.5rem;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 10px;
+        .source-badge.fallback {
+            border-color: #ead5ad;
+            background: #fff5df;
+            color: var(--warning);
+        }
+
+        .empty-state {
+            min-height: 650px;
+            display: grid;
+            place-items: center;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .empty-panel {
+            max-width: 420px;
+        }
+
+        .empty-visual {
+            width: 72px;
+            height: 72px;
+            display: grid;
+            place-items: center;
+            margin: 0 auto 18px;
+            border: 1px solid #cfe0d7;
+            border-radius: 20px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 25px;
+            font-weight: 800;
+        }
+
+        .empty-panel h3 {
+            margin: 0 0 8px;
+            font-size: 18px;
+        }
+
+        .empty-panel p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .result-content {
+            display: none;
+        }
+
+        .result-content.visible {
+            display: block;
+        }
+
+        .metric-strip {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 16px 20px 0;
+        }
+
+        .metric {
+            min-width: 0;
+            padding: 13px 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-soft);
+        }
+
+        .metric span {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .metric strong {
+            display: block;
+            overflow: hidden;
+            font-size: 17px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .metric strong.positive {
+            color: #c33d3d;
+        }
+
+        .metric strong.negative {
+            color: #14805a;
+        }
+
+        td.positive {
+            color: #c33d3d;
+            font-weight: 700;
+        }
+
+        td.negative {
+            color: #14805a;
+            font-weight: 700;
+        }
+
+        #ranking-leader {
+            overflow: visible;
+            font-size: 14px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+            white-space: normal;
         }
 
         #chart {
@@ -204,1034 +528,928 @@
             height: 600px;
         }
 
-        .data-info {
-            background: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
+        .table-section {
+            padding: 0 20px 20px;
         }
 
-        .data-info h3 {
-            color: #4a5568;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
+        .table-section h3 {
+            margin: 4px 0 12px;
+            font-size: 14px;
         }
 
-        .data-info p {
-            margin-bottom: 5px;
-            color: #4a5568;
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 10px;
         }
 
-        .data-info strong {
-            color: #2d3748;
-        }
-
-        /* Time window selector styles */
-        .time-window-container {
-            background: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .time-window-container h3 {
-            color: #4a5568;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-        }
-
-        .time-window-info {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        .time-window-slider {
-            position: relative;
-            margin-bottom: 10px;
-        }
-
-        .slider-track {
-            position: relative;
-            height: 6px;
-            background: #e2e8f0;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-
-        .slider-handle {
-            position: absolute;
-            top: -7px;
-            width: 20px;
-            height: 20px;
-            background: #667eea;
-            border-radius: 50%;
-            cursor: grab;
-            border: 2px solid white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            z-index: 10;
-        }
-
-        .slider-handle:hover {
-            background: #5a67d8;
-            transform: scale(1.1);
-        }
-
-        .slider-handle:active {
-            cursor: grabbing;
-        }
-
-        .slider-selection {
-            position: absolute;
-            height: 6px;
-            background: #48bb78;
-            border-radius: 3px;
-            top: 0;
-        }
-
-        .slider-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 11px;
-            color: #999;
-            margin-top: 5px;
-        }
-
-        /* Comparison analysis styles */
-        .comparison-section {
-            background: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .comparison-section h3 {
-            color: #4a5568;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-        }
-
-        .comparison-info {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-
-        .comparison-table {
+        table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-        }
-
-        .comparison-table th,
-        .comparison-table td {
-            border: 1px solid #e2e8f0;
-            padding: 8px;
-            text-align: center;
             font-size: 12px;
         }
 
-        .comparison-table th {
-            background: #f7fafc;
-            font-weight: 600;
+        th,
+        td {
+            padding: 10px 12px;
+            text-align: right;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--border);
         }
 
-        .error-stats {
+        th:first-child,
+        td:first-child {
+            text-align: left;
+        }
+
+        th {
+            background: var(--surface-soft);
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .pool-card {
+            overflow: hidden;
+        }
+
+        .pool-header {
+            min-height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pool-header h2 {
+            margin: 0;
+            font-size: 17px;
+        }
+
+        .pool-header p {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .pool-controls {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            align-items: end;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-soft);
         }
 
-        .error-stat {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 15px;
+        .pool-field label {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 8px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .pool-input {
+            width: 100%;
+            min-height: 72px;
+            resize: vertical;
+            padding: 10px 12px;
+            border: 1px solid #cbd5ce;
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text);
+            line-height: 1.55;
+            outline: none;
+        }
+
+        .pool-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(22, 116, 81, 0.12);
+        }
+
+        .pool-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .secondary-button,
+        .rank-button,
+        .inspect-button {
+            min-height: 40px;
+            padding: 0 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .secondary-button {
+            border: 1px solid #cbd5ce;
+            background: #fff;
+            color: var(--text);
+        }
+
+        .rank-button {
+            min-width: 112px;
+            border: 1px solid var(--accent);
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .secondary-button:disabled,
+        .rank-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.48;
+        }
+
+        .rank-button.loading {
+            color: transparent;
+            position: relative;
+        }
+
+        .rank-button.loading::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            margin: -9px 0 0 -9px;
+            border: 2px solid rgba(255, 255, 255, 0.42);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .pool-empty {
+            padding: 36px 20px;
+            color: var(--muted);
             text-align: center;
+            font-size: 13px;
         }
 
-        .error-stat h4 {
-            color: #4a5568;
-            margin-bottom: 5px;
-            font-size: 0.9rem;
-        }
-
-        .error-stat .value {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #667eea;
-        }
-
-        .error-stat .unit {
-            font-size: 0.8rem;
-            color: #718096;
-        }
-
-        .loading {
+        .ranking-content {
             display: none;
-            text-align: center;
-            padding: 20px;
         }
 
-        .loading.show {
+        .ranking-content.visible {
             display: block;
         }
 
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+        .ranking-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 16px 20px;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .rank-number {
+            font-weight: 800;
+            color: var(--muted);
         }
 
-        .model-info {
-            background: #e6fffa;
-            border: 1px solid #81e6d9;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
+        .signal-pill {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
+            padding: 0 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 750;
         }
 
-        .model-info h3 {
-            color: #234e52;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
+        .signal-pill.candidate {
+            background: #fbe7e7;
+            color: #b63434;
         }
 
-        .model-info p {
-            margin-bottom: 5px;
-            color: #234e52;
+        .signal-pill.positive {
+            background: #fff1e6;
+            color: #a9511e;
         }
 
-        .model-info strong {
-            color: #0f2027;
+        .signal-pill.negative {
+            background: #e8f4ee;
+            color: #166847;
         }
 
-        @media (max-width: 768px) {
-            .main-content {
+        .inspect-button {
+            min-height: 30px;
+            padding: 0 10px;
+            border: 1px solid #cbd5ce;
+            background: #fff;
+            color: var(--accent-dark);
+            font-size: 11px;
+        }
+
+        .toast {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 20;
+            max-width: 420px;
+            padding: 12px 15px;
+            border: 1px solid #cfe0d7;
+            border-radius: 10px;
+            background: #173c2d;
+            color: #fff;
+            box-shadow: var(--shadow);
+            font-size: 13px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(10px);
+            transition: opacity 0.2s, transform 0.2s;
+        }
+
+        .toast.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.error {
+            border-color: #e5bcbc;
+            background: #742b2b;
+        }
+
+        @media (max-width: 980px) {
+            .workspace {
                 grid-template-columns: 1fr;
             }
-            
-            .container {
-                padding: 10px;
+
+            .sidebar {
+                grid-template-columns: 1fr 1fr;
             }
-            
-            .header h1 {
-                font-size: 2rem;
+
+            .result-card {
+                min-height: 620px;
+            }
+
+            .pool-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 680px) {
+            .topbar {
+                padding: 0 16px;
+            }
+
+            .brand-copy span,
+            .model-caption {
+                display: none;
+            }
+
+            .page {
+                padding: 20px 14px 30px;
+            }
+
+            .page-heading {
+                align-items: start;
+            }
+
+            .view-tabs {
+                display: grid;
+                width: 100%;
+            }
+
+            .view-tab {
+                min-width: 0;
+                padding: 0 10px;
+            }
+
+            .sidebar {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-strip {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .ranking-metrics {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .pool-actions {
+                flex-wrap: wrap;
+            }
+
+            .result-toolbar {
+                align-items: start;
+                flex-direction: column;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 Kronos Financial Prediction Web UI</h1>
-            <p>AI-based financial K-line data prediction analysis platform</p>
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-mark">K</div>
+            <div class="brand-copy">
+                <strong>Kronos A股预测台</strong>
+                <span>市值分层条件预测</span>
+            </div>
+        </div>
+        <div id="runtime-status" class="runtime-status">
+            <span class="status-dot"></span>
+            <span id="runtime-text">模型启动中</span>
+        </div>
+    </header>
+
+    <main class="page">
+        <div class="page-heading">
+            <div>
+                <h1>A股预测工作台</h1>
+                <p id="view-subtitle">单股预测</p>
+            </div>
+            <div class="model-caption">A-share Size Kronos-base · 102.3M</div>
         </div>
 
-        <div class="main-content">
-            <div class="control-panel">
-                <h2>🎯 Control Panel</h2>
+        <div class="view-tabs" role="tablist" aria-label="工作视图">
+            <button
+                id="single-tab"
+                class="view-tab active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="single-view"
+                data-view="single"
+            >单股预测</button>
+            <button
+                id="pool-tab"
+                class="view-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="pool-view"
+                data-view="pool"
+            >股票池排序</button>
+        </div>
 
-                <!-- Model Selection -->
-                <div class="form-group">
-                    <label for="model-select">Select Model:</label>
-                    <select id="model-select">
-                        <option value="">Please load available models first</option>
-                    </select>
-                    <small class="form-text">Select the Kronos model to use</small>
-                </div>
+        <section id="single-view" class="view-panel active" role="tabpanel" aria-labelledby="single-tab">
+          <div class="workspace">
+            <aside class="sidebar">
+                <section class="card control-card">
+                    <p class="section-label">股票</p>
+                    <input
+                        id="stock-input"
+                        class="stock-input"
+                        list="stock-options"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        placeholder="输入代码，如 300395"
+                        aria-label="股票代码"
+                    >
+                    <datalist id="stock-options"></datalist>
+                    <div id="stock-help" class="field-help">输入六位代码后按 Enter 确认</div>
 
-                <!-- Device Selection -->
-                <div class="form-group">
-                    <label for="device-select">Select Device:</label>
-                    <select id="device-select">
-                        <option value="cpu">CPU</option>
-                        <option value="cuda">CUDA (NVIDIA GPU)</option>
-                        <option value="mps">MPS (Apple Silicon)</option>
-                    </select>
-                    <small class="form-text">Select the device to run the model on</small>
-                </div>
-
-                <!-- Model Status -->
-                <div id="model-status" class="status info" style="display: none;">
-                    Model status information
-                </div>
-
-                <!-- Load Model Button -->
-                <button id="load-model-btn" class="btn btn-secondary">
-                    🔄 Load Model
-                </button>
-
-                <hr style="margin: 20px 0; border: 1px solid #e2e8f0;">
-
-                <!-- Data File Selection -->
-                <div class="form-group">
-                    <label for="data-file-select">Select Data File:</label>
-                    <select id="data-file-select">
-                        <option value="">Please load data file list first</option>
-                    </select>
-                    <small class="form-text">Select K-line data file from data directory</small>
-                </div>
-
-                <button id="load-data-btn" class="btn btn-secondary">
-                    📁 Load Data
-                </button>
-
-                <!-- Data Information Display -->
-                <div id="data-info" class="data-info" style="display: none;">
-                    <h3>📊 Data Information</h3>
-                    <p><strong>Rows:</strong> <span id="data-rows">-</span></p>
-                    <p><strong>Columns:</strong> <span id="data-cols">-</span></p>
-                    <p><strong>Time Range:</strong> <span id="data-time-range">-</span></p>
-                    <p><strong>Price Range:</strong> <span id="data-price-range">-</span></p>
-                    <p><strong>Time Frequency:</strong> <span id="data-timeframe">-</span></p>
-                    <p><strong>Prediction Columns:</strong> <span id="data-prediction-cols">-</span></p>
-                </div>
-
-                <hr style="margin: 20px 0; border: 1px solid #e2e8f0;">
-
-                <!-- Time Window Selector -->
-                <div class="time-window-container">
-                    <h3>⏰ Time Window Selection</h3>
-                    <div class="time-window-info">
-                        <span id="window-start">Start: --</span>
-                        <span id="window-end">End: --</span>
-                        <span id="window-size">Window Size: 400+120=520 data points</span>
-                    </div>
-                    
-                    <div class="time-window-slider">
-                        <div class="slider-track">
-                            <div class="slider-handle start-handle" id="start-handle"></div>
-                            <div class="slider-selection" id="slider-selection"></div>
-                            <div class="slider-handle end-handle" id="end-handle"></div>
+                    <div id="stock-summary" class="stock-summary">
+                        <div class="summary-title">
+                            <strong id="summary-symbol">—</strong>
+                            <span id="summary-bucket" class="bucket-pill">市值层 —</span>
                         </div>
-                        <div class="slider-labels">
-                            <span id="min-label">Earliest</span>
-                            <span id="max-label">Latest</span>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <span>本地数据截止</span>
+                                <strong id="summary-date">—</strong>
+                            </div>
+                            <div class="summary-item">
+                                <span>最新收盘</span>
+                                <strong id="summary-close">—</strong>
+                            </div>
+                            <div class="summary-item">
+                                <span>历史交易日</span>
+                                <strong id="summary-rows">—</strong>
+                            </div>
+                            <div class="summary-item">
+                                <span>数据频率</span>
+                                <strong>日线</strong>
+                            </div>
                         </div>
                     </div>
-                    
-                    <small class="form-text">Drag slider to select time window position for 520 data points, green area represents fixed 400+120 data point range</small>
-                </div>
+                </section>
 
-                <!-- Prediction Parameters -->
-                <div class="form-group">
-                    <label for="lookback">Lookback Window Size:</label>
-                    <input type="number" id="lookback" value="400" readonly>
-                    <small class="form-text">Fixed at 400 data points</small>
-                </div>
+                <section class="card control-card">
+                    <p class="section-label">执行方案</p>
+                    <ul class="plan-list">
+                        <li><span>行情上下文</span><strong>最新 90 日</strong></li>
+                        <li><span>预测区间</span><strong>未来 10 日</strong></li>
+                        <li><span>生成路径</span><strong>20 条</strong></li>
+                        <li><span>预测区间</span><strong>P10 – P90</strong></li>
+                        <li><span>市值条件</span><strong>最新可用分层</strong></li>
+                    </ul>
+                    <button id="predict-button" class="predict-button" disabled>刷新最新数据并预测</button>
+                    <p class="predict-note">优先使用 BaoStock 最新复权日线；查询失败时会明确回退到本地缓存。</p>
+                </section>
+            </aside>
 
-                <div class="form-group">
-                    <label for="pred-len">Prediction Length:</label>
-                    <input type="number" id="pred-len" value="120" readonly>
-                    <small class="form-text">Fixed at 120 data points</small>
-                </div>
-
-                <!-- Prediction Quality Parameters -->
-                <div class="form-group">
-                    <label for="temperature">Prediction Temperature (T):</label>
-                    <input type="range" id="temperature" value="1.0" min="0.1" max="2.0" step="0.1">
-                    <span id="temperature-value">1.0</span>
-                    <small class="form-text">Controls prediction randomness, higher values make predictions more diverse, lower values make predictions more conservative</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="top-p">Nucleus Sampling Parameter (top_p):</label>
-                    <input type="range" id="top-p" value="0.9" min="0.1" max="1.0" step="0.1">
-                    <span id="top-p-value">0.9</span>
-                    <small class="form-text">Controls prediction diversity, higher values consider broader probability distributions</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="sample-count">Sample Count:</label>
-                    <input type="number" id="sample-count" value="1" min="1" max="5" step="1">
-                    <small class="form-text">Generate multiple prediction samples to improve quality (recommended 1-3)</small>
-                </div>
-
-                <button id="predict-btn" class="btn btn-success" disabled>
-                    🔮 Start Prediction
-                </button>
-
-                <!-- Loading Status -->
-                <div id="loading" class="loading">
-                    <div class="spinner"></div>
-                    <p>Processing, please wait...</p>
-                </div>
-            </div>
-
-            <div class="chart-container">
-                <h2>📈 Prediction Results Chart</h2>
-                <div id="chart"></div>
-                
-                <!-- Comparison Analysis -->
-                <div id="comparison-section" class="comparison-section" style="display: none;">
-                    <h3>📊 Prediction vs Actual Data Comparison</h3>
-                    <div id="comparison-info" class="comparison-info">
-                        <p><strong>Prediction Type:</strong> <span id="prediction-type">-</span></p>
-                        <p><strong>Comparison Data:</strong> <span id="comparison-data">-</span></p>
+            <section class="card result-card">
+                <div class="result-toolbar">
+                    <div class="result-title">
+                        <h2 id="result-heading">预测结果</h2>
+                        <p id="result-subtitle">等待选择股票</p>
                     </div>
-                    
-                    <div class="error-stats">
-                        <div class="error-stat">
-                            <h4>Mean Absolute Error</h4>
-                            <div class="value" id="mae">-</div>
-                            <div class="unit">Price Units</div>
+                    <span id="source-badge" class="source-badge" style="display: none;">BaoStock 最新日线</span>
+                </div>
+
+                <div id="empty-state" class="empty-state">
+                    <div class="empty-panel">
+                        <div class="empty-visual">10D</div>
+                        <h3>选择一只股票开始预测</h3>
+                        <p>输入代码并确认后，系统会在点击预测时刷新最新行情，使用最近 90 个交易日生成未来 10 个交易日的 K 线。</p>
+                    </div>
+                </div>
+
+                <div id="result-content" class="result-content">
+                    <div class="metric-strip">
+                        <div class="metric">
+                            <span>最新收盘</span>
+                            <strong id="metric-latest">—</strong>
                         </div>
-                        <div class="error-stat">
-                            <h4>Root Mean Square Error</h4>
-                            <div class="value" id="rmse">-</div>
-                            <div class="unit">Price Units</div>
+                        <div class="metric">
+                            <span>预测末日中位数</span>
+                            <strong id="metric-final">—</strong>
                         </div>
-                        <div class="error-stat">
-                            <h4>Mean Absolute Percentage Error</h4>
-                            <div class="value" id="mape">-</div>
-                            <div class="unit">%</div>
+                        <div class="metric">
+                            <span>预测区间涨跌</span>
+                            <strong id="metric-change">—</strong>
+                        </div>
+                        <div class="metric">
+                            <span>末日 80% 区间</span>
+                            <strong id="metric-range">—</strong>
                         </div>
                     </div>
-                    
-                    <div class="error-details">
-                        <h4>Detailed Comparison Data:</h4>
-                        <div style="max-height: 300px; overflow-y: auto;">
-                            <table class="comparison-table">
+                    <div id="chart"></div>
+                    <div class="table-section">
+                        <h3>未来交易日明细</h3>
+                        <div class="table-wrap">
+                            <table>
                                 <thead>
                                     <tr>
-                                        <th>Time</th>
-                                        <th>Actual Open</th>
-                                        <th>Predicted Open</th>
-                                        <th>Actual High</th>
-                                        <th>Predicted High</th>
-                                        <th>Actual Low</th>
-                                        <th>Predicted Low</th>
-                                        <th>Actual Close</th>
-                                        <th>Predicted Close</th>
+                                        <th>交易日</th>
+                                        <th>开盘</th>
+                                        <th>最高</th>
+                                        <th>最低</th>
+                                        <th>均值收盘</th>
+                                        <th>P10–P90 收盘区间</th>
+                                        <th>成交量</th>
                                     </tr>
                                 </thead>
-                                <tbody id="comparison-tbody">
-                                </tbody>
+                                <tbody id="forecast-body"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="pool-view" class="view-panel" role="tabpanel" aria-labelledby="pool-tab">
+          <section class="card pool-card">
+            <div class="pool-header">
+                <div>
+                    <h2>自选股票池排序</h2>
+                    <p id="pool-subtitle">等待股票池</p>
+                </div>
+                <span class="source-badge">未来 10 日</span>
             </div>
-        </div>
-    </div>
+            <div class="pool-controls">
+                <div class="pool-field">
+                    <label for="pool-input">
+                        <span>股票池</span>
+                        <span id="pool-count">0 / 64</span>
+                    </label>
+                    <textarea
+                        id="pool-input"
+                        class="pool-input"
+                        placeholder="300395, 600519, 000001"
+                        aria-label="自选股票池"
+                    ></textarea>
+                </div>
+                <div class="pool-actions">
+                    <button id="add-current-button" class="secondary-button" disabled>加入当前股票</button>
+                    <button id="rank-button" class="rank-button" disabled>生成排名</button>
+                </div>
+            </div>
+            <div id="pool-empty" class="pool-empty">尚无排序结果</div>
+            <div id="ranking-content" class="ranking-content">
+                <div class="ranking-metrics">
+                    <div class="metric">
+                        <span>共同数据日期</span>
+                        <strong id="ranking-date">—</strong>
+                    </div>
+                    <div class="metric">
+                        <span>股票池</span>
+                        <strong id="ranking-size">—</strong>
+                    </div>
+                    <div class="metric">
+                        <span>正预测数量</span>
+                        <strong id="ranking-positive">—</strong>
+                    </div>
+                    <div class="metric">
+                        <span>排名第一</span>
+                        <strong id="ranking-leader">—</strong>
+                    </div>
+                </div>
+                <div class="table-section">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>股票</th>
+                                    <th>市值层</th>
+                                    <th>最新收盘</th>
+                                    <th>预测末日中位数</th>
+                                    <th>预测收益</th>
+                                    <th>上涨路径</th>
+                                    <th>信号</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ranking-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+          </section>
+        </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
 
     <script>
-        // Global variables
-        let currentDataFile = null;
-        let currentDataInfo = null;
-        let availableModels = [];
-        let modelLoaded = false;
+        const state = {
+            modelReady: false,
+            symbol: null,
+            dataInfo: null,
+            symbolCount: 0,
+            rankingLoading: false,
+        };
 
-        // Initialize after page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
-        });
+        const stockInput = document.getElementById('stock-input');
+        const predictButton = document.getElementById('predict-button');
+        const poolInput = document.getElementById('pool-input');
+        const rankButton = document.getElementById('rank-button');
+        const addCurrentButton = document.getElementById('add-current-button');
+        const viewTabs = Array.from(document.querySelectorAll('.view-tab'));
 
-        // Initialize application
-        async function initializeApp() {
-            console.log('🚀 Initializing Kronos Web UI...');
-            
-            // Load available models
-            await loadAvailableModels();
-            
-            // Load data file list
-            await loadDataFiles();
-            
-            // Set up event listeners
-            setupEventListeners();
-            
-            // Initialize time slider
-            initializeTimeSlider();
-            
-            console.log('✅ Application initialization completed');
+        document.addEventListener('DOMContentLoaded', initialize);
+
+        async function initialize() {
+            setupEvents();
+            await Promise.all([loadModel(), loadSymbols()]);
         }
 
-        // Load available models
-        async function loadAvailableModels() {
-            try {
-                const response = await axios.get('/api/available-models');
-                if (response.data.model_available) {
-                    availableModels = response.data.models;
-                    populateModelSelect();
-                    console.log('✅ Available models loaded successfully:', availableModels);
-                } else {
-                    console.warn('⚠️ Kronos model library not available');
-                    showStatus('warning', 'Kronos model library not available, will use simulated prediction');
+        function setupEvents() {
+            stockInput.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    confirmStock();
                 }
-            } catch (error) {
-                console.error('❌ Failed to load available models:', error);
-                showStatus('error', 'Failed to load available models');
-            }
-        }
-
-        // Populate model selection dropdown
-        function populateModelSelect() {
-            const modelSelect = document.getElementById('model-select');
-            modelSelect.innerHTML = '<option value="">Please select model</option>';
-            
-            Object.entries(availableModels).forEach(([key, model]) => {
-                const option = document.createElement('option');
-                option.value = key;
-                option.textContent = `${model.name} (${model.params}) - ${model.description}`;
-                modelSelect.appendChild(option);
+            });
+            stockInput.addEventListener('change', () => {
+                if (stockInput.value.trim()) confirmStock();
+            });
+            predictButton.addEventListener('click', runPrediction);
+            poolInput.addEventListener('input', syncPoolActions);
+            rankButton.addEventListener('click', runPortfolioRanking);
+            addCurrentButton.addEventListener('click', addCurrentStockToPool);
+            viewTabs.forEach(tab => {
+                tab.addEventListener('click', () => switchView(tab.dataset.view));
+                tab.addEventListener('keydown', event => {
+                    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+                    event.preventDefault();
+                    switchView(tab.dataset.view === 'single' ? 'pool' : 'single', true);
+                });
             });
         }
 
-        // Load model
+        function switchView(viewName, focusTab = false) {
+            const labels = {single: '单股预测', pool: '股票池排序'};
+            viewTabs.forEach(tab => {
+                const active = tab.dataset.view === viewName;
+                tab.classList.toggle('active', active);
+                tab.setAttribute('aria-selected', String(active));
+                tab.tabIndex = active ? 0 : -1;
+                if (active && focusTab) tab.focus();
+            });
+            document.getElementById('single-view').classList.toggle('active', viewName === 'single');
+            document.getElementById('pool-view').classList.toggle('active', viewName === 'pool');
+            document.getElementById('view-subtitle').textContent = labels[viewName];
+        }
+
         async function loadModel() {
-            const modelKey = document.getElementById('model-select').value;
-            const device = document.getElementById('device-select').value;
-            
-            if (!modelKey) {
-                showStatus('error', 'Please select a model to load');
-                return;
-            }
-            
+            setRuntime('loading', '模型启动中');
             try {
-                showLoading(true);
-                document.getElementById('load-model-btn').disabled = true;
-                
-                const response = await axios.post('/api/load-model', {
-                    model_key: modelKey,
-                    device: device
-                });
-                
-                if (response.data.success) {
-                    modelLoaded = true;
-                    showStatus('success', response.data.message);
-                    updateModelStatus();
-                    document.getElementById('predict-btn').disabled = false;
-                    console.log('✅ Model loaded successfully:', response.data.model_info);
-                } else {
-                    showStatus('error', response.data.error);
-                }
+                const response = await axios.post('/api/load-model', {});
+                state.modelReady = true;
+                const device = response.data.model_info.device.toUpperCase();
+                setRuntime('ready', `${device} · 模型就绪`);
+                syncPredictButton();
+                syncPoolActions();
             } catch (error) {
-                console.error('❌ Model loading failed:', error);
-                showStatus('error', `Model loading failed: ${error.response?.data?.error || error.message}`);
-            } finally {
-                showLoading(false);
-                document.getElementById('load-model-btn').disabled = false;
+                state.modelReady = false;
+                setRuntime('error', '模型加载失败');
+                showToast(error.response?.data?.error || error.message, true);
             }
         }
 
-        // Update model status
-        async function updateModelStatus() {
+        async function loadSymbols() {
             try {
-                const response = await axios.get('/api/model-status');
-                const status = response.data;
-                
-                if (status.loaded) {
-                    showStatus('success', `Model loaded: ${status.current_model.name} on ${status.current_model.device}`);
-                } else if (status.available) {
-                    showStatus('info', 'Model available but not loaded');
-                } else {
-                    showStatus('warning', 'Model library not available');
-                }
-            } catch (error) {
-                console.error('❌ Failed to get model status:', error);
-            }
-        }
-
-        // Load data file list
-        async function loadDataFiles() {
-            try {
-                const response = await axios.get('/api/data-files');
-                const dataFiles = response.data;
-                
-                const dataFileSelect = document.getElementById('data-file-select');
-                dataFileSelect.innerHTML = '<option value="">Please select data file</option>';
-                
-                dataFiles.forEach(file => {
+                const response = await axios.get('/api/a-share/symbols');
+                const options = document.getElementById('stock-options');
+                options.innerHTML = '';
+                response.data.symbols.forEach(item => {
                     const option = document.createElement('option');
-                    option.value = file.path;
-                    option.textContent = `${file.name} (${file.size})`;
-                    dataFileSelect.appendChild(option);
+                    option.value = item.symbol.replace(/^\w+\./, '');
+                    option.label = `${item.symbol} · 市值层 ${item.size_bucket}`;
+                    options.appendChild(option);
                 });
-                
-                console.log('✅ Data file list loaded successfully:', dataFiles);
+                state.symbolCount = response.data.count;
+                document.getElementById('stock-help').textContent = `${state.symbolCount} 只股票可用，输入后按 Enter 确认`;
             } catch (error) {
-                console.error('❌ Failed to load data file list:', error);
-                showStatus('error', 'Failed to load data file list');
+                document.getElementById('stock-help').textContent = '股票列表加载失败，可直接输入六位代码';
             }
         }
 
-        // Load data file
-        async function loadData() {
-            const filePath = document.getElementById('data-file-select').value;
-            
-            if (!filePath) {
-                showStatus('error', 'Please select a data file to load');
-                return;
-            }
-            
+        async function confirmStock() {
+            const value = stockInput.value.trim();
+            if (!value) return;
+
+            stockInput.disabled = true;
+            document.getElementById('stock-help').textContent = '正在确认股票…';
             try {
-                showLoading(true);
-                document.getElementById('load-data-btn').disabled = true;
-                
-                const response = await axios.post('/api/load-data', {
-                    file_path: filePath
+                const response = await axios.post('/api/load-data', {symbol: value});
+                const info = response.data.data_info;
+                state.symbol = info.symbol;
+                state.dataInfo = info;
+                stockInput.value = info.symbol.replace(/^\w+\./, '');
+                renderStockSummary(info);
+                document.getElementById('stock-help').textContent = `${info.symbol} 已确认；点击预测时将刷新最新行情`;
+                document.getElementById('result-subtitle').textContent = `${info.symbol} · 等待预测`;
+                syncPredictButton();
+                syncPoolActions();
+            } catch (error) {
+                state.symbol = null;
+                state.dataInfo = null;
+                document.getElementById('stock-summary').classList.remove('visible');
+                document.getElementById('stock-help').textContent = error.response?.data?.error || '股票确认失败';
+                syncPredictButton();
+                syncPoolActions();
+                showToast(error.response?.data?.error || error.message, true);
+            } finally {
+                stockInput.disabled = false;
+            }
+        }
+
+        function renderStockSummary(info) {
+            document.getElementById('stock-summary').classList.add('visible');
+            document.getElementById('summary-symbol').textContent = info.symbol;
+            document.getElementById('summary-bucket').textContent = `市值层 ${info.size_bucket} / 9`;
+            document.getElementById('summary-date').textContent = formatDate(info.end_date);
+            document.getElementById('summary-close').textContent = formatPrice(info.latest_close);
+            document.getElementById('summary-rows').textContent = info.rows.toLocaleString('zh-CN');
+        }
+
+        async function runPrediction() {
+            if (!state.symbol || !state.modelReady) return;
+
+            setPredicting(true);
+            document.getElementById('result-heading').textContent = `${state.symbol} 正在预测`;
+            document.getElementById('result-subtitle').textContent = '刷新最新行情并生成未来交易日…';
+            try {
+                const response = await axios.post('/api/predict', {
+                    symbol: state.symbol,
+                    sample_count: 20,
+                    temperature: 0.6,
+                    top_p: 0.9,
                 });
-                
-                if (response.data.success) {
-                    currentDataFile = filePath;
-                    currentDataInfo = response.data.data_info;
-                    showDataInfo(response.data.data_info);
-                    showStatus('success', response.data.message);
-                    
-                    // Update prediction button status
-                    if (modelLoaded) {
-                        document.getElementById('predict-btn').disabled = false;
-                    }
-                    
-                    console.log('✅ Data loaded successfully:', response.data.data_info);
-                } else {
-                    showStatus('error', response.data.error);
-                }
+                renderPrediction(response.data);
+                showToast(response.data.message);
             } catch (error) {
-                console.error('❌ Data loading failed:', error);
-                showStatus('error', `Data loading failed: ${error.response?.data?.error || error.message}`);
+                document.getElementById('result-heading').textContent = '预测失败';
+                document.getElementById('result-subtitle').textContent = error.response?.data?.error || error.message;
+                showToast(error.response?.data?.error || error.message, true);
             } finally {
-                showLoading(false);
-                document.getElementById('load-data-btn').disabled = false;
+                setPredicting(false);
             }
         }
 
-        // Display data information
-        function showDataInfo(dataInfo) {
-            document.getElementById('data-info').style.display = 'block';
-            document.getElementById('data-rows').textContent = dataInfo.rows;
-            document.getElementById('data-cols').textContent = dataInfo.columns.length;
-            document.getElementById('data-time-range').textContent = `${dataInfo.start_date} to ${dataInfo.end_date}`;
-            document.getElementById('data-price-range').textContent = `${dataInfo.price_range.min.toFixed(4)} - ${dataInfo.price_range.max.toFixed(4)}`;
-            document.getElementById('data-timeframe').textContent = dataInfo.timeframe;
-            document.getElementById('data-prediction-cols').textContent = dataInfo.prediction_columns.join(', ');
-            
-            // Initialize time window slider
-            initializeTimeWindowSlider(dataInfo);
-        }
+        function renderPrediction(result) {
+            const predictions = result.prediction_results;
+            const finalPrediction = predictions[predictions.length - 1];
+            const changePct = (finalPrediction.close_p50 / result.latest_close - 1) * 100;
 
-                    // Time window slider related variables
-        let sliderData = null;
-        let isDragging = false;
-        let currentHandle = null;
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('result-content').classList.add('visible');
+            document.getElementById('result-heading').textContent = `${result.symbol} 未来 ${result.pred_len} 日预测`;
+            document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · 市值层 ${result.size_bucket} · ${result.interval.sample_count} 条路径`;
 
-        // Initialize time window slider
-        function initializeTimeSlider() {
-            // Set up slider event listeners
-            setupSliderEventListeners();
-        }
+            const sourceBadge = document.getElementById('source-badge');
+            sourceBadge.style.display = 'inline-flex';
+            sourceBadge.classList.toggle('fallback', result.data_source !== 'baostock');
+            sourceBadge.textContent = result.data_source === 'baostock' ? 'BaoStock 最新日线' : '本地缓存回退';
 
-        // Set up slider event listeners
-        function setupSliderEventListeners() {
-            const startHandle = document.getElementById('start-handle');
-            const endHandle = document.getElementById('end-handle');
-            const track = document.querySelector('.slider-track');
-            
-            // Start dragging
-            startHandle.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                currentHandle = 'start';
-                e.preventDefault();
-            });
-            
-            endHandle.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                currentHandle = 'end';
-                e.preventDefault();
-            });
-            
-            // Dragging
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                
-                const rect = track.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = Math.max(0, Math.min(1, x / rect.width));
-                
-                if (currentHandle === 'start') {
-                    updateStartHandle(percentage);
-                } else if (currentHandle === 'end') {
-                    updateEndHandle(percentage);
-                }
-                
-                updateSliderFromHandles();
-            });
-            
-            // End dragging
-            document.addEventListener('mouseup', () => {
-                isDragging = false;
-                currentHandle = null;
-            });
-            
-            // Click track to set position directly
-            track.addEventListener('click', (e) => {
-                const rect = track.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const percentage = Math.max(0, Math.min(1, x / rect.width));
-                
-                // Determine which handle is closer to the click position
-                const startHandle = document.getElementById('start-handle');
-                const endHandle = document.getElementById('end-handle');
-                const startRect = startHandle.getBoundingClientRect();
-                const endRect = endHandle.getBoundingClientRect();
-                
-                if (Math.abs(x - (startRect.left - rect.left)) < Math.abs(x - (endRect.left - rect.left))) {
-                    updateStartHandle(percentage);
-                } else {
-                    updateEndHandle(percentage);
-                }
-                
-                updateSliderFromHandles();
-            });
-        }
+            document.getElementById('metric-latest').textContent = formatPrice(result.latest_close);
+            document.getElementById('metric-final').textContent = formatPrice(finalPrediction.close_p50);
+            const changeElement = document.getElementById('metric-change');
+            changeElement.textContent = `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`;
+            changeElement.className = changePct >= 0 ? 'positive' : 'negative';
+            document.getElementById('metric-range').textContent = `${formatPrice(finalPrediction.close_p10)} – ${formatPrice(finalPrediction.close_p90)}`;
 
-        // Update start handle position
-        function updateStartHandle(percentage) {
-            const startHandle = document.getElementById('start-handle');
-            const selection = document.getElementById('slider-selection');
-            
-            // Fixed window size of 520 data points
-            const windowSize = 520;
-            const totalRows = sliderData ? sliderData.totalRows : 1000;
-            const windowPercentage = windowSize / totalRows;
-            
-            // Ensure start handle doesn't cause window to exceed data range
-            if (percentage + windowPercentage > 1) {
-                percentage = 1 - windowPercentage;
-            }
-            
-            startHandle.style.left = (percentage * 100) + '%';
-            selection.style.left = (percentage * 100) + '%';
-            selection.style.width = (windowPercentage * 100) + '%';
-            
-            // Automatically adjust end handle position to maintain fixed window size
-            const endHandle = document.getElementById('end-handle');
-            endHandle.style.left = ((percentage + windowPercentage) * 100) + '%';
-        }
-
-        // Update end handle position
-        function updateEndHandle(percentage) {
-            const endHandle = document.getElementById('end-handle');
-            const selection = document.getElementById('slider-selection');
-            
-            // Fixed window size of 520 data points
-            const windowSize = 520;
-            const totalRows = sliderData ? sliderData.totalRows : 1000;
-            const windowPercentage = windowSize / totalRows;
-            
-            // Ensure end handle doesn't cause window to exceed data range
-            if (percentage - windowPercentage < 0) {
-                percentage = windowPercentage;
-            }
-            
-            endHandle.style.left = (percentage * 100) + '%';
-            selection.style.left = ((percentage - windowPercentage) * 100) + '%';
-            selection.style.width = (windowPercentage * 100) + '%';
-            
-            // Automatically adjust start handle position to maintain fixed window size
-            const startHandle = document.getElementById('start-handle');
-            startHandle.style.left = ((percentage - windowPercentage) * 100) + '%';
-        }
-
-        // Update slider display based on handle positions
-        function updateSliderFromHandles() {
-            const startHandle = document.getElementById('start-handle');
-            const endHandle = document.getElementById('end-handle');
-            
-            const startPercentage = parseFloat(startHandle.style.left) / 100;
-            const endPercentage = parseFloat(endHandle.style.left) / 100;
-            
-            if (!sliderData) return;
-            
-            // Calculate selected time range
-            const totalTime = sliderData.endDate.getTime() - sliderData.startDate.getTime();
-            const startTime = sliderData.startDate.getTime() + (totalTime * startPercentage);
-            const endTime = sliderData.startDate.getTime() + (totalTime * endPercentage);
-            
-            const startDate = new Date(startTime);
-            const endDate = new Date(endTime);
-            
-            // Update display information
-            document.getElementById('window-start').textContent = `Start: ${startDate.toLocaleDateString()}`;
-            document.getElementById('window-end').textContent = `End: ${endDate.toLocaleDateString()}`;
-            
-            // Display fixed window size
-            document.getElementById('window-size').textContent = `Window Size: 400 + 120 = 520 data points (fixed)`;
-            
-            // Input field values remain fixed
-            document.getElementById('lookback').value = 400;
-            document.getElementById('pred-len').value = 120;
-        }
-
-        // Update slider based on input fields
-        function updateSliderFromInputs() {
-            if (!sliderData) return;
-            
-            // Fixed window size: 400 + 120 = 520 data points
-            const lookback = 400;
-            const predLen = 120;
-            const windowSize = lookback + predLen; // Fixed at 520
-            
-            // Calculate slider position
-            const totalRows = sliderData.totalRows;
-            
-            if (windowSize > totalRows) {
-                // If window size exceeds total data amount, show error
-                showStatus('error', `Insufficient data, need at least ${windowSize} data points, currently only ${totalRows} available`);
-                return;
-            }
-            
-            // Calculate slider position (default select first half of data)
-            const startPercentage = 0.1; // Start from 10%
-            const endPercentage = startPercentage + (windowSize / totalRows);
-            
-            // Update handle positions
-            updateStartHandle(startPercentage);
-            updateEndHandle(endPercentage);
-            
-            // Update display information
-            updateSliderFromHandles();
-        }
-
-        // Initialize time window slider
-        function initializeTimeWindowSlider(dataInfo) {
-            sliderData = {
-                startDate: new Date(dataInfo.start_date),
-                endDate: new Date(dataInfo.end_date),
-                totalRows: dataInfo.rows,
-                timeframe: dataInfo.timeframe
-            };
-            
-            // Set slider labels
-            document.getElementById('min-label').textContent = dataInfo.start_date.split('T')[0];
-            document.getElementById('max-label').textContent = dataInfo.end_date.split('T')[0];
-            
-            // Initialize slider position
-            updateSliderFromInputs();
-        }
-
-        // Start prediction
-        async function startPrediction() {
-            if (!currentDataFile) {
-                showStatus('error', 'Please load data file first');
-                return;
-            }
-            
-            if (!modelLoaded) {
-                showStatus('error', 'Please load model first');
-                return;
-            }
-            
-            try {
-                showLoading(true);
-                document.getElementById('predict-btn').disabled = true;
-                
-                const lookback = parseInt(document.getElementById('lookback').value);
-                const predLen = parseInt(document.getElementById('pred-len').value);
-                
-                // Get selected time range from time window slider
-                const startHandle = document.getElementById('start-handle');
-                const startPercentage = parseFloat(startHandle.style.left) / 100;
-                
-                if (!sliderData) {
-                    showStatus('error', 'Time window slider not initialized');
-                    return;
-                }
-                
-                // Calculate selected time range
-                const totalTime = sliderData.endDate.getTime() - sliderData.startDate.getTime();
-                const startTime = sliderData.startDate.getTime() + (totalTime * startPercentage);
-                const startDate = new Date(startTime);
-                
-                // Get prediction quality parameters
-                const temperature = parseFloat(document.getElementById('temperature').value);
-                const topP = parseFloat(document.getElementById('top-p').value);
-                const sampleCount = parseInt(document.getElementById('sample-count').value);
-                
-                let predictionParams = {
-                    file_path: currentDataFile,
-                    lookback: lookback,
-                    pred_len: predLen,
-                    start_date: startDate.toISOString().slice(0, 16), // Format as YYYY-MM-DDTHH:MM
-                    temperature: temperature,
-                    top_p: topP,
-                    sample_count: sampleCount
-                };
-                
-                console.log('🚀 Starting prediction, parameters:', predictionParams);
-                
-                const response = await axios.post('/api/predict', predictionParams);
-                
-                if (response.data.success) {
-                    // Display prediction results
-                    displayPredictionResult(response.data);
-                    showStatus('success', response.data.message);
-                } else {
-                    showStatus('error', response.data.error);
-                }
-            } catch (error) {
-                console.error('❌ Prediction failed:', error);
-                showStatus('error', `Prediction failed: ${error.response?.data?.error || error.message}`);
-            } finally {
-                showLoading(false);
-                document.getElementById('predict-btn').disabled = false;
-            }
-        }
-
-        // Display prediction results
-        function displayPredictionResult(result) {
-            // Display chart
             const chartData = JSON.parse(result.chart);
-            Plotly.newPlot('chart', chartData.data, chartData.layout);
-            
-            // Display comparison analysis (if actual data exists)
-            if (result.has_comparison) {
-                displayComparisonAnalysis(result);
-            } else {
-                document.getElementById('comparison-section').style.display = 'none';
-            }
-        }
+            chartData.layout.height = 600;
+            chartData.layout.margin = {l: 62, r: 26, t: 52, b: 48};
+            chartData.layout.paper_bgcolor = '#ffffff';
+            chartData.layout.plot_bgcolor = '#ffffff';
+            chartData.layout.font = {family: 'Inter, PingFang SC, sans-serif', color: '#4c5a52', size: 11};
+            chartData.layout.title = null;
+            chartData.layout.legend = {orientation: 'h', x: 0, y: 1.08};
+            Plotly.react('chart', chartData.data, chartData.layout, {responsive: true, displaylogo: false});
 
-        // Display comparison analysis
-        function displayComparisonAnalysis(result) {
-            document.getElementById('comparison-section').style.display = 'block';
-            
-            // Update comparison information
-            document.getElementById('prediction-type').textContent = result.prediction_type;
-            document.getElementById('comparison-data').textContent = `${result.actual_data.length} actual data points`;
-            
-            // Calculate error statistics
-            const errorStats = getPredictionQuality(result.prediction_results, result.actual_data);
-            
-            // Display error statistics
-            document.getElementById('mae').textContent = errorStats.mae.toFixed(4);
-            document.getElementById('rmse').textContent = errorStats.rmse.toFixed(4);
-            document.getElementById('mape').textContent = errorStats.mape.toFixed(2);
-            
-            // Fill comparison table
-            fillComparisonTable(result.prediction_results, result.actual_data);
-        }
-
-        // Calculate prediction quality metrics
-        function getPredictionQuality(predictions, actuals) {
-            if (!predictions || !actuals || predictions.length === 0 || actuals.length === 0) {
-                return { mae: 0, rmse: 0, mape: 0 };
-            }
-            
-            const minLen = Math.min(predictions.length, actuals.length);
-            let mae = 0, rmse = 0, mape = 0;
-            
-            for (let i = 0; i < minLen; i++) {
-                const pred = predictions[i];
-                const act = actuals[i];
-                
-                // Use closing price to calculate errors
-                const error = Math.abs(pred.close - act.close);
-                const percentError = (error / act.close) * 100;
-                
-                mae += error;
-                rmse += error * error;
-                mape += percentError;
-            }
-            
-            mae /= minLen;
-            rmse = Math.sqrt(rmse / minLen);
-            mape /= minLen;
-            
-            return { mae, rmse, mape };
-        }
-
-                    // Fill comparison table
-        function fillComparisonTable(predictions, actuals) {
-            const tbody = document.getElementById('comparison-tbody');
-            tbody.innerHTML = '';
-            
-            const minLen = Math.min(predictions.length, actuals.length);
-            
-            for (let i = 0; i < minLen; i++) {
-                const pred = predictions[i];
-                const act = actuals[i];
-                
+            const tableBody = document.getElementById('forecast-body');
+            tableBody.innerHTML = '';
+            predictions.forEach(item => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${new Date(pred.timestamp).toLocaleString()}</td>
-                    <td>${act.open.toFixed(4)}</td>
-                    <td>${pred.open.toFixed(4)}</td>
-                    <td>${act.high.toFixed(4)}</td>
-                    <td>${pred.high.toFixed(4)}</td>
-                    <td>${act.low.toFixed(4)}</td>
-                    <td>${pred.low.toFixed(4)}</td>
-                    <td>${act.close.toFixed(4)}</td>
-                    <td>${pred.close.toFixed(4)}</td>
+                    <td>${formatDate(item.timestamp)}</td>
+                    <td>${formatPrice(item.open)}</td>
+                    <td>${formatPrice(item.high)}</td>
+                    <td>${formatPrice(item.low)}</td>
+                    <td>${formatPrice(item.close)}</td>
+                    <td>${formatPrice(item.close_p10)} – ${formatPrice(item.close_p90)}</td>
+                    <td>${formatVolume(item.volume)}</td>
                 `;
-                tbody.appendChild(row);
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById('summary-date').textContent = formatDate(result.latest_data_date);
+            document.getElementById('summary-close').textContent = formatPrice(result.latest_close);
+            document.getElementById('summary-bucket').textContent = `市值层 ${result.size_bucket} / 9`;
+
+            if (result.refresh_error) {
+                showToast(`实时行情不可用，已回退本地缓存：${result.refresh_error}`, true);
             }
         }
 
-        // Set up event listeners
-        function setupEventListeners() {
-            // Load model button
-            document.getElementById('load-model-btn').addEventListener('click', loadModel);
-            
-            // Load data button
-            document.getElementById('load-data-btn').addEventListener('click', loadData);
-            
-            // Prediction button
-            document.getElementById('predict-btn').addEventListener('click', startPrediction);
-            
-            // Prediction quality parameter sliders
-            document.getElementById('temperature').addEventListener('input', function() {
-                document.getElementById('temperature-value').textContent = this.value;
-            });
-            
-            document.getElementById('top-p').addEventListener('input', function() {
-                document.getElementById('top-p-value').textContent = this.value;
-            });
-            
-            // Update slider when lookback window size changes
-            document.getElementById('lookback').addEventListener('input', updateSliderFromInputs);
-            document.getElementById('pred-len').addEventListener('input', updateSliderFromInputs);
+        function syncPredictButton() {
+            predictButton.disabled = !(state.modelReady && state.symbol);
         }
 
-        // Display status information
-        function showStatus(type, message) {
-            const statusDiv = document.getElementById('model-status');
-            statusDiv.className = `status ${type}`;
-            statusDiv.textContent = message;
-            statusDiv.style.display = 'block';
-            
-            // Auto-hide
-            setTimeout(() => {
-                statusDiv.style.display = 'none';
+        function parsePoolSymbols() {
+            const symbols = poolInput.value
+                .split(/[\s,，;；]+/)
+                .map(value => value.trim())
+                .filter(Boolean);
+            return [...new Set(symbols)];
+        }
+
+        function syncPoolActions() {
+            const symbols = parsePoolSymbols();
+            document.getElementById('pool-count').textContent = `${symbols.length} / 64`;
+            addCurrentButton.disabled = !state.symbol || state.rankingLoading;
+            rankButton.disabled = !state.modelReady
+                || state.rankingLoading
+                || symbols.length < 2
+                || symbols.length > 64;
+        }
+
+        function addCurrentStockToPool() {
+            if (!state.symbol) return;
+            const code = state.symbol.replace(/^\w+\./, '');
+            const symbols = parsePoolSymbols();
+            if (!symbols.includes(code)) symbols.push(code);
+            poolInput.value = symbols.join(', ');
+            syncPoolActions();
+        }
+
+        async function runPortfolioRanking() {
+            const symbols = parsePoolSymbols();
+            if (symbols.length < 2 || symbols.length > 64 || !state.modelReady) return;
+
+            state.rankingLoading = true;
+            rankButton.classList.add('loading');
+            document.getElementById('pool-subtitle').textContent = `正在比较 ${symbols.length} 只股票`;
+            syncPoolActions();
+            try {
+                const response = await axios.post('/api/a-share/rankings', {
+                    symbols,
+                    sample_count: 3,
+                });
+                renderPortfolioRanking(response.data);
+                showToast(response.data.message);
+            } catch (error) {
+                document.getElementById('pool-subtitle').textContent = '排序失败';
+                showToast(error.response?.data?.error || error.message, true);
+            } finally {
+                state.rankingLoading = false;
+                rankButton.classList.remove('loading');
+                syncPoolActions();
+            }
+        }
+
+        function renderPortfolioRanking(result) {
+            const rankings = result.rankings;
+            const positiveCount = rankings.filter(item => item.predicted_return_p50 > 0).length;
+            const leader = rankings[0];
+            document.getElementById('pool-subtitle').textContent = `数据 ${formatDate(result.as_of_date)} · 预测至 ${formatDate(result.forecast_end)} · ${result.sample_count} 条路径中位数`;
+            document.getElementById('pool-empty').style.display = 'none';
+            document.getElementById('ranking-content').classList.add('visible');
+            document.getElementById('ranking-date').textContent = formatDate(result.as_of_date);
+            document.getElementById('ranking-size').textContent = `${result.universe_size} 只`;
+            document.getElementById('ranking-positive').textContent = `${positiveCount} 只`;
+            document.getElementById('ranking-leader').textContent = `${leader.symbol.replace(/^\w+\./, '')} · ${formatPct(leader.predicted_return_p50)}`;
+
+            const labels = {
+                candidate: 'Top 8',
+                positive: '正预测',
+                negative: '负预测',
+            };
+            const body = document.getElementById('ranking-body');
+            body.innerHTML = '';
+            rankings.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><span class="rank-number">${item.rank}</span></td>
+                    <td>${item.symbol}</td>
+                    <td>${item.size_bucket} / 9</td>
+                    <td>${formatPrice(item.latest_close)}</td>
+                    <td>${formatPrice(item.predicted_close_p50)}</td>
+                    <td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${formatPct(item.predicted_return_p50)}</td>
+                    <td>${Math.round(item.positive_path_rate * 100)}%</td>
+                    <td><span class="signal-pill ${item.signal}">${labels[item.signal]}</span></td>
+                    <td><button class="inspect-button" data-symbol="${item.symbol}">单股预测</button></td>
+                `;
+                row.querySelector('.inspect-button').addEventListener('click', () => {
+                    selectRankedSymbol(item.symbol);
+                });
+                body.appendChild(row);
+            });
+        }
+
+        async function selectRankedSymbol(symbol) {
+            switchView('single');
+            stockInput.value = symbol.replace(/^\w+\./, '');
+            await confirmStock();
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }
+
+        function setPredicting(isPredicting) {
+            predictButton.disabled = isPredicting;
+            predictButton.classList.toggle('loading', isPredicting);
+            if (!isPredicting) syncPredictButton();
+        }
+
+        function setRuntime(type, text) {
+            const status = document.getElementById('runtime-status');
+            status.className = `runtime-status ${type}`;
+            document.getElementById('runtime-text').textContent = text;
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast visible${isError ? ' error' : ''}`;
+            clearTimeout(showToast.timer);
+            showToast.timer = setTimeout(() => {
+                toast.className = 'toast';
             }, 5000);
         }
 
-        // Show/hide loading status
-        function showLoading(show) {
-            const loadingDiv = document.getElementById('loading');
-            if (show) {
-                loadingDiv.classList.add('show');
-            } else {
-                loadingDiv.classList.remove('show');
-            }
+        function formatDate(value) {
+            if (!value) return '—';
+            return new Intl.DateTimeFormat('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            }).format(new Date(value));
+        }
+
+        function formatPrice(value) {
+            return Number(value).toLocaleString('zh-CN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            });
+        }
+
+        function formatPct(value) {
+            const percentage = Number(value) * 100;
+            return `${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%`;
+        }
+
+        function formatVolume(value) {
+            const number = Number(value);
+            if (number >= 100000000) return `${(number / 100000000).toFixed(2)} 亿`;
+            if (number >= 10000) return `${(number / 10000).toFixed(1)} 万`;
+            return number.toFixed(0);
         }
     </script>
 </body>

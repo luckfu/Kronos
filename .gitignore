@@ -48,12 +48,16 @@ Desktop.ini
 *.parquet
 *.h5
 *.hdf5
+/data/a_share/
 
 # Model files (large files)
 *.pth
 *.pt
 *.ckpt
 *.bin
+/outputs/models/a_share_size_kronos_base/
+/outputs/
+/webui/prediction_results/
 
 # Logs
 *.log

@@ -17,17 +17,26 @@ def setup_ddp():
     Returns:
         tuple: A tuple containing (rank, world_size, local_rank).
     """
+    if "WORLD_SIZE" not in os.environ:
+        # Apple MPS and CPU training use a normal single-process loop.
+        print("[DDP Setup] WORLD_SIZE is not set; using single-process training.")
+        return 0, 1, 0
+
     if not dist.is_available():
         raise RuntimeError("torch.distributed is not available.")
 
-    dist.init_process_group(backend="nccl")
+    backend = os.environ.get("DIST_BACKEND", "nccl")
+    if backend == "nccl" and not torch.cuda.is_available():
+        backend = "gloo"
+    dist.init_process_group(backend=backend)
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
     local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
     print(
         f"[DDP Setup] Global Rank: {rank}/{world_size}, "
-        f"Local Rank (GPU): {local_rank} on device {torch.cuda.current_device()}"
+        f"Local Rank: {local_rank}, backend={backend}"
     )
     return rank, world_size, local_rank
 

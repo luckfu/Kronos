@@ -1,0 +1,5 @@
+symbol,date,sector,size_bucket
+SH600000,2020-01-01,bank,8
+SH600000,2024-01-01,bank,7
+SZ000001,2020-01-01,technology,5
+SZ000001,2024-01-01,technology,4
