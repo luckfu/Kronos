@@ -37,6 +37,8 @@ def evaluate(path, dataset, loader, tokenizer, device, config):
             s1_logits, s2_logits = model(
                 s1[:, :-1], s2[:, :-1], stamp[:, :-1], size_bucket=size,
                 size_percentile=percentile,
+                use_teacher_forcing=True,
+                s1_targets=s1[:, 1:],
             )
             s1_loss = F.cross_entropy(
                 s1_logits.transpose(1, 2), s1[:, 1:], reduction='none'

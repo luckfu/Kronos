@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kronos A股增训管理</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <style>
+        :root {
+            --bg: #f3f5f2;
+            --surface: #ffffff;
+            --surface-soft: #f8faf8;
+            --border: #dce3dd;
+            --text: #17221c;
+            --muted: #68766e;
+            --accent: #167451;
+            --accent-dark: #0f5a3e;
+            --accent-soft: #e7f3ed;
+            --warning: #a66515;
+            --warning-soft: #fff4df;
+            --danger: #b83d3d;
+            --danger-soft: #fbeaea;
+            --code: #142019;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+            letter-spacing: 0;
+        }
+
+        button, input, select { font: inherit; letter-spacing: 0; }
+
+        .topbar {
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 max(24px, calc((100vw - 1360px) / 2));
+            background: #17251e;
+            color: #ffffff;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .brand, .topbar-nav, .runtime { display: flex; align-items: center; }
+        .brand { gap: 12px; }
+        .topbar-nav { gap: 20px; }
+        .runtime { gap: 8px; color: #c9d5ce; font-size: 13px; }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 8px;
+            background: #2b9a6d;
+            font-weight: 800;
+        }
+
+        .brand-copy strong { display: block; font-size: 17px; }
+        .brand-copy span { display: block; margin-top: 2px; color: #aab8b0; font-size: 11px; }
+
+        .nav-link { color: #dbe5df; font-size: 13px; font-weight: 700; text-decoration: none; }
+        .nav-link[aria-current="page"], .nav-link:hover { color: #ffffff; }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #87958d;
+            box-shadow: 0 0 0 4px rgba(135,149,141,0.14);
+        }
+        .runtime.running .status-dot { background: #55c387; box-shadow: 0 0 0 4px rgba(85,195,135,0.14); }
+        .runtime.stopping .status-dot { background: #e0a13d; box-shadow: 0 0 0 4px rgba(224,161,61,0.14); }
+        .runtime.failed .status-dot { background: #e36868; box-shadow: 0 0 0 4px rgba(227,104,104,0.14); }
+
+        .page { max-width: 1360px; margin: 0 auto; padding: 28px 24px 44px; }
+
+        .heading-row {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 22px;
+        }
+        .heading-row h1 { margin: 0; font-size: 25px; line-height: 1.25; font-weight: 800; }
+        .heading-row p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+
+        .device-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 10px;
+            border: 1px solid #bfd8ca;
+            border-radius: 7px;
+            background: var(--accent-soft);
+            color: var(--accent-dark);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .dataset-band {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            margin-bottom: 20px;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            background: rgba(255,255,255,0.45);
+        }
+        .dataset-stat { min-width: 0; padding: 15px 18px; border-right: 1px solid var(--border); }
+        .dataset-stat:last-child { border-right: 0; }
+        .dataset-stat span { display: block; color: var(--muted); font-size: 11px; }
+        .dataset-stat strong { display: block; margin-top: 5px; font-size: 18px; line-height: 1.2; }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(330px, 410px) minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .tool-panel {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface);
+            overflow: hidden;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 54px;
+            padding: 0 18px;
+            border-bottom: 1px solid var(--border);
+        }
+        .panel-header h2 { margin: 0; font-size: 14px; font-weight: 800; }
+        .panel-meta { color: var(--muted); font-size: 11px; }
+        .panel-body { padding: 18px; }
+
+        .form-section + .form-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+        .section-label { display: block; margin-bottom: 10px; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+
+        .segmented {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            background: #edf1ed;
+        }
+        .segment {
+            min-height: 38px;
+            border: 0;
+            border-radius: 5px;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .segment.active { background: #ffffff; color: var(--text); box-shadow: 0 1px 4px rgba(31,49,39,0.12); }
+
+        .field { margin-top: 13px; }
+        .field:first-child { margin-top: 0; }
+        .field label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
+        .field-hint { color: #8b9890; font-weight: 500; }
+        .input, .select {
+            width: 100%;
+            height: 40px;
+            padding: 0 11px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            outline: none;
+            background: #ffffff;
+            color: var(--text);
+            font-size: 13px;
+        }
+        .input:focus, .select:focus { border-color: #58a982; box-shadow: 0 0 0 3px rgba(39,142,97,0.1); }
+        .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 14px;
+        }
+        .toggle-copy strong { display: block; font-size: 12px; }
+        .toggle-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+        .toggle { position: relative; width: 38px; height: 22px; flex: 0 0 auto; }
+        .toggle input { position: absolute; opacity: 0; pointer-events: none; }
+        .toggle-track { position: absolute; inset: 0; border-radius: 11px; background: #cbd3cd; cursor: pointer; transition: 0.15s; }
+        .toggle-track::after { content: ""; position: absolute; width: 16px; height: 16px; top: 3px; left: 3px; border-radius: 50%; background: #ffffff; transition: 0.15s; }
+        .toggle input:checked + .toggle-track { background: var(--accent); }
+        .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
+
+        .estimate-box {
+            margin-top: 16px;
+            padding: 12px 13px;
+            border-left: 3px solid #d29131;
+            background: var(--warning-soft);
+            color: #69430f;
+        }
+        .estimate-box strong { display: block; font-size: 13px; }
+        .estimate-box span { display: block; margin-top: 4px; font-size: 11px; line-height: 1.5; }
+
+        .actions { display: grid; grid-template-columns: 1fr 46px; gap: 8px; margin-top: 18px; }
+        .button {
+            height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: 0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 800;
+        }
+        .button:disabled { cursor: not-allowed; opacity: 0.45; }
+        .button-primary { background: var(--accent); color: #ffffff; }
+        .button-primary:hover:not(:disabled) { background: var(--accent-dark); }
+        .button-danger { background: var(--danger-soft); color: var(--danger); }
+        .button-danger:hover:not(:disabled) { background: #f5d7d7; }
+
+        .monitor-body { padding: 0; }
+        .progress-section { padding: 18px; border-bottom: 1px solid var(--border); }
+        .progress-head { display: flex; justify-content: space-between; align-items: baseline; gap: 18px; }
+        .progress-head strong { font-size: 15px; }
+        .progress-head span { color: var(--muted); font-size: 11px; }
+        .progress-track { height: 8px; margin-top: 12px; border-radius: 4px; background: #e7ece8; overflow: hidden; }
+        .progress-fill { width: 0; height: 100%; background: var(--accent); transition: width 0.25s; }
+
+        .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); margin-top: 16px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+        .metric { min-width: 0; padding: 12px; border-right: 1px solid var(--border); background: var(--surface-soft); }
+        .metric:last-child { border-right: 0; }
+        .metric span { display: block; color: var(--muted); font-size: 10px; }
+        .metric strong { display: block; margin-top: 5px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .chart-section { padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+        .chart-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+        .chart-header strong { font-size: 13px; }
+        .chart-header span { color: var(--muted); font-size: 10px; }
+        .loss-chart { width: 100%; height: 290px; margin-top: 8px; }
+
+        .log-toolbar { display: flex; justify-content: space-between; align-items: center; min-height: 42px; padding: 0 18px; border-bottom: 1px solid #2a3a31; background: #1b2921; color: #aebbb3; font-size: 11px; }
+        .log-output { height: 360px; margin: 0; padding: 16px 18px; overflow: auto; background: var(--code); color: #d7e0da; font: 11px/1.65 "SFMono-Regular", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+        .checkpoint-section { margin-top: 18px; }
+        .checkpoint-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .checkpoint-table th { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); text-align: left; font-size: 10px; }
+        .checkpoint-table td { padding: 11px 12px; border-bottom: 1px solid #edf0ed; }
+        .checkpoint-table tr:last-child td { border-bottom: 0; }
+        .checkpoint-name { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+        .status-pill { display: inline-flex; padding: 4px 7px; border-radius: 5px; background: #edf1ee; color: #536159; font-size: 10px; font-weight: 800; }
+        .status-pill.running { background: var(--accent-soft); color: var(--accent-dark); }
+        .status-pill.failed { background: var(--danger-soft); color: var(--danger); }
+        .resume-button {
+            min-height: 30px;
+            padding: 0 9px;
+            border: 1px solid #bfd8ca;
+            border-radius: 5px;
+            background: var(--accent-soft);
+            color: var(--accent-dark);
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 800;
+        }
+        .resume-button:hover { border-color: #58a982; }
+
+        .toast {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            max-width: min(420px, calc(100vw - 44px));
+            padding: 12px 14px;
+            border-radius: 7px;
+            background: #17251e;
+            color: #ffffff;
+            font-size: 12px;
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: 0.18s;
+        }
+        .toast.visible { opacity: 1; transform: translateY(0); }
+        .toast.error { background: #842f2f; }
+
+        @media (max-width: 980px) {
+            .workspace { grid-template-columns: 1fr; }
+            .dataset-band { grid-template-columns: repeat(3, 1fr); }
+            .dataset-stat:nth-child(3) { border-right: 0; }
+            .dataset-stat:nth-child(n+4) { border-top: 1px solid var(--border); }
+        }
+
+        @media (max-width: 640px) {
+            .topbar { height: auto; min-height: 68px; padding: 12px 16px; align-items: flex-start; }
+            .brand-copy span, .runtime span:last-child { display: none; }
+            .topbar-nav { gap: 12px; }
+            .page { padding: 20px 14px 34px; }
+            .heading-row { align-items: flex-start; flex-direction: column; gap: 12px; }
+            .dataset-band { grid-template-columns: 1fr 1fr; }
+            .dataset-stat, .dataset-stat:nth-child(3) { border-right: 1px solid var(--border); }
+            .dataset-stat:nth-child(even) { border-right: 0; }
+            .dataset-stat:nth-child(n+3) { border-top: 1px solid var(--border); }
+            .field-grid, .metric-grid { grid-template-columns: 1fr 1fr; }
+            .metric:nth-child(2) { border-right: 0; }
+            .metric:nth-child(n+3) { border-top: 1px solid var(--border); }
+            .checkpoint-table th:nth-child(3), .checkpoint-table td:nth-child(3) { display: none; }
+            .loss-chart { height: 250px; }
+            .log-output { height: 300px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-mark">K</div>
+            <div class="brand-copy">
+                <strong>Kronos A股增训</strong>
+                <span>完整覆盖训练管理</span>
+            </div>
+        </div>
+        <nav class="topbar-nav" aria-label="主导航">
+            <a class="nav-link" href="http://127.0.0.1:7070/">预测台</a>
+            <a class="nav-link" href="/" aria-current="page">增训管理</a>
+            <div id="runtime" class="runtime">
+                <span class="status-dot"></span>
+                <span id="runtime-text">读取状态</span>
+            </div>
+        </nav>
+    </header>
+
+    <main class="page">
+        <div class="heading-row">
+            <div>
+                <h1>A股模型增训</h1>
+                <p>无放回窗口覆盖 · 固定验证集 · 可恢复 checkpoint</p>
+            </div>
+            <div class="device-badge"><i data-lucide="cpu" size="14"></i><span id="device">自动设备</span></div>
+        </div>
+
+        <section class="dataset-band" aria-label="数据集统计">
+            <div class="dataset-stat"><span>训练股票</span><strong id="train-symbols">—</strong></div>
+            <div class="dataset-stat"><span>训练日线</span><strong id="train-rows">—</strong></div>
+            <div class="dataset-stat"><span>唯一窗口</span><strong id="train-windows">—</strong></div>
+            <div class="dataset-stat"><span>验证窗口</span><strong id="val-windows">—</strong></div>
+            <div class="dataset-stat"><span>输入 / 预测</span><strong>90 / 10 日</strong></div>
+        </section>
+
+        <div class="workspace">
+            <section class="tool-panel" aria-labelledby="config-title">
+                <div class="panel-header">
+                    <h2 id="config-title">训练配置</h2>
+                    <span id="selected-base-model" class="panel-meta">读取基础模型</span>
+                </div>
+                <div class="panel-body">
+                    <div class="form-section">
+                        <div class="field">
+                            <label for="base-model"><span>基础模型</span><span class="field-hint">训练起点</span></label>
+                            <select id="base-model" class="select"><option>读取可用权重</option></select>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <span class="section-label">条件模式</span>
+                        <div class="segmented" role="group" aria-label="条件模式">
+                            <button class="segment active" type="button" data-mode="discrete">离散市值桶</button>
+                            <button class="segment" type="button" data-mode="hybrid">桶 + 连续百分位</button>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <div class="field">
+                            <label for="output-name"><span>输出名称</span><span class="field-hint">独立目录</span></label>
+                            <input id="output-name" class="input" autocomplete="off">
+                        </div>
+                        <div class="field-grid">
+                            <div class="field">
+                                <label for="samples-segment"><span>每段唯一窗口</span></label>
+                                <input id="samples-segment" class="input" type="number" min="800" max="200000" step="800">
+                            </div>
+                            <div class="field">
+                                <label for="validation-samples"><span>固定验证窗口</span></label>
+                                <input id="validation-samples" class="input" type="number" min="200" max="10000" step="200">
+                            </div>
+                        </div>
+                        <div class="field-grid">
+                            <div class="field">
+                                <label for="coverage-passes"><span>完整覆盖遍数</span></label>
+                                <select id="coverage-passes" class="select"><option value="1">1 遍</option><option value="2">2 遍</option><option value="3">3 遍</option></select>
+                            </div>
+                            <div class="field">
+                                <label for="batch-size"><span>Batch size</span></label>
+                                <select id="batch-size" class="select"><option value="2">2</option><option value="4">4</option><option value="8">8</option></select>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="patience"><span>覆盖完成后早停耐心</span><span class="field-hint">分段</span></label>
+                            <input id="patience" class="input" type="number" min="0" max="20" step="1">
+                        </div>
+                        <div class="toggle-row">
+                            <div class="toggle-copy"><strong>恢复现有任务</strong><span>从 last_state.pt 继续</span></div>
+                            <label class="toggle"><input id="resume" type="checkbox"><span class="toggle-track"></span></label>
+                        </div>
+                    </div>
+
+                    <div id="estimate" class="estimate-box">
+                        <strong>计算训练规模</strong>
+                        <span>—</span>
+                    </div>
+
+                    <div class="actions">
+                        <button id="start-button" class="button button-primary" type="button"><i data-lucide="play" size="16"></i><span>启动完整覆盖训练</span></button>
+                        <button id="stop-button" class="button button-danger" type="button" title="停止并保存" disabled><i data-lucide="square" size="16"></i></button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="tool-panel" aria-labelledby="monitor-title">
+                <div class="panel-header">
+                    <h2 id="monitor-title">运行监控</h2>
+                    <span id="job-name" class="panel-meta">暂无任务</span>
+                </div>
+                <div class="monitor-body">
+                    <div class="progress-section">
+                        <div class="progress-head"><strong id="phase">等待启动</strong><span id="progress-label">0%</span></div>
+                        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+                        <div class="metric-grid">
+                            <div class="metric"><span>覆盖窗口</span><strong id="covered">0</strong></div>
+                            <div class="metric"><span>当前分段</span><strong id="segment">—</strong></div>
+                            <div class="metric"><span>训练 Loss</span><strong id="train-loss">—</strong></div>
+                            <div class="metric"><span>最佳验证</span><strong id="best-loss">—</strong></div>
+                        </div>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-header"><strong>Loss 曲线</strong><span id="chart-state">等待指标</span></div>
+                        <div id="loss-chart" class="loss-chart" aria-label="训练与验证 Loss 曲线"></div>
+                    </div>
+                    <div class="log-toolbar"><span>training.log</span><span id="log-state">等待输出</span></div>
+                    <pre id="log-output" class="log-output">暂无训练日志</pre>
+                </div>
+            </section>
+        </div>
+
+        <section class="tool-panel checkpoint-section" aria-labelledby="checkpoint-title">
+            <div class="panel-header"><h2 id="checkpoint-title">Checkpoint</h2><span class="panel-meta" id="checkpoint-count">0 项</span></div>
+            <div style="overflow-x:auto">
+                <table class="checkpoint-table">
+                    <thead><tr><th>名称</th><th>状态</th><th>进度</th><th>最佳验证</th><th>恢复</th></tr></thead>
+                    <tbody id="checkpoint-body"><tr><td colspan="5">暂无 checkpoint</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const state = { mode: 'discrete', running: false, defaults: null, timer: null };
+        const byId = id => document.getElementById(id);
+        const formatInt = value => Number(value || 0).toLocaleString('zh-CN');
+        const formatLoss = value => value !== null && value !== '' && Number.isFinite(Number(value)) ? Number(value).toFixed(6) : '—';
+        const phaseNames = {initializing:'初始化',training:'训练',validation:'验证',checkpointing:'保存 checkpoint',complete:'已完成'};
+
+        function renderLossChart(metrics, progress) {
+            if (!window.Plotly) {
+                byId('chart-state').textContent = '图表组件加载失败';
+                return;
+            }
+            const train = [...(metrics?.train || [])];
+            if (progress?.current_segment && progress?.current_step && Number.isFinite(Number(progress.train_loss))) {
+                train.push({
+                    segment: Number(progress.current_segment),
+                    step: Number(progress.current_step),
+                    total_steps: Number(progress.total_steps || 1),
+                    average_loss: Number(progress.train_loss),
+                    live: true,
+                });
+            }
+            const validation = metrics?.validation || [];
+            const traces = [];
+            const batchPoints = train.filter(point => Number.isFinite(Number(point.loss)));
+            if (batchPoints.length) {
+                traces.push({
+                    x: batchPoints.map(point => Number(point.segment) - 1 + Number(point.step || 0) / Number(point.total_steps || 1)),
+                    y: batchPoints.map(point => Number(point.loss)),
+                    type: 'scatter', mode: 'lines+markers', name: '批次 Loss',
+                    line: {color:'#167451', width:1.5}, marker:{size:4},
+                    hovertemplate:'分段进度 %{x:.3f}<br>Loss %{y:.5f}<extra></extra>',
+                });
+            }
+            const averagePoints = train.filter(point => Number.isFinite(Number(point.average_loss)));
+            if (averagePoints.length) {
+                traces.push({
+                    x: averagePoints.map(point => Number(point.segment) - 1 + Number(point.step || 0) / Number(point.total_steps || 1)),
+                    y: averagePoints.map(point => Number(point.average_loss)),
+                    type: 'scatter', mode: 'lines+markers', name: '段内平均',
+                    line: {color:'#2f6f9f', width:2}, marker:{size:5},
+                    hovertemplate:'分段进度 %{x:.3f}<br>平均 %{y:.5f}<extra></extra>',
+                });
+            }
+            if (validation.length) {
+                traces.push({
+                    x: validation.map(point => Number(point.segment)),
+                    y: validation.map(point => Number(point.loss)),
+                    type: 'scatter', mode: 'lines+markers', name: '验证 Loss',
+                    line: {color:'#b36b16', width:2}, marker:{size:6},
+                    hovertemplate:'第 %{x} 段<br>验证 %{y:.5f}<extra></extra>',
+                });
+                traces.push({
+                    x: validation.map(point => Number(point.segment)),
+                    y: validation.map(point => Number(point.best_loss)),
+                    type: 'scatter', mode: 'lines', name: '最佳验证',
+                    line: {color:'#b83d3d', width:1.5, dash:'dot'},
+                    hovertemplate:'第 %{x} 段<br>最佳 %{y:.5f}<extra></extra>',
+                });
+            }
+            byId('chart-state').textContent = validation.length
+                ? `${train.length} 个训练点 · ${validation.length} 个验证点`
+                : `${train.length} 个训练点 · 首段结束后显示验证曲线`;
+            Plotly.react('loss-chart', traces, {
+                margin:{l:52,r:18,t:34,b:42},
+                paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'#f8faf8',
+                font:{family:'Inter, PingFang SC, sans-serif',size:10,color:'#68766e'},
+                xaxis:{title:'覆盖分段',gridcolor:'#e3e8e4',zeroline:false},
+                yaxis:{title:'Loss',gridcolor:'#e3e8e4',zeroline:false},
+                legend:{orientation:'h',x:0,y:1.16},
+                hovermode:'closest', uirevision:'loss-history',
+                annotations: traces.length ? [] : [{
+                    text:'等待第一个训练指标',showarrow:false,xref:'paper',yref:'paper',x:0.5,y:0.5,
+                    font:{color:'#87958d',size:12},
+                }],
+            }, {responsive:true,displayModeBar:false,displaylogo:false});
+        }
+
+        function showToast(message, error=false) {
+            const toast = byId('toast');
+            toast.textContent = message;
+            toast.className = `toast visible${error ? ' error' : ''}`;
+            clearTimeout(showToast.timer);
+            showToast.timer = setTimeout(() => toast.className = 'toast', 3500);
+        }
+
+        function formPayload() {
+            return {
+                mode: state.mode,
+                base_model: byId('base-model').value,
+                output_name: byId('output-name').value.trim(),
+                samples_per_segment: Number(byId('samples-segment').value),
+                validation_samples: Number(byId('validation-samples').value),
+                coverage_passes: Number(byId('coverage-passes').value),
+                batch_size: Number(byId('batch-size').value),
+                patience: Number(byId('patience').value),
+                resume: byId('resume').checked,
+            };
+        }
+
+        async function updateEstimate() {
+            try {
+                const response = await axios.post('/api/finetune/estimate', formPayload());
+                const estimate = response.data.estimate;
+                byId('estimate').innerHTML = `<strong>${estimate.total_segments} 个训练分段 · 约 ${estimate.estimated_hours} 小时</strong><span>${estimate.segments_per_coverage} 段完成一遍 ${formatInt(estimate.train_windows)} 个唯一窗口，之后最多观察 ${formPayload().patience} 段早停。</span>`;
+            } catch (error) {
+                byId('estimate').innerHTML = `<strong>配置无效</strong><span>${error.response?.data?.error || error.message}</span>`;
+            }
+        }
+
+        function applyDefaults(data) {
+            const d = data.defaults;
+            state.defaults = d;
+            state.mode = d.mode;
+            const models = data.base_models || [];
+            byId('base-model').innerHTML = models.map(model =>
+                `<option value="${model.id}">${model.name} · ${model.source}</option>`
+            ).join('');
+            byId('base-model').value = d.base_model;
+            const selectedModel = models.find(model => model.id === d.base_model);
+            byId('selected-base-model').textContent = selectedModel?.name || '基础模型';
+            byId('output-name').value = d.output_name;
+            byId('samples-segment').value = d.samples_per_segment;
+            byId('validation-samples').value = d.validation_samples;
+            byId('coverage-passes').value = d.coverage_passes;
+            byId('batch-size').value = d.batch_size;
+            byId('patience').value = d.patience;
+            document.querySelectorAll('.segment').forEach(button => button.classList.toggle('active', button.dataset.mode === state.mode));
+            byId('device').textContent = String(data.device).toUpperCase();
+            byId('train-symbols').textContent = formatInt(data.dataset.train.symbols);
+            byId('train-rows').textContent = formatInt(data.dataset.train.rows);
+            byId('train-windows').textContent = formatInt(data.dataset.train.windows);
+            byId('val-windows').textContent = formatInt(data.dataset.val.windows);
+        }
+
+        function renderStatus(data) {
+            state.running = Boolean(data.running);
+            const runtime = byId('runtime');
+            runtime.className = `runtime ${data.status}`;
+            byId('runtime-text').textContent = ({running:'训练中',stopping:'正在停止并保存',completed:'已完成',stopped:'已停止',failed:'失败',idle:'空闲'})[data.status] || data.status;
+            byId('start-button').disabled = state.running;
+            byId('stop-button').disabled = !state.running || data.status === 'stopping';
+            byId('resume').disabled = state.running;
+            ['base-model','output-name','samples-segment','validation-samples','coverage-passes','batch-size','patience']
+                .forEach(id => byId(id).disabled = state.running);
+            document.querySelectorAll('.segment').forEach(button => button.disabled = state.running);
+            if (state.running && data.job?.base_model?.name) {
+                byId('selected-base-model').textContent = data.job.base_model.name;
+            }
+            byId('job-name').textContent = data.job?.output_name || '暂无任务';
+
+            const p = data.progress || {};
+            const totalSegments = Number(p.total_segments || 0);
+            const currentSegment = Number(p.current_segment || 0);
+            const stepRatio = p.total_steps ? Number(p.current_step || 0) / Number(p.total_steps) : 0;
+            const ratio = totalSegments ? Math.min(((Math.max(currentSegment - 1, 0) + stepRatio) / totalSegments), 1) : 0;
+            byId('progress-fill').style.width = `${(ratio * 100).toFixed(2)}%`;
+            byId('progress-label').textContent = `${(ratio * 100).toFixed(1)}%`;
+            byId('phase').textContent = data.status === 'stopped'
+                ? '已停止'
+                : (phaseNames[p.phase] || (data.status === 'idle' ? '等待启动' : data.status));
+            byId('covered').textContent = formatInt(p.unique_windows_covered);
+            byId('segment').textContent = totalSegments ? `${currentSegment} / ${totalSegments}` : '—';
+            byId('train-loss').textContent = formatLoss(p.train_loss);
+            byId('best-loss').textContent = formatLoss(p.best_val_loss);
+            renderLossChart(data.metrics, p);
+            byId('log-state').textContent = p.updated_at ? `更新 ${new Date(p.updated_at).toLocaleTimeString('zh-CN')}` : '等待输出';
+            const log = data.log || '暂无训练日志';
+            const logOutput = byId('log-output');
+            const shouldStick = logOutput.scrollTop + logOutput.clientHeight >= logOutput.scrollHeight - 24;
+            logOutput.textContent = log;
+            if (shouldStick) logOutput.scrollTop = logOutput.scrollHeight;
+            renderCheckpoints(data.checkpoints || []);
+        }
+
+        function renderCheckpoints(items) {
+            byId('checkpoint-count').textContent = `${items.length} 项`;
+            const body = byId('checkpoint-body');
+            if (!items.length) {
+                body.innerHTML = '<tr><td colspan="5">暂无 checkpoint</td></tr>';
+                return;
+            }
+            body.innerHTML = items.map(item => `
+                <tr>
+                    <td class="checkpoint-name" title="${item.name}">${item.name}</td>
+                    <td><span class="status-pill ${item.status}">${item.status}</span></td>
+                    <td>${item.total_segments ? `${item.current_segment || 0} / ${item.total_segments}` : '—'}</td>
+                    <td>${formatLoss(item.best_val_loss)}</td>
+                    <td>${item.can_resume ? `<button class="resume-button" type="button" data-resume-name="${item.name}">继续</button>` : '—'}</td>
+                </tr>`).join('');
+        }
+
+        async function pollStatus() {
+            try {
+                const response = await axios.get('/api/finetune/status');
+                renderStatus(response.data);
+            } catch (error) {
+                byId('runtime').className = 'runtime failed';
+                byId('runtime-text').textContent = '连接失败';
+            }
+        }
+
+        async function startTraining() {
+            try {
+                byId('start-button').disabled = true;
+                const response = await axios.post('/api/finetune/start', formPayload());
+                renderStatus(response.data);
+                showToast('增训任务已启动');
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+                byId('start-button').disabled = false;
+            }
+        }
+
+        async function stopTraining() {
+            try {
+                byId('stop-button').disabled = true;
+                const response = await axios.post('/api/finetune/stop');
+                renderStatus(response.data);
+                showToast('将在当前 batch 完成后停止并保存');
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        async function initialize() {
+            try {
+                const response = await axios.get('/api/finetune/config');
+                applyDefaults(response.data);
+                renderStatus(response.data.status);
+                renderCheckpoints(response.data.checkpoints || []);
+                await updateEstimate();
+                state.timer = setInterval(pollStatus, 2000);
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        document.querySelectorAll('.segment').forEach(button => button.addEventListener('click', () => {
+            state.mode = button.dataset.mode;
+            document.querySelectorAll('.segment').forEach(item => item.classList.toggle('active', item === button));
+        }));
+        ['samples-segment','validation-samples','coverage-passes','patience'].forEach(id => byId(id).addEventListener('change', updateEstimate));
+        byId('base-model').addEventListener('change', event => {
+            const option = event.target.options[event.target.selectedIndex];
+            byId('selected-base-model').textContent = option.textContent.split(' · ')[0];
+        });
+        byId('start-button').addEventListener('click', startTraining);
+        byId('stop-button').addEventListener('click', stopTraining);
+        byId('checkpoint-body').addEventListener('click', event => {
+            const button = event.target.closest('[data-resume-name]');
+            if (!button || state.running) return;
+            byId('output-name').value = button.dataset.resumeName;
+            byId('resume').checked = true;
+            showToast(`已选择恢复 ${button.dataset.resumeName}`);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        lucide.createIcons();
+        initialize();
+    </script>
+</body>
+</html>

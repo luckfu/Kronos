@@ -1,11 +1,15 @@
 import pickle
-import random
+import math
 import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from config import Config
-from asset_metadata import AssetMetadata
+try:
+    from .config import Config
+    from .asset_metadata import AssetMetadata
+except ImportError:
+    from config import Config
+    from asset_metadata import AssetMetadata
 
 
 class QlibDataset(Dataset):
@@ -13,7 +17,7 @@ class QlibDataset(Dataset):
     A PyTorch Dataset for handling Qlib financial time series data.
 
     This dataset pre-computes all possible start indices for sliding windows
-    and then randomly samples from them during training/validation.
+    and exposes deterministic, non-repeating coverage segments.
 
     Args:
         data_type (str): The type of dataset to load, either 'train' or 'val'.
@@ -28,17 +32,13 @@ class QlibDataset(Dataset):
             raise ValueError("data_type must be 'train' or 'val'")
         self.data_type = data_type
 
-        # Use a dedicated random number generator for sampling to avoid
-        # interfering with other random processes (e.g., in model initialization).
-        self.py_rng = random.Random(self.config.seed)
-
         # Set paths and number of samples based on the data type.
         if data_type == 'train':
             self.data_path = f"{self.config.dataset_path}/train_data.pkl"
-            self.n_samples = self.config.n_train_iter
+            self.configured_samples = self.config.n_train_iter
         else:
             self.data_path = f"{self.config.dataset_path}/val_data.pkl"
-            self.n_samples = self.config.n_val_iter
+            self.configured_samples = self.config.n_val_iter
 
         with open(self.data_path, 'rb') as f:
             self.data = pickle.load(f)
@@ -97,31 +97,58 @@ class QlibDataset(Dataset):
                 for i in range(num_samples):
                     self.indices.append((symbol, i))
 
-        # The effective dataset size is the minimum of the configured iterations
-        # and the total number of available samples.
-        self.n_samples = min(self.n_samples, len(self.indices))
-        print(f"[{data_type.upper()}] Found {len(self.indices)} possible samples. Using {self.n_samples} per epoch.")
+        self.total_samples = len(self.indices)
+        requested = int(self.configured_samples)
+        self.n_samples = self.total_samples if requested <= 0 else min(requested, self.total_samples)
+        permutation_seed = self.config.seed + (0 if data_type == 'train' else 1)
+        self.coverage_order = np.random.default_rng(permutation_seed).permutation(
+            self.total_samples
+        )
+        self.active_positions = self.coverage_order[:self.n_samples]
+        self.coverage_start = 0
+        print(
+            f"[{data_type.upper()}] Found {self.total_samples} possible samples. "
+            f"Using {self.n_samples} unique samples per segment."
+        )
 
     def set_epoch_seed(self, epoch: int):
         """
-        Sets a new seed for the random sampler for each epoch. This is crucial
-        for reproducibility in distributed training.
+        Advance the training coverage cursor without replacement.
 
         Args:
             epoch (int): The current epoch number.
         """
-        epoch_seed = self.config.seed + epoch
-        self.py_rng.seed(epoch_seed)
+        if self.total_samples == 0:
+            return
+        if self.data_type == 'val':
+            self.coverage_start = 0
+            self.active_positions = self.coverage_order[:self.n_samples]
+            return
 
+        segments_per_pass = math.ceil(self.total_samples / self.n_samples)
+        segment_in_pass = int(epoch) % segments_per_pass
+        start = segment_in_pass * self.n_samples
+        end = min(start + self.n_samples, self.total_samples)
+        self.coverage_start = start
+        self.active_positions = self.coverage_order[start:end]
+
+    def coverage_state(self, segment_index: int = 0) -> dict:
+        consumed = min((int(segment_index) + 1) * self.n_samples, self.total_samples)
+        return {
+            'total_samples': self.total_samples,
+            'samples_per_segment': len(self.active_positions),
+            'segment_start': self.coverage_start,
+            'unique_samples_covered': consumed,
+            'coverage_fraction': consumed / self.total_samples if self.total_samples else 0.0,
+        }
     def __len__(self) -> int:
         """Returns the number of samples per epoch."""
-        return self.n_samples
+        return len(self.active_positions)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         
-        # Select a random sample from the entire pool of indices.
-        random_idx = self.py_rng.randint(0, len(self.indices) - 1)
-        symbol, start_idx = self.indices[random_idx]
+        source_position = int(self.active_positions[idx])
+        symbol, start_idx = self.indices[source_position]
 
         # Extract the sliding window from the dataframe.
         df = self.data[symbol]
@@ -180,7 +207,7 @@ if __name__ == '__main__':
     print(f"Dataset length: {len(train_dataset)}")
 
     if len(train_dataset) > 0:
-        try_x, try_x_stamp = train_dataset[100]  # Index 100 is ignored.
+        try_x, try_x_stamp = train_dataset[100]
         print(f"Sample feature shape: {try_x.shape}")
         print(f"Sample time feature shape: {try_x_stamp.shape}")
     else:

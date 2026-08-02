@@ -63,14 +63,21 @@ class Config:
         self.early_stopping_patience = int(
             os.getenv("KRONOS_EARLY_STOPPING_PATIENCE", "5")
         )
-        self.log_interval = 100  # Log training status every N batches.
-        self.batch_size = 4  # Conservative default for Kronos-base on Apple MPS.
-        self.num_workers = 0
-
-        # Number of samples to draw for one "epoch" of training/validation.
-        # This is useful for large datasets where a true epoch is too long.
-        self.n_train_iter = 200 * self.batch_size
-        self.n_val_iter = 50 * self.batch_size
+        self.log_interval = int(os.getenv("KRONOS_LOG_INTERVAL", "100"))
+        self.batch_size = int(os.getenv("KRONOS_BATCH_SIZE", "4"))
+        self.num_workers = int(os.getenv("KRONOS_NUM_WORKERS", "0"))
+        # Coverage training uses unique windows within each segment and advances
+        # through one fixed permutation before any window is reused. Zero means
+        # a literal full-dataset epoch, which takes about 26 hours on this MPS host.
+        self.n_train_iter = int(os.getenv("KRONOS_TRAIN_SAMPLES_PER_SEGMENT", "20000"))
+        self.n_val_iter = int(os.getenv("KRONOS_VALIDATION_SAMPLES", "2000"))
+        self.coverage_passes = int(os.getenv("KRONOS_COVERAGE_PASSES", "1"))
+        self.require_full_coverage = os.getenv(
+            "KRONOS_REQUIRE_FULL_COVERAGE", "1"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.resume_training = os.getenv(
+            "KRONOS_RESUME_TRAINING", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
 
         # Learning rates for different model components.
         self.tokenizer_learning_rate = 2e-4
@@ -106,7 +113,7 @@ class Config:
 
         # Base directory for saving model checkpoints and results.
         # Using a general 'outputs' directory is a common practice.
-        self.save_path = "./outputs/models"
+        self.save_path = os.getenv("KRONOS_SAVE_PATH", "./outputs/models")
         self.tokenizer_save_folder_name = 'finetune_tokenizer_demo'
         self.predictor_save_folder_name = os.getenv(
             "KRONOS_PREDICTOR_SAVE_FOLDER", "a_share_size_kronos_base"

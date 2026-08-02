@@ -56,7 +56,7 @@ BaoStock 不提供稳定的历史流通市值字段，因此数据准备阶段�
 环境要求：Python 3.10+。Apple Silicon 建议安装支持 MPS 的 PyTorch；NVIDIA 机器安装对应 CUDA 版本的 PyTorch；没有加速设备时使用 CPU。
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/luckfu/Kronos.git
 cd Kronos
 python -m venv .venv
 source .venv/bin/activate
@@ -104,6 +104,10 @@ PYTHONPATH=. python webui/app.py
 
 A 股数据准备和实验口径详见 [`finetune/A_SHARE_PLAN_CN.md`](finetune/A_SHARE_PLAN_CN.md)。典型流程如下：
 
+增训是独立 App，不与预测进程共享模型或生命周期。运行 `python webui/finetune_app.py` 后访问 `http://127.0.0.1:7071/`；预测 App 继续独立运行在 7070。增训页面可选择本地 `NeoQuasar/Kronos-base` 或已有的完整 checkpoint 作为训练起点，再选择离散市值桶或“桶 + 连续百分位”；模型列表只展示名称和来源，不向前端返回本机路径。设备自动使用 MPS、CUDA 或 CPU，并提供规模预估、实时训练/验证/最佳 Loss 曲线、原始日志、完整覆盖进度、停止保存和 checkpoint 恢复。默认每段训练 20,000 个无重复窗口；训练器沿固定随机排列依次推进，76 段覆盖当前 1,509,252 个训练窗口一遍，全部窗口完成覆盖后才开始计算 5 段早停耐心。
+
+Colab GPU 重建数据、下载基础模型和长训流程见 [`finetune/COLAB.md`](finetune/COLAB.md)。该流程不把大数据文件提交进 Git，而是在 Colab 中从 BaoStock 重建真实面板，并支持 Google Drive checkpoint 和 `google-colab-cli` 远程会话。
+
 ```bash
 python finetune/download_a_share_baostock.py \
   --universe csi800 \
@@ -131,7 +135,9 @@ KRONOS_PREDICTOR_PATH=./Kronos-base \
 python finetune/train_predictor.py
 ```
 
-训练脚本默认最多运行 50 轮，并在验证集连续 5 轮没有改善时早停（可用 `KRONOS_EPOCHS` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 覆盖）。Apple Silicon 直接运行即可自动使用 MPS；CUDA 可使用 `torchrun`。`Kronos-base` 基础权重可放在任意目录，通过 `KRONOS_PREDICTOR_PATH` 指定。
+训练脚本默认使用完整覆盖分段：每段内部无放回、段间沿同一排列继续，完成要求的覆盖遍数后再应用验证集早停。`KRONOS_TRAIN_SAMPLES_PER_SEGMENT`、`KRONOS_COVERAGE_PASSES`、`KRONOS_VALIDATION_SAMPLES` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 可覆盖页面默认值。Apple Silicon 直接运行即可自动使用 MPS；CUDA 可使用 `torchrun`。停止请求会在当前 batch 完成后立即暂停计算并保存 `last_state.pt`；状态包含模型、优化器、学习率调度器、分段和 batch 位置及随机数状态，设置 `KRONOS_RESUME_TRAINING=1` 可从下一 batch 恢复。训练指标同时写入 `metrics.jsonl`，旧任务可从 `training.log` 恢复曲线。`Kronos-base` 基础权重可放在任意目录，通过 `KRONOS_PREDICTOR_PATH` 指定。
+
+现有生产 checkpoint 是早期“每轮随机抽取 800 个窗口”的实验结果，并不代表 150 万训练窗口已完整参与。新的独立增训 App 专门修正了这一点；在新的全覆盖候选模型完成评估前，预测页仍保留验证结果更好的现有生产权重。
 
 ## 评估与回测
 

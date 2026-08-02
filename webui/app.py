@@ -25,7 +25,6 @@ except ImportError:
 
 # Add project root directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 try:
     from model import Kronos, KronosTokenizer, KronosPredictor
     from model.kronos import auto_regressive_inference
@@ -1026,6 +1025,7 @@ def create_operational_chart(context, pred_df, interval_df):
 def index():
     """Home page"""
     return render_template('index.html')
+
 
 @app.route('/api/data-files')
 def get_data_files():
