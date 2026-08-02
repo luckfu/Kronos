@@ -89,6 +89,11 @@ def build_daily_periods(panel, calendar, universe_size, max_signal_days=None):
                 'context': context,
                 'future_dates': future_dates,
                 'size_bucket': int(context['size_bucket'].iloc[-1]),
+                'size_percentile': float(
+                    context['size_percentile'].iloc[-1]
+                    if 'size_percentile' in context.columns
+                    else (int(context['size_bucket'].iloc[-1]) + 0.5) / 10.0
+                ),
                 'liquidity': liquidity,
                 'last_close': signal_close,
                 'actual_close_return': exit_close / signal_close - 1,
@@ -152,6 +157,10 @@ def run_inference(label, model_path, conditioned, tokenizer, periods, device, ba
                         torch.as_tensor(batch['size_buckets'], device=device)
                         if conditioned else None
                     ),
+                    size_percentile=(
+                        torch.as_tensor(batch['size_percentiles'], device=device)
+                        if conditioned and model.use_size_percentile else None
+                    ),
                 )
                 forecast = predictions[:, -PRED_LEN:, :]
                 close_index = FEATURE_COLUMNS.index('close')
@@ -168,6 +177,7 @@ def run_inference(label, model_path, conditioned, tokenizer, periods, device, ba
                         'entry_date': period['entry_date'],
                         'symbol': record['symbol'],
                         'size_bucket': record['size_bucket'],
+                        'size_percentile': record['size_percentile'],
                         'score': float(final_close / record['last_close'] - 1),
                         'actual_close_return': record['actual_close_return'],
                         'next_day_return': record['next_day_return'],
@@ -326,6 +336,11 @@ def main():
         default=None,
         help='Reuse daily predictions and rerun only the portfolio simulation.',
     )
+    parser.add_argument(
+        '--baseline-predictions-input',
+        default=None,
+        help='Reuse baseline rows from an earlier predictions.csv and infer only the fine-tuned model.',
+    )
     parser.add_argument('--max-signal-days', type=int, default=None)
     parser.add_argument('--seed', type=int, default=100)
     args = parser.parse_args()
@@ -350,10 +365,20 @@ def main():
             f'range: {periods[0]["signal_date"]:%Y-%m-%d} to {periods[-1]["entry_date"]:%Y-%m-%d}'
         )
         tokenizer = KronosTokenizer.from_pretrained(args.tokenizer).to(device).eval()
-        baseline = run_inference(
-            'baseline', args.base_model, False, tokenizer, periods, device,
-            args.batch_size, args.sample_count, args.seed,
-        )
+        if args.baseline_predictions_input:
+            previous = pd.read_csv(args.baseline_predictions_input)
+            baseline = previous.loc[previous['model'] == 'baseline'].copy()
+            expected_rows = len(periods) * args.universe_size
+            if len(baseline) != expected_rows:
+                raise ValueError(
+                    f'Reused baseline has {len(baseline)} rows; expected {expected_rows}'
+                )
+            print(f'Reusing baseline predictions: {args.baseline_predictions_input}')
+        else:
+            baseline = run_inference(
+                'baseline', args.base_model, False, tokenizer, periods, device,
+                args.batch_size, args.sample_count, args.seed,
+            )
         finetuned = run_inference(
             'finetuned', args.finetuned_model, True, tokenizer, periods, device,
             args.batch_size, args.sample_count, args.seed,

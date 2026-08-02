@@ -195,9 +195,10 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         learn_te (bool): Whether to use learnable temporal embeddings.
         num_sectors (int): Number of sector IDs; zero disables sector conditioning.
         num_size_buckets (int): Number of size buckets; zero disables size conditioning.
+        use_size_percentile (bool): Whether to add a continuous size-percentile MLP.
     """
 
-    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te, num_sectors=0, num_size_buckets=0, context_layer=0):
+    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te, num_sectors=0, num_size_buckets=0, context_layer=0, use_size_percentile=False, size_mlp_hidden_dim=64):
         super().__init__()
         self.s1_bits = s1_bits
         self.s2_bits = s2_bits
@@ -213,6 +214,8 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         self.num_sectors = int(num_sectors)
         self.num_size_buckets = int(num_size_buckets)
         self.context_layer = int(context_layer)
+        self.use_size_percentile = bool(use_size_percentile)
+        self.size_mlp_hidden_dim = int(size_mlp_hidden_dim)
         if not 0 <= self.context_layer <= self.n_layers:
             raise ValueError(f"context_layer must be in [0, {self.n_layers}], got {self.context_layer}")
 
@@ -222,6 +225,14 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         self.time_emb = TemporalEmbedding(self.d_model, self.learn_te)
         self.sector_emb = nn.Embedding(self.num_sectors + 1, self.d_model) if self.num_sectors > 0 else None
         self.size_emb = nn.Embedding(self.num_size_buckets + 1, self.d_model) if self.num_size_buckets > 0 else None
+        self.size_mlp = (
+            nn.Sequential(
+                nn.Linear(2, self.size_mlp_hidden_dim),
+                nn.SiLU(),
+                nn.Linear(self.size_mlp_hidden_dim, self.d_model),
+            )
+            if self.use_size_percentile else None
+        )
         self.transformer = nn.ModuleList([
             TransformerBlock(self.d_model, self.n_heads, self.ff_dim, self.ffn_dropout_p, self.attn_dropout_p, self.resid_dropout_p)
             for _ in range(self.n_layers)
@@ -236,6 +247,9 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             nn.init.zeros_(self.sector_emb.weight)
         if self.size_emb is not None:
             nn.init.zeros_(self.size_emb.weight)
+        if self.size_mlp is not None:
+            nn.init.zeros_(self.size_mlp[-1].weight)
+            nn.init.zeros_(self.size_mlp[-1].bias)
 
     def _init_weights(self, module):
 
@@ -251,7 +265,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         elif isinstance(module, RMSNorm):
             nn.init.ones_(module.weight)
 
-    def _add_context(self, x, sector_id=None, size_bucket=None):
+    def _add_context(self, x, sector_id=None, size_bucket=None, size_percentile=None):
         """Add static asset metadata to every timestep in a token sequence."""
         if sector_id is not None:
             if self.sector_emb is None:
@@ -265,9 +279,21 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             if size_bucket.ndim != 1 or size_bucket.shape[0] != x.shape[0]:
                 raise ValueError(f"size_bucket must have shape [batch], got {tuple(size_bucket.shape)}")
             x = x + self.size_emb(size_bucket.long()).unsqueeze(1)
+        if size_percentile is not None:
+            if self.size_mlp is None:
+                raise ValueError("size_percentile was provided but use_size_percentile is false")
+            if size_percentile.ndim != 1 or size_percentile.shape[0] != x.shape[0]:
+                raise ValueError(
+                    f"size_percentile must have shape [batch], got {tuple(size_percentile.shape)}"
+                )
+            percentile = size_percentile.to(dtype=x.dtype)
+            known = torch.isfinite(percentile)
+            percentile = torch.nan_to_num(percentile, nan=0.5).clamp(0.0, 1.0)
+            continuous_features = torch.stack([percentile, known.to(x.dtype)], dim=-1)
+            x = x + self.size_mlp(continuous_features).unsqueeze(1)
         return x
 
-    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None):
+    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None, size_percentile=None):
         """
         Args:
             s1_ids (torch.Tensor): Input tensor of s1 token IDs. Shape: [batch_size, seq_len]
@@ -287,15 +313,24 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             time_embedding = self.time_emb(stamp)
             x = x + time_embedding
         if self.context_layer == 0:
-            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
+            x = self._add_context(
+                x, sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
         x = self.token_drop(x)
 
         for layer_idx, layer in enumerate(self.transformer):
             if self.context_layer > 0 and layer_idx == self.context_layer:
-                x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
+                x = self._add_context(
+                    x, sector_id=sector_id, size_bucket=size_bucket,
+                    size_percentile=size_percentile,
+                )
             x = layer(x, key_padding_mask=padding_mask)
         if self.context_layer == self.n_layers:
-            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
+            x = self._add_context(
+                x, sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
 
         x = self.norm(x)
 
@@ -312,7 +347,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         s2_logits = self.head.cond_forward(x2)
         return s1_logits, s2_logits
 
-    def decode_s1(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None):
+    def decode_s1(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None, size_percentile=None):
         """
         Decodes only the s1 tokens.
 
@@ -335,15 +370,24 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             time_embedding = self.time_emb(stamp)
             x = x + time_embedding
         if self.context_layer == 0:
-            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
+            x = self._add_context(
+                x, sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
         x = self.token_drop(x)
 
         for layer_idx, layer in enumerate(self.transformer):
             if self.context_layer > 0 and layer_idx == self.context_layer:
-                x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
+                x = self._add_context(
+                    x, sector_id=sector_id, size_bucket=size_bucket,
+                    size_percentile=size_percentile,
+                )
             x = layer(x, key_padding_mask=padding_mask)
         if self.context_layer == self.n_layers:
-            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket)
+            x = self._add_context(
+                x, sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
 
         x = self.norm(x)
 
@@ -429,7 +473,7 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
     return x
 
 
-def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, return_samples=False):
+def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
     with torch.no_grad():
         x = torch.clip(x, -clip, clip)
 
@@ -438,17 +482,22 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         x_stamp = x_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x_stamp.size(1), x_stamp.size(2)).to(device)
         y_stamp = y_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, y_stamp.size(1), y_stamp.size(2)).to(device)
 
-        def repeat_condition(condition, name):
+        def repeat_condition(condition, name, dtype):
             if condition is None:
                 return None
             if condition.ndim == 0:
                 condition = condition.reshape(1)
             if condition.ndim != 1:
                 raise ValueError(f"{name} must have shape [batch], got {tuple(condition.shape)}")
-            return condition.unsqueeze(1).repeat(1, sample_count).reshape(-1).to(device).long()
+            return condition.unsqueeze(1).repeat(1, sample_count).reshape(-1).to(
+                device=device, dtype=dtype
+            )
 
-        sector_id = repeat_condition(sector_id, "sector_id")
-        size_bucket = repeat_condition(size_bucket, "size_bucket")
+        sector_id = repeat_condition(sector_id, "sector_id", torch.long)
+        size_bucket = repeat_condition(size_bucket, "size_bucket", torch.long)
+        size_percentile = repeat_condition(
+            size_percentile, "size_percentile", torch.float32
+        )
 
         x_token = tokenizer.encode(x, half=True)
         
@@ -490,7 +539,8 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
 
             s1_logits, context = model.decode_s1(
                 input_tokens[0], input_tokens[1], current_stamp,
-                sector_id=sector_id, size_bucket=size_bucket
+                sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
             )
             s1_logits = s1_logits[:, -1, :]
             sample_pre = sample_from_logits(s1_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True)
@@ -561,7 +611,7 @@ class KronosPredictor:
         self.tokenizer = self.tokenizer.to(self.device)
         self.model = self.model.to(self.device)
 
-    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, sector_id=None, size_bucket=None, return_samples=False):
+    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
 
         x_tensor = torch.from_numpy(np.array(x).astype(np.float32)).to(self.device)
         x_stamp_tensor = torch.from_numpy(np.array(x_stamp).astype(np.float32)).to(self.device)
@@ -569,9 +619,13 @@ class KronosPredictor:
 
         sector_tensor = None if sector_id is None else torch.as_tensor(sector_id, device=self.device)
         size_tensor = None if size_bucket is None else torch.as_tensor(size_bucket, device=self.device)
+        percentile_tensor = None if size_percentile is None else torch.as_tensor(
+            size_percentile, device=self.device, dtype=torch.float32
+        )
         preds = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
                                           self.clip, T, top_k, top_p, sample_count, verbose,
                                           sector_id=sector_tensor, size_bucket=size_tensor,
+                                          size_percentile=percentile_tensor,
                                           return_samples=return_samples)
         if return_samples:
             preds = preds[:, :, -pred_len:, :]
@@ -579,7 +633,7 @@ class KronosPredictor:
             preds = preds[:, -pred_len:, :]
         return preds
 
-    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, return_samples=False):
+    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
 
         if not isinstance(df, pd.DataFrame):
             raise ValueError("Input must be a pandas DataFrame.")
@@ -615,6 +669,7 @@ class KronosPredictor:
 
         preds = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose,
                               sector_id=sector_id, size_bucket=size_bucket,
+                              size_percentile=size_percentile,
                               return_samples=return_samples)
 
         preds = preds.squeeze(0)
@@ -628,7 +683,7 @@ class KronosPredictor:
         return pred_df
 
 
-    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True):
+    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None):
         """
         Perform parallel (batch) prediction on multiple time series. All series must have the same historical length and prediction length (pred_len).
 
@@ -718,7 +773,12 @@ class KronosPredictor:
         x_stamp_batch = np.stack(x_stamp_list, axis=0).astype(np.float32) # (B, seq_len, time_feat)
         y_stamp_batch = np.stack(y_stamp_list, axis=0).astype(np.float32) # (B, pred_len, time_feat)
 
-        preds = self.generate(x_batch, x_stamp_batch, y_stamp_batch, pred_len, T, top_k, top_p, sample_count, verbose)
+        preds = self.generate(
+            x_batch, x_stamp_batch, y_stamp_batch, pred_len,
+            T, top_k, top_p, sample_count, verbose,
+            sector_id=sector_id, size_bucket=size_bucket,
+            size_percentile=size_percentile,
+        )
         # preds: (B, pred_len, feat)
 
         pred_dfs = []

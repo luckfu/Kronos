@@ -68,7 +68,10 @@ def configure_trainable_parameters(model, config):
     for parameter in model.parameters():
         parameter.requires_grad = False
 
-    for module in [model.sector_emb, model.size_emb, model.norm, model.dep_layer, model.head]:
+    for module in [
+        model.sector_emb, model.size_emb, model.size_mlp,
+        model.norm, model.dep_layer, model.head,
+    ]:
         if module is not None:
             for parameter in module.parameters():
                 parameter.requires_grad = True
@@ -98,11 +101,19 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     core_model = model.module if isinstance(model, DDP) else model
     condition_params = [
         parameter for name, parameter in core_model.named_parameters()
-        if parameter.requires_grad and (name.startswith('sector_emb.') or name.startswith('size_emb.'))
+        if parameter.requires_grad and (
+            name.startswith('sector_emb.')
+            or name.startswith('size_emb.')
+            or name.startswith('size_mlp.')
+        )
     ]
     adaptation_params = [
         parameter for name, parameter in core_model.named_parameters()
-        if parameter.requires_grad and not (name.startswith('sector_emb.') or name.startswith('size_emb.'))
+        if parameter.requires_grad and not (
+            name.startswith('sector_emb.')
+            or name.startswith('size_emb.')
+            or name.startswith('size_mlp.')
+        )
     ]
     optimizer_groups = []
     max_lrs = []
@@ -141,12 +152,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             batch_x, batch_x_stamp = batch[0], batch[1]
             batch_sector = batch[2] if len(batch) > 2 and config.get('use_sector_features', True) else None
             batch_size_bucket = batch[3] if len(batch) > 3 and config.get('use_size_features', True) else None
+            batch_size_percentile = batch[4] if len(batch) > 4 and config.get('use_size_percentile', False) else None
             batch_x = batch_x.to(device, non_blocking=True)
             batch_x_stamp = batch_x_stamp.to(device, non_blocking=True)
             if batch_sector is not None:
                 batch_sector = batch_sector.to(device, non_blocking=True)
             if batch_size_bucket is not None:
                 batch_size_bucket = batch_size_bucket.to(device, non_blocking=True)
+            if batch_size_percentile is not None:
+                batch_size_percentile = batch_size_percentile.to(device, non_blocking=True)
 
             # Tokenize input data on-the-fly
             with torch.no_grad():
@@ -159,7 +173,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             # Forward pass and loss calculation
             logits = model(
                 token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
-                sector_id=batch_sector, size_bucket=batch_size_bucket
+                sector_id=batch_sector, size_bucket=batch_size_bucket,
+                size_percentile=batch_size_percentile,
             )
             core_model = model.module if isinstance(model, DDP) else model
             loss, s1_loss, s2_loss = core_model.head.compute_loss(logits[0], logits[1], token_out[0], token_out[1])
@@ -196,12 +211,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 batch_x, batch_x_stamp = batch[0], batch[1]
                 batch_sector = batch[2] if len(batch) > 2 and config.get('use_sector_features', True) else None
                 batch_size_bucket = batch[3] if len(batch) > 3 and config.get('use_size_features', True) else None
+                batch_size_percentile = batch[4] if len(batch) > 4 and config.get('use_size_percentile', False) else None
                 batch_x = batch_x.to(device, non_blocking=True)
                 batch_x_stamp = batch_x_stamp.to(device, non_blocking=True)
                 if batch_sector is not None:
                     batch_sector = batch_sector.to(device, non_blocking=True)
                 if batch_size_bucket is not None:
                     batch_size_bucket = batch_size_bucket.to(device, non_blocking=True)
+                if batch_size_percentile is not None:
+                    batch_size_percentile = batch_size_percentile.to(device, non_blocking=True)
 
                 token_seq_0, token_seq_1 = tokenizer.encode(batch_x, half=True)
                 token_in = [token_seq_0[:, :-1], token_seq_1[:, :-1]]
@@ -209,7 +227,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
 
                 logits = model(
                     token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
-                    sector_id=batch_sector, size_bucket=batch_size_bucket
+                    sector_id=batch_sector, size_bucket=batch_size_bucket,
+                    size_percentile=batch_size_percentile,
                 )
                 core_model = model.module if isinstance(model, DDP) else model
                 val_loss, _, _ = core_model.head.compute_loss(logits[0], logits[1], token_out[0], token_out[1])
@@ -250,6 +269,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     'num_sectors': int(config.get('num_sectors', 0)),
                     'num_size_buckets': int(config.get('num_size_buckets', 0)),
                     'context_layer': int(config.get('context_layer', 0)),
+                    'use_size_percentile': bool(config.get('use_size_percentile', False)),
+                    'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
                 })
                 core_model.save_pretrained(save_path, config=model_config)
                 print(f"Best model saved to {save_path} (Val Loss: {best_val_loss:.4f})")
@@ -314,6 +335,8 @@ def main(config: dict):
         num_sectors=int(config.get('num_sectors', 0)),
         num_size_buckets=int(config.get('num_size_buckets', 0)),
         context_layer=int(config.get('context_layer', 0)),
+        use_size_percentile=bool(config.get('use_size_percentile', False)),
+        size_mlp_hidden_dim=int(config.get('size_mlp_hidden_dim', 64)),
     )
     configure_trainable_parameters(model, config)
     model.to(device)

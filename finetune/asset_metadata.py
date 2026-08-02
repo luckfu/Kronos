@@ -56,9 +56,14 @@ class AssetMetadata:
             self.rows_by_symbol[symbol] = rows.sort_values('_metadata_datetime').reset_index(drop=True)
 
     def get(self, symbol: str, asof=None):
+        sector_id, size_bucket, _ = self.get_conditions(symbol, asof=asof)
+        return sector_id, size_bucket
+
+    def get_conditions(self, symbol: str, asof=None):
+        """Return sector, discrete size bucket, and continuous size percentile."""
         rows = self.rows_by_symbol.get(str(symbol))
         if rows is None or rows.empty:
-            return self.unknown_sector, self.unknown_size
+            return self.unknown_sector, self.unknown_size, float('nan')
 
         if asof is not None and rows['_metadata_datetime'].iloc[0] != pd.Timestamp.min:
             asof = pd.Timestamp(asof)
@@ -67,7 +72,7 @@ class AssetMetadata:
         else:
             row = rows.iloc[-1]
         if row is None:
-            return self.unknown_sector, self.unknown_size
+            return self.unknown_sector, self.unknown_size, float('nan')
 
         sector_id = self.unknown_sector
         if 'sector' in rows.columns and pd.notna(row.get('sector')):
@@ -82,4 +87,9 @@ class AssetMetadata:
             value = int(row['size_bucket'])
             if 0 <= value < self.num_size_buckets:
                 size_bucket = value
-        return sector_id, size_bucket
+        size_percentile = float('nan')
+        if 'size_percentile' in rows.columns and pd.notna(row.get('size_percentile')):
+            size_percentile = float(np.clip(row['size_percentile'], 0.0, 1.0))
+        elif size_bucket != self.unknown_size and self.num_size_buckets > 0:
+            size_percentile = (size_bucket + 0.5) / self.num_size_buckets
+        return sector_id, size_bucket, size_percentile

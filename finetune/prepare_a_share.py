@@ -9,6 +9,7 @@ point-in-time asset_metadata.csv compatible with finetune/dataset.py.
 
 import argparse
 import glob
+import json
 import os
 import pickle
 
@@ -48,18 +49,28 @@ def load_input(path: str) -> pd.DataFrame:
 
 
 def add_size_buckets(frame: pd.DataFrame, bucket_count: int) -> pd.DataFrame:
+    if 'size_percentile' in frame.columns:
+        ranks = pd.to_numeric(frame['size_percentile'], errors='coerce')
+    elif 'market_cap' in frame.columns:
+        frame['market_cap'] = pd.to_numeric(frame['market_cap'], errors='coerce')
+        # Point-in-time cross-sectional ranks preserve continuous size
+        # information while remaining comparable across calendar years.
+        ranks = frame.groupby('date')['market_cap'].rank(method='first', pct=True)
+    elif 'size_bucket' in frame.columns:
+        bucket = pd.to_numeric(frame['size_bucket'], errors='coerce')
+        ranks = (bucket + 0.5) / bucket_count
+    else:
+        raise ValueError(
+            'Input must contain market_cap, size_percentile, or size_bucket for size conditioning'
+        )
+
+    frame['size_percentile'] = ranks.clip(0.0, 1.0)
     if 'size_bucket' in frame.columns:
         frame['size_bucket'] = pd.to_numeric(frame['size_bucket'], errors='coerce')
-        return frame
-    if 'market_cap' not in frame.columns:
-        raise ValueError('Input must contain market_cap or size_bucket for size conditioning')
-    frame['market_cap'] = pd.to_numeric(frame['market_cap'], errors='coerce')
-    # Rank within each date, so the bucket is comparable across time and does
-    # not expose the absolute level of the market.
-    ranks = frame.groupby('date')['market_cap'].rank(method='first', pct=True)
-    frame['size_bucket'] = np.minimum(
-        (ranks * bucket_count).fillna(-1).astype(int), bucket_count - 1
-    )
+    else:
+        bucket = np.floor(frame['size_percentile'] * bucket_count)
+        frame['size_bucket'] = bucket.clip(0, bucket_count - 1)
+    frame.loc[frame['size_percentile'].isna(), 'size_bucket'] = np.nan
     return frame
 
 
@@ -78,7 +89,10 @@ def split_data(frame: pd.DataFrame, train_end: str, val_start: str, val_end: str
         for symbol, rows in frame.loc[mask].groupby('symbol', sort=False):
             rows = rows.sort_values('date').set_index('date')
             rows.index.name = 'datetime'
-            columns = ['open', 'high', 'low', 'close', 'volume', 'amount', 'size_bucket']
+            columns = [
+                'open', 'high', 'low', 'close', 'volume', 'amount',
+                'size_bucket', 'size_percentile',
+            ]
             if 'sector' in rows.columns:
                 columns.append('sector')
             rows = rows[columns]
@@ -93,6 +107,11 @@ def main():
     parser.add_argument('--input', required=True, help='Long CSV or directory of per-symbol CSV files')
     parser.add_argument('--output-dir', default='./data/a_share/processed_datasets')
     parser.add_argument('--metadata-out', default='./data/a_share/asset_metadata.csv')
+    parser.add_argument(
+        '--size-reference-out',
+        default='./webui/size_reference.json',
+        help='Portable latest market-cap cross-section used for unseen-stock sizing.',
+    )
     parser.add_argument('--num-size-buckets', type=int, default=10)
     parser.add_argument('--train-end', default='2025-12-31')
     parser.add_argument('--val-start', default='2026-01-01')
@@ -107,12 +126,34 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(os.path.dirname(args.metadata_out) or '.', exist_ok=True)
-    metadata_columns = ['symbol', 'date', 'size_bucket']
+    metadata_columns = ['symbol', 'date', 'size_bucket', 'size_percentile']
     if 'sector' in frame.columns:
         metadata_columns.insert(2, 'sector')
     metadata = frame[metadata_columns].copy()
     metadata['date'] = metadata['date'].dt.strftime('%Y-%m-%d')
     metadata.drop_duplicates(['symbol', 'date'], keep='last').to_csv(args.metadata_out, index=False)
+
+    if 'market_cap' in frame.columns:
+        valid_caps = frame.dropna(subset=['market_cap'])
+        valid_caps = valid_caps[valid_caps['market_cap'] > 0]
+        if not valid_caps.empty:
+            reference_date = pd.Timestamp(valid_caps['date'].max())
+            market_caps = sorted(
+                float(value)
+                for value in valid_caps.loc[
+                    valid_caps['date'] == reference_date, 'market_cap'
+                ]
+            )
+            os.makedirs(os.path.dirname(args.size_reference_out) or '.', exist_ok=True)
+            with open(args.size_reference_out, 'w') as handle:
+                json.dump({
+                    'reference_date': reference_date.strftime('%Y-%m-%d'),
+                    'market_caps': market_caps,
+                    'count': len(market_caps),
+                    'method': 'close * volume / (turnover_pct / 100)',
+                    'universe': 'CSI800 historical constituent union',
+                }, handle, separators=(',', ':'))
+            print(f'size reference: {args.size_reference_out} ({len(market_caps)} stocks)')
 
     splits = split_data(frame, args.train_end, args.val_start, args.val_end, args.test_start, args.test_end)
     for split, data in splits.items():

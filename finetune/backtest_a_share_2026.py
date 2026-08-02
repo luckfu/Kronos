@@ -89,6 +89,11 @@ def build_periods(panel, calendar, universe_size, universe_selection='liquidity'
                 'future_dates': future_dates,
                 'liquidity': liquidity,
                 'size_bucket': int(context['size_bucket'].iloc[-1]),
+                'size_percentile': float(
+                    context['size_percentile'].iloc[-1]
+                    if 'size_percentile' in context.columns
+                    else (int(context['size_bucket'].iloc[-1]) + 0.5) / 10.0
+                ),
                 'last_close': signal_close,
                 'actual_close_return': exit_close / signal_close - 1,
                 'realized_return': exit_close / entry_open - 1,
@@ -125,6 +130,7 @@ def prepare_batch(records):
     means = []
     stds = []
     size_buckets = []
+    size_percentiles = []
     for record in records:
         context = record['context']
         values = context[FEATURE_COLUMNS].to_numpy(dtype=np.float32)
@@ -136,6 +142,7 @@ def prepare_batch(records):
         means.append(mean)
         stds.append(std)
         size_buckets.append(record['size_bucket'])
+        size_percentiles.append(record['size_percentile'])
     return {
         'x': np.stack(normalized).astype(np.float32),
         'x_stamp': np.stack(x_stamps).astype(np.float32),
@@ -143,6 +150,7 @@ def prepare_batch(records):
         'means': np.stack(means).astype(np.float32),
         'stds': np.stack(stds).astype(np.float32),
         'size_buckets': np.asarray(size_buckets, dtype=np.int64),
+        'size_percentiles': np.asarray(size_percentiles, dtype=np.float32),
     }
 
 
@@ -197,6 +205,10 @@ def run_inference(
                         torch.as_tensor(batch['size_buckets'], device=device)
                         if conditioned else None
                     ),
+                    size_percentile=(
+                        torch.as_tensor(batch['size_percentiles'], device=device)
+                        if conditioned and model.use_size_percentile else None
+                    ),
                 )
                 forecast = predictions[:, -PRED_LEN:, :]
                 close_index = FEATURE_COLUMNS.index('close')
@@ -214,6 +226,7 @@ def run_inference(
                         'exit_date': period['exit_date'],
                         'symbol': record['symbol'],
                         'size_bucket': record['size_bucket'],
+                        'size_percentile': record['size_percentile'],
                         'score': float(final_close / record['last_close'] - 1),
                         'actual_close_return': record['actual_close_return'],
                         'realized_return': record['realized_return'],

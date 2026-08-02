@@ -51,9 +51,13 @@ class QlibDataset(Dataset):
         self.use_context_features = bool(getattr(self.config, 'use_context_features', False))
         self.use_sector_features = bool(getattr(self.config, 'use_sector_features', True))
         self.use_size_features = bool(getattr(self.config, 'use_size_features', True))
+        self.use_size_percentile = bool(getattr(self.config, 'use_size_percentile', False))
         self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
+        self.has_inline_percentile = self.use_size_percentile and any(
+            'size_percentile' in frame.columns for frame in self.data.values()
+        )
         metadata_path = getattr(self.config, 'asset_metadata_path', '')
-        if self.has_inline_size and not self.use_sector_features:
+        if self.has_inline_size and (self.has_inline_percentile or not self.use_size_percentile) and not self.use_sector_features:
             metadata_path = ''
         self.asset_metadata = AssetMetadata(
             metadata_path,
@@ -62,6 +66,7 @@ class QlibDataset(Dataset):
         )
         self.timestamps_by_symbol = {}
         self.size_by_symbol = {}
+        self.size_percentile_by_symbol = {}
 
         # Pre-compute all possible (symbol, start_index) pairs.
         self.indices = []
@@ -75,6 +80,10 @@ class QlibDataset(Dataset):
                 self.timestamps_by_symbol[str(symbol)] = df['datetime'].reset_index(drop=True)
                 if 'size_bucket' in df.columns:
                     self.size_by_symbol[str(symbol)] = pd.to_numeric(df['size_bucket'], errors='coerce').reset_index(drop=True)
+                if 'size_percentile' in df.columns:
+                    self.size_percentile_by_symbol[str(symbol)] = pd.to_numeric(
+                        df['size_percentile'], errors='coerce'
+                    ).reset_index(drop=True)
                 # Generate time features and store them directly in the dataframe.
                 df['minute'] = df['datetime'].dt.minute
                 df['hour'] = df['datetime'].dt.hour
@@ -141,13 +150,24 @@ class QlibDataset(Dataset):
 
         if self.use_context_features:
             asof = self.timestamps_by_symbol[str(symbol)].iloc[start_idx + self.config.lookback_window - 1]
-            sector_value, size_value = self.asset_metadata.get(symbol, asof=asof)
+            sector_value, size_value, size_percentile_value = self.asset_metadata.get_conditions(
+                symbol, asof=asof
+            )
             if str(symbol) in self.size_by_symbol:
                 inline_size = self.size_by_symbol[str(symbol)].iloc[start_idx + self.config.lookback_window - 1]
                 if pd.notna(inline_size):
                     size_value = int(inline_size)
+            if str(symbol) in self.size_percentile_by_symbol:
+                inline_percentile = self.size_percentile_by_symbol[str(symbol)].iloc[
+                    start_idx + self.config.lookback_window - 1
+                ]
+                if pd.notna(inline_percentile):
+                    size_percentile_value = float(inline_percentile)
             sector_id = torch.tensor(sector_value, dtype=torch.long)
             size_bucket = torch.tensor(size_value, dtype=torch.long)
+            if self.use_size_percentile:
+                size_percentile = torch.tensor(size_percentile_value, dtype=torch.float32)
+                return x_tensor, x_stamp_tensor, sector_id, size_bucket, size_percentile
             return x_tensor, x_stamp_tensor, sector_id, size_bucket
         return x_tensor, x_stamp_tensor
 

@@ -1213,10 +1213,15 @@
         function renderStockSummary(info) {
             document.getElementById('stock-summary').classList.add('visible');
             document.getElementById('summary-symbol').textContent = info.symbol;
-            document.getElementById('summary-bucket').textContent = `市值层 ${info.size_bucket} / 9`;
-            document.getElementById('summary-date').textContent = formatDate(info.end_date);
-            document.getElementById('summary-close').textContent = formatPrice(info.latest_close);
-            document.getElementById('summary-rows').textContent = info.rows.toLocaleString('zh-CN');
+            const percentile = Number.isFinite(info.size_percentile)
+                ? ` · ${(info.size_percentile * 100).toFixed(1)}%`
+                : '';
+            document.getElementById('summary-bucket').textContent = Number.isInteger(info.size_bucket)
+                ? `市值层 ${info.size_bucket} / 9${percentile}`
+                : '市值层待预测计算';
+            document.getElementById('summary-date').textContent = info.end_date ? formatDate(info.end_date) : '待刷新';
+            document.getElementById('summary-close').textContent = Number.isFinite(info.latest_close) ? formatPrice(info.latest_close) : '—';
+            document.getElementById('summary-rows').textContent = info.remote_only ? 'BaoStock' : info.rows.toLocaleString('zh-CN');
         }
 
         async function runPrediction() {
@@ -1251,12 +1256,14 @@
             document.getElementById('empty-state').style.display = 'none';
             document.getElementById('result-content').classList.add('visible');
             document.getElementById('result-heading').textContent = `${result.symbol} 未来 ${result.pred_len} 日预测`;
-            document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · 市值层 ${result.size_bucket} · ${result.interval.sample_count} 条路径`;
+            document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · 市值层 ${result.size_bucket}（${(result.size_percentile * 100).toFixed(1)}%） · ${result.interval.sample_count} 条路径`;
 
             const sourceBadge = document.getElementById('source-badge');
             sourceBadge.style.display = 'inline-flex';
             sourceBadge.classList.toggle('fallback', result.data_source !== 'baostock');
-            sourceBadge.textContent = result.data_source === 'baostock' ? 'BaoStock 最新日线' : '本地缓存回退';
+            sourceBadge.textContent = result.data_source === 'baostock'
+                ? `BaoStock 最新日线${result.in_local_panel ? '' : ' · 训练面板外'}`
+                : '本地缓存回退';
 
             document.getElementById('metric-latest').textContent = formatPrice(result.latest_close);
             document.getElementById('metric-final').textContent = formatPrice(finalPrediction.close_p50);
@@ -1293,7 +1300,7 @@
 
             document.getElementById('summary-date').textContent = formatDate(result.latest_data_date);
             document.getElementById('summary-close').textContent = formatPrice(result.latest_close);
-            document.getElementById('summary-bucket').textContent = `市值层 ${result.size_bucket} / 9`;
+            document.getElementById('summary-bucket').textContent = `市值层 ${result.size_bucket} / 9 · ${(result.size_percentile * 100).toFixed(1)}%`;
 
             if (result.refresh_error) {
                 showToast(`实时行情不可用，已回退本地缓存：${result.refresh_error}`, true);
@@ -1380,7 +1387,7 @@
                 row.innerHTML = `
                     <td><span class="rank-number">${item.rank}</span></td>
                     <td>${item.symbol}</td>
-                    <td>${item.size_bucket} / 9</td>
+                    <td>${item.size_bucket} / 9 · ${(item.size_percentile * 100).toFixed(1)}%</td>
                     <td>${formatPrice(item.latest_close)}</td>
                     <td>${formatPrice(item.predicted_close_p50)}</td>
                     <td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${formatPct(item.predicted_return_p50)}</td>

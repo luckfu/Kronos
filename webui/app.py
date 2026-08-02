@@ -39,6 +39,8 @@ CORS(app)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 A_SHARE_DATASET_DIR = os.path.join(PROJECT_ROOT, 'data', 'a_share', 'processed_datasets')
+A_SHARE_RAW_DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'a_share', 'a_share_daily.csv')
+A_SHARE_SIZE_REFERENCE_PATH = os.path.join(PROJECT_ROOT, 'webui', 'size_reference.json')
 A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
     'outputs',
@@ -59,6 +61,8 @@ model_load_lock = threading.Lock()
 baostock_lock = threading.Lock()
 inference_lock = threading.Lock()
 ranking_cache = None
+size_reference_cache = None
+size_reference_lock = threading.Lock()
 
 # Available model configurations
 AVAILABLE_MODELS = {
@@ -70,6 +74,7 @@ AVAILABLE_MODELS = {
         'params': '102.3M',
         'description': 'A-share daily model with point-in-time market-cap conditioning',
         'num_size_buckets': 10,
+        'use_size_percentile': False,
         'default_lookback': 90,
         'default_pred_len': 10,
         'default_temperature': 0.6,
@@ -79,6 +84,8 @@ AVAILABLE_MODELS = {
             'num_sectors': 0,
             'num_size_buckets': 10,
             'context_layer': 10,
+            'use_size_percentile': False,
+            'size_mlp_hidden_dim': 64,
         },
         'local': True,
     }
@@ -168,7 +175,9 @@ def query_latest_daily_data(symbol, lookback, pred_len):
             history = pd.DataFrame(history_rows, columns=fields.split(','))
             history = history.rename(columns={'date': 'timestamps'})
             history['timestamps'] = pd.to_datetime(history['timestamps'], errors='coerce')
-            numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
+            numeric_columns = [
+                'open', 'high', 'low', 'close', 'volume', 'amount', 'turn', 'pctChg'
+            ]
             for column in numeric_columns:
                 history[column] = pd.to_numeric(history[column], errors='coerce')
             history = history.dropna(subset=['timestamps', *numeric_columns])
@@ -196,30 +205,142 @@ def query_latest_daily_data(symbol, lookback, pred_len):
             bs.logout()
 
 
-def latest_prediction_inputs(symbol, lookback, pred_len):
-    """Refresh the selected stock, falling back explicitly to the local panel."""
-    local_frame, error = get_a_share_symbol_frame(symbol)
-    if error:
-        raise ValueError(error)
+def load_latest_size_reference():
+    """Load the latest available cross-section used to size unseen stocks."""
+    global size_reference_cache
+    if size_reference_cache is not None:
+        return size_reference_cache
 
-    size_rows = local_frame.dropna(subset=['size_bucket']) if 'size_bucket' in local_frame.columns else pd.DataFrame()
-    if size_rows.empty:
-        raise ValueError(f'No market-cap bucket is available for {symbol}')
-    size_bucket = int(size_rows.iloc[-1]['size_bucket'])
-    size_bucket_asof = pd.Timestamp(size_rows.iloc[-1]['timestamps'])
+    with size_reference_lock:
+        if size_reference_cache is not None:
+            return size_reference_cache
+        if os.path.exists(A_SHARE_SIZE_REFERENCE_PATH):
+            with open(A_SHARE_SIZE_REFERENCE_PATH) as handle:
+                payload = json.load(handle)
+            reference_date = pd.Timestamp(payload['reference_date'])
+            market_caps = np.sort(np.asarray(payload['market_caps'], dtype=np.float64))
+        elif os.path.exists(A_SHARE_RAW_DATA_PATH):
+            frame = pd.read_csv(
+                A_SHARE_RAW_DATA_PATH,
+                usecols=['date', 'market_cap'],
+                parse_dates=['date'],
+            )
+            frame['market_cap'] = pd.to_numeric(frame['market_cap'], errors='coerce')
+            frame = frame.dropna(subset=['date', 'market_cap'])
+            frame = frame[frame['market_cap'] > 0]
+            if frame.empty:
+                raise ValueError('A-share market-cap reference panel is empty')
+            reference_date = pd.Timestamp(frame['date'].max())
+            market_caps = np.sort(
+                frame.loc[frame['date'] == reference_date, 'market_cap'].to_numpy(dtype=np.float64)
+            )
+        else:
+            raise FileNotFoundError(
+                f'Market-cap reference not found: {A_SHARE_SIZE_REFERENCE_PATH}'
+            )
+        if len(market_caps) < 100:
+            raise ValueError(
+                f'Only {len(market_caps)} market-cap references are available on {reference_date:%Y-%m-%d}'
+            )
+        size_reference_cache = {
+            'date': reference_date,
+            'market_caps': market_caps,
+            'count': int(len(market_caps)),
+        }
+        return size_reference_cache
+
+
+def size_condition_from_remote_context(context):
+    """Estimate float market cap and map it to the training cross-section."""
+    ordered = context.sort_values('timestamps').copy()
+    for column in ('close', 'volume', 'turn'):
+        ordered[column] = pd.to_numeric(ordered[column], errors='coerce')
+    usable = ordered[
+        np.isfinite(ordered['close'])
+        & np.isfinite(ordered['volume'])
+        & np.isfinite(ordered['turn'])
+        & (ordered['close'] > 0)
+        & (ordered['volume'] > 0)
+        & (ordered['turn'] > 0)
+    ]
+    if usable.empty:
+        raise ValueError('BaoStock history has no usable turnover row for market-cap sizing')
+    latest = usable.iloc[-1]
+    close = float(latest['close'])
+    volume = float(latest['volume'])
+    turnover = float(latest['turn'])
+    market_cap = close * volume / (turnover / 100.0)
+    if not np.isfinite(market_cap) or market_cap <= 0:
+        raise ValueError('Unable to estimate a positive float market cap from BaoStock')
+
+    reference = load_latest_size_reference()
+    percentile = float(
+        np.searchsorted(reference['market_caps'], market_cap, side='right')
+        / reference['count']
+    )
+    percentile = float(np.clip(percentile, 0.0, 1.0))
+    size_bucket = min(int(np.floor(percentile * 10)), 9)
+    return {
+        'size_bucket': size_bucket,
+        'size_percentile': percentile,
+        'size_bucket_asof': pd.Timestamp(latest['timestamps']),
+        'size_reference_date': reference['date'],
+        'size_source': 'baostock_proxy_vs_local_cross_section',
+        'estimated_market_cap': float(market_cap),
+    }
+
+
+def size_condition_from_local_frame(local_frame):
+    if local_frame is None or 'size_bucket' not in local_frame.columns:
+        return None
+    rows = local_frame.dropna(subset=['size_bucket'])
+    if rows.empty:
+        return None
+    latest = rows.iloc[-1]
+    size_bucket = int(latest['size_bucket'])
+    percentile = latest.get('size_percentile', np.nan)
+    if not np.isfinite(percentile):
+        percentile = (size_bucket + 0.5) / 10.0
+    asof = pd.Timestamp(latest['timestamps'])
+    return {
+        'size_bucket': size_bucket,
+        'size_percentile': float(np.clip(percentile, 0.0, 1.0)),
+        'size_bucket_asof': asof,
+        'size_reference_date': asof,
+        'size_source': 'local_panel',
+        'estimated_market_cap': None,
+    }
+
+
+def latest_prediction_inputs(symbol, lookback, pred_len):
+    """Refresh a stock and derive size context even when it is outside the panel."""
+    symbol = normalize_a_share_symbol(symbol)
+    local_frame, local_error = get_a_share_symbol_frame(symbol)
+    local_size = size_condition_from_local_frame(local_frame)
 
     try:
         context, future_dates = query_latest_daily_data(symbol, lookback, pred_len)
+        try:
+            size_context = size_condition_from_remote_context(context)
+        except Exception:
+            if local_size is None:
+                raise
+            size_context = local_size
         data_source = 'baostock'
         calendar_source = 'baostock'
         refresh_error = None
     except Exception as exc:
+        if local_frame is None or local_size is None:
+            raise ValueError(
+                f'{symbol} 不在本地训练面板中，且 BaoStock 最新数据无法用于预测：{exc}'
+            ) from exc
         context = local_frame.tail(lookback).copy().reset_index(drop=True)
         last_date = pd.Timestamp(context['timestamps'].iloc[-1])
         future_dates = pd.Series(
             pd.bdate_range(last_date + pd.Timedelta(days=1), periods=pred_len),
             name='timestamps',
         )
+        size_context = local_size
         data_source = 'local_cache'
         calendar_source = 'business_day_fallback'
         refresh_error = str(exc)
@@ -229,8 +350,9 @@ def latest_prediction_inputs(symbol, lookback, pred_len):
     return {
         'context': context.tail(lookback).reset_index(drop=True),
         'future_dates': future_dates,
-        'size_bucket': size_bucket,
-        'size_bucket_asof': size_bucket_asof,
+        **size_context,
+        'in_local_panel': local_frame is not None,
+        'local_panel_error': local_error,
         'data_source': data_source,
         'calendar_source': calendar_source,
         'refresh_error': refresh_error,
@@ -271,7 +393,10 @@ def normalize_a_share_symbol(symbol):
 def get_a_share_symbol_frame(symbol):
     """Return one symbol's train and validation history as a normal DataFrame."""
     symbol = normalize_a_share_symbol(symbol)
-    splits = load_a_share_splits()
+    try:
+        splits = load_a_share_splits()
+    except FileNotFoundError as exc:
+        return None, str(exc)
     frames = [
         split[symbol]
         for split in (splits['train'], splits['val'])
@@ -324,13 +449,19 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
     for symbol, frame in frames.items():
         context = frame.loc[:as_of_date].tail(lookback)
         required = feature_columns + ['size_bucket']
+        if AVAILABLE_MODELS['a-share-size-kronos-base'].get('use_size_percentile'):
+            required.append('size_percentile')
         if context[required].isnull().values.any():
             raise ValueError(f'{symbol} 在共同日期前存在缺失行情或市值层')
         size_bucket = int(context['size_bucket'].iloc[-1])
+        size_percentile = context.iloc[-1].get('size_percentile', np.nan)
+        if not np.isfinite(size_percentile):
+            size_percentile = (size_bucket + 0.5) / 10.0
         records.append({
             'symbol': symbol,
             'context': context,
             'size_bucket': size_bucket,
+            'size_percentile': float(size_percentile),
             'latest_close': float(context['close'].iloc[-1]),
         })
 
@@ -342,6 +473,7 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
     means = []
     stds = []
     size_buckets = []
+    size_percentiles = []
     for item in records:
         context = item['context']
         values = context[feature_columns].to_numpy(dtype=np.float32)
@@ -352,6 +484,7 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
         means.append(mean)
         stds.append(std)
         size_buckets.append(item['size_bucket'])
+        size_percentiles.append(item['size_percentile'])
 
     return {
         'records': records,
@@ -366,6 +499,7 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
         'means': np.stack(means).astype(np.float32),
         'stds': np.stack(stds).astype(np.float32),
         'size_buckets': np.asarray(size_buckets, dtype=np.int64),
+        'size_percentiles': np.asarray(size_percentiles, dtype=np.float32),
     }
 
 
@@ -406,6 +540,11 @@ def generate_portfolio_ranking(symbols, sample_count=3):
                 sample_count=1,
                 verbose=False,
                 size_bucket=torch.as_tensor(batch['size_buckets'], device=device),
+                size_percentile=(
+                    torch.as_tensor(batch['size_percentiles'], device=device)
+                    if AVAILABLE_MODELS['a-share-size-kronos-base'].get('use_size_percentile')
+                    else None
+                ),
             )
             forecast = predictions[:, -AVAILABLE_MODELS['a-share-size-kronos-base']['default_pred_len']:, :]
             final_close = (
@@ -425,6 +564,7 @@ def generate_portfolio_ranking(symbols, sample_count=3):
         rankings.append({
             'symbol': item['symbol'],
             'size_bucket': item['size_bucket'],
+            'size_percentile': item['size_percentile'],
             'latest_close': item['latest_close'],
             'predicted_close_p50': float(np.median(closes)),
             'predicted_return_p50': float(np.median(returns)),
@@ -955,6 +1095,24 @@ def load_data():
         data = request.get_json() or {}
         df, error, _, symbol = resolve_request_data(data)
         if error:
+            requested_symbol = normalize_a_share_symbol(data.get('symbol'))
+            if requested_symbol and re.fullmatch(r'(sh|sz|bj)\.\d{6}', requested_symbol):
+                return jsonify({
+                    'success': True,
+                    'data_info': {
+                        'rows': 0,
+                        'columns': [],
+                        'start_date': None,
+                        'end_date': None,
+                        'symbol': requested_symbol,
+                        'size_bucket': None,
+                        'size_percentile': None,
+                        'latest_close': None,
+                        'latest_volume': None,
+                        'remote_only': True,
+                    },
+                    'message': f'{requested_symbol} 将在预测时通过 BaoStock 获取最新数据',
+                })
             return jsonify({'error': error}), 400
         
         # Detect data time frequency
@@ -997,8 +1155,13 @@ def load_data():
             'timeframe': detect_timeframe(df),
             'symbol': symbol,
             'size_bucket': int(df['size_bucket'].iloc[-1]) if 'size_bucket' in df.columns else None,
+            'size_percentile': (
+                float(df['size_percentile'].iloc[-1])
+                if 'size_percentile' in df.columns else None
+            ),
             'latest_close': float(df['close'].iloc[-1]),
             'latest_volume': float(df['volume'].iloc[-1]) if 'volume' in df.columns else None,
+            'remote_only': False,
         }
         
         return jsonify({
@@ -1250,6 +1413,7 @@ def predict_latest():
         context = inputs['context']
         future_dates = inputs['future_dates']
         size_bucket = inputs['size_bucket']
+        size_percentile = inputs['size_percentile']
 
         feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
         x_df = context[feature_columns]
@@ -1272,6 +1436,9 @@ def predict_latest():
                 sample_count=sample_count,
                 verbose=False,
                 size_bucket=size_bucket,
+                size_percentile=(
+                    size_percentile if config.get('use_size_percentile') else None
+                ),
                 return_samples=True,
             )
 
@@ -1341,7 +1508,12 @@ def predict_latest():
                 'sample_count': sample_count,
                 'symbol': symbol,
                 'size_bucket': size_bucket,
+                'size_percentile': size_percentile,
                 'size_bucket_asof': inputs['size_bucket_asof'].strftime('%Y-%m-%d'),
+                'size_reference_date': inputs['size_reference_date'].strftime('%Y-%m-%d'),
+                'size_source': inputs['size_source'],
+                'estimated_market_cap': inputs['estimated_market_cap'],
+                'in_local_panel': inputs['in_local_panel'],
                 'model_key': current_model_key,
                 'data_source': inputs['data_source'],
             },
@@ -1360,7 +1532,12 @@ def predict_latest():
             'forecast_start': pd.Timestamp(y_timestamp.iloc[0]).isoformat(),
             'forecast_end': pd.Timestamp(y_timestamp.iloc[-1]).isoformat(),
             'size_bucket': size_bucket,
+            'size_percentile': size_percentile,
             'size_bucket_asof': inputs['size_bucket_asof'].isoformat(),
+            'size_reference_date': inputs['size_reference_date'].isoformat(),
+            'size_source': inputs['size_source'],
+            'estimated_market_cap': inputs['estimated_market_cap'],
+            'in_local_panel': inputs['in_local_panel'],
             'data_source': inputs['data_source'],
             'calendar_source': inputs['calendar_source'],
             'refresh_error': inputs['refresh_error'],

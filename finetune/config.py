@@ -34,8 +34,12 @@ class Config:
         self.use_context_features = True
         self.use_sector_features = False
         self.use_size_features = True
+        self.use_size_percentile = os.getenv(
+            "KRONOS_USE_SIZE_PERCENTILE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.num_sectors = 0
         self.num_size_buckets = 10
+        self.size_mlp_hidden_dim = int(os.getenv("KRONOS_SIZE_MLP_HIDDEN_DIM", "64"))
 
         # =================================================================
         # Dataset Splitting & Paths
@@ -56,7 +60,9 @@ class Config:
         self.clip = 5.0  # Clipping value for normalized data to prevent outliers.
 
         self.epochs = int(os.getenv("KRONOS_EPOCHS", "50"))
-        self.early_stopping_patience = 2
+        self.early_stopping_patience = int(
+            os.getenv("KRONOS_EARLY_STOPPING_PATIENCE", "5")
+        )
         self.log_interval = 100  # Log training status every N batches.
         self.batch_size = 4  # Conservative default for Kronos-base on Apple MPS.
         self.num_workers = 0

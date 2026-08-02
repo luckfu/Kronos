@@ -48,6 +48,7 @@ class QlibTestDataset(Dataset):
         self.time_feature_list = config.time_feature_list
         self.use_sector_features = bool(getattr(config, 'use_sector_features', True))
         self.use_size_features = bool(getattr(config, 'use_size_features', True))
+        self.use_size_percentile = bool(getattr(config, 'use_size_percentile', False))
         self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
         metadata_path = getattr(config, 'asset_metadata_path', '')
         if self.has_inline_size and not self.use_sector_features:
@@ -98,13 +99,18 @@ class QlibTestDataset(Dataset):
         x = (x - x_mean) / (x_std + 1e-5)
         x = np.clip(x, -self.config.clip, self.config.clip)
 
-        sector_value, size_value = self.asset_metadata.get(symbol, asof=timestamp)
+        sector_value, size_value, size_percentile_value = self.asset_metadata.get_conditions(
+            symbol, asof=timestamp
+        )
         if 'size_bucket' in context_df.columns and pd.notna(context_df['size_bucket'].iloc[-1]):
             size_value = int(context_df['size_bucket'].iloc[-1])
+        if 'size_percentile' in context_df.columns and pd.notna(context_df['size_percentile'].iloc[-1]):
+            size_percentile_value = float(context_df['size_percentile'].iloc[-1])
         return (
             torch.from_numpy(x), torch.from_numpy(x_stamp), torch.from_numpy(y_stamp),
             torch.tensor(sector_value, dtype=torch.long),
             torch.tensor(size_value, dtype=torch.long),
+            torch.tensor(size_percentile_value, dtype=torch.float32),
             symbol, timestamp
         )
 
@@ -234,6 +240,12 @@ def load_models(config: dict) -> tuple[KronosTokenizer, Kronos]:
         model_kwargs['num_sectors'] = int(config['num_sectors'])
     if 'num_size_buckets' in config:
         model_kwargs['num_size_buckets'] = int(config['num_size_buckets'])
+    if 'context_layer' in config:
+        model_kwargs['context_layer'] = int(config['context_layer'])
+    if 'use_size_percentile' in config:
+        model_kwargs['use_size_percentile'] = bool(config['use_size_percentile'])
+    if 'size_mlp_hidden_dim' in config:
+        model_kwargs['size_mlp_hidden_dim'] = int(config['size_mlp_hidden_dim'])
     model = Kronos.from_pretrained(config['model_path'], **model_kwargs).to(device).eval()
     return tokenizer, model
 
@@ -250,7 +262,7 @@ def collate_fn_for_inference(batch):
         A single tuple containing the batched data.
     """
     # Unzip the list of samples into separate lists for each data type
-    x, x_stamp, y_stamp, sector_ids, size_buckets, symbols, timestamps = zip(*batch)
+    x, x_stamp, y_stamp, sector_ids, size_buckets, size_percentiles, symbols, timestamps = zip(*batch)
 
     # Stack the tensors to create a batch
     x_batch = torch.stack(x, dim=0)
@@ -261,6 +273,7 @@ def collate_fn_for_inference(batch):
     return (
         x_batch, x_stamp_batch, y_stamp_batch,
         torch.stack(sector_ids), torch.stack(size_buckets),
+        torch.stack(size_percentiles),
         list(symbols), list(timestamps)
     )
 
@@ -292,13 +305,16 @@ def generate_predictions(config: dict, test_data: dict) -> dict[str, pd.DataFram
 
     results = defaultdict(list)
     with torch.no_grad():
-        for x, x_stamp, y_stamp, sector_ids, size_buckets, symbols, timestamps in tqdm(loader, desc="Inference"):
+        for x, x_stamp, y_stamp, sector_ids, size_buckets, size_percentiles, symbols, timestamps in tqdm(loader, desc="Inference"):
             preds = auto_regressive_inference(
                 tokenizer, model, x.to(device), x_stamp.to(device), y_stamp.to(device),
                 max_context=config['max_context'], pred_len=config['pred_len'], clip=config['clip'],
                 T=config['T'], top_k=config['top_k'], top_p=config['top_p'], sample_count=config['sample_count'],
                 sector_id=sector_ids.to(device) if config.get('use_sector_features', True) else None,
-                size_bucket=size_buckets.to(device) if config.get('use_size_features', True) else None
+                size_bucket=size_buckets.to(device) if config.get('use_size_features', True) else None,
+                size_percentile=(
+                    size_percentiles.to(device) if config.get('use_size_percentile', False) else None
+                ),
             )
             # You can try commenting on this line to keep the history data
             preds = preds[:, -config['pred_len']:, :]

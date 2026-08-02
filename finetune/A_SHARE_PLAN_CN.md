@@ -24,7 +24,7 @@
 symbol,date,open,high,low,close,volume,market_cap
 ```
 
-也可以直接提供 `size_bucket`，取值范围为 `0..9`。每个 `symbol,date` 都应有一行。
+也可以直接提供 `size_bucket`（`0..9`）和 `size_percentile`（`0..1`）。只有离散桶时，数据管线会用桶中点近似连续百分位；正式混合实验应从同日横截面 `market_cap` 排名生成真实百分位。每个 `symbol,date` 都应有一行。
 
 ## 数据准备
 
@@ -49,6 +49,7 @@ self.asset_metadata_path = "./data/a_share/asset_metadata.csv"
 self.use_context_features = True
 self.use_sector_features = False
 self.use_size_features = True
+self.use_size_percentile = False
 self.num_sectors = 0
 self.num_size_buckets = 10
 self.pretrained_predictor_path = "./Kronos-base"
@@ -76,7 +77,18 @@ KRONOS_PREDICTOR_PATH=./Kronos-base \
 python finetune/train_predictor.py
 ```
 
-脚本会自动选择 `mps`；CUDA 环境仍可使用 `torchrun` 多进程。
+脚本会自动选择 `mps`；默认最多运行 50 轮，连续 5 轮验证集没有改善才早停。可通过 `KRONOS_EPOCHS` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 覆盖；CUDA 环境仍可使用 `torchrun` 多进程。
+
+混合条件消融通过环境变量启用：
+
+```bash
+KRONOS_USE_SIZE_PERCENTILE=1 \
+KRONOS_PREDICTOR_SAVE_FOLDER=a_share_size_hybrid_kronos_base_earlystop50 \
+KRONOS_PREDICTOR_PATH=./Kronos-base \
+python finetune/train_predictor.py
+```
+
+该模型保留十桶 Embedding，并用两层 MLP 将连续百分位和已知标志映射到 832 维，在第 10 层后与桶 Embedding 相加。连续分支从零输出初始化，不影响原始 checkpoint 的初始行为。
 
 ## 本次结果
 
@@ -89,6 +101,24 @@ python finetune/train_predictor.py
 - 最终 checkpoint：`outputs/models/a_share_size_kronos_base_earlystop50/checkpoints/best_model/model.safetensors`。
 - ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>。
 - 训练配置使用最多 50 轮早停；最佳训练验证 loss：2.951193。
+
+### 连续百分位混合条件消融
+
+- checkpoint：`outputs/models/a_share_size_hybrid_kronos_base_earlystop50/checkpoints/best_model`。
+- 训练连续运行 26 轮后早停，最佳训练验证 loss：`2.9518`。
+- 固定随机序列评估：离散模型 `2.951176`，混合模型 `2.951893`。
+- 混合模型比离散模型高 `0.000717`（约 `0.024%`），没有形成验证集优势，暂不替换生产模型。
+- 129 日滚动回测：混合模型 Rank IC `0.04250`，比离散模型 `0.04152` 高 `0.00098`；方向准确率 `55.05%`，比离散模型 `55.31%` 低 `0.25` 个百分点。
+- 混合模型毛收益 `-21.93%`、计成本净收益 `-43.41%`，均弱于离散模型的 `-7.35%` 和 `-33.30%`。
+- 结论：连续百分位只带来极小排序提升，没有形成可交易或验证损失优势，不部署该 checkpoint。
+
+### 早停耐心消融
+
+- 设置：离散桶模型，最多 50 轮，连续 5 轮验证集无改善才早停。
+- 实际运行 43 轮，最佳点在第 38 轮，训练日志最佳 loss `2.9548`。
+- 固定随机序列评估 loss `2.954815`，现有生产模型为 `2.951176`。
+- 候选模型高 `0.003639`（约 `0.123%`），十个市值桶全部略差，因此不替换生产 checkpoint。
+- 训练配置默认 patience 仍调整为 5，用于降低未来实验因短期波动过早停止的风险。
 
 ## 样本外回测
 
@@ -118,3 +148,4 @@ python finetune/train_predictor.py
 - `outputs/models/a_share_size_kronos_base_earlystop50/size_eval.json`
 - `outputs/backtest_results/a_share_2026_smallcap/summary.json`
 - `outputs/backtest_results/a_share_2026_daily_smallcap/summary.json`
+- `outputs/backtest_results/a_share_2026_daily_smallcap_hybrid/summary.json`

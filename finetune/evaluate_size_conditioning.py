@@ -17,19 +17,26 @@ from model import Kronos, KronosTokenizer
 
 def evaluate(path, dataset, loader, tokenizer, device, config):
     dataset.set_epoch_seed(0)
+    torch.manual_seed(config.seed)
     model = Kronos.from_pretrained(
         path,
         num_sectors=config.num_sectors,
         num_size_buckets=config.num_size_buckets,
         context_layer=config.context_layer,
+        use_size_percentile=config.use_size_percentile,
+        size_mlp_hidden_dim=config.size_mlp_hidden_dim,
     ).to(device).eval()
     by_bucket = defaultdict(list)
     with torch.no_grad():
         for batch in loader:
             x, stamp, size = batch[0].to(device), batch[1].to(device), batch[3].to(device)
+            percentile = (
+                batch[4].to(device) if len(batch) > 4 and config.use_size_percentile else None
+            )
             s1, s2 = tokenizer.encode(x, half=True)
             s1_logits, s2_logits = model(
-                s1[:, :-1], s2[:, :-1], stamp[:, :-1], size_bucket=size
+                s1[:, :-1], s2[:, :-1], stamp[:, :-1], size_bucket=size,
+                size_percentile=percentile,
             )
             s1_loss = F.cross_entropy(
                 s1_logits.transpose(1, 2), s1[:, 1:], reduction='none'
