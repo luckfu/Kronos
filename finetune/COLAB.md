@@ -17,7 +17,7 @@ bash finetune/colab_bootstrap.sh
 bash finetune/colab_train.sh
 ```
 
-默认使用 `luckfu/a-share-size-kronos-base-earlystop50` 作为训练起点、CUDA、离散市值桶、20,000 窗口/段、1 遍完整覆盖和 patience 5。
+默认使用 `luckfu/a-share-size-kronos-base-earlystop50` 作为训练起点、CUDA、离散市值桶、batch 32、4 个数据加载 worker、20,000 窗口/段、1 遍完整覆盖和 patience 5。
 
 ## 先用 CPU 准备数据，再用 GPU 训练
 
@@ -93,7 +93,7 @@ bash finetune/colab_train.sh
 ## 参数覆盖
 
 ```bash
-KRONOS_BATCH_SIZE=8 \
+KRONOS_BATCH_SIZE=32 \
 KRONOS_TRAIN_SAMPLES_PER_SEGMENT=20000 \
 KRONOS_COVERAGE_PASSES=1 \
 KRONOS_PREDICTOR_SAVE_FOLDER=a_share_colab_experiment_v1 \
