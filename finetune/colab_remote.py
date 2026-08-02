@@ -40,6 +40,8 @@ def main():
     env = os.environ.copy()
     env['KRONOS_COLAB_ROOT'] = runtime_root
     env['KRONOS_COLAB_BASE_MODEL'] = args.base_model
+    if args.prepare_only:
+        env['KRONOS_PREPARE_ONLY'] = '1'
     run(['bash', 'finetune/colab_bootstrap.sh'], cwd=repo_dir, env=env)
     if args.prepare_only:
         return

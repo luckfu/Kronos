@@ -2,39 +2,63 @@
 
 本项目不把 178 MB 原始 CSV 或 112 MB `train_data.pkl` 放进 Git。Colab 会从 BaoStock 重建同一口径的真实 A 股面板，并把数据和 checkpoint 放在本地目录或 Google Drive。
 
-## 直接使用 Colab 网页
+## Colab 终端使用
 
-在 Colab GPU Runtime 中执行：
+以下命令均在 Colab Terminal 中执行，不使用 Notebook 的 `!` 或 `%` 语法。
 
-```bash
-!git clone https://github.com/luckfu/Kronos.git
-%cd Kronos
-!bash finetune/colab_bootstrap.sh
-!bash finetune/colab_train.sh
+在 GPU Runtime 中直接训练：
+
+```shell
+cd /content
+git clone https://github.com/luckfu/Kronos.git
+cd /content/Kronos
+export KRONOS_COLAB_ROOT=/content/kronos_runtime
+bash finetune/colab_bootstrap.sh
+bash finetune/colab_train.sh
 ```
 
 默认使用 `luckfu/a-share-size-kronos-base-earlystop50` 作为训练起点、CUDA、离散市值桶、20,000 窗口/段、1 遍完整覆盖和 patience 5。
 
-默认数据和输出在 `/content/kronos_runtime`。Colab Runtime 被回收后这些文件会消失，长训应先挂载 Google Drive：
+## 先用 CPU 准备数据，再用 GPU 训练
 
-```python
-from google.colab import drive
-drive.mount('/content/drive')
+可以先选择 CPU Runtime 下载和处理数据，再切换到 GPU Runtime。一定要把运行目录放在 Google Drive；切换 Runtime 会清空 `/content` 下的临时文件。
+
+CPU Runtime 的终端中执行：
+
+```shell
+cd /content
+git clone https://github.com/luckfu/Kronos.git
+cd /content/Kronos
+export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
+export KRONOS_PREPARE_ONLY=1
+bash finetune/colab_bootstrap.sh
 ```
 
-然后设置：
+这一步只下载 CSI800 BaoStock 数据并生成处理后的数据集，不启动训练，也不要求 CUDA。完成后把 Runtime 切换为 GPU，并重新挂载 Drive、恢复仓库：
 
-```bash
-%env KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
-!bash finetune/colab_bootstrap.sh
-!bash finetune/colab_train.sh
+```shell
+cd /content
+test -d /content/Kronos/.git || git clone https://github.com/luckfu/Kronos.git /content/Kronos
+cd /content/Kronos
+export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
+export KRONOS_PREPARE_ONLY=0
+bash finetune/colab_bootstrap.sh
+bash finetune/colab_train.sh
 ```
 
-中断后恢复：
+GPU 阶段会发现 Drive 中已有处理好的数据，直接复用，只下载基础模型并开始训练。
 
-```bash
-%env KRONOS_RESUME_TRAINING=1
-!bash finetune/colab_train.sh
+如果当前终端还没有挂载 Google Drive，需要先在 Colab 的 Python 运行环境中挂载；挂载完成后，终端里应能看到 `/content/drive/MyDrive`。如果不使用 Drive，则把 `KRONOS_COLAB_ROOT` 改成 `/content/kronos_runtime`，但切换 Runtime 后数据不会保留。
+
+默认数据和输出在 `/content/kronos_runtime`。Colab Runtime 被回收后这些文件会消失；使用 Drive 时，把 `KRONOS_COLAB_ROOT` 指向 `/content/drive/MyDrive/kronos_a_share`。
+
+训练中断后，在终端恢复：
+
+```shell
+cd /content/Kronos
+export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
+export KRONOS_RESUME_TRAINING=1
+bash finetune/colab_train.sh
 ```
 
 ## 使用 google-colab-cli

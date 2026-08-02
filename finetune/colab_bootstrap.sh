@@ -9,6 +9,7 @@ DATASET_ROOT="${DATA_ROOT}/processed_datasets"
 METADATA_PATH="${DATA_ROOT}/asset_metadata.csv"
 MODEL_ROOT="${KRONOS_COLAB_MODEL_ROOT:-${RUNTIME_ROOT}/models}"
 BASE_KIND="${KRONOS_COLAB_BASE_MODEL:-production}"
+PREPARE_ONLY="${KRONOS_PREPARE_ONLY:-0}"
 
 cd "${REPO_ROOT}"
 python -m pip install -q -r finetune/requirements-colab.txt
@@ -29,6 +30,20 @@ if [[ ! -f "${DATASET_ROOT}/train_data.pkl" || ! -f "${DATASET_ROOT}/val_data.pk
     --size-reference-out "${DATA_ROOT}/size_reference.json"
 else
   echo '[colab] Prepared dataset already exists; reusing it.'
+fi
+
+# CPU runtimes can prepare and persist the data without downloading model
+# weights or requiring CUDA. The GPU phase runs this script again and then
+# continues through model setup and validation.
+if [[ "${PREPARE_ONLY}" == '1' ]]; then
+  cat <<EOF
+[colab] Data preparation complete.
+[colab] Data: ${DATASET_ROOT}
+[colab] Switch to a GPU runtime, remount Google Drive, then run:
+  KRONOS_COLAB_ROOT='${RUNTIME_ROOT}' bash finetune/colab_bootstrap.sh
+  KRONOS_COLAB_ROOT='${RUNTIME_ROOT}' bash finetune/colab_train.sh
+EOF
+  exit 0
 fi
 
 if [[ "${BASE_KIND}" == 'original' ]]; then
