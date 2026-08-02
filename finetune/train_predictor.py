@@ -74,13 +74,21 @@ def optimizer_to(optimizer, device):
                 state[key] = value.to(device)
 
 
+def mps_available():
+    return bool(
+        hasattr(torch, 'backends')
+        and hasattr(torch.backends, 'mps')
+        and torch.backends.mps.is_available()
+    )
+
+
 def capture_rng_state():
     state = {
         'python': random.getstate(),
         'numpy': np.random.get_state(),
         'torch': torch.get_rng_state(),
     }
-    if hasattr(torch, 'mps') and hasattr(torch.mps, 'get_rng_state'):
+    if mps_available() and hasattr(torch.mps, 'get_rng_state'):
         state['mps'] = torch.mps.get_rng_state()
     if torch.cuda.is_available():
         state['cuda'] = torch.cuda.get_rng_state_all()
@@ -93,7 +101,7 @@ def restore_rng_state(state):
     random.setstate(state['python'])
     np.random.set_state(state['numpy'])
     torch.set_rng_state(state['torch'])
-    if 'mps' in state and hasattr(torch, 'mps') and hasattr(torch.mps, 'set_rng_state'):
+    if 'mps' in state and mps_available() and hasattr(torch.mps, 'set_rng_state'):
         torch.mps.set_rng_state(state['mps'])
     if 'cuda' in state and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state['cuda'])

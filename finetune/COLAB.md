@@ -9,10 +9,10 @@
 在 GPU Runtime 中直接训练：
 
 ```shell
-cd /content
-git clone https://github.com/luckfu/Kronos.git
-cd /content/Kronos
-export KRONOS_COLAB_ROOT=/content/kronos_runtime
+cd /content/drive/MyDrive
+test -d Kronos/.git || git clone https://github.com/luckfu/Kronos.git Kronos
+cd /content/drive/MyDrive/Kronos
+export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
 bash finetune/colab_bootstrap.sh
 bash finetune/colab_train.sh
 ```
@@ -26,9 +26,9 @@ bash finetune/colab_train.sh
 CPU Runtime 的终端中执行：
 
 ```shell
-cd /content
-git clone https://github.com/luckfu/Kronos.git
-cd /content/Kronos
+cd /content/drive/MyDrive
+test -d Kronos/.git || git clone https://github.com/luckfu/Kronos.git Kronos
+cd /content/drive/MyDrive/Kronos
 export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
 export KRONOS_PREPARE_ONLY=1
 bash finetune/colab_bootstrap.sh
@@ -37,9 +37,7 @@ bash finetune/colab_bootstrap.sh
 这一步只下载 CSI800 BaoStock 数据并生成处理后的数据集，不启动训练，也不要求 CUDA。完成后把 Runtime 切换为 GPU，并重新挂载 Drive、恢复仓库：
 
 ```shell
-cd /content
-test -d /content/Kronos/.git || git clone https://github.com/luckfu/Kronos.git /content/Kronos
-cd /content/Kronos
+cd /content/drive/MyDrive/Kronos
 export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
 export KRONOS_PREPARE_ONLY=0
 bash finetune/colab_bootstrap.sh
@@ -55,7 +53,7 @@ GPU 阶段会发现 Drive 中已有处理好的数据，直接复用，只下载
 训练中断后，在终端恢复：
 
 ```shell
-cd /content/Kronos
+cd /content/drive/MyDrive/Kronos
 export KRONOS_COLAB_ROOT=/content/drive/MyDrive/kronos_a_share
 export KRONOS_RESUME_TRAINING=1
 bash finetune/colab_train.sh
