@@ -19,6 +19,8 @@ bash finetune/colab_train.sh
 
 默认使用 `luckfu/a-share-size-kronos-base-earlystop50` 作为训练起点、CUDA、离散市值桶、batch 32、2 个数据加载 worker、20,000 窗口/段、1 遍完整覆盖和 patience 5。同一输出目录中存在 `last_state.pt` 且没有显式设置 `KRONOS_RESUME_TRAINING` 时，训练脚本会自动恢复。
 
+为防止断线后选错输出目录，脚本在“请求恢复但没有 `last_state.pt`”或“请求新训但输出目录已有 checkpoint”时会直接退出，不会静默从第 1 段开始覆盖旧权重。
+
 ## 先用 CPU 准备数据，再用 GPU 训练
 
 可以先选择 CPU Runtime 下载和处理数据，再切换到 GPU Runtime。一定要把运行目录放在 Google Drive；切换 Runtime 会清空 `/content` 下的临时文件。

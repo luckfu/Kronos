@@ -43,6 +43,17 @@ fi
 echo "[colab] Output: ${KRONOS_SAVE_PATH}/${OUTPUT_NAME}"
 echo "[colab] Resume: ${KRONOS_RESUME_TRAINING}"
 
+if [[ "${KRONOS_RESUME_TRAINING}" == '1' && ! -f "${RESUME_PATH}" ]]; then
+  echo "[colab] ERROR: Resume requested but checkpoint does not exist: ${RESUME_PATH}" >&2
+  exit 1
+fi
+
+if [[ "${KRONOS_RESUME_TRAINING}" == '0' ]] && \
+   [[ -f "${RESUME_PATH}" || -f "${KRONOS_SAVE_PATH}/${OUTPUT_NAME}/checkpoints/best_model/model.safetensors" ]]; then
+  echo "[colab] ERROR: Output already contains checkpoints. Use a new output name or set KRONOS_RESUME_TRAINING=1." >&2
+  exit 1
+fi
+
 cd "${REPO_ROOT}"
 python finetune/verify_colab_setup.py \
   --data-dir "${KRONOS_DATASET_PATH}" \
