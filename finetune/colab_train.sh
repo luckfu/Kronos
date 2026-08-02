@@ -7,6 +7,7 @@ DATA_ROOT="${KRONOS_COLAB_DATA_ROOT:-${RUNTIME_ROOT}/data/a_share}"
 MODEL_ROOT="${KRONOS_COLAB_MODEL_ROOT:-${RUNTIME_ROOT}/models}"
 BASE_KIND="${KRONOS_COLAB_BASE_MODEL:-production}"
 OUTPUT_NAME="${KRONOS_PREDICTOR_SAVE_FOLDER:-a_share_size_full_coverage_colab_v1}"
+RESUME_PATH="${RUNTIME_ROOT}/outputs/models/${OUTPUT_NAME}/checkpoints/last_state.pt"
 
 if [[ "${BASE_KIND}" == 'original' ]]; then
   BASE_MODEL="${MODEL_ROOT}/Kronos-base"
@@ -28,8 +29,19 @@ export KRONOS_COVERAGE_PASSES="${KRONOS_COVERAGE_PASSES:-1}"
 export KRONOS_REQUIRE_FULL_COVERAGE="${KRONOS_REQUIRE_FULL_COVERAGE:-1}"
 export KRONOS_EARLY_STOPPING_PATIENCE="${KRONOS_EARLY_STOPPING_PATIENCE:-5}"
 export KRONOS_BATCH_SIZE="${KRONOS_BATCH_SIZE:-32}"
-export KRONOS_NUM_WORKERS="${KRONOS_NUM_WORKERS:-4}"
-export KRONOS_RESUME_TRAINING="${KRONOS_RESUME_TRAINING:-0}"
+export KRONOS_NUM_WORKERS="${KRONOS_NUM_WORKERS:-2}"
+if [[ -z "${KRONOS_RESUME_TRAINING+x}" ]]; then
+  if [[ -f "${RESUME_PATH}" ]]; then
+    export KRONOS_RESUME_TRAINING=1
+  else
+    export KRONOS_RESUME_TRAINING=0
+  fi
+else
+  export KRONOS_RESUME_TRAINING
+fi
+
+echo "[colab] Output: ${KRONOS_SAVE_PATH}/${OUTPUT_NAME}"
+echo "[colab] Resume: ${KRONOS_RESUME_TRAINING}"
 
 cd "${REPO_ROOT}"
 python finetune/verify_colab_setup.py \

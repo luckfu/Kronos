@@ -17,7 +17,7 @@ bash finetune/colab_bootstrap.sh
 bash finetune/colab_train.sh
 ```
 
-默认使用 `luckfu/a-share-size-kronos-base-earlystop50` 作为训练起点、CUDA、离散市值桶、batch 32、4 个数据加载 worker、20,000 窗口/段、1 遍完整覆盖和 patience 5。
+默认使用 `luckfu/a-share-size-kronos-base-earlystop50` 作为训练起点、CUDA、离散市值桶、batch 32、2 个数据加载 worker、20,000 窗口/段、1 遍完整覆盖和 patience 5。同一输出目录中存在 `last_state.pt` 且没有显式设置 `KRONOS_RESUME_TRAINING` 时，训练脚本会自动恢复。
 
 ## 先用 CPU 准备数据，再用 GPU 训练
 
