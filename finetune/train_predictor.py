@@ -119,6 +119,23 @@ def save_resume_state(path, model, optimizer, scheduler, **metadata):
     os.replace(temporary, path)
 
 
+def save_pretrained_with_retry(model, path, config, attempts=3, retry_delay=2):
+    """Retry checkpoint export when a mounted filesystem briefly loses the directory."""
+    for attempt in range(1, attempts + 1):
+        try:
+            os.makedirs(path, exist_ok=True)
+            model.save_pretrained(path, config=config)
+            return
+        except FileNotFoundError:
+            if attempt == attempts:
+                raise
+            print(
+                f"Checkpoint directory disappeared while saving {path}; "
+                f"retrying ({attempt}/{attempts})..."
+            )
+            time.sleep(retry_delay)
+
+
 def create_dataloaders(config: dict, rank: int, world_size: int):
     """
     Creates and returns distributed dataloaders for training and validation.
@@ -625,19 +642,6 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             if logger:
                 logger.log_metric('val_predictor_loss_epoch', avg_val_loss, epoch=epoch_idx)
 
-            if improved:
-                save_path = f"{save_dir}/checkpoints/best_model"
-                core_model = model.module if isinstance(model, DDP) else model
-                model_config = dict(getattr(core_model, '_hub_mixin_config', {}) or {})
-                model_config.update({
-                    'num_sectors': int(config.get('num_sectors', 0)),
-                    'num_size_buckets': int(config.get('num_size_buckets', 0)),
-                    'context_layer': int(config.get('context_layer', 0)),
-                    'use_size_percentile': bool(config.get('use_size_percentile', False)),
-                    'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
-                })
-                core_model.save_pretrained(save_path, config=model_config)
-                print(f"Best model saved to {save_path} (Val Loss: {best_val_loss:.4f})")
             save_resume_state(
                 resume_path,
                 core_model,
@@ -653,6 +657,18 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 segments_per_coverage=segments_per_coverage,
                 coverage_passes=coverage_passes,
             )
+            if improved:
+                save_path = f"{save_dir}/checkpoints/best_model"
+                model_config = dict(getattr(core_model, '_hub_mixin_config', {}) or {})
+                model_config.update({
+                    'num_sectors': int(config.get('num_sectors', 0)),
+                    'num_size_buckets': int(config.get('num_size_buckets', 0)),
+                    'context_layer': int(config.get('context_layer', 0)),
+                    'use_size_percentile': bool(config.get('use_size_percentile', False)),
+                    'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
+                })
+                save_pretrained_with_retry(core_model, save_path, model_config)
+                print(f"Best model saved to {save_path} (Val Loss: {best_val_loss:.4f})")
             completed_coverage_segments = epoch_idx + 1
             last_completed_segment = completed_coverage_segments
             write_progress(
