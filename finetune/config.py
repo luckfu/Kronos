@@ -14,7 +14,7 @@ class Config:
         self.instrument = 'csi800'
 
         # Overall time range for data loading from Qlib.
-        self.dataset_begin_time = "2020-01-01"
+        self.dataset_begin_time = "2015-01-01"
         self.dataset_end_time = '2026-12-31'
 
         # Sliding window parameters for creating samples.
@@ -46,7 +46,7 @@ class Config:
         # =================================================================
         # Note: The validation/test set starts earlier than the training/validation set ends
         # to account for the `lookback_window`.
-        self.train_time_range = ["2020-01-01", "2025-12-31"]
+        self.train_time_range = ["2015-01-01", "2025-12-31"]
         self.val_time_range = ["2026-01-01", "2026-12-31"]
         self.test_time_range = ["2027-01-01", "2027-12-31"]
         self.backtest_time_range = ["2026-01-01", "2026-12-31"]
@@ -77,6 +77,12 @@ class Config:
         ).strip().lower() in {"1", "true", "yes", "on"}
         self.resume_training = os.getenv(
             "KRONOS_RESUME_TRAINING", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.reset_size_embedding = os.getenv(
+            "KRONOS_RESET_SIZE_EMBEDDING", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.balance_size_buckets = os.getenv(
+            "KRONOS_BALANCE_SIZE_BUCKETS", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
 
         # Learning rates for different model components.

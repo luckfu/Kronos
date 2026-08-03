@@ -12,7 +12,7 @@ RESUME_PATH="${RUNTIME_ROOT}/outputs/models/${OUTPUT_NAME}/checkpoints/last_stat
 if [[ "${BASE_KIND}" == 'original' ]]; then
   BASE_MODEL="${MODEL_ROOT}/Kronos-base"
 else
-  BASE_MODEL="${MODEL_ROOT}/a_share_size_kronos_base_earlystop50"
+  BASE_MODEL="${MODEL_ROOT}/a_share_size_full_coverage_colab_bs32_latest"
 fi
 
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/finetune"

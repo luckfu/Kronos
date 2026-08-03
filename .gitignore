@@ -49,6 +49,7 @@ Desktop.ini
 *.h5
 *.hdf5
 /data/a_share/
+/data/a_share_v3/
 
 # Model files (large files)
 *.pth
@@ -57,6 +58,7 @@ Desktop.ini
 *.bin
 /outputs/models/a_share_size_kronos_base/
 /outputs/
+/artifacts/
 /webui/prediction_results/
 
 # Logs

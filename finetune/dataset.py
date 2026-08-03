@@ -12,6 +12,68 @@ except ImportError:
     from asset_metadata import AssetMetadata
 
 
+def build_balanced_coverage_order(bucket_ids, segment_size, seed):
+    """Interleave shuffled buckets per segment while using every index once."""
+    bucket_ids = np.asarray(bucket_ids, dtype=np.uint8)
+    rng = np.random.default_rng(seed)
+    unknown_positions = np.flatnonzero(bucket_ids == 255)
+    rng.shuffle(unknown_positions)
+    known_mask = bucket_ids != 255
+    known_positions = np.flatnonzero(known_mask)
+    known_bucket_ids = bucket_ids[known_mask]
+    groups = {}
+    for bucket in np.unique(known_bucket_ids):
+        positions = known_positions[np.flatnonzero(known_bucket_ids == bucket)]
+        rng.shuffle(positions)
+        groups[int(bucket)] = positions
+    cursors = {bucket: 0 for bucket in groups}
+    order = np.empty(len(bucket_ids), dtype=np.int64)
+    output_start = 0
+    known_total = len(known_positions)
+    while output_start < known_total:
+        active = [
+            bucket for bucket, positions in groups.items()
+            if cursors[bucket] < len(positions)
+        ]
+        target = min(int(segment_size), known_total - output_start)
+        allocations = {bucket: 0 for bucket in active}
+        remaining = target
+        while remaining > 0:
+            available = [
+                bucket for bucket in active
+                if cursors[bucket] + allocations[bucket] < len(groups[bucket])
+            ]
+            if not available:
+                break
+            share = max(1, remaining // len(available))
+            progressed = 0
+            for bucket in available:
+                capacity = len(groups[bucket]) - cursors[bucket] - allocations[bucket]
+                take = min(share, capacity, remaining)
+                allocations[bucket] += take
+                remaining -= take
+                progressed += take
+                if remaining == 0:
+                    break
+            if progressed == 0:
+                raise RuntimeError('Unable to allocate a balanced coverage segment')
+        segment_parts = []
+        for bucket in active:
+            take = allocations[bucket]
+            if take <= 0:
+                continue
+            start = cursors[bucket]
+            end = start + take
+            segment_parts.append(groups[bucket][start:end])
+            cursors[bucket] = end
+        segment = np.concatenate(segment_parts)
+        rng.shuffle(segment)
+        order[output_start:output_start + len(segment)] = segment
+        output_start += len(segment)
+    order[output_start:] = unknown_positions
+    return order
+
+
 class QlibDataset(Dataset):
     """
     A PyTorch Dataset for handling Qlib financial time series data.
@@ -70,6 +132,7 @@ class QlibDataset(Dataset):
 
         # Pre-compute all possible (symbol, start_index) pairs.
         self.indices = []
+        bucket_ids = bytearray()
         print(f"[{data_type.upper()}] Pre-computing sample indices...")
         for symbol in self.symbols:
             df = self.data[symbol].reset_index()
@@ -96,14 +159,32 @@ class QlibDataset(Dataset):
                 # Add all valid starting indices for this symbol to the global list.
                 for i in range(num_samples):
                     self.indices.append((symbol, i))
+                    asof_position = i + self.config.lookback_window - 1
+                    bucket = 255
+                    if str(symbol) in self.size_by_symbol:
+                        value = self.size_by_symbol[str(symbol)].iloc[asof_position]
+                        if pd.notna(value):
+                            bucket = int(value)
+                    bucket_ids.append(bucket)
 
         self.total_samples = len(self.indices)
         requested = int(self.configured_samples)
         self.n_samples = self.total_samples if requested <= 0 else min(requested, self.total_samples)
         permutation_seed = self.config.seed + (0 if data_type == 'train' else 1)
-        self.coverage_order = np.random.default_rng(permutation_seed).permutation(
-            self.total_samples
-        )
+        if (
+            data_type == 'train'
+            and bool(getattr(self.config, 'balance_size_buckets', False))
+        ):
+            self.coverage_order = build_balanced_coverage_order(
+                np.frombuffer(bucket_ids, dtype=np.uint8),
+                self.n_samples,
+                permutation_seed,
+            )
+            print('[TRAIN] Size-balanced no-replacement coverage order enabled.')
+        else:
+            self.coverage_order = np.random.default_rng(permutation_seed).permutation(
+                self.total_samples
+            )
         self.active_positions = self.coverage_order[:self.n_samples]
         self.coverage_start = 0
         print(

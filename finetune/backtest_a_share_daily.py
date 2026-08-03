@@ -322,7 +322,7 @@ def main():
     parser.add_argument('--base-model', default='./Kronos-base')
     parser.add_argument(
         '--finetuned-model',
-        default='./outputs/models/a_share_size_kronos_base_earlystop50/checkpoints/best_model',
+        default='./outputs/models/a_share_size_full_coverage_colab_bs32_latest/checkpoints/best_model',
     )
     parser.add_argument('--tokenizer', default='NeoQuasar/Kronos-Tokenizer-base')
     parser.add_argument('--output-dir', default='./outputs/backtest_results/a_share_2026_daily_smallcap')

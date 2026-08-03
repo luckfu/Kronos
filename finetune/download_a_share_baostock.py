@@ -15,7 +15,11 @@ import numpy as np
 import pandas as pd
 
 
-SNAPSHOT_DATES = ['2020-12-31', '2021-12-31', '2022-12-30', '2023-12-29', '2024-12-31', '2025-12-31']
+SNAPSHOT_DATES = [
+    '2015-12-31', '2016-12-30', '2017-12-29', '2018-12-28',
+    '2019-12-31', '2020-12-31', '2021-12-31', '2022-12-30',
+    '2023-12-29', '2024-12-31', '2025-12-31',
+]
 
 
 def read_result(result):
@@ -84,7 +88,8 @@ def download_symbol(symbol, start_date, end_date, industry_history=None):
 def main():
     parser = argparse.ArgumentParser(description='Download A-share daily data with BaoStock')
     parser.add_argument('--universe', choices=['csi300', 'csi800'], default='csi800')
-    parser.add_argument('--start', default='2020-01-01')
+    parser.add_argument('--symbols-file', default=None, help='CSV manifest containing a symbol column')
+    parser.add_argument('--start', default='2015-01-01')
     parser.add_argument('--end', default='2026-07-31')
     parser.add_argument('--output', default='./data/a_share/a_share_daily.csv')
     parser.add_argument('--resume', action='store_true', help='Skip symbols already present in output')
@@ -106,9 +111,15 @@ def main():
 
     login_baostock()
     try:
-        symbols = query_universe(args.universe)
+        if args.symbols_file:
+            manifest = pd.read_csv(args.symbols_file, usecols=['symbol'])
+            symbols = sorted(set(manifest['symbol'].astype(str)))
+            universe_label = os.path.basename(args.symbols_file)
+        else:
+            symbols = query_universe(args.universe)
+            universe_label = args.universe
         industry_history = query_industry_history() if args.with_sector else None
-        print(f'universe={args.universe}, symbols={len(symbols)}, skip={len(completed)}')
+        print(f'universe={universe_label}, symbols={len(symbols)}, skip={len(completed)}')
         rows = []
         for idx, symbol in enumerate(symbols, 1):
             if symbol in completed:
@@ -130,7 +141,7 @@ def main():
                         print(f'warning: {symbol}: {retry_exc}')
                 else:
                     print(f'warning: {symbol}: {exc}')
-            if idx % 25 == 0:
+            if idx % 10 == 0:
                 print(f'{idx}/{len(symbols)} symbols, rows={len(rows)}')
                 if rows:
                     pd.DataFrame(rows).to_csv(args.output, mode='a' if wrote_output else 'w', index=False, header=not wrote_output)

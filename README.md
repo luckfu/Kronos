@@ -12,9 +12,11 @@
 - 条件：按交易日横截面流通市值划分为 10 桶（`0` 最小，`9` 最大）
 - 训练期：2020-01-02 至 2025-12-31
 - 验证期：2026-01-01 至 2026-07-31
+- 生产 checkpoint：`a_share_size_full_coverage_colab_bs32_latest`
+- 完整覆盖：1,509,252 个训练窗口，81 个覆盖分段，batch size 32
 - 设备：自动选择 `MPS → CUDA → CPU`
 
-公开模型权重已发布到 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。模型卡记录了加载方式、训练口径和限制。
+公开模型权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。仓库地址为兼容已有部署保持不变，当前文件已更新为完整覆盖生产权重；模型卡记录了版本、校验和、训练口径与限制。
 
 ## 市值桶如何接入原版 Kronos
 
@@ -45,7 +47,7 @@ BaoStock 不提供稳定的历史流通市值字段，因此数据准备阶段�
 
 数据管线同时保留 `size_percentile`（当日横截面市值百分位）。实验模型在离散桶 Embedding 之外增加一个两层 MLP，将 `[size_percentile, is_known]` 映射到 832 维并在同一位置注入。该分支同样以零输出层初始化，旧离散 checkpoint 默认关闭，因此向后兼容。
 
-混合模型从原始 `Kronos-base` 独立训练，连续运行 26 轮后早停。固定随机序列评估中，旧离散模型 loss 为 `2.951176`，混合模型为 `2.951893`；混合模型高 `0.000717`，没有胜出。129 日滚动回测中，混合模型 Rank IC 从 `0.04152` 小幅升至 `0.04250`，但方向准确率从 `55.31%` 降至 `55.05%`，计成本净收益从 `-33.30%` 恶化至 `-43.41%`。因此当前生产页面和 ModelScope 仍使用离散桶模型，混合 checkpoint 仅作为消融实验保留在 `outputs/models/a_share_size_hybrid_kronos_base_earlystop50`。
+混合模型从原始 `Kronos-base` 独立训练，连续运行 26 轮后早停。固定随机序列评估中，旧离散模型 loss 为 `2.951176`，混合模型为 `2.951893`；混合模型高 `0.000717`，没有胜出。129 日滚动回测中，混合模型 Rank IC 从 `0.04152` 小幅升至 `0.04250`，但方向准确率从 `55.31%` 降至 `55.05%`，计成本净收益从 `-33.30%` 恶化至 `-43.41%`。因此当前生产页面和 ModelScope 使用完整覆盖的离散桶模型，混合 checkpoint 仅作为消融实验保留。
 
 ### 早停耐心消融
 
@@ -70,7 +72,7 @@ python -m pip install modelscope
 ```bash
 modelscope download luckfu/a-share-size-kronos-base-earlystop50 \
   --repo-type model \
-  --local-dir outputs/models/a_share_size_kronos_base_earlystop50/checkpoints/best_model
+  --local-dir outputs/models/a_share_size_full_coverage_colab_bs32_latest/checkpoints/best_model
 ```
 
 启动页面：
@@ -103,6 +105,14 @@ PYTHONPATH=. python webui/app.py
 ## 增训与数据准备
 
 A 股数据准备和实验口径详见 [`finetune/A_SHARE_PLAN_CN.md`](finetune/A_SHARE_PLAN_CN.md)。典型流程如下：
+
+### 全市场市值分层 V3（训练中）
+
+CSI800 历史成分仍偏向大中盘，不能代表完整的小微盘风格。V3 在 2015–2025 年 CSI800 历史成分并集之外，按 2025 年末市值代理值补入微盘、小盘和中小盘股票各 300 只，并为这三个层级各保留 80 只整股票样本外集合。训练集共 2,389 只股票，整股票样本外集合 240 只，两者没有股票重叠。
+
+V3 行情从 2015-01-01 开始，使训练同时覆盖 2015 年快速上涨和随后大幅下跌的市场状态；训练截止 2025-12-31，2026 数据不参与参数更新，只用于严格的时间外验证。处理后训练集包含 5,233,538 个有效窗口，按十个市值桶均衡编排，每个窗口在一遍覆盖中只出现一次。完整配置入口是 `finetune/train_a_share_v3.sh`，候选模型完成跨时间、跨股票评估前不会替换生产模型。
+
+正式长训放在 Colab CUDA 上，本机只负责准备、校验和打包数据。具体命令见 [`finetune/COLAB_V3.md`](finetune/COLAB_V3.md)；本机 `train_a_share_v3.sh` 只用于短跑通或有意的 MPS 实验，不作为默认完整训练入口。
 
 增训是独立 App，不与预测进程共享模型或生命周期。运行 `python webui/finetune_app.py` 后访问 `http://127.0.0.1:7071/`；预测 App 继续独立运行在 7070。增训页面可选择本地 `NeoQuasar/Kronos-base` 或已有的完整 checkpoint 作为训练起点，再选择离散市值桶或“桶 + 连续百分位”；模型列表只展示名称和来源，不向前端返回本机路径。设备自动使用 MPS、CUDA 或 CPU，并提供规模预估、实时训练/验证/最佳 Loss 曲线、原始日志、完整覆盖进度、停止保存和 checkpoint 恢复。默认每段训练 20,000 个无重复窗口；训练器沿固定随机排列依次推进，76 段覆盖当前 1,509,252 个训练窗口一遍，全部窗口完成覆盖后才开始计算 5 段早停耐心。
 
@@ -137,11 +147,13 @@ python finetune/train_predictor.py
 
 训练脚本默认使用完整覆盖分段：每段内部无放回、段间沿同一排列继续，完成要求的覆盖遍数后再应用验证集早停。`KRONOS_TRAIN_SAMPLES_PER_SEGMENT`、`KRONOS_COVERAGE_PASSES`、`KRONOS_VALIDATION_SAMPLES` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 可覆盖页面默认值。Apple Silicon 直接运行即可自动使用 MPS；CUDA 可使用 `torchrun`。停止请求会在当前 batch 完成后立即暂停计算并保存 `last_state.pt`；状态包含模型、优化器、学习率调度器、分段和 batch 位置及随机数状态，设置 `KRONOS_RESUME_TRAINING=1` 可从下一 batch 恢复。训练指标同时写入 `metrics.jsonl`，旧任务可从 `training.log` 恢复曲线。`Kronos-base` 基础权重可放在任意目录，通过 `KRONOS_PREDICTOR_PATH` 指定。
 
-现有生产 checkpoint 是早期“每轮随机抽取 800 个窗口”的实验结果，并不代表 150 万训练窗口已完整参与。新的独立增训 App 专门修正了这一点；在新的全覆盖候选模型完成评估前，预测页仍保留验证结果更好的现有生产权重。
+当前生产 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留，不再由预测页面、默认回测或 Colab `production` 起点加载。
 
 ## 评估与回测
 
-本次验证集 token loss 从原始模型的 `3.142226` 降至 `2.951122`，改善 `6.082%`，十个市值桶均有改善。连续百分位混合模型的固定种子 loss 为 `2.951893`，patience5 离散候选为 `2.954815`，均没有超过生产离散模型的 `2.951176`。129 个信号日的滚动小市值试验中，离散模型平均 Rank IC 为 `0.04152`，10 日方向准确率为 `55.31%`，计成本净收益为 `-33.30%`；混合模型对应为 `0.04250`、`55.05%` 和 `-43.41%`。同期等权基准为 `-5.98%`。混合条件只有排序指标微升，loss、方向和交易结果均未改善，因此不替换生产模型；两者都存在高换手和信号反转问题，当前结果不支持直接实盘。
+全覆盖训练共使用 1,509,252 个窗口，最终 `latest` checkpoint 位于第 81 个覆盖分段；训练过程记录的最佳验证 loss 为 `2.877660`。针对从未进入 1,176 只训练面板、且不属于对应 CSI800 截面的 24 只股票，2025 年 16 个截面上 `latest` 的平均 Rank IC 为 `0.16549`，高于全覆盖 `best` 的 `0.15849` 和旧在线模型的 `0.09122`；预测前后 20% 的平均十日收益差分别为 `4.46%`、`4.04%` 和 `2.44%`。2024 年三个模型的 Rank IC 都接近零，2026 熊市压力测试中排序能力同样明显减弱，说明模型表现具有行情依赖性。
+
+2024、2025 的股票本身没有参与增训，但模型见过同期 CSI800 行情，因此这些结果检验的是跨股票泛化，不是严格的时间外验证。2026 是时间外压力测试，也不能单独代表所有市场环境。当前证据支持将全覆盖 `latest` 用于股票池排序，但不支持把单股绝对涨跌或预测价格直接作为交易指令。
 
 复现实验：
 

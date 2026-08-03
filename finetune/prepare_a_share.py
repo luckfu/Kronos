@@ -108,6 +108,15 @@ def main():
     parser.add_argument('--output-dir', default='./data/a_share/processed_datasets')
     parser.add_argument('--metadata-out', default='./data/a_share/asset_metadata.csv')
     parser.add_argument(
+        '--universe-manifest', default=None,
+        help='Optional CSV with symbol and split=train/holdout columns.',
+    )
+    parser.add_argument(
+        '--holdout-output', default=None,
+        help='Optional pickle containing every row for symbols held out from training.',
+    )
+    parser.add_argument('--universe-label', default='configured A-share universe')
+    parser.add_argument(
         '--size-reference-out',
         default='./webui/size_reference.json',
         help='Portable latest market-cap cross-section used for unseen-stock sizing.',
@@ -121,6 +130,19 @@ def main():
     args = parser.parse_args()
 
     frame = add_size_buckets(load_input(args.input), args.num_size_buckets)
+    reference_frame = frame
+    holdout_frame = frame.iloc[0:0].copy()
+    if args.universe_manifest:
+        manifest = pd.read_csv(args.universe_manifest, usecols=['symbol', 'split'])
+        manifest['symbol'] = manifest['symbol'].astype(str)
+        split_by_symbol = manifest.drop_duplicates('symbol').set_index('symbol')['split']
+        frame['universe_split'] = frame['symbol'].map(split_by_symbol)
+        missing = frame['universe_split'].isna()
+        if missing.any():
+            print(f'warning: dropping {missing.sum()} rows absent from universe manifest')
+            frame = frame.loc[~missing].copy()
+        holdout_frame = frame[frame['universe_split'] == 'holdout'].copy()
+        frame = frame[frame['universe_split'] == 'train'].copy()
     if 'sector' in frame.columns:
         frame['sector'] = frame['sector'].astype(str)
 
@@ -134,7 +156,7 @@ def main():
     metadata.drop_duplicates(['symbol', 'date'], keep='last').to_csv(args.metadata_out, index=False)
 
     if 'market_cap' in frame.columns:
-        valid_caps = frame.dropna(subset=['market_cap'])
+        valid_caps = reference_frame.dropna(subset=['market_cap'])
         valid_caps = valid_caps[valid_caps['market_cap'] > 0]
         if not valid_caps.empty:
             reference_date = pd.Timestamp(valid_caps['date'].max())
@@ -151,7 +173,7 @@ def main():
                     'market_caps': market_caps,
                     'count': len(market_caps),
                     'method': 'close * volume / (turnover_pct / 100)',
-                    'universe': 'CSI800 historical constituent union',
+                    'universe': args.universe_label,
                 }, handle, separators=(',', ':'))
             print(f'size reference: {args.size_reference_out} ({len(market_caps)} stocks)')
 
@@ -160,6 +182,20 @@ def main():
         with open(os.path.join(args.output_dir, f'{split}_data.pkl'), 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print(f'{split}: {len(data)} symbols, {sum(len(item) for item in data.values())} rows')
+    if args.holdout_output:
+        os.makedirs(os.path.dirname(args.holdout_output) or '.', exist_ok=True)
+        holdout = split_data(
+            holdout_frame,
+            train_end=args.test_end,
+            val_start='1900-01-01', val_end='1900-01-01',
+            test_start='1900-01-01', test_end='1900-01-01',
+        )['train']
+        with open(args.holdout_output, 'wb') as handle:
+            pickle.dump(holdout, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        print(
+            f'holdout: {len(holdout)} symbols, '
+            f'{sum(len(item) for item in holdout.values())} rows -> {args.holdout_output}'
+        )
     print(f'metadata: {args.metadata_out}')
 
 

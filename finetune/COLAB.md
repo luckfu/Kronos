@@ -1,5 +1,7 @@
 # Colab GPU 训练
 
+> 全市场 2015–2025 V3 长训使用 [`COLAB_V3.md`](COLAB_V3.md) 和 `colab_v3_*.sh`。本文件以下内容是旧 CSI800、2020–2025 训练流程，仅用于复现旧模型，不可直接用于 V3。
+
 本项目不把 178 MB 原始 CSV 或 112 MB `train_data.pkl` 放进 Git。Colab 会从 BaoStock 重建同一口径的真实 A 股面板，并把数据和 checkpoint 放在本地目录或 Google Drive。
 
 ## Colab 终端使用

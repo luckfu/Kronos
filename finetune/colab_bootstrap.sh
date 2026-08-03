@@ -55,7 +55,7 @@ snapshot_download('NeoQuasar/Kronos-base', local_dir='${BASE_MODEL}')
 PY
   fi
 else
-  BASE_MODEL="${MODEL_ROOT}/a_share_size_kronos_base_earlystop50"
+  BASE_MODEL="${MODEL_ROOT}/a_share_size_full_coverage_colab_bs32_latest"
   if [[ ! -f "${BASE_MODEL}/model.safetensors" ]]; then
     python - <<PY
 from modelscope.hub.snapshot_download import snapshot_download

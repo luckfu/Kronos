@@ -6,12 +6,12 @@
 
 ## 数据口径
 
-- 股票池：优先 CSI800；数据供应商支持点时成分时，再使用全 A 股。
+- 股票池：以 2015–2025 年 CSI800 历史成分并集为核心，再补入微盘、小盘和中小盘股票，避免 CSI800 对大中盘风格的系统性偏置。
 - 频率：日线。
 - 价格：统一使用前复权或后复权口径，不能混用。
 - 规模：流通市值，按交易日横截面分成 10 桶。
 - 行业：当前实验关闭；以后拿到可靠的 point-in-time 行业数据再单独做消融。
-- 训练期：2020-01-01 至 2025-12-31。
+- V3 训练期：2015-01-01 至 2025-12-31。2015 年用于覆盖快速上涨及随后大幅下跌的完整市场状态。
 - 验证期：2026-01-01 至当前可用日期。
 - 样本外评估：使用 2026-01-05 至 2026-07-17 的日频滚动信号做第一版样本外回测；该结果仍属于 pilot，不是完整年度测试。
 - 输入窗口：90 个交易日；预测窗口：未来 10 个交易日。
@@ -27,6 +27,39 @@ symbol,date,open,high,low,close,volume,market_cap
 也可以直接提供 `size_bucket`（`0..9`）和 `size_percentile`（`0..1`）。只有离散桶时，数据管线会用桶中点近似连续百分位；正式混合实验应从同日横截面 `market_cap` 排名生成真实百分位。每个 `symbol,date` 都应有一行。
 
 ## 数据准备
+
+### 全市场市值分层 V3
+
+V3 使用 2025 年末可交易 A 股横截面构造补充股票池，并优先选择 2016 年前已上市的股票，以获得尽可能完整的 2015–2025 历史。训练股票包括 1,489 只 CSI800 历史成分，以及微盘、小盘和中小盘各 300 只；另从三个层级各留出 80 只整股票作为跨股票样本外集合。训练集 2,389 只，holdout 240 只，股票代码完全不重叠。
+
+本地已经生成的数据口径为：
+
+- 原始行情：2,629 只股票、6,279,803 行，2015-01-05 至 2026-07-31。
+- 训练集：2,389 只股票、5,472,438 行、5,233,538 个 90→10 窗口。
+- 2026 时间外验证：2,312 只股票、320,840 行、89,730 个窗口。
+- 整股票 holdout：240 只股票、486,525 行。
+
+训练窗口按市值桶生成确定性的均衡无放回顺序。完整覆盖序列中的每个窗口只出现一次；每个 20,000 样本分段优先从十个桶各取 2,000 个，缺失市值的窗口保留到覆盖序列末尾，不作为额外的第十一种风格参与均衡。
+
+```bash
+python finetune/build_a_share_v3_universe.py
+python finetune/download_a_share_parallel.py
+python finetune/prepare_a_share.py \
+  --input ./data/a_share_v3/a_share_daily_parallel.csv \
+  --output-dir ./data/a_share_v3/processed_datasets \
+  --metadata-out ./data/a_share_v3/asset_metadata.csv \
+  --train-end 2025-12-31 \
+  --val-start 2026-01-01 \
+  --val-end 2026-12-31 \
+  --universe-manifest ./data/a_share_v3/universe_manifest.csv \
+  --holdout-output ./data/a_share_v3/processed_datasets/symbol_holdout_data.pkl \
+  --size-reference-out ./data/a_share_v3/size_reference.json
+
+KRONOS_BATCH_SIZE=16 KRONOS_NUM_WORKERS=0 \
+bash finetune/train_a_share_v3.sh
+```
+
+V3 从当前生产 checkpoint warm-start，但会将 `size_emb` 清零，因为 V3 的桶边界基于更广的全市场横截面，不能直接沿用 CSI800 相对桶的语义。底部十层继续冻结，只训练顶部两层、归一化层、依赖层、输出头和市值 Embedding。训练完成后必须同时比较 2026 时间外结果和 240 只整股票 holdout，才能决定是否替换生产模型。
 
 ```bash
 python finetune/download_a_share_baostock.py \
@@ -98,7 +131,17 @@ python finetune/train_predictor.py
 
 该模型保留十桶 Embedding，并用两层 MLP 将连续百分位和已知标志映射到 832 维，在第 10 层后与桶 Embedding 相加。连续分支从零输出初始化，不影响原始 checkpoint 的初始行为。
 
-## 本次结果
+## 当前生产结果
+
+- 生产 checkpoint：`outputs/models/a_share_size_full_coverage_colab_bs32_latest/checkpoints/best_model/model.safetensors`。
+- 训练覆盖：1,509,252 个有效窗口，batch size 32，81 个覆盖分段，完整遍历一轮。
+- 可训练参数：20,260,416 / 102,319,744（19.8%）。
+- 训练过程最佳验证 loss：`2.877660`；生产使用完整遍历结束后的 `latest` 权重。
+- 2025 年未见股票测试：Rank IC `0.16549`，前后 20% 平均十日收益差 `4.46%`。
+- 同条件旧在线模型：Rank IC `0.09122`，前后 20% 平均十日收益差 `2.44%`。
+- ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>，仓库地址保持兼容，权重已更新为全覆盖版本。
+
+## 早期实验结果
 
 - 数据：1176 只 CSI800 历史成分并集，1,786,689 行。
 - 训练：2020-01-02 至 2025-12-31，共 1,626,852 行。
@@ -106,7 +149,7 @@ python finetune/train_predictor.py
 - 原始 `Kronos-base` 分桶评估 loss：3.142226。
 - 市值分层增训后分桶评估 loss：2.951122，改善 6.082%。
 - 0–9 十个市值桶全部改善，单桶改善范围为 4.292%–8.165%。
-- 最终 checkpoint：`outputs/models/a_share_size_kronos_base_earlystop50/checkpoints/best_model/model.safetensors`。
+- 早期 checkpoint：`outputs/models/a_share_size_kronos_base_earlystop50/checkpoints/best_model/model.safetensors`，已退出生产。
 - ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>。
 - 训练配置使用最多 50 轮早停；最佳训练验证 loss：2.951193。
 

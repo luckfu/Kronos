@@ -177,6 +177,19 @@ def configure_trainable_parameters(model, config):
     print(f"Trainable predictor parameters: {trainable:,}/{total:,} ({trainable / total:.1%})")
 
 
+def reset_size_conditioning(model, config):
+    """Reset conditions whose percentile semantics changed with the V3 universe."""
+    if not config.get('reset_size_embedding', False):
+        return
+    if model.size_emb is not None:
+        torch.nn.init.zeros_(model.size_emb.weight)
+        print('Reset size_emb to zero for the new full-market bucket definition.')
+    if model.size_mlp is not None:
+        torch.nn.init.zeros_(model.size_mlp[-1].weight)
+        torch.nn.init.zeros_(model.size_mlp[-1].bias)
+        print('Reset size percentile output layer to zero.')
+
+
 def completed_coverage_windows(dataset, completed_segments, coverage_passes):
     segments_per_pass = math.ceil(dataset.total_samples / dataset.n_samples)
     complete_passes, remaining_segments = divmod(
@@ -780,6 +793,7 @@ def main(config: dict):
         use_size_percentile=bool(config.get('use_size_percentile', False)),
         size_mlp_hidden_dim=int(config.get('size_mlp_hidden_dim', 64)),
     )
+    reset_size_conditioning(model, config)
     configure_trainable_parameters(model, config)
     model.to(device)
     if dist.is_available() and dist.is_initialized():

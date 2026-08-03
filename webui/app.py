@@ -44,7 +44,7 @@ A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
     'outputs',
     'models',
-    'a_share_size_kronos_base_earlystop50',
+    'a_share_size_full_coverage_colab_bs32_latest',
     'checkpoints',
     'best_model',
 )
