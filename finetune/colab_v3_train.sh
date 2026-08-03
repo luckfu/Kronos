@@ -28,9 +28,9 @@ export KRONOS_REQUIRE_FULL_COVERAGE="1"
 export KRONOS_EARLY_STOPPING_PATIENCE="5"
 export KRONOS_BATCH_SIZE="32"
 export KRONOS_NUM_WORKERS="${KRONOS_NUM_WORKERS:-2}"
-# Root conflict cleanup is opt-in. Deleting through the Drive mount can move
-# files to Trash without releasing quota, so it is not a storage strategy.
-export KRONOS_DRIVE_CONFLICT_ROOT="${KRONOS_DRIVE_CONFLICT_ROOT-}"
+# Permanently remove root-level conflicts through the Drive API. Filesystem
+# deletion only moves them to Trash and does not release quota.
+export KRONOS_DRIVE_CONFLICT_CLEANUP="${KRONOS_DRIVE_CONFLICT_CLEANUP:-api}"
 
 if [[ -z "${KRONOS_RESUME_TRAINING+x}" ]]; then
   [[ -f "${RESUME_PATH}" ]] && export KRONOS_RESUME_TRAINING=1 || export KRONOS_RESUME_TRAINING=0
@@ -72,6 +72,10 @@ cd "${REPO_ROOT}"
 python finetune/verify_a_share_v3_setup.py \
   --data-root "${DATA_ROOT}" \
   --base-model "${BASE_MODEL}"
+
+if [[ "${KRONOS_DRIVE_CONFLICT_CLEANUP}" == "api" ]]; then
+  python finetune/drive_cleanup.py
+fi
 
 echo "[colab-v3] Output: ${OUTPUT_ROOT}"
 echo "[colab-v3] Resume: ${KRONOS_RESUME_TRAINING}"

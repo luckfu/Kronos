@@ -10,7 +10,7 @@ V3 使用 2015–2025 年训练数据，2026 年只做时间外验证，并保�
 - 早停：两遍完整覆盖后最多再观察 5 段，因此最多 529 段。
 - Colab batch size：32；验证样本：4,000；默认 2 个 DataLoader worker。
 - 输出目录：`a_share_size_full_market_v3_colab_bs32`，与本机 MPS 和旧 CSI800 任务隔离。
-- 跨账号共享目录写 checkpoint 时，Drive 可能在当前账号 `MyDrive` 根目录生成 `last_state (N).pt` 和 `model (N).safetensors`。挂载盘删除会把冲突文件移入回收站但不释放配额，因此根目录清理默认关闭。推荐把训练数据作为只读共享目录，把输出写入当前账号自有目录，再单独共享结果目录；如显式设置 `KRONOS_DRIVE_CONFLICT_ROOT`，训练器只清理该根目录中匹配 `last_state[ (N)].pt` 与 `model[ (N)].safetensors` 的文件。
+- 跨账号共享目录写 checkpoint 时，Drive 可能在当前账号 `MyDrive` 根目录生成 `last_state (N).pt` 和 `model (N).safetensors`。挂载盘删除只会把文件移入回收站，因此 V3 默认通过 Google Drive API 在保存前后永久删除根目录中匹配 `last_state[ (N)].pt` 与 `model[ (N)].safetensors` 的冲突副本。启动前必须在 Colab Cell 执行 `from google.colab import auth; auth.authenticate_user()`；API 预检不通过时训练拒绝启动，避免静默耗尽配额。
 
 本机 MPS 的 `last_state.pt` 是 batch 16 的优化器和学习率调度状态，不复制到 Colab 新输出目录。Colab 从第 1 段开始，后续断线只恢复 Colab 自己产生的 batch 32 断点。
 
