@@ -3,6 +3,7 @@ import sys
 import json
 import math
 import random
+import re
 import signal
 import time
 from time import gmtime, strftime
@@ -107,7 +108,40 @@ def restore_rng_state(state):
         torch.cuda.set_rng_state_all(state['cuda'])
 
 
+DRIVE_CONFLICT_NAME = re.compile(
+    r'^(?:last_state(?: \(\d+\))?\.pt|model(?: \(\d+\))?\.safetensors)$'
+)
+
+
+def cleanup_drive_conflict_files():
+    """Remove root-level conflict copies produced by Drive shared-folder writes."""
+    root = os.getenv('KRONOS_DRIVE_CONFLICT_ROOT', '').strip()
+    if not root:
+        return []
+
+    removed = []
+    try:
+        entries = list(os.scandir(root))
+    except OSError as exc:
+        print(f"Warning: cannot scan Drive conflict root {root}: {exc}")
+        return removed
+
+    for entry in entries:
+        if not entry.is_file(follow_symlinks=False) or not DRIVE_CONFLICT_NAME.fullmatch(entry.name):
+            continue
+        try:
+            os.remove(entry.path)
+            removed.append(entry.name)
+        except OSError as exc:
+            print(f"Warning: cannot remove Drive conflict file {entry.path}: {exc}")
+
+    if removed:
+        print(f"Removed {len(removed)} Drive root checkpoint conflict file(s).")
+    return removed
+
+
 def save_resume_state(path, model, optimizer, scheduler, **metadata):
+    cleanup_drive_conflict_files()
     temporary = f'{path}.tmp'
     torch.save({
         'model': model.state_dict(),
@@ -117,14 +151,17 @@ def save_resume_state(path, model, optimizer, scheduler, **metadata):
         **metadata,
     }, temporary)
     os.replace(temporary, path)
+    cleanup_drive_conflict_files()
 
 
 def save_pretrained_with_retry(model, path, config, attempts=3, retry_delay=2):
     """Retry checkpoint export when a mounted filesystem briefly loses the directory."""
+    cleanup_drive_conflict_files()
     for attempt in range(1, attempts + 1):
         try:
             os.makedirs(path, exist_ok=True)
             model.save_pretrained(path, config=config)
+            cleanup_drive_conflict_files()
             return
         except FileNotFoundError:
             if attempt == attempts:

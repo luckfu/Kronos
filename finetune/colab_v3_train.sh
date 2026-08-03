@@ -28,6 +28,9 @@ export KRONOS_REQUIRE_FULL_COVERAGE="1"
 export KRONOS_EARLY_STOPPING_PATIENCE="5"
 export KRONOS_BATCH_SIZE="32"
 export KRONOS_NUM_WORKERS="${KRONOS_NUM_WORKERS:-2}"
+# Shared-folder writes can surface conflict copies in the mounted account root.
+# Set this variable to an empty string before launch to disable scoped cleanup.
+export KRONOS_DRIVE_CONFLICT_ROOT="${KRONOS_DRIVE_CONFLICT_ROOT-/content/drive/MyDrive}"
 
 if [[ -z "${KRONOS_RESUME_TRAINING+x}" ]]; then
   [[ -f "${RESUME_PATH}" ]] && export KRONOS_RESUME_TRAINING=1 || export KRONOS_RESUME_TRAINING=0
