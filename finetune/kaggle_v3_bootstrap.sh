@@ -17,18 +17,27 @@ if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
   if [[ -f "${INPUT_ROOT}/data/a_share_v3/processed_datasets/train_data.pkl" ]]; then
     DATA_ROOT="${INPUT_ROOT}/data/a_share_v3"
   else
-    if [[ ! -f "${BUNDLE}" ]]; then
-      BUNDLE="$(find "${INPUT_ROOT}" -maxdepth 2 -type f \
-        -name 'kronos_a_share_v3*.tar.gz' -print -quit 2>/dev/null || true)"
+    DETECTED_TRAIN="$(find "${INPUT_ROOT}" -maxdepth 6 -type f \
+      -path '*/data/a_share_v3/processed_datasets/train_data.pkl' \
+      -print -quit 2>/dev/null || true)"
+    if [[ -n "${DETECTED_TRAIN}" ]]; then
+      DATA_ROOT="$(dirname "$(dirname "${DETECTED_TRAIN}")")"
     fi
-    if [[ -f "${BUNDLE}" ]]; then
-      echo "[kaggle-v3] Extracting ${BUNDLE} to local working storage"
-      mkdir -p "${RUNTIME_ROOT}/data"
-      tar -xzf "${BUNDLE}" -C "${RUNTIME_ROOT}"
-    else
-      echo "[kaggle-v3] ERROR: no V3 data bundle or extracted Kaggle Dataset found" >&2
-      exit 1
-    fi
+  fi
+fi
+
+if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
+  if [[ ! -f "${BUNDLE}" ]]; then
+    BUNDLE="$(find "${INPUT_ROOT}" -maxdepth 2 -type f \
+      -name 'kronos_a_share_v3*.tar.gz' -print -quit 2>/dev/null || true)"
+  fi
+  if [[ -f "${BUNDLE}" ]]; then
+    echo "[kaggle-v3] Extracting ${BUNDLE} to local working storage"
+    mkdir -p "${RUNTIME_ROOT}/data"
+    tar -xzf "${BUNDLE}" -C "${RUNTIME_ROOT}"
+  else
+    echo "[kaggle-v3] ERROR: no V3 data bundle or extracted Kaggle Dataset found" >&2
+    exit 1
   fi
 fi
 

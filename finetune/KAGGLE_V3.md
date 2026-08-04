@@ -1,13 +1,14 @@
 # Kaggle V3 GPU Benchmark
 
-Kaggle 数据集已经上传：[`luckfu/kronos-train-set-a`](https://www.kaggle.com/datasets/luckfu/kronos-train-set-a)。数据集应包含：
+Kaggle 数据集已经上传：[`luckfu/kronos-train-set-a`](https://www.kaggle.com/datasets/luckfu/kronos-train-set-a)。Kaggle 可能保留 tar 文件，也可能自动展开为：
 
 ```text
-kronos_a_share_v3_colab_data.tar.gz
-kronos_a_share_v3_colab_data.tar.gz.sha256
+kronos_a_share_v3_colab_data/data/a_share_v3/processed_datasets/train_data.pkl
+kronos_a_share_v3_colab_data/data/a_share_v3/processed_datasets/val_data.pkl
+kronos_a_share_v3_colab_data/data/a_share_v3/processed_datasets/symbol_holdout_data.pkl
 ```
 
-压缩包只包含处理后的训练、验证、holdout 和元数据，不包含原始 BaoStock CSV。
+bootstrap 会自动识别两种布局。数据只包含处理后的训练、验证、holdout 和元数据，不包含原始 BaoStock CSV。
 
 ## 三段 P100 基准
 
