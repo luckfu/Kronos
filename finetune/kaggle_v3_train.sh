@@ -34,6 +34,7 @@ export KRONOS_EARLY_STOPPING_PATIENCE="${KRONOS_EARLY_STOPPING_PATIENCE:-0}"
 export KRONOS_COVERAGE_PASSES="${KRONOS_COVERAGE_PASSES:-1}"
 export KRONOS_REQUIRE_FULL_COVERAGE="${KRONOS_REQUIRE_FULL_COVERAGE:-0}"
 export KRONOS_EPOCHS="${KRONOS_EPOCHS:-3}"
+export KRONOS_MAX_SEGMENTS_PER_RUN="${KRONOS_MAX_SEGMENTS_PER_RUN:-180}"
 export KRONOS_DRIVE_CONFLICT_CLEANUP="off"
 
 if [[ -z "${KRONOS_RESUME_TRAINING+x}" ]]; then
@@ -81,4 +82,5 @@ python finetune/verify_a_share_v3_setup.py \
 
 echo "[kaggle-v3] Output: ${OUTPUT_ROOT}"
 echo "[kaggle-v3] Resume: ${KRONOS_RESUME_TRAINING}"
+echo "[kaggle-v3] Segment limit for this run: ${KRONOS_MAX_SEGMENTS_PER_RUN}"
 exec python -u finetune/train_predictor.py

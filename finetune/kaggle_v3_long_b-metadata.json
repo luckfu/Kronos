@@ -1,0 +1,13 @@
+{
+  "id": "luckfu/kronos-a-share-v3-p100-long-b",
+  "title": "Kronos A-share V3 P100 long training B",
+  "code_file": "kaggle_v3_long.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/kronos-train-set-a"],
+  "competition_sources": [],
+  "kernel_sources": ["luckfu/kronos-a-share-v3-p100-long-a"]
+}

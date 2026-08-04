@@ -230,6 +230,12 @@ def segment_sample_count(dataset, segment_index):
     return min(dataset.n_samples, dataset.total_samples - start)
 
 
+def segment_run_limit_reached(start_segment, next_segment, max_segments_per_run):
+    """Return whether this invocation has completed its configured chunk."""
+    limit = max(0, int(max_segments_per_run or 0))
+    return limit > 0 and int(next_segment) - int(start_segment) >= limit
+
+
 def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_size):
     """
     The main training and validation loop for the predictor.
@@ -253,12 +259,18 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         else 0
     )
     effective_epochs = max(int(config['epochs']), required_segments)
+    max_segments_per_run = max(0, int(config.get('max_segments_per_run', 0)))
     if rank == 0:
         print(
             f"Coverage plan: {train_dataset.total_samples:,} windows, "
             f"{train_dataset.n_samples:,}/segment, {segments_per_coverage} segments/pass, "
             f"{coverage_passes} pass(es), up to {effective_epochs} segments."
         )
+        if max_segments_per_run:
+            print(
+                f"Invocation limit: stop safely after {max_segments_per_run} "
+                "completed segment(s); the global schedule is unchanged."
+            )
 
     core_model = model.module if isinstance(model, DDP) else model
     condition_params = [
@@ -638,6 +650,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             if epoch_idx + 1 > minimum_coverage_segments:
                 post_coverage_without_improvement += 1
 
+        next_segment = epoch_idx + 1
+
         # --- End of Epoch Summary & Checkpointing (Master Process Only) ---
         if rank == 0:
             print(f"\n--- Coverage Segment {epoch_idx + 1}/{effective_epochs} Summary ---")
@@ -652,7 +666,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 core_model,
                 optimizer,
                 scheduler,
-                next_epoch=epoch_idx + 1,
+                next_epoch=next_segment,
                 best_val_loss=best_val_loss,
                 epochs_without_improvement=epochs_without_improvement,
                 post_coverage_without_improvement=post_coverage_without_improvement,
@@ -674,7 +688,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 })
                 save_pretrained_with_retry(core_model, save_path, model_config)
                 print(f"Best model saved to {save_path} (Val Loss: {best_val_loss:.4f})")
-            completed_coverage_segments = epoch_idx + 1
+            completed_coverage_segments = next_segment
             last_completed_segment = completed_coverage_segments
             write_progress(
                 save_dir,
@@ -709,6 +723,27 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
+
+        if (
+            next_segment < effective_epochs
+            and segment_run_limit_reached(
+                start_epoch, next_segment, max_segments_per_run
+            )
+        ):
+            if rank == 0:
+                print(
+                    f"Chunk limit reached after {next_segment - start_epoch} "
+                    f"segment(s); resume from coverage segment {next_segment + 1}."
+                )
+            dt_result.update({
+                'best_val_loss': best_val_loss,
+                'status': 'stopped',
+                'stop_reason': 'segment_limit',
+                'completed_segments': next_segment,
+                'resume_segment': next_segment + 1,
+                'total_segments': effective_epochs,
+            })
+            break
 
         coverage_requirement_met = epoch_idx + 1 >= minimum_coverage_segments
         if (

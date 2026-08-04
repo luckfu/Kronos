@@ -72,6 +72,12 @@ class Config:
         self.n_train_iter = int(os.getenv("KRONOS_TRAIN_SAMPLES_PER_SEGMENT", "20000"))
         self.n_val_iter = int(os.getenv("KRONOS_VALIDATION_SAMPLES", "2000"))
         self.coverage_passes = int(os.getenv("KRONOS_COVERAGE_PASSES", "1"))
+        # Limit only the number of completed segments in this process. This is
+        # intentionally separate from epochs so resumed jobs keep one global
+        # coverage plan and one unchanged OneCycle schedule.
+        self.max_segments_per_run = int(
+            os.getenv("KRONOS_MAX_SEGMENTS_PER_RUN", "0")
+        )
         self.require_full_coverage = os.getenv(
             "KRONOS_REQUIRE_FULL_COVERAGE", "1"
         ).strip().lower() in {"1", "true", "yes", "on"}

@@ -70,9 +70,41 @@ kaggle kernels output luckfu/kronos-a-share-v3-p100-benchmark -p ./kaggle-output
 
 `--accelerator P100` 是显式硬件请求；若当前账号没有 P100 配额或该资源不可用，不能用其他 GPU 的结果冒充 P100 benchmark。
 
-## 长训注意事项
+## 两轮正式长训
 
-三段 benchmark 的 checkpoint 放在 `/kaggle/working` 没问题；Kaggle 运行时结束后该目录会被清空。正式两轮训练前必须增加 checkpoint 持久化方式（Kaggle Dataset 新版本或外部对象存储），不能只依赖本地工作目录。
+正式训练总计划固定为 529 段：每遍 262 段，两遍共 524 段，再保留 5 段早停观察。`KRONOS_MAX_SEGMENTS_PER_RUN=180` 只让单次 Kaggle 会话在完整 segment 验证并保存 `last_state.pt` 后安全退出，不会把 OneCycle 学习率计划缩短成 180 段。三次预计分别运行 180、180、169 段。
+
+Kaggle 每次只保留本次 Kernel 输出，所以使用 A/B 两个私有 Kernel 交替承接 checkpoint：
+
+1. A 第一次从基础模型训练，输出 segment 180 的 checkpoint。
+2. B 把 A 的 Kernel 输出作为只读输入，复制 checkpoint 后续跑到 segment 360。
+3. 再更新 A，使它读取 B 的输出，完成到 segment 529。
+
+准备两个 Kernel 目录：
+
+```bash
+bash finetune/prepare_kaggle_v3_kernel.sh
+```
+
+首次提交 A：
+
+```bash
+kaggle kernels push -p artifacts/kaggle_v3_long_a --accelerator P100
+```
+
+A 完成后提交 B：
+
+```bash
+kaggle kernels push -p artifacts/kaggle_v3_long_b --accelerator P100
+```
+
+第三次运行前，把 `artifacts/kaggle_v3_long_a/kernel-metadata.json` 的 `kernel_sources` 改为：
+
+```json
+["luckfu/kronos-a-share-v3-p100-long-b"]
+```
+
+然后再次提交 A。入口会自动寻找属于正式输出名的 `last_state.pt`；没找到就从第 1 段开始，找到多个则直接报错，避免误续跑。每次日志必须确认 `Resumed training at coverage segment ...` 与预期一致。
 
 正式长训参数应为：
 
@@ -83,6 +115,7 @@ export KRONOS_PREDICTOR_SAVE_FOLDER=a_share_size_full_market_v3_kaggle
 export KRONOS_COVERAGE_PASSES=2
 export KRONOS_REQUIRE_FULL_COVERAGE=1
 export KRONOS_EARLY_STOPPING_PATIENCE=5
+export KRONOS_MAX_SEGMENTS_PER_RUN=180
 ```
 
 不要把 Kaggle benchmark 的输出目录与 Colab 主训练目录混用，也不要让 Kaggle 和 Colab 同时写同一个 checkpoint。
