@@ -66,5 +66,5 @@ def test_long_kernel_b_resumes_from_kernel_a_output():
 
     assert metadata['enable_gpu'] is True
     assert metadata['kernel_sources'] == [
-        'luckfu/kronos-a-share-v3-p100-long-a'
+        'luckfu/kronos-a-share-v3-p100-long-training-a'
     ]

@@ -101,7 +101,7 @@ kaggle kernels push -p artifacts/kaggle_v3_long_b --accelerator P100
 第三次运行前，把 `artifacts/kaggle_v3_long_a/kernel-metadata.json` 的 `kernel_sources` 改为：
 
 ```json
-["luckfu/kronos-a-share-v3-p100-long-b"]
+["luckfu/kronos-a-share-v3-p100-long-training-b"]
 ```
 
 然后再次提交 A。入口会自动寻找属于正式输出名的 `last_state.pt`；没找到就从第 1 段开始，找到多个则直接报错，避免误续跑。每次日志必须确认 `Resumed training at coverage segment ...` 与预期一致。

@@ -1,5 +1,5 @@
 {
-  "id": "luckfu/kronos-a-share-v3-p100-long-b",
+  "id": "luckfu/kronos-a-share-v3-p100-long-training-b",
   "title": "Kronos A-share V3 P100 long training B",
   "code_file": "kaggle_v3_long.py",
   "language": "python",
@@ -9,5 +9,5 @@
   "enable_internet": true,
   "dataset_sources": ["luckfu/kronos-train-set-a"],
   "competition_sources": [],
-  "kernel_sources": ["luckfu/kronos-a-share-v3-p100-long-a"]
+  "kernel_sources": ["luckfu/kronos-a-share-v3-p100-long-training-a"]
 }
