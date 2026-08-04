@@ -4,6 +4,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_ROOT="${KRONOS_KAGGLE_ROOT:-/kaggle/working/kronos_a_share_v3}"
 INPUT_ROOT="${KRONOS_KAGGLE_DATASET_INPUT:-/kaggle/input/kronos-train-set-a}"
+SEARCH_ROOT="${INPUT_ROOT}"
+if [[ ! -d "${SEARCH_ROOT}" ]]; then
+  SEARCH_ROOT="/kaggle/input"
+fi
 DATA_ROOT="${KRONOS_KAGGLE_DATA_ROOT:-${RUNTIME_ROOT}/data/a_share_v3}"
 MODEL_ROOT="${KRONOS_KAGGLE_MODEL_ROOT:-${RUNTIME_ROOT}/models}"
 BUNDLE="${KRONOS_KAGGLE_BUNDLE:-${INPUT_ROOT}/kronos_a_share_v3_colab_data.tar.gz}"
@@ -17,18 +21,19 @@ if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
   if [[ -f "${INPUT_ROOT}/data/a_share_v3/processed_datasets/train_data.pkl" ]]; then
     DATA_ROOT="${INPUT_ROOT}/data/a_share_v3"
   else
-    DETECTED_TRAIN="$(find "${INPUT_ROOT}" -maxdepth 6 -type f \
+    DETECTED_TRAIN="$(find "${SEARCH_ROOT}" -maxdepth 8 -type f \
       -path '*/data/a_share_v3/processed_datasets/train_data.pkl' \
       -print -quit 2>/dev/null || true)"
     if [[ -n "${DETECTED_TRAIN}" ]]; then
       DATA_ROOT="$(dirname "$(dirname "${DETECTED_TRAIN}")")"
+      echo "[kaggle-v3] Detected Dataset root: ${DATA_ROOT}"
     fi
   fi
 fi
 
 if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
   if [[ ! -f "${BUNDLE}" ]]; then
-    BUNDLE="$(find "${INPUT_ROOT}" -maxdepth 2 -type f \
+    BUNDLE="$(find "${SEARCH_ROOT}" -maxdepth 4 -type f \
       -name 'kronos_a_share_v3*.tar.gz' -print -quit 2>/dev/null || true)"
   fi
   if [[ -f "${BUNDLE}" ]]; then
