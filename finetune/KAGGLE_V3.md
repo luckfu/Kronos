@@ -36,6 +36,20 @@ Coverage plan: ... 3 segments
 
 如果显示 T4、CPU 或其他 GPU，先不要拿它与 Colab T4 的速度作结论。记录每段的 `Time This Epoch`，并比较同样的 batch size `32`、20,000 窗口/段和 4,000 验证样本。
 
+## 2026-08-04 实测结果
+
+私有 Kernel `luckfu/kronos-a-share-v3-p100-benchmark` 使用 `Tesla P100-PCIE-16GB` 和 `torch 2.5.1+cu121` 完成三段：
+
+| Segment | 耗时 | Validation Loss |
+|---:|---:|---:|
+| 1 | 2:05 | 2.8433 |
+| 2 | 2:04 | 2.8420 |
+| 3 | 2:04 | 2.8418 |
+
+平均每段约 124 秒；同口径 Colab T4 首段约 261 秒，因此 P100 吞吐约为 T4 的 2.1 倍，耗时减少约 52%。按 529 段线性估算，纯训练约 18.3 小时，另加每个 Kaggle 会话安装兼容 PyTorch、下载基础模型和保存输出的时间。
+
+三段 benchmark 使用三段长度的 OneCycle 学习率调度，只用于比较吞吐，不用于判断模型质量，也不能与 529 段正式调度的早期 Loss 直接比较。
+
 ## Kaggle CLI
 
 本机安装并登录 Kaggle CLI：
