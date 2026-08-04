@@ -14,6 +14,8 @@ bootstrap 会自动识别两种布局。数据只包含处理后的训练、验�
 
 在 Kaggle Notebook 中添加 `luckfu/kronos-train-set-a` 数据集，打开 GPU 和 Internet，并在硬件设置中选择 P100（如果当前账号有该资源）。Kaggle 不保证每次都分配 P100，先检查输出的 GPU 名称。
 
+Kaggle 当前预装的 PyTorch 可能是 `2.10+cu128`，该 wheel 不包含 P100 的 `sm_60` CUDA kernel。bootstrap 检测到 P100 且当前 wheel 不兼容时，会自动安装 `torch==2.5.1` 的 CUDA 12.1 wheel；日志中看到安装提示是正常的。
+
 Notebook 中执行：
 
 ```bash

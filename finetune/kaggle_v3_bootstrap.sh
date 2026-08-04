@@ -17,6 +17,20 @@ cd "${REPO_ROOT}"
 python -m pip install -q -r finetune/requirements-colab.txt
 mkdir -p "${RUNTIME_ROOT}" "${MODEL_ROOT}"
 
+# Kaggle currently preinstalls recent PyTorch wheels without sm_60 kernels.
+# Tesla P100 is sm_60, so use a CUDA 12.1 wheel that still contains them.
+if nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | grep -qi 'P100'; then
+  if ! python - <<'PY'
+import torch
+raise SystemExit(0 if 'sm_60' in torch.cuda.get_arch_list() else 1)
+PY
+  then
+    echo "[kaggle-v3] Installing a P100-compatible PyTorch wheel"
+    python -m pip install -q --index-url https://download.pytorch.org/whl/cu121 \
+      "torch==${KRONOS_KAGGLE_TORCH_VERSION:-2.5.1}"
+  fi
+fi
+
 if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
   if [[ -f "${INPUT_ROOT}/data/a_share_v3/processed_datasets/train_data.pkl" ]]; then
     DATA_ROOT="${INPUT_ROOT}/data/a_share_v3"
