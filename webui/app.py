@@ -519,7 +519,7 @@ def generate_portfolio_ranking(symbols, sample_count=3):
 
     device = next(predictor.model.parameters()).device
     close_index = batch['feature_columns'].index('close')
-    final_close_samples = []
+    average_close_samples = []
     with inference_lock, torch.no_grad():
         for sample_index in range(sample_count):
             torch.manual_seed(20260801 + sample_index)
@@ -546,19 +546,19 @@ def generate_portfolio_ranking(symbols, sample_count=3):
                 ),
             )
             forecast = predictions[:, -AVAILABLE_MODELS['a-share-size-kronos-base']['default_pred_len']:, :]
-            final_close = (
-                forecast[:, -1, close_index]
+            average_close = (
+                forecast[:, :, close_index].mean(axis=1)
                 * (batch['stds'][:, close_index] + 1e-5)
                 + batch['means'][:, close_index]
             )
-            final_close_samples.append(final_close)
+            average_close_samples.append(average_close)
         if device.type == 'mps':
             torch.mps.synchronize()
 
-    final_close_samples = np.stack(final_close_samples)
+    average_close_samples = np.stack(average_close_samples)
     rankings = []
     for item_index, item in enumerate(batch['records']):
-        closes = final_close_samples[:, item_index]
+        closes = average_close_samples[:, item_index]
         returns = closes / item['latest_close'] - 1
         rankings.append({
             'symbol': item['symbol'],

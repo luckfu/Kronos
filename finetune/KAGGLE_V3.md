@@ -1,5 +1,36 @@
 # Kaggle V3 GPU Benchmark
 
+## 2026 增量训练
+
+完成 V3 全市场两轮覆盖后，2026 增量任务使用独立流水线：
+
+- 起点是完整 V3 `last_state.pt` 中的模型权重，不加载旧 optimizer 或 scheduler。
+- 训练集为 2026-01-05 至 2026-07-31 的 2,312 只非 holdout 股票，共 89,730 个窗口。
+- 验证集为同期 240 只 symbol holdout 股票，共 9,307 个窗口；它们不参与梯度更新。
+- 完整覆盖两轮，共 179,460 个窗口暴露，20,000 窗口一段，总计 10 段。
+- predictor 学习率为 `2e-6`，市值条件层学习率为 `2e-4`。
+- 保留 V3 已学到的市值桶权重，即 `KRONOS_RESET_SIZE_EMBEDDING=0`。
+- 训练结束同时保留 `best_model` 和 `last_state.pt`。新 Last 只是生产候选，必须通过 2025/2026 holdout 对比后才能切换生产。
+
+本机准备并上传私有数据集：
+
+```bash
+bash finetune/package_a_share_2026_incremental.sh
+kaggle datasets create -p artifacts/kaggle_2026_incremental_dataset
+```
+
+若数据集已存在，使用 `kaggle datasets version`。提交 Kernel：
+
+```bash
+mkdir -p artifacts/kaggle_2026_incremental_kernel
+cp finetune/kaggle_2026_incremental.py artifacts/kaggle_2026_incremental_kernel/
+cp finetune/kaggle_2026_incremental-metadata.json \
+  artifacts/kaggle_2026_incremental_kernel/kernel-metadata.json
+kaggle kernels push -p artifacts/kaggle_2026_incremental_kernel
+```
+
+Kernel 使用新 optimizer 和 OneCycle 调度器从 V3 Last 权重开始，不应设置 `KRONOS_RESUME_TRAINING=1`。只有同一个 2026 增量任务被 Kaggle 中断后，才允许从该任务自己的 `last_state.pt` 恢复。
+
 Kaggle 数据集已经上传：[`luckfu/kronos-train-set-a`](https://www.kaggle.com/datasets/luckfu/kronos-train-set-a)。Kaggle 可能保留 tar 文件，也可能自动展开为：
 
 ```text

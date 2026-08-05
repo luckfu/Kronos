@@ -1,0 +1,13 @@
+{
+  "id": "luckfu/kronos-a-share-2026-incremental-training",
+  "title": "Kronos A-share 2026 incremental training",
+  "code_file": "kaggle_2026_incremental.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/kronos-a-share-2026-incremental"],
+  "competition_sources": [],
+  "kernel_sources": []
+}

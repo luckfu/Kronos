@@ -93,8 +93,12 @@ class Config:
 
         # Learning rates for different model components.
         self.tokenizer_learning_rate = 2e-4
-        self.predictor_learning_rate = 1e-5
-        self.condition_learning_rate = 1e-3
+        self.predictor_learning_rate = float(
+            os.getenv("KRONOS_PREDICTOR_LEARNING_RATE", "1e-5")
+        )
+        self.condition_learning_rate = float(
+            os.getenv("KRONOS_CONDITION_LEARNING_RATE", "1e-3")
+        )
         self.trainable_transformer_layers = 2
         self.context_layer = 10
 

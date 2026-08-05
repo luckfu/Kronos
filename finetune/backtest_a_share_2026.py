@@ -80,6 +80,7 @@ def build_periods(panel, calendar, universe_size, universe_selection='liquidity'
                 continue
             entry_open = float(frame.loc[future_dates[0], 'open'])
             exit_close = float(frame.loc[future_dates[-1], 'close'])
+            average_close = float(frame.loc[future_dates, 'close'].mean())
             signal_close = float(context['close'].iloc[-1])
             if min(entry_open, exit_close, signal_close) <= 0:
                 continue
@@ -95,7 +96,7 @@ def build_periods(panel, calendar, universe_size, universe_selection='liquidity'
                     else (int(context['size_bucket'].iloc[-1]) + 0.5) / 10.0
                 ),
                 'last_close': signal_close,
-                'actual_close_return': exit_close / signal_close - 1,
+                'actual_close_return': average_close / signal_close - 1,
                 'realized_return': exit_close / entry_open - 1,
             })
 
@@ -213,7 +214,7 @@ def run_inference(
                 forecast = predictions[:, -PRED_LEN:, :]
                 close_index = FEATURE_COLUMNS.index('close')
                 predicted_close = (
-                    forecast[:, -1, close_index]
+                    forecast[:, :, close_index].mean(axis=1)
                     * (batch['stds'][:, close_index] + 1e-5)
                     + batch['means'][:, close_index]
                 )

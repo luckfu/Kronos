@@ -202,6 +202,7 @@ def build_periods(panel, references, period_count, eval_start, eval_end):
             size_bucket = min(int(np.floor(percentile * 10)), 9)
             signal_close = float(latest['close'])
             exit_close = float(frame.loc[future_dates[-1], 'close'])
+            average_close = float(frame.loc[future_dates, 'close'].mean())
             entry_open = float(frame.loc[future_dates[0], 'open'])
             records.append({
                 'symbol': symbol,
@@ -211,7 +212,7 @@ def build_periods(panel, references, period_count, eval_start, eval_end):
                 'size_bucket': size_bucket,
                 'size_percentile': percentile,
                 'last_close': signal_close,
-                'actual_close_return': exit_close / signal_close - 1,
+                'actual_close_return': average_close / signal_close - 1,
                 'realized_return': exit_close / entry_open - 1,
             })
         if len(records) < 8:
@@ -270,7 +271,8 @@ def run_model(label, path, tokenizer, periods, device, batch_size, sample_count,
             )[:, -PRED_LEN:, :]
             close_index = FEATURE_COLUMNS.index('close')
             predicted_close = (
-                forecast[:, -1, close_index] * (batch['stds'][:, close_index] + 1e-5)
+                forecast[:, :, close_index].mean(axis=1)
+                * (batch['stds'][:, close_index] + 1e-5)
                 + batch['means'][:, close_index]
             )
             for record, final_close in zip(records, predicted_close):

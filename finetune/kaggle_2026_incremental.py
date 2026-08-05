@@ -1,0 +1,48 @@
+"""Kaggle entrypoint for two-pass 2026 incremental training from V3 Last."""
+
+import os
+import shutil
+import subprocess
+import tarfile
+from pathlib import Path
+
+
+REPO = Path("/kaggle/working/Kronos")
+RUNTIME = Path("/kaggle/working/kronos_a_share_2026_incremental")
+
+
+if not (REPO / ".git").is_dir():
+    subprocess.run(
+        ["git", "clone", "https://github.com/luckfu/Kronos.git", str(REPO)],
+        check=True,
+    )
+
+subprocess.run(
+    ["python", "-m", "pip", "install", "-q", "-r", "finetune/requirements-colab.txt"],
+    cwd=REPO,
+    check=True,
+)
+
+bundle_candidates = list(
+    Path("/kaggle/input").rglob("kronos_a_share_2026_incremental.tar.gz")
+)
+if len(bundle_candidates) != 1:
+    raise RuntimeError(f"Expected one incremental bundle, found {bundle_candidates}")
+RUNTIME.mkdir(parents=True, exist_ok=True)
+with tarfile.open(bundle_candidates[0], "r:gz") as archive:
+    archive.extractall(RUNTIME, filter="data")
+
+env = os.environ.copy()
+env["KRONOS_KAGGLE_ROOT"] = str(RUNTIME)
+subprocess.run(
+    ["bash", "finetune/kaggle_2026_incremental_train.sh"],
+    cwd=REPO,
+    env=env,
+    check=True,
+)
+
+# Keep only outputs: the input bundle remains available as a Dataset and the
+# repository is reproducible from GitHub.
+shutil.rmtree(RUNTIME / "data", ignore_errors=True)
+shutil.rmtree(RUNTIME / "base_model", ignore_errors=True)
+shutil.rmtree(REPO, ignore_errors=True)
