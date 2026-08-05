@@ -23,6 +23,32 @@ subprocess.run(
     check=True,
 )
 
+gpu = subprocess.run(
+    ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+    capture_output=True,
+    text=True,
+    check=False,
+).stdout
+if "P100" in gpu.upper():
+    compatible = subprocess.run(
+        [
+            "python",
+            "-c",
+            "import torch; raise SystemExit(0 if 'sm_60' in torch.cuda.get_arch_list() else 1)",
+        ],
+        check=False,
+    ).returncode == 0
+    if not compatible:
+        print("[incremental-2026] Installing P100-compatible PyTorch", flush=True)
+        subprocess.run(
+            [
+                "python", "-m", "pip", "install", "-q",
+                "--index-url", "https://download.pytorch.org/whl/cu121",
+                "torch==2.5.1",
+            ],
+            check=True,
+        )
+
 bundle_candidates = list(
     Path("/kaggle/input").rglob("kronos_a_share_2026_incremental.tar.gz")
 )
