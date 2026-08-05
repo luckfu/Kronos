@@ -31,6 +31,26 @@ kaggle kernels push -p artifacts/kaggle_2026_incremental_kernel
 
 Kernel 使用新 optimizer 和 OneCycle 调度器从 V3 Last 权重开始，不应设置 `KRONOS_RESUME_TRAINING=1`。只有同一个 2026 增量任务被 Kaggle 中断后，才允许从该任务自己的 `last_state.pt` 恢复。
 
+### 2026-08-06 实验结果
+
+Kaggle Kernel `luckfu/kronos-a-share-2026-incremental-training` 在 P100 上完成 `10/10` 段，实际运行 23 分 21 秒：
+
+- 两轮完整覆盖 179,460 个窗口，`next_epoch=10`、`resume_step=0`。
+- 最低验证 loss 为 `2.638070556640625`，出现在最后一段，因此 Best 和 Last 的 193 个张量完全相同。
+- Best `model.safetensors` SHA-256：`3ae659b1b5a117bc3f23987ad8977a8f5b7539a9e22331e82f9c483c47368ce0`。
+- Last `last_state.pt` SHA-256：`ca77949b86fe592a1d537d4c19b7baa80b23be5b967d93806c1a45fd08cf0d41`。
+
+使用 240 只从未参与训练的 symbol holdout 股票、24 个信号日、未来 10 日预测收盘均值信号，对比完整 V3 Last 与 2026 增量 Last：
+
+| 窗口 | 模型 | Rank IC | 方向准确率 | MAE |
+| --- | --- | ---: | ---: | ---: |
+| 2025 | 完整 V3 Last | 0.1509 | 61.0% | 0.0385 |
+| 2025 | 2026 增量 Last | 0.1047 | 54.7% | 0.0504 |
+| 2026 | 完整 V3 Last | 0.0241 | 52.8% | 0.0519 |
+| 2026 | 2026 增量 Last | 0.0705 | 57.1% | 0.0566 |
+
+2026 增量模型在 2026 的 Rank IC 和方向准确率上显著改善，但 MAE 显著恶化；在 2025 上三项指标均显著退化。这是近期市场适应伴随历史能力遗忘，未通过“2026 改善且 2025 不明显退化”的生产门槛。因此保留为实验候选，不切换生产模型。
+
 Kaggle 数据集已经上传：[`luckfu/kronos-train-set-a`](https://www.kaggle.com/datasets/luckfu/kronos-train-set-a)。Kaggle 可能保留 tar 文件，也可能自动展开为：
 
 ```text
