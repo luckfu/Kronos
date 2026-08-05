@@ -49,17 +49,36 @@ if "P100" in gpu.upper():
             check=True,
         )
 
-bundle_candidates = list(
-    Path("/kaggle/input").rglob("kronos_a_share_2026_incremental.tar.gz")
-)
-if len(bundle_candidates) != 1:
-    raise RuntimeError(f"Expected one incremental bundle, found {bundle_candidates}")
-RUNTIME.mkdir(parents=True, exist_ok=True)
-with tarfile.open(bundle_candidates[0], "r:gz") as archive:
-    archive.extractall(RUNTIME, filter="data")
-
 env = os.environ.copy()
 env["KRONOS_KAGGLE_ROOT"] = str(RUNTIME)
+train_candidates = list(
+    Path("/kaggle/input").rglob(
+        "a_share_v3_2026_incremental/processed_datasets/train_data.pkl"
+    )
+)
+base_candidates = list(
+    Path("/kaggle/input").rglob("base_model/v3_last/model.safetensors")
+)
+if len(train_candidates) == 1 and len(base_candidates) == 1:
+    data_root = train_candidates[0].parent.parent
+    base_model = base_candidates[0].parent
+    print(f"[incremental-2026] Using expanded Dataset at {data_root}", flush=True)
+else:
+    bundle_candidates = list(
+        Path("/kaggle/input").rglob("kronos_a_share_2026_incremental.tar.gz")
+    )
+    if len(bundle_candidates) != 1:
+        raise RuntimeError(
+            "Expected one expanded incremental Dataset or bundle; found "
+            f"train={train_candidates}, base={base_candidates}, bundle={bundle_candidates}"
+        )
+    RUNTIME.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(bundle_candidates[0], "r:gz") as archive:
+        archive.extractall(RUNTIME, filter="data")
+    data_root = RUNTIME / "data/a_share_v3_2026_incremental"
+    base_model = RUNTIME / "base_model/v3_last"
+env["KRONOS_KAGGLE_DATA_ROOT"] = str(data_root)
+env["KRONOS_PREDICTOR_PATH"] = str(base_model)
 subprocess.run(
     ["bash", "finetune/kaggle_2026_incremental_train.sh"],
     cwd=REPO,
