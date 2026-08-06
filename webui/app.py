@@ -44,7 +44,7 @@ A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
     'outputs',
     'models',
-    'a_share_v3_2026_incremental_latest',
+    'a_share_v4_corrected_2026_replay20_latest',
     'checkpoints',
     'best_model',
 )
@@ -66,7 +66,7 @@ size_reference_lock = threading.Lock()
 # Available model configurations
 AVAILABLE_MODELS = {
     'a-share-size-kronos-base': {
-        'name': 'A-share 2026 Incremental Kronos',
+        'name': 'A-share V4 Replay20 Kronos',
         'model_id': A_SHARE_MODEL_PATH,
         'tokenizer_id': 'NeoQuasar/Kronos-Tokenizer-base',
         'context_length': 512,

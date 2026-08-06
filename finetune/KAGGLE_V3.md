@@ -2,6 +2,16 @@
 
 ## V4 连续上下文 A/B 实验
 
+V4 B 的正式两轮版本只运行回放组，不重复训练 A。它完整覆盖
+`311,600` 个窗口两遍，共暴露 `623,200` 个窗口并执行 32 个 segment；训练结束同时
+保留最低验证 loss 的 `best_model`、可续训的 `last_state.pt`，并将第二轮结束权重导出为
+可直接部署的 `last_model`。
+
+```bash
+bash finetune/prepare_kaggle_v4_b_2pass_kernel.sh
+kaggle kernels push -p artifacts/kaggle_v4_b_2pass_kernel --accelerator P100
+```
+
 2026 增量数据审计确认旧流水线先把面板裁到 2026 年，再生成 `90 + 10 + 1` 行窗口。90 日观察期因此吞掉了年初行情，89,730 个训练窗口实际只覆盖 `2026-05-22` 至 `2026-07-16` 的 39 个信号日；训练集未来十日均价收益为负的比例是 `65.83%`，同期 symbol holdout 验证集为 `72.56%`。这解释了旧增量模型的系统性偏跌。
 
 V4 不再按文件日期裁掉上下文。加载器合并 2015-2025 `train_data.pkl` 与 2026 `val_data.pkl`，保留连续行情，并根据窗口第 90 行的信号日期筛选：
