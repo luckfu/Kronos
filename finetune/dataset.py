@@ -74,6 +74,75 @@ def build_balanced_coverage_order(bucket_ids, segment_size, seed):
     return order
 
 
+def load_merged_panels(paths):
+    """Load one or more panel pickles and join each symbol chronologically."""
+    merged = {}
+    for path in paths:
+        with open(path, 'rb') as handle:
+            panel = pickle.load(handle)
+        for symbol, frame in panel.items():
+            if symbol not in merged:
+                merged[symbol] = frame
+                continue
+            joined = pd.concat([merged[symbol], frame]).sort_index()
+            merged[symbol] = joined[~joined.index.duplicated(keep='last')]
+    return merged
+
+
+def balanced_stratum_quotas(strata, target):
+    """Allocate a replay target evenly across available year/size strata."""
+    strata = np.asarray(strata, dtype=np.int32)
+    target = min(max(0, int(target)), len(strata))
+    unique, counts = np.unique(strata, return_counts=True)
+    quotas = np.zeros(len(unique), dtype=np.int64)
+    remaining = target
+    while remaining > 0:
+        available = np.flatnonzero(quotas < counts)
+        if len(available) == 0:
+            break
+        share = max(1, remaining // len(available))
+        consumed = 0
+        for position in available:
+            take = min(
+                share,
+                int(counts[position] - quotas[position]),
+                remaining,
+            )
+            quotas[position] += take
+            remaining -= take
+            consumed += take
+            if remaining == 0:
+                break
+        if not consumed:
+            break
+    return unique, quotas
+
+
+def select_stratified_replay(strata, target, seed):
+    """Select deterministic replay positions without replacement."""
+    strata = np.asarray(strata, dtype=np.int32)
+    unique, quotas = balanced_stratum_quotas(strata, target)
+    if not len(strata) or not int(quotas.sum()):
+        return np.empty(0, dtype=np.int64)
+    order = np.argsort(strata, kind='stable')
+    sorted_strata = strata[order]
+    values, starts, counts = np.unique(
+        sorted_strata, return_index=True, return_counts=True
+    )
+    quota_by_value = dict(zip(unique.tolist(), quotas.tolist()))
+    rng = np.random.default_rng(seed)
+    selected = []
+    for value, start, count in zip(values, starts, counts):
+        quota = quota_by_value.get(int(value), 0)
+        if quota <= 0:
+            continue
+        candidates = order[start:start + count]
+        selected.append(rng.choice(candidates, size=quota, replace=False))
+    result = np.concatenate(selected) if selected else np.empty(0, dtype=np.int64)
+    rng.shuffle(result)
+    return result
+
+
 class QlibDataset(Dataset):
     """
     A PyTorch Dataset for handling Qlib financial time series data.
@@ -96,14 +165,13 @@ class QlibDataset(Dataset):
 
         # Set paths and number of samples based on the data type.
         if data_type == 'train':
-            self.data_path = f"{self.config.dataset_path}/train_data.pkl"
+            self.data_paths = self.config.train_data_paths
             self.configured_samples = self.config.n_train_iter
         else:
-            self.data_path = f"{self.config.dataset_path}/val_data.pkl"
+            self.data_paths = self.config.val_data_paths
             self.configured_samples = self.config.n_val_iter
 
-        with open(self.data_path, 'rb') as f:
-            self.data = pickle.load(f)
+        self.data = load_merged_panels(self.data_paths)
 
         self.window = self.config.lookback_window + self.config.predict_window + 1
 
@@ -133,8 +201,30 @@ class QlibDataset(Dataset):
         # Pre-compute all possible (symbol, start_index) pairs.
         self.indices = []
         bucket_ids = bytearray()
+        replay_symbols = []
+        replay_starts = []
+        replay_buckets = []
+        replay_strata = []
+        signal_dates_seen = set()
+        replay_ratio = (
+            float(self.config.history_replay_ratio) if data_type == 'train' else 0.0
+        )
+        if not 0.0 <= replay_ratio < 1.0:
+            raise ValueError('KRONOS_HISTORY_REPLAY_RATIO must be in [0, 1)')
+        signal_start = getattr(self.config, f'{data_type}_signal_start') or None
+        signal_end = getattr(self.config, f'{data_type}_signal_end') or None
+        signal_start = np.datetime64(signal_start, 'D') if signal_start else None
+        signal_end = np.datetime64(signal_end, 'D') if signal_end else None
+        replay_start = self.config.replay_signal_start or None
+        replay_end = self.config.replay_signal_end or None
+        replay_start = np.datetime64(replay_start, 'D') if replay_start else None
+        replay_end = np.datetime64(replay_end, 'D') if replay_end else None
+        if replay_ratio and (signal_start is None or signal_end is None):
+            raise ValueError('Historical replay requires an explicit train signal range')
+        if replay_ratio and (replay_start is None or replay_end is None):
+            raise ValueError('Historical replay requires an explicit replay signal range')
         print(f"[{data_type.upper()}] Pre-computing sample indices...")
-        for symbol in self.symbols:
+        for symbol_position, symbol in enumerate(self.symbols):
             df = self.data[symbol].reset_index()
             series_len = len(df)
             num_samples = series_len - self.window + 1
@@ -156,16 +246,63 @@ class QlibDataset(Dataset):
                 # Keep only necessary columns to save memory.
                 self.data[symbol] = df[self.feature_list + self.time_feature_list]
 
-                # Add all valid starting indices for this symbol to the global list.
-                for i in range(num_samples):
-                    self.indices.append((symbol, i))
-                    asof_position = i + self.config.lookback_window - 1
-                    bucket = 255
-                    if str(symbol) in self.size_by_symbol:
-                        value = self.size_by_symbol[str(symbol)].iloc[asof_position]
-                        if pd.notna(value):
-                            bucket = int(value)
-                    bucket_ids.append(bucket)
+                starts = np.arange(num_samples, dtype=np.int32)
+                asof_positions = starts + self.config.lookback_window - 1
+                dates = df['datetime'].to_numpy(dtype='datetime64[D]')[asof_positions]
+                buckets = np.full(num_samples, 255, dtype=np.uint8)
+                if str(symbol) in self.size_by_symbol:
+                    raw_buckets = pd.to_numeric(
+                        self.size_by_symbol[str(symbol)].iloc[asof_positions],
+                        errors='coerce',
+                    ).to_numpy(dtype=np.float64)
+                    known = np.isfinite(raw_buckets)
+                    buckets[known] = raw_buckets[known].astype(np.uint8)
+
+                eligible = np.ones(num_samples, dtype=bool)
+                if signal_start is not None:
+                    eligible &= dates >= signal_start
+                if signal_end is not None:
+                    eligible &= dates <= signal_end
+                eligible_positions = np.flatnonzero(eligible)
+                for position in eligible_positions:
+                    self.indices.append((symbol, int(starts[position])))
+                    bucket_ids.append(int(buckets[position]))
+                signal_dates_seen.update(dates[eligible].tolist())
+
+                if replay_ratio:
+                    replay_eligible = ~eligible
+                    replay_eligible &= dates >= replay_start
+                    replay_eligible &= dates <= replay_end
+                    replay_positions = np.flatnonzero(replay_eligible)
+                    if len(replay_positions):
+                        replay_symbols.append(np.full(
+                            len(replay_positions), symbol_position, dtype=np.int32
+                        ))
+                        replay_starts.append(starts[replay_positions])
+                        replay_buckets.append(buckets[replay_positions])
+                        years = pd.DatetimeIndex(
+                            dates[replay_positions]
+                        ).year.to_numpy(dtype=np.int32)
+                        replay_strata.append(
+                            years * 256 + buckets[replay_positions].astype(np.int32)
+                        )
+
+        recent_samples = len(self.indices)
+        replay_samples = 0
+        if replay_ratio:
+            candidate_symbols = np.concatenate(replay_symbols)
+            candidate_starts = np.concatenate(replay_starts)
+            candidate_buckets = np.concatenate(replay_buckets)
+            candidate_strata = np.concatenate(replay_strata)
+            replay_target = round(recent_samples * replay_ratio / (1.0 - replay_ratio))
+            selected = select_stratified_replay(
+                candidate_strata, replay_target, self.config.seed + 2026
+            )
+            for candidate in selected:
+                symbol = self.symbols[int(candidate_symbols[candidate])]
+                self.indices.append((symbol, int(candidate_starts[candidate])))
+                bucket_ids.append(int(candidate_buckets[candidate]))
+            replay_samples = len(selected)
 
         self.total_samples = len(self.indices)
         requested = int(self.configured_samples)
@@ -187,10 +324,20 @@ class QlibDataset(Dataset):
             )
         self.active_positions = self.coverage_order[:self.n_samples]
         self.coverage_start = 0
+        self.selection_report = {
+            'recent_samples': recent_samples,
+            'replay_samples': replay_samples,
+            'replay_ratio': replay_samples / self.total_samples if self.total_samples else 0.0,
+            'signal_days': len(signal_dates_seen),
+            'signal_start': str(min(signal_dates_seen)) if signal_dates_seen else None,
+            'signal_end': str(max(signal_dates_seen)) if signal_dates_seen else None,
+        }
         print(
             f"[{data_type.upper()}] Found {self.total_samples} possible samples. "
             f"Using {self.n_samples} unique samples per segment."
         )
+        if signal_start is not None or signal_end is not None or replay_samples:
+            print(f"[{data_type.upper()}] Selection: {self.selection_report}")
 
     def set_epoch_seed(self, epoch: int):
         """

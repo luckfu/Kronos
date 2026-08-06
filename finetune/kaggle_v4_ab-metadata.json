@@ -1,0 +1,16 @@
+{
+  "id": "luckfu/kronos-a-share-v4-ab-training",
+  "title": "Kronos A-share V4 corrected context A-B training",
+  "code_file": "kaggle_v4_ab.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "luckfu/kronos-train-set-a",
+    "luckfu/kronos-a-share-2026-incremental"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

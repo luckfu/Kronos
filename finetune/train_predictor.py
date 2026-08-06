@@ -759,6 +759,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     dt_result.setdefault('status', 'completed')
     dt_result.setdefault('completed_segments', last_completed_segment)
     dt_result.setdefault('total_segments', effective_epochs)
+    dt_result.setdefault('train_selection', train_dataset.selection_report)
+    dt_result.setdefault('validation_selection', valid_dataset.selection_report)
     if rank == 0:
         display_segment = dt_result.get(
             'partial_segment', dt_result['completed_segments']

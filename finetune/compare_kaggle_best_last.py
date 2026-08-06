@@ -86,8 +86,69 @@ def build_periods(panel, calendar, start, end, period_count):
     return periods
 
 
+def build_signal_periods(panel, calendar, start, end, period_count):
+    """Build periods whose signal dates, rather than labels, are date-bounded."""
+    signal_dates = calendar[
+        (calendar >= pd.Timestamp(start)) & (calendar <= pd.Timestamp(end))
+    ]
+    calendar_positions = calendar.get_indexer(signal_dates)
+    valid_positions = calendar_positions[
+        calendar_positions + PRED_LEN < len(calendar)
+    ]
+    if len(valid_positions) == 0:
+        raise RuntimeError(f"No valid signal dates in {start}..{end}")
+    selected = np.linspace(0, len(valid_positions) - 1, period_count)
+    selected = np.unique(selected.round().astype(int))
+    periods = []
+    for period_index, selected_position in enumerate(selected):
+        position = int(valid_positions[selected_position])
+        signal_date = pd.Timestamp(calendar[position])
+        future_dates = pd.DatetimeIndex(
+            calendar[position + 1:position + PRED_LEN + 1]
+        )
+        records = []
+        for symbol, frame in panel.items():
+            if signal_date not in frame.index or not set(future_dates).issubset(frame.index):
+                continue
+            context = frame.loc[:signal_date].tail(LOOKBACK)
+            if len(context) != LOOKBACK or context.index[-1] != signal_date:
+                continue
+            latest = context.iloc[-1]
+            if any(float(latest[col]) <= 0 for col in ("close", "volume", "amount")):
+                continue
+            entry_open = float(frame.loc[future_dates[0], "open"])
+            exit_close = float(frame.loc[future_dates[-1], "close"])
+            average_close = float(frame.loc[future_dates, "close"].mean())
+            records.append({
+                "symbol": symbol,
+                "name": str(latest["name"]),
+                "context": context,
+                "future_dates": future_dates,
+                "size_bucket": int(np.clip(round(float(latest["size_bucket"])), 0, 9)),
+                "size_percentile": float(np.clip(float(latest["size_percentile"]), 0, 1)),
+                "last_close": float(latest["close"]),
+                "actual_close_return": average_close / float(latest["close"]) - 1,
+                "realized_return": exit_close / entry_open - 1,
+            })
+        if len(records) < 100:
+            raise RuntimeError(f"{signal_date:%Y-%m-%d}: only {len(records)} eligible holdout stocks")
+        periods.append({
+            "period": period_index,
+            "signal_date": signal_date,
+            "entry_date": future_dates[0],
+            "exit_date": future_dates[-1],
+            "records": records,
+        })
+    return periods
+
+
 def compare_window(best_path, last_path, tokenizer, panel, calendar, label, start, end, args, device, index):
-    periods = build_periods(panel, calendar, start, end, args.period_count)
+    if args.signal_start:
+        periods = build_signal_periods(
+            panel, calendar, start, end, args.period_count
+        )
+    else:
+        periods = build_periods(panel, calendar, start, end, args.period_count)
     print(
         f"Window {label}: periods={len(periods)}, "
         f"first={periods[0]['signal_date']:%Y-%m-%d}, "
@@ -145,6 +206,9 @@ def main():
     parser.add_argument("--batch-size", type=int, default=24)
     parser.add_argument("--seed", type=int, default=20260805)
     parser.add_argument("--window", choices=("2024", "2025", "2026"), default=None)
+    parser.add_argument("--signal-start", default="")
+    parser.add_argument("--signal-end", default="")
+    parser.add_argument("--signal-label", default="time_holdout")
     args = parser.parse_args()
 
     output = Path(args.output_dir)
@@ -161,7 +225,11 @@ def main():
         ("2025", "2025-01-01", "2025-12-31"),
         ("2026", "2026-01-01", "2026-07-31"),
     ]
-    if args.window:
+    if args.signal_start or args.signal_end:
+        if not args.signal_start or not args.signal_end:
+            parser.error('--signal-start and --signal-end must be provided together')
+        windows = [(args.signal_label, args.signal_start, args.signal_end)]
+    elif args.window:
         windows = [window for window in windows if window[0] == args.window]
     predictions, results = [], {}
     for index, window in enumerate(windows):

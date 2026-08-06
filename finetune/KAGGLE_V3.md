@@ -1,5 +1,35 @@
 # Kaggle V3 GPU Benchmark
 
+## V4 连续上下文 A/B 实验
+
+2026 增量数据审计确认旧流水线先把面板裁到 2026 年，再生成 `90 + 10 + 1` 行窗口。90 日观察期因此吞掉了年初行情，89,730 个训练窗口实际只覆盖 `2026-05-22` 至 `2026-07-16` 的 39 个信号日；训练集未来十日均价收益为负的比例是 `65.83%`，同期 symbol holdout 验证集为 `72.56%`。这解释了旧增量模型的系统性偏跌。
+
+V4 不再按文件日期裁掉上下文。加载器合并 2015-2025 `train_data.pkl` 与 2026 `val_data.pkl`，保留连续行情，并根据窗口第 90 行的信号日期筛选：
+
+- 近期训练：`2026-01-05` 至 `2026-06-17`，108 个信号日、249,280 个窗口。
+- 时间验证：`2026-06-18` 至 `2026-07-16`，20 个信号日、46,129 个窗口。
+- A 组：仅使用修正后的近期训练窗口。
+- B 组：同一批近期窗口加 62,320 个历史回放窗口，总计 311,600；回放占 20%，按年份和市值桶分层无放回抽取。
+- 两组都从增训前 V3 Last 开始，predictor 学习率 `1e-6`、市值层学习率 `1e-4`，完整覆盖一遍。
+
+本机严格校验但不启动训练：
+
+```bash
+PYTHONPATH=. python finetune/verify_a_share_v4_data.py --strict
+```
+
+Kaggle 直接复用已有的 `luckfu/kronos-train-set-a` 完整数据和 `luckfu/kronos-a-share-2026-incremental` 中保存的增训前 V3 Last，不需要重新上传大文件：
+
+```bash
+bash finetune/prepare_kaggle_v4_ab_kernel.sh
+kaggle kernels push -p artifacts/kaggle_v4_ab_kernel --accelerator P100
+kaggle kernels status luckfu/kronos-a-share-v4-ab-training
+kaggle kernels output luckfu/kronos-a-share-v4-ab-training \
+  -p artifacts/kaggle_v4_ab_output
+```
+
+Kernel 会依次训练 `a_share_v4_corrected_2026_recent_only` 和 `a_share_v4_corrected_2026_replay20`，然后在固定股票 holdout 的最后 20 个时间外信号日上生成 A/B 预测、Rank IC、方向准确率和 MAE。输出同时保留两个 `best_model`、两个 `last_state.pt` 和 `outputs/evaluation/v4_recent_vs_replay20`。
+
 ## 2026 增量训练
 
 完成 V3 全市场两轮覆盖后，2026 增量任务使用独立流水线：

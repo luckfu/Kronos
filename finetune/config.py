@@ -53,6 +53,27 @@ class Config:
 
         # TODO: Directory to save the processed, pickled datasets.
         self.dataset_path = os.getenv("KRONOS_DATASET_PATH", "./data/a_share/processed_datasets")
+        default_train_path = os.path.join(self.dataset_path, "train_data.pkl")
+        default_val_path = os.path.join(self.dataset_path, "val_data.pkl")
+        self.train_data_paths = tuple(
+            path for path in os.getenv(
+                "KRONOS_TRAIN_DATA_PATHS", default_train_path
+            ).split(os.pathsep) if path
+        )
+        self.val_data_paths = tuple(
+            path for path in os.getenv(
+                "KRONOS_VAL_DATA_PATHS", default_val_path
+            ).split(os.pathsep) if path
+        )
+        self.train_signal_start = os.getenv("KRONOS_TRAIN_SIGNAL_START", "")
+        self.train_signal_end = os.getenv("KRONOS_TRAIN_SIGNAL_END", "")
+        self.val_signal_start = os.getenv("KRONOS_VAL_SIGNAL_START", "")
+        self.val_signal_end = os.getenv("KRONOS_VAL_SIGNAL_END", "")
+        self.history_replay_ratio = float(
+            os.getenv("KRONOS_HISTORY_REPLAY_RATIO", "0")
+        )
+        self.replay_signal_start = os.getenv("KRONOS_REPLAY_SIGNAL_START", "")
+        self.replay_signal_end = os.getenv("KRONOS_REPLAY_SIGNAL_END", "")
 
         # =================================================================
         # Training Hyperparameters

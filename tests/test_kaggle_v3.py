@@ -68,3 +68,24 @@ def test_long_kernel_b_resumes_from_kernel_a_output():
     assert metadata['kernel_sources'] == [
         'luckfu/kronos-a-share-v3-p100-long-training-a'
     ]
+
+
+def test_v4_ab_kernel_uses_full_data_and_preincremental_base():
+    metadata = json.loads(
+        (ROOT / 'finetune/kaggle_v4_ab-metadata.json').read_text()
+    )
+    source = (ROOT / 'finetune/kaggle_v4_ab.py').read_text()
+    train_script = (ROOT / 'finetune/kaggle_v4_ab_train.sh').read_text()
+
+    assert metadata['dataset_sources'] == [
+        'luckfu/kronos-train-set-a',
+        'luckfu/kronos-a-share-2026-incremental',
+    ]
+    assert 'base_model/v3_last/model.safetensors' in source
+    assert "for variant in ('recent_only', 'replay20')" in source
+    assert 'KRONOS_TRAIN_SIGNAL_START="2026-01-01"' in train_script
+    assert 'KRONOS_TRAIN_SIGNAL_END="2026-06-17"' in train_script
+    assert 'KRONOS_VAL_SIGNAL_START="2026-06-18"' in train_script
+    assert 'KRONOS_VAL_SIGNAL_END="2026-07-16"' in train_script
+    assert 'KRONOS_HISTORY_REPLAY_RATIO="${REPLAY_RATIO}"' in train_script
+    assert 'KRONOS_PREDICTOR_LEARNING_RATE="1e-6"' in train_script
