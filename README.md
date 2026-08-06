@@ -114,6 +114,8 @@ V3 行情从 2015-01-01 开始，使训练同时覆盖 2015 年快速上涨和�
 
 正式长训放在 Colab CUDA 上，本机只负责准备、校验和打包数据。Kaggle P100 三段吞吐基准和后续迁移说明见 [`finetune/KAGGLE_V3.md`](finetune/KAGGLE_V3.md)；完整 Colab 命令见 [`finetune/COLAB_V3.md`](finetune/COLAB_V3.md)。本机 `train_a_share_v3.sh` 只用于短跑通或有意的 MPS 实验，不作为默认完整训练入口。
 
+滚动生产增训默认使用 `80%` 近期窗口和 `20%` 分层历史回放窗口，并允许在 `10%-30%` 历史占比内调整。历史回放覆盖不同牛熊震荡、波动状态和市值桶，用于降低灾难性遗忘；固定股票 holdout 与最近至少 20 个完整标签交易日分别负责跨股票和跨时间验证。当前市场 Rank IC、方向准确率和含成本交易收益是主要晋级指标，旧年份表现用于调整回放比例和回滚判断，不作为绝对否决条件。完整规则见 [`finetune/A_SHARE_PLAN_CN.md`](finetune/A_SHARE_PLAN_CN.md)。
+
 增训是独立 App，不与预测进程共享模型或生命周期。运行 `python webui/finetune_app.py` 后访问 `http://127.0.0.1:7071/`；预测 App 继续独立运行在 7070。增训页面可选择本地 `NeoQuasar/Kronos-base` 或已有的完整 checkpoint 作为训练起点，再选择离散市值桶或“桶 + 连续百分位”；模型列表只展示名称和来源，不向前端返回本机路径。设备自动使用 MPS、CUDA 或 CPU，并提供规模预估、实时训练/验证/最佳 Loss 曲线、原始日志、完整覆盖进度、停止保存和 checkpoint 恢复。默认每段训练 20,000 个无重复窗口；训练器沿固定随机排列依次推进，76 段覆盖当前 1,509,252 个训练窗口一遍，全部窗口完成覆盖后才开始计算 5 段早停耐心。
 
 Colab GPU 重建数据、下载基础模型和长训流程见 [`finetune/COLAB.md`](finetune/COLAB.md)。该流程不把大数据文件提交进 Git，而是在 Colab 中从 BaoStock 重建真实面板，并支持 Google Drive checkpoint 和 `google-colab-cli` 远程会话。
