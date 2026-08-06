@@ -23,8 +23,8 @@ Kaggle 直接复用已有的 `luckfu/kronos-train-set-a` 完整数据和 `luckfu
 ```bash
 bash finetune/prepare_kaggle_v4_ab_kernel.sh
 kaggle kernels push -p artifacts/kaggle_v4_ab_kernel --accelerator P100
-kaggle kernels status luckfu/kronos-a-share-v4-ab-training
-kaggle kernels output luckfu/kronos-a-share-v4-ab-training \
+kaggle kernels status luckfu/kronos-a-share-v4-corrected-context-a-b-training
+kaggle kernels output luckfu/kronos-a-share-v4-corrected-context-a-b-training \
   -p artifacts/kaggle_v4_ab_output
 ```
 

@@ -81,6 +81,9 @@ def test_v4_ab_kernel_uses_full_data_and_preincremental_base():
         'luckfu/kronos-train-set-a',
         'luckfu/kronos-a-share-2026-incremental',
     ]
+    assert metadata['id'] == (
+        'luckfu/kronos-a-share-v4-corrected-context-a-b-training'
+    )
     assert 'base_model/v3_last/model.safetensors' in source
     assert "for variant in ('recent_only', 'replay20')" in source
     assert 'KRONOS_TRAIN_SIGNAL_START="2026-01-01"' in train_script
