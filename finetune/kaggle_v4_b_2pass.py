@@ -8,8 +8,6 @@ import sys
 import tarfile
 from pathlib import Path
 
-import torch
-
 
 REPO = Path('/kaggle/working/Kronos')
 RUNTIME = Path('/kaggle/working/kronos_a_share_v4_b_2pass')
@@ -37,6 +35,8 @@ def locate_v3_base():
 
 
 def export_last_model(output_root):
+    import torch
+
     sys.path.insert(0, str(REPO))
     from model import Kronos
 
