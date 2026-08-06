@@ -154,6 +154,8 @@ python finetune/train_predictor.py
 
 该实验先验证数据修正和历史回放，不修改 Kronos 主结构。生产晋级必须同时检查时间外 Rank IC、方向准确率、预测涨跌比例偏差、MAE 和股票池头尾收益差，不能再仅依据同期 symbol holdout 的 token loss。
 
+V4 A/B 已在 P100 完成。最后 20 个时间外信号日、240 只固定股票的结果为：V3 Last Rank IC `0.01124`、A 组 `-0.04796`、B 组 `-0.03966`；A/B 的方向准确率虽然分别为 `64.23%` 和 `62.90%`，但实际下跌比例为 `73.37%`，两者平衡准确率均低于 `0.50`。B 只将预测下跌比例从 `81.63%` 降到 `78.87%`，没有恢复排序能力。结论是：数据裁剪修正已经生效，20% 回放也按预期生效，但这一训练配置不能晋级生产；当前生产 checkpoint 保持不变，候选模型及其时间外预测保留在 Kaggle 输出用于后续分析。
+
 - 生产 checkpoint：`outputs/models/a_share_size_full_coverage_colab_bs32_latest/checkpoints/best_model/model.safetensors`。
 - 训练覆盖：1,509,252 个有效窗口，batch size 32，81 个覆盖分段，完整遍历一轮。
 - 可训练参数：20,260,416 / 102,319,744（19.8%）。

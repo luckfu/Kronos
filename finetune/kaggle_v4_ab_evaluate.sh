@@ -12,7 +12,7 @@ A_MODEL="${RUNTIME_ROOT}/outputs/models/a_share_v4_corrected_2026_recent_only/ch
 B_MODEL="${RUNTIME_ROOT}/outputs/models/a_share_v4_corrected_2026_replay20/checkpoints/best_model"
 
 export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/finetune"
-python "${REPO_ROOT}/finetune/compare_kaggle_best_last.py" \
+python -u "${REPO_ROOT}/finetune/compare_kaggle_best_last.py" \
   --holdout "${DATA_ROOT}/processed_datasets/symbol_holdout_data.pkl" \
   --manifest "${DATA_ROOT}/universe_manifest.csv" \
   --best-model "${A_MODEL}" \
