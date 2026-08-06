@@ -10,10 +10,10 @@
 - 输入：90 个交易日的 `open/high/low/close/volume/amount`
 - 输出：未来 10 个交易日的采样路径及 P10/P50/P90 区间
 - 条件：按交易日横截面流通市值划分为 10 桶（`0` 最小，`9` 最大）
-- 训练期：2020-01-02 至 2025-12-31
-- 验证期：2026-01-01 至 2026-07-31
-- 生产 checkpoint：`a_share_size_full_coverage_colab_bs32_latest`
-- 完整覆盖：1,509,252 个训练窗口，81 个覆盖分段，batch size 32
+- 基础训练期：2015-01-05 至 2025-12-31
+- 增量训练期：2026-01-05 至 2026-07-31
+- 生产 checkpoint：`a_share_v3_2026_incremental_latest`
+- 增量覆盖：89,730 个窗口完整遍历两遍，共 10 个分段，batch size 32
 - 设备：自动选择 `MPS → CUDA → CPU`
 
 公开模型权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。仓库地址为兼容已有部署保持不变，当前文件已更新为完整覆盖生产权重；模型卡记录了版本、校验和、训练口径与限制。
@@ -72,7 +72,7 @@ python -m pip install modelscope
 ```bash
 modelscope download luckfu/a-share-size-kronos-base-earlystop50 \
   --repo-type model \
-  --local-dir outputs/models/a_share_size_full_coverage_colab_bs32_latest/checkpoints/best_model
+  --local-dir outputs/models/a_share_v3_2026_incremental_latest/checkpoints/best_model
 ```
 
 启动页面：

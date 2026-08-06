@@ -44,7 +44,7 @@ A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
     'outputs',
     'models',
-    'a_share_size_full_coverage_colab_bs32_latest',
+    'a_share_v3_2026_incremental_latest',
     'checkpoints',
     'best_model',
 )
@@ -66,12 +66,12 @@ size_reference_lock = threading.Lock()
 # Available model configurations
 AVAILABLE_MODELS = {
     'a-share-size-kronos-base': {
-        'name': 'A-share Size Kronos-base',
+        'name': 'A-share 2026 Incremental Kronos',
         'model_id': A_SHARE_MODEL_PATH,
         'tokenizer_id': 'NeoQuasar/Kronos-Tokenizer-base',
         'context_length': 512,
         'params': '102.3M',
-        'description': 'A-share daily model with point-in-time market-cap conditioning',
+        'description': 'Current-market A-share ranking model with market-cap conditioning',
         'num_size_buckets': 10,
         'use_size_percentile': False,
         'default_lookback': 90,
