@@ -248,7 +248,17 @@ def prepare_batch(records):
     }
 
 
-def run_model(label, path, tokenizer, periods, device, batch_size, sample_count, seed):
+def run_model(
+    label,
+    path,
+    tokenizer,
+    periods,
+    device,
+    batch_size,
+    sample_count,
+    seed,
+    temperature=0.6,
+):
     model = Kronos.from_pretrained(
         path, num_sectors=0, num_size_buckets=10, context_layer=10,
         use_size_percentile=False, size_mlp_hidden_dim=64,
@@ -265,7 +275,7 @@ def run_model(label, path, tokenizer, periods, device, batch_size, sample_count,
                 torch.as_tensor(batch['x'], device=device),
                 torch.as_tensor(batch['x_stamp'], device=device),
                 torch.as_tensor(batch['y_stamp'], device=device),
-                max_context=512, pred_len=PRED_LEN, clip=5, T=0.6,
+                max_context=512, pred_len=PRED_LEN, clip=5, T=temperature,
                 top_k=0, top_p=0.9, sample_count=sample_count, verbose=False,
                 size_bucket=torch.as_tensor(batch['buckets'], device=device),
             )[:, -PRED_LEN:, :]
