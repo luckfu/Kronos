@@ -473,7 +473,7 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
     return x
 
 
-def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False):
     with torch.no_grad():
         x = torch.clip(x, -clip, clip)
 
@@ -572,7 +572,14 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         z = tokenizer.decode(input_tokens, half=True)
         z = z.reshape(-1, sample_count, z.size(1), z.size(2))
         samples = z.cpu().numpy()
-        return samples if return_samples else np.mean(samples, axis=1)
+        forecasts = samples if return_samples else np.mean(samples, axis=1)
+        if not return_generated_tokens:
+            return forecasts
+        tokens = {
+            "s1": generated_pre.reshape(-1, sample_count, pred_len).cpu().numpy(),
+            "s2": generated_post.reshape(-1, sample_count, pred_len).cpu().numpy(),
+        }
+        return forecasts, tokens
 
 
 def calc_time_stamps(x_timestamp):
