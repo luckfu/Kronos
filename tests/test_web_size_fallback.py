@@ -102,3 +102,51 @@ def test_symbol_lookup_degrades_cleanly_without_local_dataset(monkeypatch):
 
     assert frame is None
     assert error == 'panel missing'
+
+
+def test_portfolio_ranking_accepts_remote_only_symbols(monkeypatch):
+    monkeypatch.setattr(web_app, 'size_reference_cache', {
+        'date': pd.Timestamp('2026-08-06'),
+        'market_caps': np.linspace(1_000_000, 1_000_000_000, 1000),
+        'count': 1000,
+    })
+
+    def remote_inputs(symbol, lookback, pred_len, history_rows=None):
+        end = pd.Timestamp('2026-08-06' if symbol == 'sz.000430' else '2026-08-05')
+        dates = pd.bdate_range(end=end, periods=history_rows)
+        values = np.arange(len(dates), dtype=np.float64) + 10
+        context = pd.DataFrame({
+            'timestamps': dates,
+            'open': values,
+            'high': values + 1,
+            'low': values - 1,
+            'close': values + 0.5,
+            'volume': np.full(len(dates), 1_000_000.0),
+            'amount': np.full(len(dates), 10_000_000.0),
+            'turn': np.full(len(dates), 1.0),
+        })
+        return {
+            'context': context,
+            'future_dates': pd.Series(
+                pd.bdate_range(end + pd.Timedelta(days=1), periods=pred_len),
+                name='timestamps',
+            ),
+            'size_bucket': 5,
+            'size_percentile': 0.55,
+            'size_source': 'baostock_proxy_vs_local_cross_section',
+            'in_local_panel': False,
+            'data_source': 'baostock',
+        }
+
+    monkeypatch.setattr(web_app, 'latest_prediction_inputs', remote_inputs)
+
+    batch = web_app.portfolio_ranking_batch(
+        ['sz.000430', 'sz.300886'],
+        lookback=90,
+        pred_len=10,
+    )
+
+    assert batch['as_of_date'] == pd.Timestamp('2026-08-05')
+    assert batch['x'].shape == (2, 90, 6)
+    assert batch['y_stamp'].shape == (2, 10, 5)
+    assert all(not item['in_local_panel'] for item in batch['records'])

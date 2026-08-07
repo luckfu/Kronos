@@ -143,13 +143,14 @@ def read_baostock_result(result):
     return rows
 
 
-def query_latest_daily_data(symbol, lookback, pred_len):
+def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
     """Fetch a fresh adjusted context and the next exchange trading dates."""
     if not BAOSTOCK_AVAILABLE:
         raise RuntimeError('BaoStock is not installed')
 
+    retained_rows = max(lookback, int(history_rows or lookback))
     today = pd.Timestamp.now().normalize()
-    history_start = today - pd.Timedelta(days=max(365, lookback * 4))
+    history_start = today - pd.Timedelta(days=max(365, retained_rows * 4))
     fields = 'date,code,open,high,low,close,volume,amount,turn,pctChg'
 
     with baostock_lock:
@@ -182,7 +183,7 @@ def query_latest_daily_data(symbol, lookback, pred_len):
             history = history.dropna(subset=['timestamps', *numeric_columns])
             history = history[(history['close'] > 0) & (history['volume'] >= 0)]
             history = history.sort_values('timestamps').drop_duplicates('timestamps', keep='last')
-            history = history.tail(lookback).reset_index(drop=True)
+            history = history.tail(retained_rows).reset_index(drop=True)
 
             last_date = history['timestamps'].iloc[-1]
             calendar_end = last_date + pd.Timedelta(days=max(45, pred_len * 6))
@@ -311,14 +312,20 @@ def size_condition_from_local_frame(local_frame):
     }
 
 
-def latest_prediction_inputs(symbol, lookback, pred_len):
+def latest_prediction_inputs(symbol, lookback, pred_len, history_rows=None):
     """Refresh a stock and derive size context even when it is outside the panel."""
     symbol = normalize_a_share_symbol(symbol)
+    retained_rows = max(lookback, int(history_rows or lookback))
     local_frame, local_error = get_a_share_symbol_frame(symbol)
     local_size = size_condition_from_local_frame(local_frame)
 
     try:
-        context, future_dates = query_latest_daily_data(symbol, lookback, pred_len)
+        context, future_dates = query_latest_daily_data(
+            symbol,
+            lookback,
+            pred_len,
+            history_rows=retained_rows,
+        )
         try:
             size_context = size_condition_from_remote_context(context)
         except Exception:
@@ -333,7 +340,7 @@ def latest_prediction_inputs(symbol, lookback, pred_len):
             raise ValueError(
                 f'{symbol} 不在本地训练面板中，且 BaoStock 最新数据无法用于预测：{exc}'
             ) from exc
-        context = local_frame.tail(lookback).copy().reset_index(drop=True)
+        context = local_frame.tail(retained_rows).copy().reset_index(drop=True)
         last_date = pd.Timestamp(context['timestamps'].iloc[-1])
         future_dates = pd.Series(
             pd.bdate_range(last_date + pd.Timedelta(days=1), periods=pred_len),
@@ -347,7 +354,7 @@ def latest_prediction_inputs(symbol, lookback, pred_len):
     if len(context) < lookback:
         raise ValueError(f'{symbol} has only {len(context)} rows; {lookback} are required')
     return {
-        'context': context.tail(lookback).reset_index(drop=True),
+        'context': context.tail(retained_rows).reset_index(drop=True),
         'future_dates': future_dates,
         **size_context,
         'in_local_panel': local_frame is not None,
@@ -426,47 +433,60 @@ def kronos_time_features(index):
 def portfolio_ranking_batch(symbols, lookback, pred_len):
     """Build a same-date batch for a user-provided A-share universe."""
     feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
-    frames = {}
+    history_rows = lookback + max(30, pred_len * 3)
+    inputs_by_symbol = {}
     for symbol in symbols:
-        frame, error = get_a_share_symbol_frame(symbol)
-        if error:
-            raise ValueError(error)
-        frame = frame.set_index('timestamps').sort_index()
-        if len(frame) < lookback:
-            raise ValueError(f'{symbol} 只有 {len(frame)} 个交易日，至少需要 {lookback} 个')
-        frames[symbol] = frame
+        inputs = latest_prediction_inputs(
+            symbol,
+            lookback,
+            pred_len,
+            history_rows=history_rows,
+        )
+        frame = inputs['context'].set_index('timestamps').sort_index()
+        inputs_by_symbol[symbol] = {**inputs, 'frame': frame}
 
-    common_dates = None
-    for frame in frames.values():
-        dates = pd.DatetimeIndex(frame.index)
-        common_dates = dates if common_dates is None else common_dates.intersection(dates)
-    if common_dates is None or common_dates.empty:
-        raise ValueError('股票池没有共同交易日期，无法公平排序')
-    as_of_date = pd.Timestamp(common_dates.max())
+    as_of_date = min(
+        pd.Timestamp(inputs['frame'].index.max())
+        for inputs in inputs_by_symbol.values()
+    )
 
     records = []
-    for symbol, frame in frames.items():
+    for symbol, inputs in inputs_by_symbol.items():
+        frame = inputs['frame']
         context = frame.loc[:as_of_date].tail(lookback)
-        required = feature_columns + ['size_bucket']
-        if AVAILABLE_MODELS['a-share-size-kronos-base'].get('use_size_percentile'):
-            required.append('size_percentile')
-        if context[required].isnull().values.any():
-            raise ValueError(f'{symbol} 在共同日期前存在缺失行情或市值层')
-        size_bucket = int(context['size_bucket'].iloc[-1])
-        size_percentile = context.iloc[-1].get('size_percentile', np.nan)
-        if not np.isfinite(size_percentile):
-            size_percentile = (size_bucket + 0.5) / 10.0
+        if len(context) < lookback:
+            raise ValueError(
+                f'{symbol} 截至 {as_of_date:%Y-%m-%d} 只有 {len(context)} 个交易日，'
+                f'至少需要 {lookback} 个'
+            )
+        if context[feature_columns].isnull().values.any():
+            raise ValueError(f'{symbol} 在共同日期前存在缺失行情')
+        if {'turn', 'timestamps'}.issubset(context.reset_index().columns):
+            size_context = size_condition_from_remote_context(context.reset_index())
+        else:
+            size_context = size_condition_from_local_frame(context.reset_index())
+            if size_context is None:
+                size_context = {
+                    'size_bucket': inputs['size_bucket'],
+                    'size_percentile': inputs['size_percentile'],
+                    'size_source': inputs['size_source'],
+                }
         records.append({
             'symbol': symbol,
             'context': context,
-            'size_bucket': size_bucket,
-            'size_percentile': float(size_percentile),
+            'size_bucket': int(size_context['size_bucket']),
+            'size_percentile': float(size_context['size_percentile']),
             'latest_close': float(context['close'].iloc[-1]),
+            'in_local_panel': bool(inputs['in_local_panel']),
+            'data_source': inputs['data_source'],
+            'size_source': size_context.get('size_source', inputs['size_source']),
         })
 
-    future_dates = pd.bdate_range(
-        as_of_date + pd.Timedelta(days=1), periods=pred_len
+    calendar_inputs = next(
+        inputs for inputs in inputs_by_symbol.values()
+        if pd.Timestamp(inputs['frame'].index.max()) == as_of_date
     )
+    future_dates = pd.DatetimeIndex(calendar_inputs['future_dates'])
     normalized = []
     x_stamps = []
     means = []
@@ -568,6 +588,8 @@ def generate_portfolio_ranking(symbols, sample_count=3):
             'predicted_close_p50': float(np.median(closes)),
             'predicted_return_p50': float(np.median(returns)),
             'positive_path_rate': float(np.mean(returns > 0)),
+            'in_local_panel': item['in_local_panel'],
+            'data_source': item['data_source'],
         })
     rankings.sort(
         key=lambda item: (-item['predicted_return_p50'], item['symbol'])
