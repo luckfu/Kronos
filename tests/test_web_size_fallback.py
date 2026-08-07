@@ -150,3 +150,18 @@ def test_portfolio_ranking_accepts_remote_only_symbols(monkeypatch):
     assert batch['x'].shape == (2, 90, 6)
     assert batch['y_stamp'].shape == (2, 10, 5)
     assert all(not item['in_local_panel'] for item in batch['records'])
+
+
+def test_forecast_return_summary_uses_horizon_average_per_path():
+    summary = web_app.forecast_return_summary(
+        np.asarray([
+            [100.0, 110.0],
+            [90.0, 100.0],
+            [120.0, 100.0],
+        ]),
+        latest_close=100.0,
+    )
+
+    assert summary['predicted_average_close_p50'] == 105.0
+    assert np.isclose(summary['predicted_return_p50'], 0.05)
+    assert np.isclose(summary['positive_path_rate'], 2 / 3)

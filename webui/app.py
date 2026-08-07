@@ -430,6 +430,22 @@ def kronos_time_features(index):
     ]).astype(np.float32)
 
 
+def forecast_return_summary(close_samples, latest_close):
+    """Summarize the same horizon-average return signal used for ranking."""
+    close_samples = np.asarray(close_samples, dtype=np.float64)
+    if close_samples.ndim != 2 or close_samples.shape[1] == 0:
+        raise ValueError('Forecast close samples must have shape [samples, horizon]')
+    if not np.isfinite(latest_close) or latest_close <= 0:
+        raise ValueError('Latest close must be positive')
+    average_closes = close_samples.mean(axis=1)
+    returns = average_closes / latest_close - 1
+    return {
+        'predicted_average_close_p50': float(np.median(average_closes)),
+        'predicted_return_p50': float(np.median(returns)),
+        'positive_path_rate': float(np.mean(returns > 0)),
+    }
+
+
 def portfolio_ranking_batch(symbols, lookback, pred_len):
     """Build a same-date batch for a user-provided A-share universe."""
     feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
@@ -1513,6 +1529,7 @@ def predict_latest():
         )
         latest_date = pd.Timestamp(context['timestamps'].iloc[-1])
         latest_close = float(context['close'].iloc[-1])
+        forecast_summary = forecast_return_summary(close_samples, latest_close)
         prediction_type = f'最新 {lookback} 个交易日 → 未来 {pred_len} 个交易日'
         model_device = str(next(predictor.model.parameters()).device)
 
@@ -1551,6 +1568,7 @@ def predict_latest():
             'pred_len': pred_len,
             'latest_data_date': latest_date.isoformat(),
             'latest_close': latest_close,
+            **forecast_summary,
             'forecast_start': pd.Timestamp(y_timestamp.iloc[0]).isoformat(),
             'forecast_end': pd.Timestamp(y_timestamp.iloc[-1]).isoformat(),
             'size_bucket': size_bucket,

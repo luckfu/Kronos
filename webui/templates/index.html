@@ -978,7 +978,7 @@
                             <strong id="metric-final">—</strong>
                         </div>
                         <div class="metric">
-                            <span>预测区间涨跌</span>
+                            <span>未来 10 日预测收益</span>
                             <strong id="metric-change">—</strong>
                         </div>
                         <div class="metric">
@@ -1251,7 +1251,7 @@
         function renderPrediction(result) {
             const predictions = result.prediction_results;
             const finalPrediction = predictions[predictions.length - 1];
-            const changePct = (finalPrediction.close_p50 / result.latest_close - 1) * 100;
+            const predictedReturnPct = result.predicted_return_p50 * 100;
 
             document.getElementById('empty-state').style.display = 'none';
             document.getElementById('result-content').classList.add('visible');
@@ -1268,8 +1268,8 @@
             document.getElementById('metric-latest').textContent = formatPrice(result.latest_close);
             document.getElementById('metric-final').textContent = formatPrice(finalPrediction.close_p50);
             const changeElement = document.getElementById('metric-change');
-            changeElement.textContent = `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`;
-            changeElement.className = changePct >= 0 ? 'positive' : 'negative';
+            changeElement.textContent = `${predictedReturnPct >= 0 ? '+' : ''}${predictedReturnPct.toFixed(2)}%`;
+            changeElement.className = predictedReturnPct >= 0 ? 'positive' : 'negative';
             document.getElementById('metric-range').textContent = `${formatPrice(finalPrediction.close_p10)} – ${formatPrice(finalPrediction.close_p90)}`;
 
             const chartData = JSON.parse(result.chart);
