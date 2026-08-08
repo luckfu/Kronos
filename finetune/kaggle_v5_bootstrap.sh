@@ -27,6 +27,11 @@ if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
     echo "[kaggle-v5] Extracting data bundle: ${DATA_BUNDLE}"
     tar -xzf "${DATA_BUNDLE}" -C "${RUNTIME_ROOT}"
   fi
+  if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
+    DETECTED_DATA="$(find "${INPUT_ROOT}" -type f \
+      -path '*/data/a_share_v5/processed_datasets/train_data.pkl' -print -quit 2>/dev/null || true)"
+    [[ -n "${DETECTED_DATA}" ]] && DATA_ROOT="$(dirname "$(dirname "${DETECTED_DATA}")")"
+  fi
 fi
 
 if [[ ! -f "${BASE_MODEL}/model.safetensors" ]]; then
@@ -35,6 +40,10 @@ if [[ ! -f "${BASE_MODEL}/model.safetensors" ]]; then
     echo "[kaggle-v5] Extracting V4 B base bundle: ${BASE_BUNDLE}"
     tar -xzf "${BASE_BUNDLE}" -C "${MODEL_ROOT}"
     DETECTED="$(find "${MODEL_ROOT}" -type f -name model.safetensors -print -quit)"
+    [[ -n "${DETECTED}" ]] && BASE_MODEL="$(dirname "${DETECTED}")"
+  fi
+  if [[ ! -f "${BASE_MODEL}/model.safetensors" ]]; then
+    DETECTED="$(find "${INPUT_ROOT}" -type f -path '*/a_share_v4_corrected_2026_replay20_latest/model.safetensors' -print -quit 2>/dev/null || true)"
     [[ -n "${DETECTED}" ]] && BASE_MODEL="$(dirname "${DETECTED}")"
   fi
 fi
