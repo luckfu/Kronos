@@ -14,7 +14,9 @@ export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/finetune"
 export KMP_DUPLICATE_LIB_OK=TRUE
 export KRONOS_DATASET_PATH="${DATA_ROOT}/processed_datasets"
 export KRONOS_TRAIN_DATA_PATHS="${DATA_ROOT}/processed_datasets/train_data.pkl"
-export KRONOS_VAL_DATA_PATHS="${DATA_ROOT}/processed_datasets/val_data.pkl"
+# V5 validation is sampled from the complete training pool, not a special
+# market regime. The post-training evaluator owns the true time holdout.
+export KRONOS_VAL_DATA_PATHS="${DATA_ROOT}/processed_datasets/train_data.pkl"
 export KRONOS_METADATA_PATH="${DATA_ROOT}/asset_metadata.csv"
 export KRONOS_PREDICTOR_PATH="${BASE_MODEL}"
 export KRONOS_SAVE_PATH="${RUNTIME_ROOT}/outputs/models"

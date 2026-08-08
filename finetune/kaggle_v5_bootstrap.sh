@@ -17,7 +17,12 @@ python -m pip install -q -r finetune/requirements-colab.txt
 mkdir -p "${RUNTIME_ROOT}" "${MODEL_ROOT}"
 
 if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
-  [[ -n "${DATA_BUNDLE}" ]] || DATA_BUNDLE="$(find_one 'kronos_a_share_v5_context_120d.tar.gz')"
+  if [[ -z "${DATA_BUNDLE}" ]]; then
+    DATA_BUNDLE="$(find_one 'kronos_a_share_v5_context120_train2015_2026.tar.gz')"
+  fi
+  if [[ -z "${DATA_BUNDLE}" ]]; then
+    DATA_BUNDLE="$(find_one 'kronos_a_share_v5_context_120d.tar.gz')"
+  fi
   if [[ -n "${DATA_BUNDLE}" ]]; then
     echo "[kaggle-v5] Extracting data bundle: ${DATA_BUNDLE}"
     tar -xzf "${DATA_BUNDLE}" -C "${RUNTIME_ROOT}"

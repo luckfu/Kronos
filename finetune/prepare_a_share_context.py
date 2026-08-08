@@ -277,6 +277,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--train-end", default="2026-12-31")
     parser.add_argument("--val-start", default=None)
     parser.add_argument("--val-end", default=None)
+    parser.add_argument(
+        "--val-from-train", action="store_true",
+        help="Use the complete train signal range as the validation pool; validation sampling is handled by the trainer.",
+    )
     parser.add_argument("--test-start", default=None)
     parser.add_argument("--test-end", default=None)
     parser.add_argument("--holdout-start", default=None)
@@ -367,9 +371,13 @@ def main() -> None:
         shutil.copy2(args.universe_manifest, output_root / "universe_manifest.csv")
 
     split_specs = {"train": (args.train_start, args.train_end, train_frame)}
+    if args.val_from_train and (args.val_start or args.val_end):
+        raise SystemExit("--val-from-train cannot be combined with --val-start/--val-end")
     if bool(args.val_start) != bool(args.val_end):
         raise SystemExit("--val-start and --val-end must be provided together")
-    if args.val_start:
+    if args.val_from_train:
+        split_specs["val"] = (args.train_start, args.train_end, train_frame)
+    elif args.val_start:
         split_specs["val"] = (args.val_start, args.val_end, train_frame)
     if bool(args.test_start) != bool(args.test_end):
         raise SystemExit("--test-start and --test-end must be provided together")
@@ -406,6 +414,8 @@ def main() -> None:
             "skipped_examples": skipped[:20],
             "signal_range_requested": [signal_start, signal_end],
         }
+        if split == "val" and args.val_from_train:
+            summary["splits"][split]["source"] = "train_pool_random_sample"
         coverage_manifest.extend(
             {"split": split, **item} for item in coverage
         )

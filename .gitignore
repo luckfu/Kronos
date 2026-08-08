@@ -51,6 +51,7 @@ Desktop.ini
 /data/a_share/
 /data/a_share_v3/
 /data/a_share_v5/
+/data/a_share_v5_train2026/
 /data/a_share_v3_2026_incremental/
 
 # Model files (large files)
