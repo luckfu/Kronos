@@ -42,3 +42,5 @@ os.environ['KRONOS_BATCH_SIZE'] = '16'
 其中 `checkpoints/best_model` 是训练池随机验证 loss 最佳权重，`checkpoints/last_model` 是完整覆盖后的生产候选，`checkpoints/last_state.pt` 用于续跑。训练进程正常结束后脚本会自动导出 `last_model`；中断时先保留 `last_state.pt`，下次续跑完成后再导出。
 
 V5 使用原版全序列 next-token Loss，运行期间不改变。后续 V6 才切换为未来 10 日 `forecast_loss` 主目标；具体约束见 `A_SHARE_PLAN_CN.md`。
+
+V6 还会先做 batch=32 的单段显存短测，依据 P100 的实际 allocated/reserved 峰值选择 batch 32、24 或 16，不在未测显存的情况下直接长训。

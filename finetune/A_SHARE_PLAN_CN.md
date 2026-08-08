@@ -177,6 +177,8 @@ V6 必须分别记录 `history_loss`、`forecast_loss` 和兼容用的 `full_seq
 
 V6 的晋级仍以新增时间外数据上的 Rank IC、方向准确率、预测涨跌比例和头尾收益差为准。训练 Loss 口径改变后，V5 与 V6 的绝对 Loss 数值不可直接横向比较，必须使用相同预测区间上的 `forecast_loss` 或下游回测指标比较。
 
+V6 训练前增加显存短测：先用 `KRONOS_BATCH_SIZE=32` 跑一段，记录每段的 `torch.cuda.max_memory_allocated()` 和 `torch.cuda.max_memory_reserved()`。峰值低于约 13.5 GB 才正式采用 batch 32；峰值在 13.5--15 GB 时采用 batch 24，超过 15 GB 或发生 OOM 则回退 batch 16。显存峰值必须写入训练日志，不能只根据参数量或单步耗时估算。
+
 ### 2014 上下文数据
 
 现有 V3 原始面板从 `2015-01-05` 开始，无法为 2015 年初的 120 日输入提供完整历史。V5 数据准备器使用独立的 2014 文件，不改写 V3 原始数据，并在合并前拒绝重复 `symbol,date`。本地准备流程为：
