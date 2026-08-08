@@ -139,35 +139,60 @@ python finetune/train_predictor.py
 
 该模型保留十桶 Embedding，并用两层 MLP 将连续百分位和已知标志映射到 832 维，在第 10 层后与桶 Embedding 相加。连续分支从零输出初始化，不影响原始 checkpoint 的初始行为。
 
-## 下一版实验计划：V5 上下文窗口
+## 下一版训练计划：V5 上下文窗口
 
-下一版增加一个独立的上下文窗口消融：输入最近 **120 个交易日**，仍然预测未来 **10 个交易日**。当前生产的 `90+10` 口径保持不变，先作为严格对照组；在 120 日候选通过时间外评估之前，不修改前端默认输入长度。
+下一版直接从当前生产 checkpoint 增训一个 `120+10` 候选：输入最近 **120 个交易日**，预测未来 **10 个交易日**。本轮不再单独训练 `V5-90-control`；生产模型仍保持 90 日输入，直到 120 日候选完成时间外检查后再决定是否切换。
 
 ### 设计约束
 
 - 预测目标不变：未来 10 个交易日的路径，生产信号仍使用预测收盘价均值。
 - 数据切分不变：训练、验证和 holdout 使用相同股票隔离、时间隔离和历史回放比例；只改变上下文长度。
 - 每个窗口需要 `120 + 10 + 1 = 131` 行连续行情。计算信号日期时必须保留信号日前至少 120 个交易日，不能再次先裁掉上下文。
-- 90 日和 120 日实验必须使用相同的信号日期、股票、随机种子、batch 语义、学习率和覆盖遍数，不能用不同样本数量造成比较偏差。
+- 本轮只登记 120 日候选的信号日期、股票、随机种子、batch 语义、学习率和覆盖遍数；后续若要做窗口消融，再另开对照实验，不能把两种口径混在同一个结果里。
 - 现有模型参数形状不因窗口长度改变，可以 warm-start；tokenizer、Transformer 层数、市值条件结构暂不修改。
 
 ### 资源与训练安排
 
-120 日会增加每个 batch 的 token 数，并提高注意力显存和计算开销；当序列长度主要由上下文决定时，注意力部分的理论开销约按 `(120/90)^2 = 1.78` 倍增长。首次试跑先用 batch size 16 与 32 各做一个 segment benchmark，再决定正式 batch；不能只按 90 日的耗时估算 Kaggle 配额。
+120 日会增加每个 batch 的 token 数，并提高注意力显存和计算开销；当序列长度主要由上下文决定时，注意力部分的理论开销约按 `(120/90)^2 = 1.78` 倍增长。V5 脚本默认 batch size 16，可通过环境变量在 GPU 上上调；不能只按 90 日的耗时估算 Kaggle 配额。
 
 正式候选仍使用一遍完整覆盖加第二遍确认，保存每遍结束的 checkpoint、`best` 和 `last`，并记录实际覆盖窗口数。早停只作为第二遍之后的观察机制，不能在第一遍中途依据同一验证集淘汰上下文方案。
 
 ### 评估顺序
 
-1. 在相同市值条件和相同 V3 基础权重上，先比较 `90+10` 控制组与 `120+10` 候选组。
-2. 在固定的 2025 历史时间窗口检查长期能力和遗忘，在 2026 开发窗口检查近期适应性。
-3. 新增的未来标签积累到至少 20 个完整信号日后，作为最终时间外测试；此前的 2026-06-18 至 2026-07-16 只作为开发验证，不能反复调参后再当最终证据。
+1. 从当前生产 `last_model` warm-start，保持 tokenizer、Transformer 层数、市值条件结构和学习率口径不变，只切换上下文长度。
+2. 训练信号使用 2015-01-01 至 2025-12-17；2026-01-05 至 2026-07-16 保留为时间验证，训练截止日留出未来 10 个交易日标签，避免跨年泄漏。
+3. 新增的未来标签积累到至少 20 个完整信号日后，作为最终时间外测试；此前的 2026 验证只用于开发检查，不能反复调参后再当最终证据。
 4. 统一报告 token loss、Rank IC、Rank IC 正日期比例、方向准确率、balanced accuracy、MAE、预测下跌比例、头尾 20% 收益差、换手和含成本收益。
-5. 先完成窗口长度消融，再决定是否在 120 日上继续做“无市值条件 vs condition dropout”实验，避免一次扩展成无法解释的组合矩阵。
+5. 120 日候选完成后，再决定是否需要窗口长度消融或“无市值条件 vs condition dropout”实验，避免一次扩展成无法解释的组合矩阵。
 
 ### 晋级条件
 
-120 日候选只有在新时间外 Rank IC 和头尾收益差不低于 90 日 incumbent、没有明显增加预测下跌偏差、历史回放能力没有显著退化，且训练吞吐和显存成本可接受时，才进入前端灰度。否则保留 90 日生产模型；120 日模型的失败结果也要记录，不能仅凭训练 loss 较低晋级。
+120 日候选只有在新时间外 Rank IC 和头尾收益差达到可接受水平、没有明显增加预测下跌偏差、历史能力没有显著退化，且训练吞吐和显存成本可接受时，才进入前端灰度。否则保留 90 日生产模型；120 日模型的失败结果也要记录，不能仅凭训练 loss 较低晋级。
+
+### 2014 上下文数据
+
+现有 V3 原始面板从 `2015-01-05` 开始，无法为 2015 年初的 120 日输入提供完整历史。V5 数据准备器使用独立的 2014 文件，不改写 V3 原始数据，并在合并前拒绝重复 `symbol,date`。本地准备流程为：
+
+```bash
+python finetune/download_a_share_parallel.py \
+  --symbols-file data/a_share_v3/universe_manifest.csv \
+  --start 2014-01-01 --end 2014-12-31 \
+  --output data/a_share_v5/a_share_2014_context.csv \
+  --chunk-dir data/a_share_v5/chunks_2014_context \
+  --workers 4
+
+python finetune/prepare_a_share_context.py \
+  --raw-input data/a_share_v3/a_share_daily_parallel.csv \
+  --raw-input data/a_share_v5/a_share_2014_context_merged.csv \
+  --universe-manifest data/a_share_v3/universe_manifest.csv \
+  --output-root data/a_share_v5 \
+  --lookback 120 --predict 10 --min-2014-trading-days 120 \
+  --train-start 2015-01-01 --train-end 2025-12-17 \
+  --val-start 2026-01-05 --val-end 2026-07-16 \
+  --holdout-start 2014-01-01 --holdout-end 2026-07-31
+```
+
+`v5_context_summary.json` 和 `context_coverage_manifest.csv` 是训练前的硬证据：必须看到至少 120 个 2014 交易日、131 行窗口口径、重复键为零，并确认早期 2015 信号确实保留了 120 行上下文。打包上传使用 `bash finetune/package_a_share_context.sh`；Colab 运行步骤见 [`COLAB_V5.md`](COLAB_V5.md)。
 
 ## 当前生产结果
 
@@ -186,13 +211,12 @@ python finetune/train_predictor.py
 
 V4 A/B 已在 P100 完成。最后 20 个时间外信号日、240 只固定股票的结果为：V3 Last Rank IC `0.01124`、A 组 `-0.04796`、B 组 `-0.03966`；A/B 的方向准确率虽然分别为 `64.23%` 和 `62.90%`，但实际下跌比例为 `73.37%`，两者平衡准确率均低于 `0.50`。B 只将预测下跌比例从 `81.63%` 降到 `78.87%`，没有恢复排序能力。结论是：数据裁剪修正已经生效，20% 回放也按预期生效，但这一训练配置不能晋级生产；当前生产 checkpoint 保持不变，候选模型及其时间外预测保留在 Kaggle 输出用于后续分析。
 
-- 生产 checkpoint：`outputs/models/a_share_size_full_coverage_colab_bs32_latest/checkpoints/best_model/model.safetensors`。
-- 训练覆盖：1,509,252 个有效窗口，batch size 32，81 个覆盖分段，完整遍历一轮。
+- 生产 checkpoint：`outputs/models/a_share_v4_corrected_2026_replay20_latest/checkpoints/last_model/model.safetensors`。
+- 生产模型是 V4 B 两遍覆盖后的 `last_model`，当前文件 SHA-256 为 `06cd68e18deb01a927b35ba61264f677076e8b0f9c3e0303cabaa0bee475b4d2`。
 - 可训练参数：20,260,416 / 102,319,744（19.8%）。
-- 训练过程最佳验证 loss：`2.877660`；生产使用完整遍历结束后的 `latest` 权重。
 - 2025 年未见股票测试：Rank IC `0.16549`，前后 20% 平均十日收益差 `4.46%`。
 - 同条件旧在线模型：Rank IC `0.09122`，前后 20% 平均十日收益差 `2.44%`。
-- ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>，仓库地址保持兼容，权重已更新为全覆盖版本。
+- ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>。该公开仓库当前仍是 90 日的 2026 增量权重，不作为 V5 的默认基座；V5 使用 `package_a_share_v5_base.sh` 打包的本机 V4 B `last_model`。
 
 ## 早期实验结果
 

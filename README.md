@@ -11,14 +11,14 @@
 - 输出：未来 10 个交易日的采样路径及 P10/P50/P90 区间
 - 条件：按交易日横截面流通市值划分为 10 桶（`0` 最小，`9` 最大）
 - 基础训练期：2015-01-05 至 2025-12-31
-- 增量数据行：2026-01-05 至 2026-07-31；已审计的有效监督信号实际只有 2026-05-22 至 2026-07-16
-- 生产 checkpoint：`a_share_v3_2026_incremental_latest`
-- 增量覆盖：89,730 个窗口完整遍历两遍，共 10 个分段，batch size 32
+- 增量数据行：2026-01-05 至 2026-07-31；V4 连续面板保留了信号日前 90 日上下文，并加入 20% 分层历史回放
+- 生产 checkpoint：`outputs/models/a_share_v4_corrected_2026_replay20_latest/checkpoints/last_model`
+- 增量覆盖：V4 B 训练混合 249,280 个近期窗口和 62,320 个历史回放窗口，生产使用两遍覆盖后的 `last_model`
 - 设备：自动选择 `MPS → CUDA → CPU`
 
-公开模型权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。仓库地址为兼容已有部署保持不变，当前文件已更新为完整覆盖生产权重；模型卡记录了版本、校验和、训练口径与限制。
+公开的 90 日增量权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。本机预测前端当前加载上面的 V4 B `last_model`；两者 SHA-256 不同，V5 训练默认使用本机生产基座包，不会静默回退到 ModelScope。
 
-当前生产权重存在已确认的数据构造限制：2026 面板在生成 101 行窗口前被裁到 2026 年，90 日观察长度使 1 月至 5 月上旬无法成为监督信号，最终只训练了 39 个偏空信号日。该权重暂时只作为横截面排序模型。V4 连续上下文 A/B 实验已经完成，但两个候选在真正时间外窗口上的 Rank IC 都低于增训前 V3 Last，因此当前生产模型保持不变。
+旧 V3+2026 增量权重存在已确认的数据构造限制：2026 面板在生成 101 行窗口前被裁到 2026 年，90 日观察长度使 1 月至 5 月上旬无法成为监督信号，最终只训练了 39 个偏空信号日。V4 已修正连续上下文并加入历史回放；当前生产切到了 V4 B 两遍覆盖后的 `last_model`，但仍只应作为待持续验证的横截面排序模型。
 
 ## 市值桶如何接入原版 Kronos
 
@@ -122,7 +122,7 @@ V4 修正实验使用连续的 2015-2026 面板，但只允许信号日期在配
 
 增训是独立 App，不与预测进程共享模型或生命周期。运行 `python webui/finetune_app.py` 后访问 `http://127.0.0.1:7071/`；预测 App 继续独立运行在 7070。增训页面可选择本地 `NeoQuasar/Kronos-base` 或已有的完整 checkpoint 作为训练起点，再选择离散市值桶或“桶 + 连续百分位”；模型列表只展示名称和来源，不向前端返回本机路径。设备自动使用 MPS、CUDA 或 CPU，并提供规模预估、实时训练/验证/最佳 Loss 曲线、原始日志、完整覆盖进度、停止保存和 checkpoint 恢复。默认每段训练 20,000 个无重复窗口；训练器沿固定随机排列依次推进，76 段覆盖当前 1,509,252 个训练窗口一遍，全部窗口完成覆盖后才开始计算 5 段早停耐心。
 
-Colab GPU 重建数据、下载基础模型和长训流程见 [`finetune/COLAB.md`](finetune/COLAB.md)。该流程不把大数据文件提交进 Git，而是在 Colab 中从 BaoStock 重建真实面板，并支持 Google Drive checkpoint 和 `google-colab-cli` 远程会话。
+Colab GPU 重建数据、下载基础模型和长训流程见 [`finetune/COLAB.md`](finetune/COLAB.md)。该流程不把大数据文件提交进 Git，而是在 Colab 中从 BaoStock 重建真实面板，并支持 Google Drive checkpoint 和 `google-colab-cli` 远程会话。下一版 `120+10` 上下文候选使用独立的 2014 补充数据和 [`finetune/COLAB_V5.md`](finetune/COLAB_V5.md)，不运行 `V5-90-control`。
 
 ```bash
 python finetune/download_a_share_baostock.py \
@@ -153,11 +153,11 @@ python finetune/train_predictor.py
 
 训练脚本默认使用完整覆盖分段：每段内部无放回、段间沿同一排列继续，完成要求的覆盖遍数后再应用验证集早停。`KRONOS_TRAIN_SAMPLES_PER_SEGMENT`、`KRONOS_COVERAGE_PASSES`、`KRONOS_VALIDATION_SAMPLES` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 可覆盖页面默认值。Apple Silicon 直接运行即可自动使用 MPS；CUDA 可使用 `torchrun`。停止请求会在当前 batch 完成后立即暂停计算并保存 `last_state.pt`；状态包含模型、优化器、学习率调度器、分段和 batch 位置及随机数状态，设置 `KRONOS_RESUME_TRAINING=1` 可从下一 batch 恢复。训练指标同时写入 `metrics.jsonl`，旧任务可从 `training.log` 恢复曲线。`Kronos-base` 基础权重可放在任意目录，通过 `KRONOS_PREDICTOR_PATH` 指定。
 
-当前生产 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留，不再由预测页面、默认回测或 Colab `production` 起点加载。
+V3 全覆盖基线 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留；当前预测页面加载的是后续 V4 B `last_model`。
 
 ## 评估与回测
 
-全覆盖训练共使用 1,509,252 个窗口，最终 `latest` checkpoint 位于第 81 个覆盖分段；训练过程记录的最佳验证 loss 为 `2.877660`。针对从未进入 1,176 只训练面板、且不属于对应 CSI800 截面的 24 只股票，2025 年 16 个截面上 `latest` 的平均 Rank IC 为 `0.16549`，高于全覆盖 `best` 的 `0.15849` 和旧在线模型的 `0.09122`；预测前后 20% 的平均十日收益差分别为 `4.46%`、`4.04%` 和 `2.44%`。2024 年三个模型的 Rank IC 都接近零，2026 熊市压力测试中排序能力同样明显减弱，说明模型表现具有行情依赖性。
+V3 全覆盖基线共使用 1,509,252 个窗口，最终 `latest` checkpoint 位于第 81 个覆盖分段；训练过程记录的最佳验证 loss 为 `2.877660`。针对从未进入 1,176 只训练面板、且不属于对应 CSI800 截面的 24 只股票，2025 年 16 个截面上 `latest` 的平均 Rank IC 为 `0.16549`，高于全覆盖 `best` 的 `0.15849` 和旧在线模型的 `0.09122`；预测前后 20% 的平均十日收益差分别为 `4.46%`、`4.04%` 和 `2.44%`。2024 年三个模型的 Rank IC 都接近零，2026 熊市压力测试中排序能力同样明显减弱，说明模型表现具有行情依赖性。
 
 2024、2025 的股票本身没有参与增训，但模型见过同期 CSI800 行情，因此这些结果检验的是跨股票泛化，不是严格的时间外验证。2026 是时间外压力测试，也不能单独代表所有市场环境。当前证据支持将全覆盖 `latest` 用于股票池排序，但不支持把单股绝对涨跌或预测价格直接作为交易指令。
 

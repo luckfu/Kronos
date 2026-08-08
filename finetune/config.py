@@ -17,9 +17,13 @@ class Config:
         self.dataset_begin_time = "2015-01-01"
         self.dataset_end_time = '2026-12-31'
 
-        # Sliding window parameters for creating samples.
-        self.lookback_window = 90  # Number of past time steps for input.
-        self.predict_window = 10  # Number of future time steps for prediction.
+        # Sliding window parameters for creating samples.  Keep the production
+        # defaults unchanged; long-context experiments (for example 120+10)
+        # opt in through environment variables in their run script.
+        self.lookback_window = int(os.getenv("KRONOS_LOOKBACK_WINDOW", "90"))
+        self.predict_window = int(os.getenv("KRONOS_PREDICT_WINDOW", "10"))
+        if self.lookback_window < 1 or self.predict_window < 1:
+            raise ValueError("KRONOS_LOOKBACK_WINDOW and KRONOS_PREDICT_WINDOW must be positive")
         self.max_context = 512  # Maximum context length for the model.
 
         # Features to be used from the raw data.

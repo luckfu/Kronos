@@ -11,6 +11,20 @@ import pandas as pd
 from download_a_share_baostock import download_symbol, read_result
 
 
+TRANSIENT_ERRORS = (
+    '10001001',  # session expired
+    '10002007',  # network receive error
+    'Broken pipe',
+    '网络接收错误',
+    '接收数据异常',
+)
+
+
+def is_transient_error(exc):
+    message = str(exc)
+    return any(token in message for token in TRANSIENT_ERRORS)
+
+
 def worker(worker_id, symbols, start, end, chunk_dir):
     output = os.path.join(chunk_dir, f'chunk_{worker_id:02d}.csv')
     completed = set()
@@ -37,22 +51,23 @@ def worker(worker_id, symbols, start, end, chunk_dir):
                 bs.logout()
                 time.sleep(0.5)
                 worker_login()
-            try:
-                rows.extend(download_symbol(symbol, start, end))
-            except Exception as exc:
-                if '10001001' in str(exc):
-                    bs.logout()
-                    time.sleep(0.5)
-                    worker_login()
-                    try:
-                        rows.extend(download_symbol(symbol, start, end))
-                    except Exception as retry_exc:
+            for attempt in range(3):
+                try:
+                    rows.extend(download_symbol(symbol, start, end))
+                    break
+                except Exception as exc:
+                    if not is_transient_error(exc) or attempt == 2:
                         print(
-                            f'[worker {worker_id}] warning {symbol}: {retry_exc}',
+                            f'[worker {worker_id}] warning {symbol}: {exc}',
                             flush=True,
                         )
-                else:
-                    print(f'[worker {worker_id}] warning {symbol}: {exc}', flush=True)
+                        break
+                    try:
+                        bs.logout()
+                    except Exception:
+                        pass
+                    time.sleep(0.5 * (attempt + 1))
+                    worker_login()
             if index % 10 == 0:
                 print(
                     f'[worker {worker_id}] {index}/{len(symbols)} symbols, '
