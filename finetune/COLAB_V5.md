@@ -36,7 +36,9 @@ bash finetune/package_a_share_v5_base.sh
 
 `v5_context_summary.json`、`context_coverage_manifest.csv` 和包内 SHA-256 是训练前检查依据。包至少要包含 120 个 2014 交易日；每个样本窗口为 `120 + 10 + 1 = 131` 行。不要把 2014 原始 CSV 或旧 V3 处理结果混进 V5 包。
 
-## 2. Colab 运行
+## 2. Kaggle 运行
+
+本版本正式训练使用 Kaggle P100，不使用 Colab。请参阅 [`KAGGLE_V5.md`](KAGGLE_V5.md)；下面的旧 Colab 命令仅作为历史备份，不是当前入口。
 
 把 `kronos_a_share_v5_context_120d.tar.gz`、它的 `.sha256`、`a_share_v4_production_last.tar.gz` 和它的 `.sha256` 放到 Drive 的运行目录，然后在仓库根目录执行。V5 默认要求这个 V4 B `last_model`，不会把当前 ModelScope 上仍为 90 日的旧基座误当成生产基座。第一步可以在 CPU runtime 完成解包和校验：
 

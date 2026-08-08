@@ -122,7 +122,7 @@ V4 修正实验使用连续的 2015-2026 面板，但只允许信号日期在配
 
 增训是独立 App，不与预测进程共享模型或生命周期。运行 `python webui/finetune_app.py` 后访问 `http://127.0.0.1:7071/`；预测 App 继续独立运行在 7070。增训页面可选择本地 `NeoQuasar/Kronos-base` 或已有的完整 checkpoint 作为训练起点，再选择离散市值桶或“桶 + 连续百分位”；模型列表只展示名称和来源，不向前端返回本机路径。设备自动使用 MPS、CUDA 或 CPU，并提供规模预估、实时训练/验证/最佳 Loss 曲线、原始日志、完整覆盖进度、停止保存和 checkpoint 恢复。默认每段训练 20,000 个无重复窗口；训练器沿固定随机排列依次推进，76 段覆盖当前 1,509,252 个训练窗口一遍，全部窗口完成覆盖后才开始计算 5 段早停耐心。
 
-Colab GPU 重建数据、下载基础模型和长训流程见 [`finetune/COLAB.md`](finetune/COLAB.md)。该流程不把大数据文件提交进 Git，而是在 Colab 中从 BaoStock 重建真实面板，并支持 Google Drive checkpoint 和 `google-colab-cli` 远程会话。下一版 `120+10` 上下文候选使用独立的 2014 补充数据和 [`finetune/COLAB_V5.md`](finetune/COLAB_V5.md)，不运行 `V5-90-control`。
+Colab GPU 重建数据、下载基础模型和长训流程见 [`finetune/COLAB.md`](finetune/COLAB.md)。该流程不把大数据文件提交进 Git，而是在 Colab 中从 BaoStock 重建真实面板。下一版 `120+10` 上下文候选使用独立的 2014 补充数据，正式训练使用 Kaggle P100，入口见 [`finetune/KAGGLE_V5.md`](finetune/KAGGLE_V5.md)，不运行 `V5-90-control`。
 
 ```bash
 python finetune/download_a_share_baostock.py \
