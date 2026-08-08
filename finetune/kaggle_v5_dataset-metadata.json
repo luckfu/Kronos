@@ -1,0 +1,8 @@
+{
+  "title": "Kronos A-share V5 120d train 2015-2026",
+  "id": "luckfu/kronos-a-share-v5-120d",
+  "subtitle": "120-day context and 10-day target training bundle",
+  "description": "Kronos A-share V5 training data. Signals cover 2015-01-01 through 2026-07-16; 2014 data supplies context for the first 120-day windows. Validation is sampled from the full training pool.",
+  "licenses": [{"name": "CC0-1.0"}],
+  "keywords": ["finance", "time-series", "kronos", "a-share"]
+}
