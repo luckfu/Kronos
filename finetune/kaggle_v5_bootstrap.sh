@@ -9,6 +9,8 @@ MODEL_ROOT="${RUNTIME_ROOT}/models"
 BASE_MODEL="${KRONOS_PREDICTOR_PATH:-${MODEL_ROOT}/a_share_v4_production_last}"
 DATA_BUNDLE="${KRONOS_KAGGLE_DATA_BUNDLE:-}"
 BASE_BUNDLE="${KRONOS_KAGGLE_BASE_BUNDLE:-}"
+OUTPUT_NAME="${KRONOS_PREDICTOR_SAVE_FOLDER:-a_share_v5_context120_2pass}"
+RESUME_ROOT="${RUNTIME_ROOT}/outputs/models/${OUTPUT_NAME}"
 
 find_one() { find "${INPUT_ROOT}" -type f -name "$1" -print -quit 2>/dev/null || true; }
 
@@ -65,6 +67,18 @@ if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" || ! -f "${BASE_MODE
   echo "[kaggle-v5] Missing V5 data or V4 B base model in /kaggle/input" >&2
   echo "Upload both tar.gz files as a Kaggle Dataset, then rerun this cell." >&2
   exit 1
+fi
+
+# A teammate can attach a Kaggle Dataset containing a previous run's output.
+# Import it into the canonical working path so kaggle_v5_train.sh auto-resumes.
+if [[ ! -f "${RESUME_ROOT}/checkpoints/last_state.pt" ]]; then
+  RESUME_STATE="$(find "${INPUT_ROOT}" -type f -path '*/checkpoints/last_state.pt' -print -quit 2>/dev/null || true)"
+  if [[ -n "${RESUME_STATE}" ]]; then
+    SOURCE_CHECKPOINTS="$(dirname "${RESUME_STATE}")"
+    mkdir -p "${RESUME_ROOT}/checkpoints"
+    cp -a "${SOURCE_CHECKPOINTS}/." "${RESUME_ROOT}/checkpoints/"
+    echo "[kaggle-v5] Imported resume checkpoint from ${SOURCE_CHECKPOINTS}"
+  fi
 fi
 
 export KRONOS_KAGGLE_ROOT="${RUNTIME_ROOT}"

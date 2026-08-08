@@ -33,6 +33,8 @@ os.environ['KRONOS_BATCH_SIZE'] = '16'
 
 同一会话重新运行 `kaggle_v5_train.sh` 会从 `outputs/models/a_share_v5_context120_2pass/checkpoints/last_state.pt` 自动恢复。Kaggle 会话销毁后，先把该输出目录打包并发布为 Kaggle Dataset，再在新 Notebook 添加它；将旧输出复制到同一路径后再次运行，脚本会继续恢复。不要改变上下文长度、日期边界或输出名。
 
+队友可以接管训练：把包含 `checkpoints/last_state.pt`、`progress.json` 和 `config.json` 的输出目录发布为共享 Kaggle Dataset，并让队友把该 Dataset 添加到同一个 Kernel。`kaggle_v5_bootstrap.sh` 会自动寻找输入中的 `checkpoints/last_state.pt`，导入到标准输出目录；随后 `kaggle_v5_train.sh` 会自动设置恢复并继续训练。队友必须使用同一份 V5 数据集、同一基座和相同的 Kernel 输出名。
+
 训练结束后，结果位于：
 
 `/kaggle/working/kronos_a_share_v5_120d/outputs/models/a_share_v5_context120_2pass/`
