@@ -40,3 +40,5 @@ os.environ['KRONOS_BATCH_SIZE'] = '16'
 `/kaggle/working/kronos_a_share_v5_120d/outputs/models/a_share_v5_context120_2pass/`
 
 其中 `checkpoints/best_model` 是训练池随机验证 loss 最佳权重，`checkpoints/last_model` 是完整覆盖后的生产候选，`checkpoints/last_state.pt` 用于续跑。训练进程正常结束后脚本会自动导出 `last_model`；中断时先保留 `last_state.pt`，下次续跑完成后再导出。
+
+V5 使用原版全序列 next-token Loss，运行期间不改变。后续 V6 才切换为未来 10 日 `forecast_loss` 主目标；具体约束见 `A_SHARE_PLAN_CN.md`。
