@@ -16,6 +16,19 @@ cd "${REPO_ROOT}"
 python -m pip install -q -r finetune/requirements-colab.txt
 mkdir -p "${RUNTIME_ROOT}" "${MODEL_ROOT}"
 
+# Kaggle's current default wheel no longer includes Tesla P100 (sm_60).
+if nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | grep -qi 'P100'; then
+  if ! python - <<'PY'
+import torch
+raise SystemExit(0 if 'sm_60' in torch.cuda.get_arch_list() else 1)
+PY
+  then
+    echo "[kaggle-v5] Installing a P100-compatible PyTorch wheel"
+    python -m pip install -q --index-url https://download.pytorch.org/whl/cu121 \
+      "torch==${KRONOS_KAGGLE_TORCH_VERSION:-2.5.1}"
+  fi
+fi
+
 if [[ ! -f "${DATA_ROOT}/processed_datasets/train_data.pkl" ]]; then
   if [[ -z "${DATA_BUNDLE}" ]]; then
     DATA_BUNDLE="$(find_one 'kronos_a_share_v5_context120_train2015_2026.tar.gz')"
