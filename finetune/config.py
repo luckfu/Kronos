@@ -115,6 +115,18 @@ class Config:
         self.balance_size_buckets = os.getenv(
             "KRONOS_BALANCE_SIZE_BUCKETS", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        self.predictor_loss_mode = os.getenv(
+            "KRONOS_PREDICTOR_LOSS_MODE", "full_sequence"
+        ).strip().lower()
+        if self.predictor_loss_mode not in {"full_sequence", "forecast"}:
+            raise ValueError(
+                "KRONOS_PREDICTOR_LOSS_MODE must be full_sequence or forecast"
+            )
+        self.history_loss_weight = float(
+            os.getenv("KRONOS_HISTORY_LOSS_WEIGHT", "0")
+        )
+        if self.history_loss_weight < 0:
+            raise ValueError("KRONOS_HISTORY_LOSS_WEIGHT must be non-negative")
 
         # Learning rates for different model components.
         self.tokenizer_learning_rate = 2e-4

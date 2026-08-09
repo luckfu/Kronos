@@ -1,0 +1,16 @@
+{
+  "id": "user281434/kronos-a-share-v6-forecast-only-from-v5-last",
+  "title": "Kronos A-share V6 forecast-only from V5 Last",
+  "code_file": "kaggle_v6.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "luckfu/kronos-a-share-v5-120d",
+    "user281434/kronos-v5-120d-final-models-segment-568"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

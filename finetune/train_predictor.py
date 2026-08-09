@@ -236,6 +236,86 @@ def segment_run_limit_reached(start_segment, next_segment, max_segments_per_run)
     return limit > 0 and int(next_segment) - int(start_segment) >= limit
 
 
+def objective_token_slices(sequence_length, lookback_window, predict_window):
+    """Return next-token positions for history reconstruction and forecasting."""
+    history_stop = int(lookback_window) - 1
+    forecast_stop = history_stop + int(predict_window)
+    if history_stop < 1:
+        raise ValueError('lookback_window must provide at least one history target')
+    if forecast_stop > int(sequence_length):
+        raise ValueError(
+            f'Need {forecast_stop} target positions for the forecast objective, '
+            f'but only {sequence_length} are available'
+        )
+    return slice(0, history_stop), slice(history_stop, forecast_stop)
+
+
+def compute_predictor_losses(head, logits, targets, config):
+    """Compute compatible full loss and the V6 history/forecast objectives."""
+    full_loss, full_s1, full_s2 = head.compute_loss(
+        logits[0], logits[1], targets[0], targets[1]
+    )
+    history_slice, forecast_slice = objective_token_slices(
+        targets[0].shape[1],
+        config['lookback_window'],
+        config['predict_window'],
+    )
+    history_loss, history_s1, history_s2 = head.compute_loss(
+        logits[0][:, history_slice], logits[1][:, history_slice],
+        targets[0][:, history_slice], targets[1][:, history_slice],
+    )
+    forecast_loss, forecast_s1, forecast_s2 = head.compute_loss(
+        logits[0][:, forecast_slice], logits[1][:, forecast_slice],
+        targets[0][:, forecast_slice], targets[1][:, forecast_slice],
+    )
+    if config.get('predictor_loss_mode', 'full_sequence') == 'forecast':
+        history_weight = float(config.get('history_loss_weight', 0.0))
+        objective = forecast_loss + history_weight * history_loss
+        objective_s1 = forecast_s1 + history_weight * history_s1
+        objective_s2 = forecast_s2 + history_weight * history_s2
+    else:
+        objective, objective_s1, objective_s2 = full_loss, full_s1, full_s2
+    return {
+        'objective': objective,
+        'objective_s1': objective_s1,
+        'objective_s2': objective_s2,
+        'full_sequence': full_loss,
+        'history': history_loss,
+        'forecast': forecast_loss,
+    }
+
+
+def reset_cuda_peak_memory(device):
+    if device.type == 'cuda':
+        torch.cuda.reset_peak_memory_stats(device)
+
+
+def cuda_peak_memory(device):
+    if device.type != 'cuda':
+        return {}
+    return {
+        'cuda_peak_allocated_gb': torch.cuda.max_memory_allocated(device) / (1024 ** 3),
+        'cuda_peak_reserved_gb': torch.cuda.max_memory_reserved(device) / (1024 ** 3),
+    }
+
+
+def is_cuda_out_of_memory(exc):
+    return torch.cuda.is_available() and 'out of memory' in str(exc).lower()
+
+
+def write_oom_marker(config, exc):
+    save_dir = os.path.join(
+        config['save_path'], config['predictor_save_folder_name']
+    )
+    os.makedirs(save_dir, exist_ok=True)
+    with open(os.path.join(save_dir, 'oom.json'), 'w') as handle:
+        json.dump({
+            'error': str(exc),
+            'batch_size': config['batch_size'],
+            'predictor_loss_mode': config.get('predictor_loss_mode'),
+        }, handle, indent=2)
+
+
 def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_size):
     """
     The main training and validation loop for the predictor.
@@ -244,6 +324,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     if rank == 0:
         effective_bs = config['batch_size'] * world_size
         print(f"Effective BATCHSIZE per GPU: {config['batch_size']}, Total: {effective_bs}")
+        print(
+            f"Predictor loss mode: {config.get('predictor_loss_mode', 'full_sequence')}; "
+            f"history weight: {float(config.get('history_loss_weight', 0.0)):.4f}"
+        )
 
     train_loader, val_loader, train_dataset, valid_dataset = create_dataloaders(config, rank, world_size)
 
@@ -330,6 +414,21 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             raise ValueError(
                 f'Resume plan has {saved_effective_epochs} segments but current plan has {effective_epochs}'
             )
+        saved_loss_mode = resume_state.get(
+            'predictor_loss_mode', config.get('predictor_loss_mode', 'full_sequence')
+        )
+        saved_history_weight = float(resume_state.get(
+            'history_loss_weight', config.get('history_loss_weight', 0.0)
+        ))
+        if saved_loss_mode != config.get('predictor_loss_mode', 'full_sequence'):
+            raise ValueError(
+                f'Resume loss mode is {saved_loss_mode}, current mode is '
+                f"{config.get('predictor_loss_mode', 'full_sequence')}"
+            )
+        if not math.isclose(
+            saved_history_weight, float(config.get('history_loss_weight', 0.0))
+        ):
+            raise ValueError('Resume history loss weight does not match current config')
         core_model.load_state_dict(resume_state['model'])
         optimizer.load_state_dict(resume_state['optimizer'])
         optimizer_to(optimizer, device)
@@ -371,6 +470,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     last_completed_segment = start_epoch
     for epoch_idx in range(start_epoch, effective_epochs):
         epoch_start_time = time.time()
+        reset_cuda_peak_memory(device)
         model.train()
         train_dataset.set_epoch_seed(epoch_idx)
         valid_dataset.set_epoch_seed(0)
@@ -400,6 +500,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
 
         epoch_loss_sum = 0.0
+        epoch_full_loss_sum = 0.0
+        epoch_history_loss_sum = 0.0
+        epoch_forecast_loss_sum = 0.0
         epoch_batches = 0
         interrupted_step = 0
         for i, batch in enumerate(train_loader):
@@ -433,7 +536,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 size_percentile=batch_size_percentile,
             )
             core_model = model.module if isinstance(model, DDP) else model
-            loss, s1_loss, s2_loss = core_model.head.compute_loss(logits[0], logits[1], token_out[0], token_out[1])
+            losses = compute_predictor_losses(core_model.head, logits, token_out, config)
+            loss = losses['objective']
+            s1_loss = losses['objective_s1']
+            s2_loss = losses['objective_s2']
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -442,6 +548,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             optimizer.step()
             scheduler.step()
             epoch_loss_sum += float(loss.item())
+            epoch_full_loss_sum += float(losses['full_sequence'].item())
+            epoch_history_loss_sum += float(losses['history'].item())
+            epoch_forecast_loss_sum += float(losses['forecast'].item())
             epoch_batches += 1
 
             # Logging (Master Process Only)
@@ -449,7 +558,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 lr = optimizer.param_groups[0]['lr']
                 print(
                     f"[Rank {rank}, Segment {epoch_idx + 1}/{effective_epochs}, Step {i + 1}/{len(train_loader)}] "
-                    f"LR {lr:.6f}, Loss: {loss.item():.4f}"
+                    f"LR {lr:.6f}, Loss: {loss.item():.4f}, "
+                    f"Forecast: {losses['forecast'].item():.4f}, "
+                    f"History: {losses['history'].item():.4f}"
                 )
                 write_progress(
                     save_dir,
@@ -469,6 +580,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         train_dataset.total_samples * coverage_passes,
                     ),
                     train_loss=epoch_loss_sum / epoch_batches,
+                    train_full_sequence_loss=epoch_full_loss_sum / epoch_batches,
+                    train_history_loss=epoch_history_loss_sum / epoch_batches,
+                    train_forecast_loss=epoch_forecast_loss_sum / epoch_batches,
                     best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
                     device=str(device),
                 )
@@ -481,6 +595,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     total_steps=len(train_loader),
                     loss=float(loss.item()),
                     average_loss=epoch_loss_sum / epoch_batches,
+                    full_sequence_loss=float(losses['full_sequence'].item()),
+                    history_loss=float(losses['history'].item()),
+                    forecast_loss=float(losses['forecast'].item()),
                     learning_rate=float(lr),
                 )
             if rank == 0 and logger:
@@ -537,6 +654,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     effective_epochs=effective_epochs,
                     segments_per_coverage=segments_per_coverage,
                     coverage_passes=coverage_passes,
+                    predictor_loss_mode=config.get('predictor_loss_mode', 'full_sequence'),
+                    history_loss_weight=float(config.get('history_loss_weight', 0.0)),
                 )
                 write_progress(
                     save_dir,
@@ -597,6 +716,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 device=str(device),
             )
         tot_val_loss_sum_rank = 0.0
+        tot_val_full_loss_sum_rank = 0.0
+        tot_val_history_loss_sum_rank = 0.0
+        tot_val_forecast_loss_sum_rank = 0.0
         val_batches_processed_rank = 0
         with torch.no_grad():
             for batch in val_loader:
@@ -625,19 +747,35 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     s1_targets=token_out[0],
                 )
                 core_model = model.module if isinstance(model, DDP) else model
-                val_loss, _, _ = core_model.head.compute_loss(logits[0], logits[1], token_out[0], token_out[1])
+                val_losses = compute_predictor_losses(
+                    core_model.head, logits, token_out, config
+                )
+                val_loss = val_losses['objective']
 
                 tot_val_loss_sum_rank += val_loss.item()
+                tot_val_full_loss_sum_rank += val_losses['full_sequence'].item()
+                tot_val_history_loss_sum_rank += val_losses['history'].item()
+                tot_val_forecast_loss_sum_rank += val_losses['forecast'].item()
                 val_batches_processed_rank += 1
 
         # Reduce validation metrics
         val_loss_sum_tensor = torch.tensor(tot_val_loss_sum_rank, device=device)
+        val_component_sums = torch.tensor([
+            tot_val_full_loss_sum_rank,
+            tot_val_history_loss_sum_rank,
+            tot_val_forecast_loss_sum_rank,
+        ], device=device)
         val_batches_tensor = torch.tensor(val_batches_processed_rank, device=device)
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(val_loss_sum_tensor, op=dist.ReduceOp.SUM)
+            dist.all_reduce(val_component_sums, op=dist.ReduceOp.SUM)
             dist.all_reduce(val_batches_tensor, op=dist.ReduceOp.SUM)
 
         avg_val_loss = val_loss_sum_tensor.item() / val_batches_tensor.item() if val_batches_tensor.item() > 0 else 0
+        val_divisor = val_batches_tensor.item() if val_batches_tensor.item() > 0 else 1
+        avg_val_full_loss, avg_val_history_loss, avg_val_forecast_loss = (
+            (val_component_sums / val_divisor).tolist()
+        )
 
         improved = avg_val_loss < best_val_loss
         if improved:
@@ -656,6 +794,17 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         if rank == 0:
             print(f"\n--- Coverage Segment {epoch_idx + 1}/{effective_epochs} Summary ---")
             print(f"Validation Loss: {avg_val_loss:.4f}")
+            print(
+                f"Validation Forecast/History/Full: {avg_val_forecast_loss:.4f} / "
+                f"{avg_val_history_loss:.4f} / {avg_val_full_loss:.4f}"
+            )
+            memory_metrics = cuda_peak_memory(device)
+            if memory_metrics:
+                print(
+                    "CUDA Peak Allocated/Reserved: "
+                    f"{memory_metrics['cuda_peak_allocated_gb']:.2f} / "
+                    f"{memory_metrics['cuda_peak_reserved_gb']:.2f} GB"
+                )
             print(f"Time This Epoch: {format_time(time.time() - epoch_start_time)}")
             print(f"Total Time Elapsed: {format_time(time.time() - start_time)}\n")
             if logger:
@@ -675,6 +824,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 effective_epochs=effective_epochs,
                 segments_per_coverage=segments_per_coverage,
                 coverage_passes=coverage_passes,
+                predictor_loss_mode=config.get('predictor_loss_mode', 'full_sequence'),
+                history_loss_weight=float(config.get('history_loss_weight', 0.0)),
             )
             if improved:
                 save_path = f"{save_dir}/checkpoints/best_model"
@@ -707,9 +858,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 ),
                 train_loss=epoch_loss_sum / max(epoch_batches, 1),
                 val_loss=avg_val_loss,
+                val_full_sequence_loss=avg_val_full_loss,
+                val_history_loss=avg_val_history_loss,
+                val_forecast_loss=avg_val_forecast_loss,
                 best_val_loss=best_val_loss,
                 epochs_without_improvement=epochs_without_improvement,
                 device=str(device),
+                **memory_metrics,
             )
             append_metric(
                 save_dir,
@@ -718,8 +873,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 total_segments=effective_epochs,
                 step=0,
                 loss=float(avg_val_loss),
+                full_sequence_loss=float(avg_val_full_loss),
+                history_loss=float(avg_val_history_loss),
+                forecast_loss=float(avg_val_forecast_loss),
                 best_loss=float(best_val_loss),
                 train_average=epoch_loss_sum / max(epoch_batches, 1),
+                **memory_metrics,
             )
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
@@ -878,4 +1037,10 @@ def main(config: dict):
 
 if __name__ == '__main__':
     config_instance = Config()
-    main(config_instance.__dict__)
+    try:
+        main(config_instance.__dict__)
+    except RuntimeError as exc:
+        if is_cuda_out_of_memory(exc):
+            write_oom_marker(config_instance.__dict__, exc)
+            print('CUDA out of memory; wrote oom.json for the Kaggle fallback.')
+        raise
