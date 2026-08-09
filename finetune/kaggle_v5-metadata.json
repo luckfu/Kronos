@@ -7,7 +7,10 @@
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": ["luckfu/kronos-a-share-v5-120d"],
+  "dataset_sources": [
+    "luckfu/kronos-a-share-v5-120d",
+    "luckfu/kronos-v5-resume-after-segment-236"
+  ],
   "competition_sources": [],
   "kernel_sources": []
 }
