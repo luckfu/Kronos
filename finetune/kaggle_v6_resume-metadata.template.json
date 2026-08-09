@@ -9,8 +9,10 @@
   "enable_internet": true,
   "dataset_sources": [
     "luckfu/kronos-a-share-v5-120d",
-    "YOUR_V6_RESUME_DATASET"
+    "user281434/kronos-v5-120d-final-models-segment-568"
   ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [
+    "user281434/kronos-a-share-v6-forecast-only-from-v5-last"
+  ]
 }
