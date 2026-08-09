@@ -40,7 +40,7 @@ def load_holdout(path, manifest_path):
     return panel, calendar
 
 
-def build_periods(panel, calendar, start, end, period_count):
+def build_periods(panel, calendar, start, end, period_count, lookback=LOOKBACK):
     dates = calendar[(calendar >= pd.Timestamp(start)) & (calendar <= pd.Timestamp(end))]
     valid_positions = np.arange(0, len(dates) - PRED_LEN)
     if len(valid_positions) == 0:
@@ -54,8 +54,8 @@ def build_periods(panel, calendar, start, end, period_count):
         for symbol, frame in panel.items():
             if signal_date not in frame.index or not set(future_dates).issubset(frame.index):
                 continue
-            context = frame.loc[:signal_date].tail(LOOKBACK)
-            if len(context) != LOOKBACK or context.index[-1] != signal_date:
+            context = frame.loc[:signal_date].tail(lookback)
+            if len(context) != lookback or context.index[-1] != signal_date:
                 continue
             latest = context.iloc[-1]
             if any(float(latest[col]) <= 0 for col in ("close", "volume", "amount")):
@@ -86,7 +86,9 @@ def build_periods(panel, calendar, start, end, period_count):
     return periods
 
 
-def build_signal_periods(panel, calendar, start, end, period_count):
+def build_signal_periods(
+    panel, calendar, start, end, period_count, lookback=LOOKBACK
+):
     """Build periods whose signal dates, rather than labels, are date-bounded."""
     signal_dates = calendar[
         (calendar >= pd.Timestamp(start)) & (calendar <= pd.Timestamp(end))
@@ -110,8 +112,8 @@ def build_signal_periods(panel, calendar, start, end, period_count):
         for symbol, frame in panel.items():
             if signal_date not in frame.index or not set(future_dates).issubset(frame.index):
                 continue
-            context = frame.loc[:signal_date].tail(LOOKBACK)
-            if len(context) != LOOKBACK or context.index[-1] != signal_date:
+            context = frame.loc[:signal_date].tail(lookback)
+            if len(context) != lookback or context.index[-1] != signal_date:
                 continue
             latest = context.iloc[-1]
             if any(float(latest[col]) <= 0 for col in ("close", "volume", "amount")):
@@ -142,13 +144,32 @@ def build_signal_periods(panel, calendar, start, end, period_count):
     return periods
 
 
+def periods_with_lookback(periods, lookback):
+    trimmed = []
+    for period in periods:
+        records = []
+        for record in period["records"]:
+            context = record["context"].tail(lookback)
+            if len(context) != lookback:
+                raise ValueError(
+                    f"Record {record['symbol']} has {len(context)} rows; "
+                    f"{lookback} required"
+                )
+            records.append({**record, "context": context})
+        trimmed.append({**period, "records": records})
+    return trimmed
+
+
 def compare_window(best_path, last_path, tokenizer, panel, calendar, label, start, end, args, device, index):
+    shared_lookback = max(args.best_lookback, args.last_lookback)
     if args.signal_start:
         periods = build_signal_periods(
-            panel, calendar, start, end, args.period_count
+            panel, calendar, start, end, args.period_count, shared_lookback
         )
     else:
-        periods = build_periods(panel, calendar, start, end, args.period_count)
+        periods = build_periods(
+            panel, calendar, start, end, args.period_count, shared_lookback
+        )
     print(
         f"Window {label}: periods={len(periods)}, "
         f"first={periods[0]['signal_date']:%Y-%m-%d}, "
@@ -156,8 +177,10 @@ def compare_window(best_path, last_path, tokenizer, panel, calendar, label, star
         f"records/period={len(periods[0]['records'])}"
     )
     seed = args.seed + index * 1000
-    best = run_model("best", best_path, tokenizer, periods, device, args.batch_size, args.sample_count, seed)
-    latest = run_model("latest", last_path, tokenizer, periods, device, args.batch_size, args.sample_count, seed)
+    best_periods = periods_with_lookback(periods, args.best_lookback)
+    last_periods = periods_with_lookback(periods, args.last_lookback)
+    best = run_model("best", best_path, tokenizer, best_periods, device, args.batch_size, args.sample_count, seed)
+    latest = run_model("latest", last_path, tokenizer, last_periods, device, args.batch_size, args.sample_count, seed)
     for frame in (best, latest):
         frame["window"] = label
         frame["period_local"] = frame["period"]
@@ -204,6 +227,8 @@ def main():
     parser.add_argument("--period-count", type=int, default=24)
     parser.add_argument("--sample-count", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=24)
+    parser.add_argument("--best-lookback", type=int, default=LOOKBACK)
+    parser.add_argument("--last-lookback", type=int, default=LOOKBACK)
     parser.add_argument("--seed", type=int, default=20260805)
     parser.add_argument("--window", choices=("2024", "2025", "2026"), default=None)
     parser.add_argument("--signal-start", default="")
@@ -247,7 +272,8 @@ def main():
             "holdout_symbols": len(panel),
             "holdout_source": args.holdout,
             "windows": [{"label": label, "start": start, "end": end} for label, start, end in windows],
-            "lookback": LOOKBACK,
+            "best_lookback": args.best_lookback,
+            "last_lookback": args.last_lookback,
             "forecast_days": PRED_LEN,
             "signal_aggregation": "mean predicted close across forecast horizon",
             "sample_count": args.sample_count,

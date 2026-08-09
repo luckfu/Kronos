@@ -37,14 +37,14 @@ app = Flask(__name__)
 CORS(app)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-A_SHARE_DATASET_DIR = os.path.join(PROJECT_ROOT, 'data', 'a_share', 'processed_datasets')
+A_SHARE_DATASET_DIR = os.path.join(PROJECT_ROOT, 'data', 'a_share_v5', 'processed_datasets')
 A_SHARE_RAW_DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'a_share', 'a_share_daily.csv')
 A_SHARE_SIZE_REFERENCE_PATH = os.path.join(PROJECT_ROOT, 'webui', 'size_reference.json')
 A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
     'outputs',
     'models',
-    'a_share_v4_corrected_2026_replay20_latest',
+    'a_share_v5_context120_latest',
     'checkpoints',
     'last_model',
 )
@@ -66,15 +66,15 @@ size_reference_lock = threading.Lock()
 # Available model configurations
 AVAILABLE_MODELS = {
     'a-share-size-kronos-base': {
-        'name': 'A-share V4 Replay20 2-Pass Kronos',
+        'name': 'A-share V5 120d 2-Pass Last Kronos',
         'model_id': A_SHARE_MODEL_PATH,
         'tokenizer_id': 'NeoQuasar/Kronos-Tokenizer-base',
         'context_length': 512,
         'params': '102.3M',
-        'description': 'Current-market A-share ranking model with market-cap conditioning',
+        'description': 'Full-market A-share ranking model with 120-day context and market-cap conditioning',
         'num_size_buckets': 10,
         'use_size_percentile': False,
-        'default_lookback': 90,
+        'default_lookback': 120,
         'default_pred_len': 10,
         'default_temperature': 0.6,
         'default_top_p': 0.9,

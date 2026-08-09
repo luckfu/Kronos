@@ -5,6 +5,13 @@ import json
 import webui.app as web_app
 
 
+def test_production_model_uses_v5_120_day_context():
+    config = web_app.AVAILABLE_MODELS['a-share-size-kronos-base']
+
+    assert config['default_lookback'] == 120
+    assert 'a_share_v5_context120_latest' in config['model_id']
+
+
 def test_remote_context_maps_market_cap_to_reference(monkeypatch):
     monkeypatch.setattr(web_app, 'size_reference_cache', {
         'date': pd.Timestamp('2026-07-31'),

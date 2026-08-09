@@ -7,18 +7,17 @@
 ## 当前模型
 
 - 模型：A-share Size-Conditioned Kronos-base
-- 输入：90 个交易日的 `open/high/low/close/volume/amount`
+- 输入：120 个交易日的 `open/high/low/close/volume/amount`
 - 输出：未来 10 个交易日的采样路径及 P10/P50/P90 区间
 - 条件：按交易日横截面流通市值划分为 10 桶（`0` 最小，`9` 最大）
-- 基础训练期：2015-01-05 至 2025-12-31
-- 增量数据行：2026-01-05 至 2026-07-31；V4 连续面板保留了信号日前 90 日上下文，并加入 20% 分层历史回放
-- 生产 checkpoint：`outputs/models/a_share_v4_corrected_2026_replay20_latest/checkpoints/last_model`
-- 增量覆盖：V4 B 训练混合 249,280 个近期窗口和 62,320 个历史回放窗口，生产使用两遍覆盖后的 `last_model`
+- 训练信号期：2015-01-05 至 2026-07-16；行情保留至 2026-07-31 以提供完整标签
+- 生产 checkpoint：`outputs/models/a_share_v5_context120_latest/checkpoints/last_model`
+- 覆盖：5,678,350 个窗口完整遍历两遍，生产使用第 568 段导出的 `last_model`
 - 设备：自动选择 `MPS → CUDA → CPU`
 
-公开的 90 日增量权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。本机预测前端当前加载上面的 V4 B `last_model`；两者 SHA-256 不同，V5 训练默认使用本机生产基座包，不会静默回退到 ModelScope。
+公开权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。本机前端与 ModelScope 当前都使用 V5 120 日两遍覆盖后的 `last_model`，SHA-256 为 `52d07c97ea22942fc89387f18bff1f05500107881eb03cfcd792907284535734`。
 
-旧 V3+2026 增量权重存在已确认的数据构造限制：2026 面板在生成 101 行窗口前被裁到 2026 年，90 日观察长度使 1 月至 5 月上旬无法成为监督信号，最终只训练了 39 个偏空信号日。V4 已修正连续上下文并加入历史回放；当前生产切到了 V4 B 两遍覆盖后的 `last_model`，但仍只应作为待持续验证的横截面排序模型。
+旧 V3+2026 增量权重存在已确认的数据构造限制：2026 面板在生成 101 行窗口前被裁到 2026 年，90 日观察长度使 1 月至 5 月上旬无法成为监督信号，最终只训练了 39 个偏空信号日。V5 使用连续的 2014-2026 面板、120 日上下文和完整市场训练池；当前生产使用 V5 两遍覆盖后的 `last_model`，但仍只应作为待持续验证的横截面排序模型。
 
 ## 市值桶如何接入原版 Kronos
 
@@ -35,7 +34,7 @@
 
 BaoStock 不提供稳定的历史流通市值字段，因此数据准备阶段使用 `收盘价 × 成交量 ÷ 换手率` 估算流通市值。这个代理值只用于同一交易日的横截面排名，不作为精确财务市值使用。每天将可用股票从小到大划分为十个近似等量分组，`0` 表示最小的约 10%，`9` 表示最大的约 10%。
 
-每个训练样本使用其 90 日观察窗口最后一个交易日对应的桶，不使用预测窗口中的未来市值信息。具体实现见 [`finetune/prepare_a_share.py`](finetune/prepare_a_share.py) 和 [`finetune/dataset.py`](finetune/dataset.py)。
+每个训练样本使用其观察窗口最后一个交易日对应的桶；当前 V5 观察窗口为 120 日，不使用预测窗口中的未来市值信息。具体实现见 [`finetune/prepare_a_share.py`](finetune/prepare_a_share.py) 和 [`finetune/dataset.py`](finetune/dataset.py)。
 
 ### 模型侧
 
@@ -74,7 +73,7 @@ python -m pip install modelscope
 ```bash
 modelscope download luckfu/a-share-size-kronos-base-earlystop50 \
   --repo-type model \
-  --local-dir outputs/models/a_share_v3_2026_incremental_latest/checkpoints/best_model
+  --local-dir outputs/models/a_share_v5_context120_latest/checkpoints/last_model
 ```
 
 启动页面：
@@ -91,7 +90,7 @@ PYTHONPATH=. python webui/app.py
 
 ### 单股预测
 
-输入六位 A 股代码（如 `300395`）后点击预测。系统会优先通过 BaoStock 拉取该股票最新复权日线和未来交易日；接口失败时回退到本地面板并明确标记数据来源。股票不在训练面板时，系统使用最新收盘价、成交量和换手率估算流通市值，再与仓库内 `webui/size_reference.json` 的参考横截面比较，得到可审计的百分位和市值桶；页面会标记“训练面板外”。该路径不要求部署完整训练面板，但至少需要 90 个有效交易日，且超出 CSI800 历史分布的股票预测风险更高。
+输入六位 A 股代码（如 `300395`）后点击预测。系统会优先通过 BaoStock 拉取该股票最新复权日线和未来交易日；接口失败时回退到本地面板并明确标记数据来源。股票不在训练面板时，系统使用最新收盘价、成交量和换手率估算流通市值，再与仓库内 `webui/size_reference.json` 的全市场参考横截面比较，得到可审计的百分位和市值桶；页面会标记“训练面板外”。该路径不要求部署完整训练面板，但至少需要 120 个有效交易日，且超出训练横截面分布的股票预测风险更高。
 
 ### 股票池排序
 
@@ -153,7 +152,7 @@ python finetune/train_predictor.py
 
 训练脚本默认使用完整覆盖分段：每段内部无放回、段间沿同一排列继续，完成要求的覆盖遍数后再应用验证集早停。`KRONOS_TRAIN_SAMPLES_PER_SEGMENT`、`KRONOS_COVERAGE_PASSES`、`KRONOS_VALIDATION_SAMPLES` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 可覆盖页面默认值。Apple Silicon 直接运行即可自动使用 MPS；CUDA 可使用 `torchrun`。停止请求会在当前 batch 完成后立即暂停计算并保存 `last_state.pt`；状态包含模型、优化器、学习率调度器、分段和 batch 位置及随机数状态，设置 `KRONOS_RESUME_TRAINING=1` 可从下一 batch 恢复。训练指标同时写入 `metrics.jsonl`，旧任务可从 `training.log` 恢复曲线。`Kronos-base` 基础权重可放在任意目录，通过 `KRONOS_PREDICTOR_PATH` 指定。
 
-V3 全覆盖基线 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留；当前预测页面加载的是后续 V4 B `last_model`。
+V3 全覆盖基线 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留；当前预测页面加载的是后续 V5 120 日两遍覆盖的 `last_model`。
 
 ## 评估与回测
 

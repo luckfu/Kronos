@@ -204,7 +204,7 @@ python finetune/prepare_a_share_context.py \
 
 `v5_context_summary.json` 和 `context_coverage_manifest.csv` 是训练前的硬证据：必须看到至少 120 个 2014 交易日、131 行窗口口径、重复键为零，并确认早期 2015 信号确实保留了 120 行上下文。打包上传使用 `bash finetune/package_a_share_context.sh`；Colab 运行步骤见 [`COLAB_V5.md`](COLAB_V5.md)。
 
-## 当前生产结果
+## V4 生产结果（历史）
 
 ### 2026 增量数据审计与 V4 修正
 
@@ -219,14 +219,20 @@ python finetune/prepare_a_share_context.py \
 
 该实验先验证数据修正和历史回放，不修改 Kronos 主结构。生产晋级必须同时检查时间外 Rank IC、方向准确率、预测涨跌比例偏差、MAE 和股票池头尾收益差，不能再仅依据同期 symbol holdout 的 token loss。
 
-V4 A/B 已在 P100 完成。最后 20 个时间外信号日、240 只固定股票的结果为：V3 Last Rank IC `0.01124`、A 组 `-0.04796`、B 组 `-0.03966`；A/B 的方向准确率虽然分别为 `64.23%` 和 `62.90%`，但实际下跌比例为 `73.37%`，两者平衡准确率均低于 `0.50`。B 只将预测下跌比例从 `81.63%` 降到 `78.87%`，没有恢复排序能力。结论是：数据裁剪修正已经生效，20% 回放也按预期生效，但这一训练配置不能晋级生产；当前生产 checkpoint 保持不变，候选模型及其时间外预测保留在 Kaggle 输出用于后续分析。
+V4 A/B 已在 P100 完成。最后 20 个时间外信号日、240 只固定股票的结果为：V3 Last Rank IC `0.01124`、A 组 `-0.04796`、B 组 `-0.03966`；A/B 的方向准确率虽然分别为 `64.23%` 和 `62.90%`，但实际下跌比例为 `73.37%`，两者平衡准确率均低于 `0.50`。B 只将预测下跌比例从 `81.63%` 降到 `78.87%`，没有恢复排序能力。该结果是 V4 阶段的历史记录；V4 B 后续曾作为生产基座，并已在 V5 晋级后转为回滚模型。
 
-- 生产 checkpoint：`outputs/models/a_share_v4_corrected_2026_replay20_latest/checkpoints/last_model/model.safetensors`。
-- 生产模型是 V4 B 两遍覆盖后的 `last_model`，当前文件 SHA-256 为 `06cd68e18deb01a927b35ba61264f677076e8b0f9c3e0303cabaa0bee475b4d2`。
+- 历史生产 checkpoint：`outputs/models/a_share_v4_corrected_2026_replay20_latest/checkpoints/last_model/model.safetensors`。
+- V4 B 两遍覆盖后的 `last_model` SHA-256 为 `06cd68e18deb01a927b35ba61264f677076e8b0f9c3e0303cabaa0bee475b4d2`，现保留用于回滚。
 - 可训练参数：20,260,416 / 102,319,744（19.8%）。
 - 2025 年未见股票测试：Rank IC `0.16549`，前后 20% 平均十日收益差 `4.46%`。
 - 同条件旧在线模型：Rank IC `0.09122`，前后 20% 平均十日收益差 `2.44%`。
-- ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>。该公开仓库当前仍是 90 日的 2026 增量权重，不作为 V5 的默认基座；V5 使用 `package_a_share_v5_base.sh` 打包的本机 V4 B `last_model`。
+- ModelScope 公开仓库：<https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50>。该仓库的主版本现已更新为 V5 120 日 `last_model`；V5 训练时使用的原始基座仍是 `package_a_share_v5_base.sh` 打包的本机 V4 B `last_model`。
+
+### V5 生产晋级
+
+V5 120 日候选完成 5,678,350 个窗口的两遍覆盖后，`last_model` 在 2025 和 2026 的 240 只整股票 holdout 上均显著优于 V4 B。匹配样本的 Rank IC 分别从 `0.14122` 提升到 `0.20512`、从 `0.04000` 提升到 `0.10795`；严格时间外信号日 2026-07-17 的 Rank IC 从 `0.03523` 提升到 `0.14557`。因此生产 checkpoint 切换为 `outputs/models/a_share_v5_context120_latest/checkpoints/last_model`，前端原生输入同步改为 120 日，ModelScope 主版本同步更新。V4 B 目录保留用于回滚。
+
+V5 仍存在偏空校准问题：2026 holdout 的预测下跌比例为 `72.62%`，实际为 `59.23%`。晋级依据是 Rank IC、方向准确率、MAE 和头尾收益差的整体改善，不表示绝对收益预测已经校准。后续 V6 继续使用 V5 Last 作为权重基座，但生产回滚点同时保留 V4 B 与 V5 Last。
 
 ## 早期实验结果
 
