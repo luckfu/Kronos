@@ -1,0 +1,16 @@
+{
+  "id": "user281434/kronos-a-share-v6-forecast-only-one-pass",
+  "title": "Kronos A-share V6 forecast-only complete first pass",
+  "code_file": "kaggle_v6_resume.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "luckfu/kronos-a-share-v5-120d",
+    "YOUR_V6_RESUME_DATASET"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
