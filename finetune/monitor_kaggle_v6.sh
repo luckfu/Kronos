@@ -3,7 +3,7 @@ set -euo pipefail
 
 export PATH="${HOME}/.local/bin:/opt/miniconda3/bin:${PATH}"
 
-KERNEL="${KRONOS_KAGGLE_V6_KERNEL:-user281434/kronos-a-share-v6-forecast-only-from-v5-last}"
+KERNEL="${KRONOS_KAGGLE_V6_KERNEL:-user281434/kronos-a-share-v6-forecast-only-one-pass}"
 INTERVAL_SECONDS="${KRONOS_KAGGLE_V6_MONITOR_INTERVAL:-1800}"
 LOG_FILE="${KRONOS_KAGGLE_V6_MONITOR_LOG:-${HOME}/.codex/kaggle-v6-monitor.log}"
 ONE_SHOT="${1:-}"
@@ -21,7 +21,9 @@ while true; do
   if [[ "${kernel_status}" == *'KernelWorkerStatus.COMPLETE'* || "${kernel_status}" == *'KernelWorkerStatus.ERROR'* ]]; then
     result="${kernel_status##*KernelWorkerStatus.}"
     osascript -e "display notification \"${result}\" with title \"Kronos V6 Kaggle training\"" || true
-    exit 0
+    # launchd keeps this job alive; park after the terminal notification so it
+    # cannot spin and repeatedly call the Kaggle API.
+    sleep 86400
   fi
   [[ "${ONE_SHOT}" == "--once" ]] && exit 0
   sleep "${INTERVAL_SECONDS}"
