@@ -85,6 +85,11 @@ def test_portable_size_reference_does_not_require_raw_panel(monkeypatch, tmp_pat
 def test_unknown_symbol_can_be_confirmed_without_local_panel(monkeypatch):
     monkeypatch.setattr(
         web_app,
+        'latest_prediction_inputs',
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('offline')),
+    )
+    monkeypatch.setattr(
+        web_app,
         'resolve_request_data',
         lambda data: (None, 'Unknown A-share symbol: sh.600012', None, None),
     )
@@ -96,6 +101,78 @@ def test_unknown_symbol_can_be_confirmed_without_local_panel(monkeypatch):
     payload = response.get_json()
     assert payload['data_info']['symbol'] == 'sh.600012'
     assert payload['data_info']['remote_only'] is True
+
+
+def test_latest_inputs_prefers_eastmoney_over_baostock(monkeypatch):
+    dates = pd.bdate_range(end='2026-08-07', periods=120)
+    remote = pd.DataFrame({
+        'timestamps': dates,
+        'open': np.full(120, 10.0),
+        'high': np.full(120, 11.0),
+        'low': np.full(120, 9.0),
+        'close': np.full(120, 10.0),
+        'volume': np.full(120, 1_000_000.0),
+        'amount': np.full(120, 10_000_000.0),
+        'turn': np.full(120, 1.0),
+        'pctChg': np.zeros(120),
+    })
+    local = remote.assign(size_bucket=4, size_percentile=0.45)
+    monkeypatch.setattr(web_app, 'get_a_share_symbol_frame', lambda symbol: (local, None))
+    monkeypatch.setattr(
+        web_app,
+        'query_eastmoney_daily_data',
+        lambda *args, **kwargs: (
+            remote,
+            pd.Series(pd.bdate_range('2026-08-10', periods=10)),
+        ),
+    )
+    monkeypatch.setattr(
+        web_app,
+        'query_latest_daily_data',
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError('BaoStock should not be queried after Eastmoney succeeds')
+        ),
+    )
+    monkeypatch.setattr(web_app, 'size_reference_cache', {
+        'date': pd.Timestamp('2026-07-31'),
+        'market_caps': np.linspace(1_000_000, 2_000_000_000, 1000),
+        'count': 1000,
+    })
+
+    result = web_app.latest_prediction_inputs('600000', 120, 10)
+
+    assert result['data_source'] == 'eastmoney'
+    assert result['context']['timestamps'].iloc[-1] == pd.Timestamp('2026-08-07')
+    assert result['refresh_error'] is None
+
+
+def test_load_data_confirms_stock_with_live_context(monkeypatch):
+    dates = pd.bdate_range(end='2026-08-07', periods=120)
+    context = pd.DataFrame({
+        'timestamps': dates,
+        'open': np.full(120, 10.0),
+        'high': np.full(120, 11.0),
+        'low': np.full(120, 9.0),
+        'close': np.full(120, 10.5),
+        'volume': np.full(120, 1_000_000.0),
+        'amount': np.full(120, 10_000_000.0),
+        'turn': np.full(120, 1.0),
+    })
+    monkeypatch.setattr(web_app, 'latest_prediction_inputs', lambda *args, **kwargs: {
+        'context': context,
+        'size_bucket': 5,
+        'size_percentile': 0.55,
+        'in_local_panel': True,
+        'data_source': 'eastmoney',
+    })
+    client = web_app.app.test_client()
+
+    response = client.post('/api/load-data', json={'symbol': '600000'})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['data_info']['end_date'].startswith('2026-08-07')
+    assert payload['data_info']['data_source'] == 'eastmoney'
 
 
 def test_symbol_lookup_degrades_cleanly_without_local_dataset(monkeypatch):

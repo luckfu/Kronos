@@ -1260,10 +1260,13 @@
 
             const sourceBadge = document.getElementById('source-badge');
             sourceBadge.style.display = 'inline-flex';
-            sourceBadge.classList.toggle('fallback', result.data_source !== 'baostock');
-            sourceBadge.textContent = result.data_source === 'baostock'
-                ? `BaoStock 最新日线${result.in_local_panel ? '' : ' · 训练面板外'}`
-                : '本地缓存回退';
+            sourceBadge.classList.toggle('fallback', result.data_source === 'local_cache');
+            const sourceLabels = {
+                eastmoney: 'Eastmoney 最新日线',
+                baostock: 'BaoStock 最新日线',
+                local_cache: '本地缓存回退',
+            };
+            sourceBadge.textContent = `${sourceLabels[result.data_source] || result.data_source}${result.in_local_panel || result.data_source === 'local_cache' ? '' : ' · 训练面板外'}`;
 
             document.getElementById('metric-latest').textContent = formatPrice(result.latest_close);
             document.getElementById('metric-final').textContent = formatPrice(finalPrediction.close_p50);
@@ -1302,7 +1305,7 @@
             document.getElementById('summary-close').textContent = formatPrice(result.latest_close);
             document.getElementById('summary-bucket').textContent = `市值层 ${result.size_bucket} / 9 · ${(result.size_percentile * 100).toFixed(1)}%`;
 
-            if (result.refresh_error) {
+            if (result.refresh_error && result.data_source === 'local_cache') {
                 showToast(`实时行情不可用，已回退本地缓存：${result.refresh_error}`, true);
             }
         }

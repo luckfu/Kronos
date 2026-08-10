@@ -14,6 +14,8 @@ from flask_cors import CORS
 import sys
 import warnings
 import datetime
+import subprocess
+from urllib.parse import urlencode
 warnings.filterwarnings('ignore')
 
 try:
@@ -205,6 +207,73 @@ def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
             bs.logout()
 
 
+def query_eastmoney_daily_data(symbol, lookback, pred_len, history_rows=None):
+    """Fetch a fresh adjusted daily context from Eastmoney as a fallback."""
+    retained_rows = max(lookback, int(history_rows or lookback))
+    today = pd.Timestamp.now().normalize()
+    history_start = today - pd.Timedelta(days=max(365, retained_rows * 4))
+    market, code = str(symbol).lower().split('.', 1)
+    secid = f"1.{code}" if market == 'sh' else f"0.{code}"
+    query = urlencode({
+        'secid': secid,
+        'klt': '101',
+        'fqt': '1',
+        'beg': history_start.strftime('%Y%m%d'),
+        'end': today.strftime('%Y%m%d'),
+        'fields1': 'f1',
+        'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+    })
+    url = f'https://push2his.eastmoney.com/api/qt/stock/kline/get?{query}'
+    response = subprocess.run(
+        [
+            'curl', '--fail', '--silent', '--show-error', '--compressed',
+            '--max-time', '20', '-A', 'Mozilla/5.0', url,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=25,
+    )
+    payload = json.loads(response.stdout)
+    data = payload.get('data') or {}
+    klines = data.get('klines') or []
+    if len(klines) < lookback:
+        raise RuntimeError(
+            f'Eastmoney returned {len(klines)} rows; {lookback} are required'
+        )
+    columns = [
+        'timestamps', 'open', 'close', 'high', 'low', 'volume', 'amount',
+        'amplitude', 'pctChg', 'change', 'turn',
+    ]
+    history = pd.DataFrame(
+        [row.split(',') for row in klines], columns=columns
+    )
+    history['timestamps'] = pd.to_datetime(history['timestamps'], errors='coerce')
+    numeric_columns = [
+        'open', 'close', 'high', 'low', 'volume', 'amount', 'turn', 'pctChg',
+    ]
+    for column in numeric_columns:
+        history[column] = pd.to_numeric(history[column], errors='coerce')
+    history = history.dropna(subset=['timestamps', *numeric_columns])
+    history = history[(history['close'] > 0) & (history['volume'] >= 0)]
+    history = history.sort_values('timestamps').drop_duplicates(
+        'timestamps', keep='last'
+    ).tail(retained_rows).reset_index(drop=True)
+    if len(history) < lookback:
+        raise RuntimeError(
+            f'Eastmoney returned only {len(history)} usable rows; {lookback} are required'
+        )
+    last_date = pd.Timestamp(history['timestamps'].iloc[-1])
+    future_dates = pd.Series(
+        pd.bdate_range(
+            last_date + pd.Timedelta(days=1),
+            periods=pred_len,
+        ),
+        name='timestamps',
+    )
+    return history, future_dates
+
+
 def load_latest_size_reference():
     """Load the latest available cross-section used to size unseen stocks."""
     global size_reference_cache
@@ -319,8 +388,9 @@ def latest_prediction_inputs(symbol, lookback, pred_len, history_rows=None):
     local_frame, local_error = get_a_share_symbol_frame(symbol)
     local_size = size_condition_from_local_frame(local_frame)
 
+    refresh_errors = []
     try:
-        context, future_dates = query_latest_daily_data(
+        context, future_dates = query_eastmoney_daily_data(
             symbol,
             lookback,
             pred_len,
@@ -332,24 +402,44 @@ def latest_prediction_inputs(symbol, lookback, pred_len, history_rows=None):
             if local_size is None:
                 raise
             size_context = local_size
-        data_source = 'baostock'
-        calendar_source = 'baostock'
+        data_source = 'eastmoney'
+        calendar_source = 'business_day_fallback'
         refresh_error = None
     except Exception as exc:
-        if local_frame is None or local_size is None:
-            raise ValueError(
-                f'{symbol} 不在本地训练面板中，且 BaoStock 最新数据无法用于预测：{exc}'
-            ) from exc
-        context = local_frame.tail(retained_rows).copy().reset_index(drop=True)
-        last_date = pd.Timestamp(context['timestamps'].iloc[-1])
-        future_dates = pd.Series(
-            pd.bdate_range(last_date + pd.Timedelta(days=1), periods=pred_len),
-            name='timestamps',
-        )
-        size_context = local_size
-        data_source = 'local_cache'
-        calendar_source = 'business_day_fallback'
-        refresh_error = str(exc)
+        refresh_errors.append(f'Eastmoney: {exc}')
+        try:
+            context, future_dates = query_latest_daily_data(
+                symbol,
+                lookback,
+                pred_len,
+                history_rows=retained_rows,
+            )
+            try:
+                size_context = size_condition_from_remote_context(context)
+            except Exception:
+                if local_size is None:
+                    raise
+                size_context = local_size
+            data_source = 'baostock'
+            calendar_source = 'baostock'
+            refresh_error = '; '.join(refresh_errors)
+        except Exception as baostock_exc:
+            refresh_errors.append(f'BaoStock: {baostock_exc}')
+            exc = baostock_exc
+            if local_frame is None or local_size is None:
+                raise ValueError(
+                    f'{symbol} 不在本地训练面板中，且实时数据源均不可用：{exc}'
+                ) from exc
+            context = local_frame.tail(retained_rows).copy().reset_index(drop=True)
+            last_date = pd.Timestamp(context['timestamps'].iloc[-1])
+            future_dates = pd.Series(
+                pd.bdate_range(last_date + pd.Timedelta(days=1), periods=pred_len),
+                name='timestamps',
+            )
+            size_context = local_size
+            data_source = 'local_cache'
+            calendar_source = 'business_day_fallback'
+            refresh_error = '; '.join(refresh_errors)
 
     if len(context) < lookback:
         raise ValueError(f'{symbol} has only {len(context)} rows; {lookback} are required')
@@ -1131,9 +1221,42 @@ def load_data():
     """Load data file"""
     try:
         data = request.get_json() or {}
+        requested_symbol = normalize_a_share_symbol(data.get('symbol'))
+        if requested_symbol and re.fullmatch(r'(sh|sz|bj)\.\d{6}', requested_symbol):
+            config = AVAILABLE_MODELS['a-share-size-kronos-base']
+            try:
+                latest = latest_prediction_inputs(
+                    requested_symbol,
+                    int(config['default_lookback']),
+                    int(config['default_pred_len']),
+                )
+                frame = latest['context']
+                return jsonify({
+                    'success': True,
+                    'data_info': {
+                        'rows': len(frame),
+                        'columns': list(frame.columns),
+                        'start_date': pd.Timestamp(frame['timestamps'].min()).isoformat(),
+                        'end_date': pd.Timestamp(frame['timestamps'].max()).isoformat(),
+                        'symbol': requested_symbol,
+                        'size_bucket': int(latest['size_bucket']),
+                        'size_percentile': float(latest['size_percentile']),
+                        'latest_close': float(frame['close'].iloc[-1]),
+                        'latest_volume': float(frame['volume'].iloc[-1]),
+                        'remote_only': not latest['in_local_panel'],
+                        'data_source': latest['data_source'],
+                    },
+                    'message': (
+                        f'{requested_symbol} 已刷新至 '
+                        f"{pd.Timestamp(frame['timestamps'].iloc[-1]):%Y-%m-%d}"
+                    ),
+                })
+            except Exception:
+                # Keep confirmation usable when all live providers are down;
+                # /api/predict will retry and disclose any cache fallback.
+                pass
         df, error, _, symbol = resolve_request_data(data)
         if error:
-            requested_symbol = normalize_a_share_symbol(data.get('symbol'))
             if requested_symbol and re.fullmatch(r'(sh|sz|bj)\.\d{6}', requested_symbol):
                 return jsonify({
                     'success': True,
