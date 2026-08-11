@@ -141,44 +141,6 @@
             text-align: right;
         }
 
-        .view-tabs {
-            display: inline-grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 3px;
-            margin-bottom: 18px;
-            padding: 3px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: #e8ece8;
-        }
-
-        .view-tab {
-            min-width: 132px;
-            min-height: 38px;
-            padding: 0 16px;
-            border: 0;
-            border-radius: 6px;
-            background: transparent;
-            color: var(--muted);
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 750;
-        }
-
-        .view-tab.active {
-            background: #fff;
-            color: var(--text);
-            box-shadow: 0 1px 4px rgba(35, 54, 43, 0.1);
-        }
-
-        .view-panel {
-            display: none;
-        }
-
-        .view-panel.active {
-            display: block;
-        }
-
         .workspace {
             display: grid;
             grid-template-columns: 350px minmax(0, 1fr);
@@ -262,7 +224,18 @@
             font-size: 18px;
         }
 
+        .stock-name {
+            min-width: 0;
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .bucket-pill {
+            margin-left: auto;
             padding: 5px 9px;
             border-radius: 999px;
             background: var(--accent-soft);
@@ -469,7 +442,7 @@
 
         .metric-strip {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 10px;
             padding: 16px 20px 0;
         }
@@ -505,6 +478,34 @@
             color: #14805a;
         }
 
+        .timing-signal {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: fit-content;
+            min-width: 58px;
+            min-height: 28px;
+            padding: 0 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .timing-signal.bullish {
+            background: #fbe7e7;
+            color: #b63434;
+        }
+
+        .timing-signal.neutral {
+            background: #f3efe3;
+            color: #7a6429;
+        }
+
+        .timing-signal.bearish {
+            background: #e8f4ee;
+            color: #166847;
+        }
+
         td.positive {
             color: #c33d3d;
             font-weight: 700;
@@ -513,14 +514,6 @@
         td.negative {
             color: #14805a;
             font-weight: 700;
-        }
-
-        #ranking-leader {
-            overflow: visible;
-            font-size: 14px;
-            line-height: 1.35;
-            overflow-wrap: anywhere;
-            white-space: normal;
         }
 
         #chart {
@@ -573,183 +566,6 @@
             border-bottom: 0;
         }
 
-        .pool-card {
-            overflow: hidden;
-        }
-
-        .pool-header {
-            min-height: 68px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 18px;
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .pool-header h2 {
-            margin: 0;
-            font-size: 17px;
-        }
-
-        .pool-header p {
-            margin: 5px 0 0;
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        .pool-controls {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 14px;
-            align-items: end;
-            padding: 18px 20px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface-soft);
-        }
-
-        .pool-field label {
-            display: flex;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 8px;
-            color: var(--muted);
-            font-size: 11px;
-            font-weight: 700;
-        }
-
-        .pool-input {
-            width: 100%;
-            min-height: 72px;
-            resize: vertical;
-            padding: 10px 12px;
-            border: 1px solid #cbd5ce;
-            border-radius: 8px;
-            background: #fff;
-            color: var(--text);
-            line-height: 1.55;
-            outline: none;
-        }
-
-        .pool-input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(22, 116, 81, 0.12);
-        }
-
-        .pool-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .secondary-button,
-        .rank-button,
-        .inspect-button {
-            min-height: 40px;
-            padding: 0 14px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 700;
-        }
-
-        .secondary-button {
-            border: 1px solid #cbd5ce;
-            background: #fff;
-            color: var(--text);
-        }
-
-        .rank-button {
-            min-width: 112px;
-            border: 1px solid var(--accent);
-            background: var(--accent);
-            color: #fff;
-        }
-
-        .secondary-button:disabled,
-        .rank-button:disabled {
-            cursor: not-allowed;
-            opacity: 0.48;
-        }
-
-        .rank-button.loading {
-            color: transparent;
-            position: relative;
-        }
-
-        .rank-button.loading::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 16px;
-            height: 16px;
-            margin: -9px 0 0 -9px;
-            border: 2px solid rgba(255, 255, 255, 0.42);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        .pool-empty {
-            padding: 36px 20px;
-            color: var(--muted);
-            text-align: center;
-            font-size: 13px;
-        }
-
-        .ranking-content {
-            display: none;
-        }
-
-        .ranking-content.visible {
-            display: block;
-        }
-
-        .ranking-metrics {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            padding: 16px 20px;
-        }
-
-        .rank-number {
-            font-weight: 800;
-            color: var(--muted);
-        }
-
-        .signal-pill {
-            display: inline-flex;
-            align-items: center;
-            min-height: 24px;
-            padding: 0 8px;
-            border-radius: 999px;
-            font-size: 11px;
-            font-weight: 750;
-        }
-
-        .signal-pill.candidate {
-            background: #fbe7e7;
-            color: #b63434;
-        }
-
-        .signal-pill.positive {
-            background: #fff1e6;
-            color: #a9511e;
-        }
-
-        .signal-pill.negative {
-            background: #e8f4ee;
-            color: #166847;
-        }
-
-        .inspect-button {
-            min-height: 30px;
-            padding: 0 10px;
-            border: 1px solid #cbd5ce;
-            background: #fff;
-            color: var(--accent-dark);
-            font-size: 11px;
-        }
-
         .toast {
             position: fixed;
             right: 24px;
@@ -792,9 +608,6 @@
                 min-height: 620px;
             }
 
-            .pool-controls {
-                grid-template-columns: 1fr;
-            }
         }
 
         @media (max-width: 680px) {
@@ -815,30 +628,12 @@
                 align-items: start;
             }
 
-            .view-tabs {
-                display: grid;
-                width: 100%;
-            }
-
-            .view-tab {
-                min-width: 0;
-                padding: 0 10px;
-            }
-
             .sidebar {
                 grid-template-columns: 1fr;
             }
 
             .metric-strip {
                 grid-template-columns: 1fr 1fr;
-            }
-
-            .ranking-metrics {
-                grid-template-columns: 1fr 1fr;
-            }
-
-            .pool-actions {
-                flex-wrap: wrap;
             }
 
             .result-toolbar {
@@ -872,29 +667,7 @@
             <div class="model-caption">A-share Size Kronos-base · 102.3M</div>
         </div>
 
-        <div class="view-tabs" role="tablist" aria-label="工作视图">
-            <button
-                id="single-tab"
-                class="view-tab active"
-                type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="single-view"
-                data-view="single"
-            >单股预测</button>
-            <button
-                id="pool-tab"
-                class="view-tab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="pool-view"
-                data-view="pool"
-            >股票池排序</button>
-        </div>
-
-        <section id="single-view" class="view-panel active" role="tabpanel" aria-labelledby="single-tab">
-          <div class="workspace">
+        <div class="workspace">
             <aside class="sidebar">
                 <section class="card control-card">
                     <p class="section-label">股票</p>
@@ -913,11 +686,12 @@
                     <div id="stock-summary" class="stock-summary">
                         <div class="summary-title">
                             <strong id="summary-symbol">—</strong>
+                            <span id="summary-name" class="stock-name">—</span>
                             <span id="summary-bucket" class="bucket-pill">市值层 —</span>
                         </div>
                         <div class="summary-grid">
                             <div class="summary-item">
-                                <span>本地数据截止</span>
+                                <span>行情数据截止</span>
                                 <strong id="summary-date">—</strong>
                             </div>
                             <div class="summary-item">
@@ -939,14 +713,14 @@
                 <section class="card control-card">
                     <p class="section-label">执行方案</p>
                     <ul class="plan-list">
-                        <li><span>行情上下文</span><strong>最新 90 日</strong></li>
+                        <li><span>行情上下文</span><strong>最新 120 日</strong></li>
                         <li><span>预测区间</span><strong>未来 10 日</strong></li>
                         <li><span>生成路径</span><strong>20 条</strong></li>
                         <li><span>预测区间</span><strong>P10 – P90</strong></li>
                         <li><span>市值条件</span><strong>最新可用分层</strong></li>
                     </ul>
                     <button id="predict-button" class="predict-button" disabled>刷新最新数据并预测</button>
-                    <p class="predict-note">优先使用 BaoStock 最新复权日线；查询失败时会明确回退到本地缓存。</p>
+                    <p class="predict-note">查询时刷新最新复权日线；行情过期或查询失败时停止预测，不使用本地旧缓存。</p>
                 </section>
             </aside>
 
@@ -963,7 +737,7 @@
                     <div class="empty-panel">
                         <div class="empty-visual">10D</div>
                         <h3>选择一只股票开始预测</h3>
-                        <p>输入代码并确认后，系统会在点击预测时刷新最新行情，使用最近 90 个交易日生成未来 10 个交易日的 K 线。</p>
+                        <p>输入代码并确认后，系统会在点击预测时刷新最新行情，使用最近 120 个交易日生成未来 10 个交易日的 K 线。</p>
                     </div>
                 </div>
 
@@ -980,6 +754,10 @@
                         <div class="metric">
                             <span>未来 10 日预测收益</span>
                             <strong id="metric-change">—</strong>
+                        </div>
+                        <div class="metric">
+                            <span>择时判断</span>
+                            <strong id="metric-signal" class="timing-signal neutral">观望</strong>
                         </div>
                         <div class="metric">
                             <span>末日 80% 区间</span>
@@ -1008,79 +786,7 @@
                     </div>
                 </div>
             </section>
-          </div>
-        </section>
-
-        <section id="pool-view" class="view-panel" role="tabpanel" aria-labelledby="pool-tab">
-          <section class="card pool-card">
-            <div class="pool-header">
-                <div>
-                    <h2>自选股票池排序</h2>
-                    <p id="pool-subtitle">等待股票池</p>
-                </div>
-                <span class="source-badge">未来 10 日</span>
-            </div>
-            <div class="pool-controls">
-                <div class="pool-field">
-                    <label for="pool-input">
-                        <span>股票池</span>
-                        <span id="pool-count">0 / 64</span>
-                    </label>
-                    <textarea
-                        id="pool-input"
-                        class="pool-input"
-                        placeholder="300395, 600519, 000001"
-                        aria-label="自选股票池"
-                    ></textarea>
-                </div>
-                <div class="pool-actions">
-                    <button id="add-current-button" class="secondary-button" disabled>加入当前股票</button>
-                    <button id="rank-button" class="rank-button" disabled>生成排名</button>
-                </div>
-            </div>
-            <div id="pool-empty" class="pool-empty">尚无排序结果</div>
-            <div id="ranking-content" class="ranking-content">
-                <div class="ranking-metrics">
-                    <div class="metric">
-                        <span>共同数据日期</span>
-                        <strong id="ranking-date">—</strong>
-                    </div>
-                    <div class="metric">
-                        <span>股票池</span>
-                        <strong id="ranking-size">—</strong>
-                    </div>
-                    <div class="metric">
-                        <span>正预测数量</span>
-                        <strong id="ranking-positive">—</strong>
-                    </div>
-                    <div class="metric">
-                        <span>排名第一</span>
-                        <strong id="ranking-leader">—</strong>
-                    </div>
-                </div>
-                <div class="table-section">
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>排名</th>
-                                    <th>股票</th>
-                                    <th>市值层</th>
-                                    <th>最新收盘</th>
-                                    <th>预测末日中位数</th>
-                                    <th>预测收益</th>
-                                    <th>上涨路径</th>
-                                    <th>信号</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ranking-body"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-          </section>
-        </section>
+        </div>
     </main>
 
     <div id="toast" class="toast"></div>
@@ -1091,16 +797,10 @@
             symbol: null,
             dataInfo: null,
             symbolCount: 0,
-            rankingLoading: false,
         };
 
         const stockInput = document.getElementById('stock-input');
         const predictButton = document.getElementById('predict-button');
-        const poolInput = document.getElementById('pool-input');
-        const rankButton = document.getElementById('rank-button');
-        const addCurrentButton = document.getElementById('add-current-button');
-        const viewTabs = Array.from(document.querySelectorAll('.view-tab'));
-
         document.addEventListener('DOMContentLoaded', initialize);
 
         async function initialize() {
@@ -1119,31 +819,6 @@
                 if (stockInput.value.trim()) confirmStock();
             });
             predictButton.addEventListener('click', runPrediction);
-            poolInput.addEventListener('input', syncPoolActions);
-            rankButton.addEventListener('click', runPortfolioRanking);
-            addCurrentButton.addEventListener('click', addCurrentStockToPool);
-            viewTabs.forEach(tab => {
-                tab.addEventListener('click', () => switchView(tab.dataset.view));
-                tab.addEventListener('keydown', event => {
-                    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-                    event.preventDefault();
-                    switchView(tab.dataset.view === 'single' ? 'pool' : 'single', true);
-                });
-            });
-        }
-
-        function switchView(viewName, focusTab = false) {
-            const labels = {single: '单股预测', pool: '股票池排序'};
-            viewTabs.forEach(tab => {
-                const active = tab.dataset.view === viewName;
-                tab.classList.toggle('active', active);
-                tab.setAttribute('aria-selected', String(active));
-                tab.tabIndex = active ? 0 : -1;
-                if (active && focusTab) tab.focus();
-            });
-            document.getElementById('single-view').classList.toggle('active', viewName === 'single');
-            document.getElementById('pool-view').classList.toggle('active', viewName === 'pool');
-            document.getElementById('view-subtitle').textContent = labels[viewName];
         }
 
         async function loadModel() {
@@ -1154,7 +829,6 @@
                 const device = response.data.model_info.device.toUpperCase();
                 setRuntime('ready', `${device} · 模型就绪`);
                 syncPredictButton();
-                syncPoolActions();
             } catch (error) {
                 state.modelReady = false;
                 setRuntime('error', '模型加载失败');
@@ -1193,17 +867,16 @@
                 state.dataInfo = info;
                 stockInput.value = info.symbol.replace(/^\w+\./, '');
                 renderStockSummary(info);
-                document.getElementById('stock-help').textContent = `${info.symbol} 已确认；点击预测时将刷新最新行情`;
-                document.getElementById('result-subtitle').textContent = `${info.symbol} · 等待预测`;
+                const displayName = info.name ? ` · ${info.name}` : '';
+                document.getElementById('stock-help').textContent = `${info.symbol}${displayName} 已确认；点击预测时将刷新最新行情`;
+                document.getElementById('result-subtitle').textContent = `${info.symbol}${displayName} · 等待预测`;
                 syncPredictButton();
-                syncPoolActions();
             } catch (error) {
                 state.symbol = null;
                 state.dataInfo = null;
                 document.getElementById('stock-summary').classList.remove('visible');
                 document.getElementById('stock-help').textContent = error.response?.data?.error || '股票确认失败';
                 syncPredictButton();
-                syncPoolActions();
                 showToast(error.response?.data?.error || error.message, true);
             } finally {
                 stockInput.disabled = false;
@@ -1213,6 +886,7 @@
         function renderStockSummary(info) {
             document.getElementById('stock-summary').classList.add('visible');
             document.getElementById('summary-symbol').textContent = info.symbol;
+            document.getElementById('summary-name').textContent = info.name || '名称未知';
             const percentile = Number.isFinite(info.size_percentile)
                 ? ` · ${(info.size_percentile * 100).toFixed(1)}%`
                 : '';
@@ -1221,14 +895,15 @@
                 : '市值层待预测计算';
             document.getElementById('summary-date').textContent = info.end_date ? formatDate(info.end_date) : '待刷新';
             document.getElementById('summary-close').textContent = Number.isFinite(info.latest_close) ? formatPrice(info.latest_close) : '—';
-            document.getElementById('summary-rows').textContent = info.remote_only ? 'BaoStock' : info.rows.toLocaleString('zh-CN');
+            document.getElementById('summary-rows').textContent = `${info.rows.toLocaleString('zh-CN')} 条`;
         }
 
         async function runPrediction() {
             if (!state.symbol || !state.modelReady) return;
 
             setPredicting(true);
-            document.getElementById('result-heading').textContent = `${state.symbol} 正在预测`;
+            const pendingName = state.dataInfo?.name ? ` · ${state.dataInfo.name}` : '';
+            document.getElementById('result-heading').textContent = `${state.symbol}${pendingName} 正在预测`;
             document.getElementById('result-subtitle').textContent = '刷新最新行情并生成未来交易日…';
             try {
                 const response = await axios.post('/api/predict', {
@@ -1255,24 +930,26 @@
 
             document.getElementById('empty-state').style.display = 'none';
             document.getElementById('result-content').classList.add('visible');
-            document.getElementById('result-heading').textContent = `${result.symbol} 未来 ${result.pred_len} 日预测`;
+            const resultName = result.name ? ` · ${result.name}` : '';
+            document.getElementById('result-heading').textContent = `${result.symbol}${resultName} 未来 ${result.pred_len} 日预测`;
             document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · 市值层 ${result.size_bucket}（${(result.size_percentile * 100).toFixed(1)}%） · ${result.interval.sample_count} 条路径`;
 
             const sourceBadge = document.getElementById('source-badge');
             sourceBadge.style.display = 'inline-flex';
-            sourceBadge.classList.toggle('fallback', result.data_source === 'local_cache');
             const sourceLabels = {
                 eastmoney: 'Eastmoney 最新日线',
                 baostock: 'BaoStock 最新日线',
-                local_cache: '本地缓存回退',
             };
-            sourceBadge.textContent = `${sourceLabels[result.data_source] || result.data_source}${result.in_local_panel || result.data_source === 'local_cache' ? '' : ' · 训练面板外'}`;
+            sourceBadge.textContent = `${sourceLabels[result.data_source] || result.data_source}${result.in_local_panel ? '' : ' · 训练面板外'}`;
 
             document.getElementById('metric-latest').textContent = formatPrice(result.latest_close);
             document.getElementById('metric-final').textContent = formatPrice(finalPrediction.close_p50);
             const changeElement = document.getElementById('metric-change');
             changeElement.textContent = `${predictedReturnPct >= 0 ? '+' : ''}${predictedReturnPct.toFixed(2)}%`;
             changeElement.className = predictedReturnPct >= 0 ? 'positive' : 'negative';
+            const signalElement = document.getElementById('metric-signal');
+            signalElement.textContent = result.timing_signal.label;
+            signalElement.className = `timing-signal ${result.timing_signal.key}`;
             document.getElementById('metric-range').textContent = `${formatPrice(finalPrediction.close_p10)} – ${formatPrice(finalPrediction.close_p90)}`;
 
             const chartData = JSON.parse(result.chart);
@@ -1305,111 +982,10 @@
             document.getElementById('summary-close').textContent = formatPrice(result.latest_close);
             document.getElementById('summary-bucket').textContent = `市值层 ${result.size_bucket} / 9 · ${(result.size_percentile * 100).toFixed(1)}%`;
 
-            if (result.refresh_error && result.data_source === 'local_cache') {
-                showToast(`实时行情不可用，已回退本地缓存：${result.refresh_error}`, true);
-            }
         }
 
         function syncPredictButton() {
             predictButton.disabled = !(state.modelReady && state.symbol);
-        }
-
-        function parsePoolSymbols() {
-            const symbols = poolInput.value
-                .split(/[\s,，;；]+/)
-                .map(value => value.trim())
-                .filter(Boolean);
-            return [...new Set(symbols)];
-        }
-
-        function syncPoolActions() {
-            const symbols = parsePoolSymbols();
-            document.getElementById('pool-count').textContent = `${symbols.length} / 64`;
-            addCurrentButton.disabled = !state.symbol || state.rankingLoading;
-            rankButton.disabled = !state.modelReady
-                || state.rankingLoading
-                || symbols.length < 2
-                || symbols.length > 64;
-        }
-
-        function addCurrentStockToPool() {
-            if (!state.symbol) return;
-            const code = state.symbol.replace(/^\w+\./, '');
-            const symbols = parsePoolSymbols();
-            if (!symbols.includes(code)) symbols.push(code);
-            poolInput.value = symbols.join(', ');
-            syncPoolActions();
-        }
-
-        async function runPortfolioRanking() {
-            const symbols = parsePoolSymbols();
-            if (symbols.length < 2 || symbols.length > 64 || !state.modelReady) return;
-
-            state.rankingLoading = true;
-            rankButton.classList.add('loading');
-            document.getElementById('pool-subtitle').textContent = `正在比较 ${symbols.length} 只股票`;
-            syncPoolActions();
-            try {
-                const response = await axios.post('/api/a-share/rankings', {
-                    symbols,
-                    sample_count: 3,
-                });
-                renderPortfolioRanking(response.data);
-                showToast(response.data.message);
-            } catch (error) {
-                document.getElementById('pool-subtitle').textContent = '排序失败';
-                showToast(error.response?.data?.error || error.message, true);
-            } finally {
-                state.rankingLoading = false;
-                rankButton.classList.remove('loading');
-                syncPoolActions();
-            }
-        }
-
-        function renderPortfolioRanking(result) {
-            const rankings = result.rankings;
-            const positiveCount = rankings.filter(item => item.predicted_return_p50 > 0).length;
-            const leader = rankings[0];
-            document.getElementById('pool-subtitle').textContent = `数据 ${formatDate(result.as_of_date)} · 预测至 ${formatDate(result.forecast_end)} · ${result.sample_count} 条路径中位数`;
-            document.getElementById('pool-empty').style.display = 'none';
-            document.getElementById('ranking-content').classList.add('visible');
-            document.getElementById('ranking-date').textContent = formatDate(result.as_of_date);
-            document.getElementById('ranking-size').textContent = `${result.universe_size} 只`;
-            document.getElementById('ranking-positive').textContent = `${positiveCount} 只`;
-            document.getElementById('ranking-leader').textContent = `${leader.symbol.replace(/^\w+\./, '')} · ${formatPct(leader.predicted_return_p50)}`;
-
-            const labels = {
-                candidate: 'Top 8',
-                positive: '正预测',
-                negative: '负预测',
-            };
-            const body = document.getElementById('ranking-body');
-            body.innerHTML = '';
-            rankings.forEach(item => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><span class="rank-number">${item.rank}</span></td>
-                    <td>${item.symbol}</td>
-                    <td>${item.size_bucket} / 9 · ${(item.size_percentile * 100).toFixed(1)}%</td>
-                    <td>${formatPrice(item.latest_close)}</td>
-                    <td>${formatPrice(item.predicted_close_p50)}</td>
-                    <td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${formatPct(item.predicted_return_p50)}</td>
-                    <td>${Math.round(item.positive_path_rate * 100)}%</td>
-                    <td><span class="signal-pill ${item.signal}">${labels[item.signal]}</span></td>
-                    <td><button class="inspect-button" data-symbol="${item.symbol}">单股预测</button></td>
-                `;
-                row.querySelector('.inspect-button').addEventListener('click', () => {
-                    selectRankedSymbol(item.symbol);
-                });
-                body.appendChild(row);
-            });
-        }
-
-        async function selectRankedSymbol(symbol) {
-            switchView('single');
-            stockInput.value = symbol.replace(/^\w+\./, '');
-            await confirmStock();
-            window.scrollTo({top: 0, behavior: 'smooth'});
         }
 
         function setPredicting(isPredicting) {
@@ -1448,11 +1024,6 @@
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
             });
-        }
-
-        function formatPct(value) {
-            const percentage = Number(value) * 100;
-            return `${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%`;
         }
 
         function formatVolume(value) {

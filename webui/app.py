@@ -29,7 +29,6 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from model import Kronos, KronosTokenizer, KronosPredictor
-    from model.kronos import auto_regressive_inference
     MODEL_AVAILABLE = True
 except ImportError:
     MODEL_AVAILABLE = False
@@ -42,11 +41,12 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 A_SHARE_DATASET_DIR = os.path.join(PROJECT_ROOT, 'data', 'a_share_v5', 'processed_datasets')
 A_SHARE_RAW_DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'a_share', 'a_share_daily.csv')
 A_SHARE_SIZE_REFERENCE_PATH = os.path.join(PROJECT_ROOT, 'webui', 'size_reference.json')
+MAX_MARKET_DATA_AGE_DAYS = 10
 A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
     'outputs',
     'models',
-    'a_share_v5_context120_latest',
+    'a_share_v6_segment542_latest',
     'checkpoints',
     'last_model',
 )
@@ -61,19 +61,18 @@ a_share_splits = None
 model_load_lock = threading.Lock()
 baostock_lock = threading.Lock()
 inference_lock = threading.Lock()
-ranking_cache = None
 size_reference_cache = None
 size_reference_lock = threading.Lock()
 
 # Available model configurations
 AVAILABLE_MODELS = {
     'a-share-size-kronos-base': {
-        'name': 'A-share V5 120d 2-Pass Last Kronos',
+        'name': 'A-share V6 Segment 542 Last Kronos',
         'model_id': A_SHARE_MODEL_PATH,
         'tokenizer_id': 'NeoQuasar/Kronos-Tokenizer-base',
         'context_length': 512,
         'params': '102.3M',
-        'description': 'Full-market A-share ranking model with 120-day context and market-cap conditioning',
+        'description': 'Production A-share single-stock timing model with 120-day context and 10-day forecast',
         'num_size_buckets': 10,
         'use_size_percentile': False,
         'default_lookback': 120,
@@ -145,6 +144,41 @@ def read_baostock_result(result):
     return rows
 
 
+def query_remote_stock_name(symbol):
+    """Resolve the Chinese display name without coupling prediction to local metadata."""
+    market, code = str(symbol).lower().split('.', 1)
+    secid = f"1.{code}" if market == 'sh' else f"0.{code}"
+    query = urlencode({'secid': secid, 'fields': 'f57,f58'})
+    url = f'https://push2.eastmoney.com/api/qt/stock/get?{query}'
+    try:
+        response = subprocess.run(
+            ['curl', '--fail', '--silent', '--show-error', '--compressed',
+             '--max-time', '10', '-A', 'Mozilla/5.0', url],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        payload = json.loads(response.stdout)
+        name = ((payload.get('data') or {}).get('f58') or '').strip()
+        return name or None
+    except Exception:
+        return None
+
+
+def require_fresh_market_data(history, source):
+    """Reject suspended, delisted, or stale histories in production prediction."""
+    if history.empty:
+        raise RuntimeError(f'{source} returned no usable daily data')
+    latest_date = pd.Timestamp(history['timestamps'].iloc[-1]).normalize()
+    age_days = (pd.Timestamp.now().normalize() - latest_date).days
+    if age_days > MAX_MARKET_DATA_AGE_DAYS:
+        raise RuntimeError(
+            f'{source} latest trading date is {latest_date:%Y-%m-%d}; '
+            'the stock may be delisted or long-term suspended'
+        )
+
+
 def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
     """Fetch a fresh adjusted context and the next exchange trading dates."""
     if not BAOSTOCK_AVAILABLE:
@@ -186,6 +220,7 @@ def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
             history = history[(history['close'] > 0) & (history['volume'] >= 0)]
             history = history.sort_values('timestamps').drop_duplicates('timestamps', keep='last')
             history = history.tail(retained_rows).reset_index(drop=True)
+            require_fresh_market_data(history, 'BaoStock')
 
             last_date = history['timestamps'].iloc[-1]
             calendar_end = last_date + pd.Timedelta(days=max(45, pred_len * 6))
@@ -263,6 +298,7 @@ def query_eastmoney_daily_data(symbol, lookback, pred_len, history_rows=None):
         raise RuntimeError(
             f'Eastmoney returned only {len(history)} usable rows; {lookback} are required'
         )
+    require_fresh_market_data(history, 'Eastmoney')
     last_date = pd.Timestamp(history['timestamps'].iloc[-1])
     future_dates = pd.Series(
         pd.bdate_range(
@@ -425,27 +461,24 @@ def latest_prediction_inputs(symbol, lookback, pred_len, history_rows=None):
             refresh_error = '; '.join(refresh_errors)
         except Exception as baostock_exc:
             refresh_errors.append(f'BaoStock: {baostock_exc}')
-            exc = baostock_exc
-            if local_frame is None or local_size is None:
-                raise ValueError(
-                    f'{symbol} 不在本地训练面板中，且实时数据源均不可用：{exc}'
-                ) from exc
-            context = local_frame.tail(retained_rows).copy().reset_index(drop=True)
-            last_date = pd.Timestamp(context['timestamps'].iloc[-1])
-            future_dates = pd.Series(
-                pd.bdate_range(last_date + pd.Timedelta(days=1), periods=pred_len),
-                name='timestamps',
+            local_date = None
+            if local_frame is not None and not local_frame.empty:
+                local_date = pd.Timestamp(local_frame['timestamps'].iloc[-1])
+            cache_note = (
+                f'；本地缓存仅到 {local_date:%Y-%m-%d}，生产预测已禁止使用旧缓存'
+                if local_date is not None else ''
             )
-            size_context = local_size
-            data_source = 'local_cache'
-            calendar_source = 'business_day_fallback'
-            refresh_error = '; '.join(refresh_errors)
+            raise ValueError(
+                f'{symbol} 无法获取最新行情，可能已退市、长期停牌或数据源暂不可用'
+                f'{cache_note}。详情：{"; ".join(refresh_errors)}'
+            ) from baostock_exc
 
     if len(context) < lookback:
         raise ValueError(f'{symbol} has only {len(context)} rows; {lookback} are required')
     return {
         'context': context.tail(retained_rows).reset_index(drop=True),
         'future_dates': future_dates,
+        'stock_name': query_remote_stock_name(symbol),
         **size_context,
         'in_local_panel': local_frame is not None,
         'local_panel_error': local_error,
@@ -509,19 +542,8 @@ def get_a_share_symbol_frame(symbol):
     return frame, None
 
 
-def kronos_time_features(index):
-    index = pd.DatetimeIndex(index)
-    return np.column_stack([
-        index.minute,
-        index.hour,
-        index.weekday,
-        index.day,
-        index.month,
-    ]).astype(np.float32)
-
-
 def forecast_return_summary(close_samples, latest_close):
-    """Summarize the same horizon-average return signal used for ranking."""
+    """Summarize the forecast and classify its 10-day timing direction."""
     close_samples = np.asarray(close_samples, dtype=np.float64)
     if close_samples.ndim != 2 or close_samples.shape[1] == 0:
         raise ValueError('Forecast close samples must have shape [samples, horizon]')
@@ -529,197 +551,19 @@ def forecast_return_summary(close_samples, latest_close):
         raise ValueError('Latest close must be positive')
     average_closes = close_samples.mean(axis=1)
     returns = average_closes / latest_close - 1
+    predicted_return_p50 = float(np.median(returns))
+    if predicted_return_p50 >= 0.01:
+        timing_signal = {'key': 'bullish', 'label': '偏多'}
+    elif predicted_return_p50 <= -0.01:
+        timing_signal = {'key': 'bearish', 'label': '偏空'}
+    else:
+        timing_signal = {'key': 'neutral', 'label': '观望'}
     return {
         'predicted_average_close_p50': float(np.median(average_closes)),
-        'predicted_return_p50': float(np.median(returns)),
+        'predicted_return_p50': predicted_return_p50,
         'positive_path_rate': float(np.mean(returns > 0)),
+        'timing_signal': timing_signal,
     }
-
-
-def portfolio_ranking_batch(symbols, lookback, pred_len):
-    """Build a same-date batch for a user-provided A-share universe."""
-    feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
-    history_rows = lookback + max(30, pred_len * 3)
-    inputs_by_symbol = {}
-    for symbol in symbols:
-        inputs = latest_prediction_inputs(
-            symbol,
-            lookback,
-            pred_len,
-            history_rows=history_rows,
-        )
-        frame = inputs['context'].set_index('timestamps').sort_index()
-        inputs_by_symbol[symbol] = {**inputs, 'frame': frame}
-
-    as_of_date = min(
-        pd.Timestamp(inputs['frame'].index.max())
-        for inputs in inputs_by_symbol.values()
-    )
-
-    records = []
-    for symbol, inputs in inputs_by_symbol.items():
-        frame = inputs['frame']
-        context = frame.loc[:as_of_date].tail(lookback)
-        if len(context) < lookback:
-            raise ValueError(
-                f'{symbol} 截至 {as_of_date:%Y-%m-%d} 只有 {len(context)} 个交易日，'
-                f'至少需要 {lookback} 个'
-            )
-        if context[feature_columns].isnull().values.any():
-            raise ValueError(f'{symbol} 在共同日期前存在缺失行情')
-        if {'turn', 'timestamps'}.issubset(context.reset_index().columns):
-            size_context = size_condition_from_remote_context(context.reset_index())
-        else:
-            size_context = size_condition_from_local_frame(context.reset_index())
-            if size_context is None:
-                size_context = {
-                    'size_bucket': inputs['size_bucket'],
-                    'size_percentile': inputs['size_percentile'],
-                    'size_source': inputs['size_source'],
-                }
-        records.append({
-            'symbol': symbol,
-            'context': context,
-            'size_bucket': int(size_context['size_bucket']),
-            'size_percentile': float(size_context['size_percentile']),
-            'latest_close': float(context['close'].iloc[-1]),
-            'in_local_panel': bool(inputs['in_local_panel']),
-            'data_source': inputs['data_source'],
-            'size_source': size_context.get('size_source', inputs['size_source']),
-        })
-
-    calendar_inputs = next(
-        inputs for inputs in inputs_by_symbol.values()
-        if pd.Timestamp(inputs['frame'].index.max()) == as_of_date
-    )
-    future_dates = pd.DatetimeIndex(calendar_inputs['future_dates'])
-    normalized = []
-    x_stamps = []
-    means = []
-    stds = []
-    size_buckets = []
-    size_percentiles = []
-    for item in records:
-        context = item['context']
-        values = context[feature_columns].to_numpy(dtype=np.float32)
-        mean = values.mean(axis=0)
-        std = values.std(axis=0)
-        normalized.append(np.clip((values - mean) / (std + 1e-5), -5, 5))
-        x_stamps.append(kronos_time_features(context.index))
-        means.append(mean)
-        stds.append(std)
-        size_buckets.append(item['size_bucket'])
-        size_percentiles.append(item['size_percentile'])
-
-    return {
-        'records': records,
-        'as_of_date': as_of_date,
-        'future_dates': future_dates,
-        'feature_columns': feature_columns,
-        'x': np.stack(normalized).astype(np.float32),
-        'x_stamp': np.stack(x_stamps).astype(np.float32),
-        'y_stamp': np.repeat(
-            kronos_time_features(future_dates)[None, :, :], len(records), axis=0
-        ),
-        'means': np.stack(means).astype(np.float32),
-        'stds': np.stack(stds).astype(np.float32),
-        'size_buckets': np.asarray(size_buckets, dtype=np.int64),
-        'size_percentiles': np.asarray(size_percentiles, dtype=np.float32),
-    }
-
-
-def generate_portfolio_ranking(symbols, sample_count=3):
-    """Rank a user-provided stock pool by median forecast return."""
-    global ranking_cache
-    ensure_model_loaded()
-    batch = portfolio_ranking_batch(
-        symbols,
-        AVAILABLE_MODELS['a-share-size-kronos-base']['default_lookback'],
-        AVAILABLE_MODELS['a-share-size-kronos-base']['default_pred_len'],
-    )
-    cache_key = (
-        batch['as_of_date'].isoformat(), tuple(symbols), sample_count, current_model_key
-    )
-    if ranking_cache and ranking_cache.get('cache_key') == cache_key:
-        return ranking_cache['payload']
-
-    device = next(predictor.model.parameters()).device
-    close_index = batch['feature_columns'].index('close')
-    average_close_samples = []
-    with inference_lock, torch.no_grad():
-        for sample_index in range(sample_count):
-            torch.manual_seed(20260801 + sample_index)
-            np.random.seed(20260801 + sample_index)
-            predictions = auto_regressive_inference(
-                tokenizer,
-                model,
-                torch.as_tensor(batch['x'], device=device),
-                torch.as_tensor(batch['x_stamp'], device=device),
-                torch.as_tensor(batch['y_stamp'], device=device),
-                max_context=AVAILABLE_MODELS['a-share-size-kronos-base']['context_length'],
-                pred_len=AVAILABLE_MODELS['a-share-size-kronos-base']['default_pred_len'],
-                clip=5,
-                T=AVAILABLE_MODELS['a-share-size-kronos-base']['default_temperature'],
-                top_k=0,
-                top_p=AVAILABLE_MODELS['a-share-size-kronos-base']['default_top_p'],
-                sample_count=1,
-                verbose=False,
-                size_bucket=torch.as_tensor(batch['size_buckets'], device=device),
-                size_percentile=(
-                    torch.as_tensor(batch['size_percentiles'], device=device)
-                    if AVAILABLE_MODELS['a-share-size-kronos-base'].get('use_size_percentile')
-                    else None
-                ),
-            )
-            forecast = predictions[:, -AVAILABLE_MODELS['a-share-size-kronos-base']['default_pred_len']:, :]
-            average_close = (
-                forecast[:, :, close_index].mean(axis=1)
-                * (batch['stds'][:, close_index] + 1e-5)
-                + batch['means'][:, close_index]
-            )
-            average_close_samples.append(average_close)
-        if device.type == 'mps':
-            torch.mps.synchronize()
-
-    average_close_samples = np.stack(average_close_samples)
-    rankings = []
-    for item_index, item in enumerate(batch['records']):
-        closes = average_close_samples[:, item_index]
-        returns = closes / item['latest_close'] - 1
-        rankings.append({
-            'symbol': item['symbol'],
-            'size_bucket': item['size_bucket'],
-            'size_percentile': item['size_percentile'],
-            'latest_close': item['latest_close'],
-            'predicted_close_p50': float(np.median(closes)),
-            'predicted_return_p50': float(np.median(returns)),
-            'positive_path_rate': float(np.mean(returns > 0)),
-            'in_local_panel': item['in_local_panel'],
-            'data_source': item['data_source'],
-        })
-    rankings.sort(
-        key=lambda item: (-item['predicted_return_p50'], item['symbol'])
-    )
-    for rank, item in enumerate(rankings, start=1):
-        item['rank'] = rank
-        if rank <= 8 and item['predicted_return_p50'] > 0:
-            item['signal'] = 'candidate'
-        elif item['predicted_return_p50'] > 0:
-            item['signal'] = 'positive'
-        else:
-            item['signal'] = 'negative'
-
-    payload = {
-        'success': True,
-        'as_of_date': batch['as_of_date'].isoformat(),
-        'forecast_end': batch['future_dates'][-1].isoformat(),
-        'universe_size': len(symbols),
-        'sample_count': sample_count,
-        'rankings': rankings,
-        'message': f'已完成自选股票池 {len(symbols)} 只股票的横截面排序',
-    }
-    ranking_cache = {'cache_key': cache_key, 'payload': payload}
-    return payload
 
 
 def resolve_request_data(data):
@@ -1021,6 +865,16 @@ def create_operational_chart(context, pred_df, interval_df):
     )
     history_dates = pd.DatetimeIndex(context['timestamps'])
     forecast_dates = pd.DatetimeIndex(pred_df.index)
+    plotted_dates = history_dates.union(forecast_dates).normalize()
+    calendar_weekdays = pd.date_range(
+        plotted_dates.min(),
+        plotted_dates.max(),
+        freq='B',
+    )
+    market_holidays = [
+        timestamp.strftime('%Y-%m-%d')
+        for timestamp in calendar_weekdays.difference(plotted_dates)
+    ]
 
     figure.add_trace(
         go.Candlestick(
@@ -1142,7 +996,10 @@ def create_operational_chart(context, pred_df, interval_df):
     figure.update_xaxes(
         type='date',
         rangeslider_visible=False,
-        rangebreaks=[{'bounds': ['sat', 'mon']}],
+        rangebreaks=[
+            {'bounds': ['sat', 'mon']},
+            {'values': market_holidays},
+        ],
     )
     figure.update_xaxes(title_text='交易日', row=2, col=1)
     figure.update_yaxes(title_text='价格', row=1, col=1)
@@ -1185,37 +1042,6 @@ def get_a_share_symbols():
         return jsonify({'error': f'Failed to load A-share symbols: {exc}'}), 500
 
 
-@app.route('/api/a-share/rankings', methods=['POST'])
-def rank_a_share_portfolio():
-    """Rank a user-provided stock pool on one common point-in-time date."""
-    try:
-        data = request.get_json() or {}
-        raw_symbols = data.get('symbols', [])
-        if isinstance(raw_symbols, str):
-            raw_symbols = re.split(r'[\s,，;；]+', raw_symbols.strip())
-        if not isinstance(raw_symbols, list):
-            return jsonify({'error': '股票池格式无效'}), 400
-
-        symbols = []
-        for raw_symbol in raw_symbols:
-            symbol = normalize_a_share_symbol(raw_symbol)
-            if symbol and symbol not in symbols:
-                symbols.append(symbol)
-        if len(symbols) < 2:
-            return jsonify({'error': '股票池至少需要 2 只股票'}), 400
-        if len(symbols) > 64:
-            return jsonify({'error': '股票池最多支持 64 只股票'}), 400
-        symbols.sort()
-
-        sample_count = int(data.get('sample_count', 3))
-        if not 1 <= sample_count <= 5:
-            return jsonify({'error': '排序路径数必须在 1 到 5 之间'}), 400
-        return jsonify(generate_portfolio_ranking(symbols, sample_count=sample_count))
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    except Exception as exc:
-        return jsonify({'error': f'股票池排序失败: {exc}'}), 500
-
 @app.route('/api/load-data', methods=['POST'])
 def load_data():
     """Load data file"""
@@ -1239,6 +1065,7 @@ def load_data():
                         'start_date': pd.Timestamp(frame['timestamps'].min()).isoformat(),
                         'end_date': pd.Timestamp(frame['timestamps'].max()).isoformat(),
                         'symbol': requested_symbol,
+                        'name': latest['stock_name'],
                         'size_bucket': int(latest['size_bucket']),
                         'size_percentile': float(latest['size_percentile']),
                         'latest_close': float(frame['close'].iloc[-1]),
@@ -1251,10 +1078,8 @@ def load_data():
                         f"{pd.Timestamp(frame['timestamps'].iloc[-1]):%Y-%m-%d}"
                     ),
                 })
-            except Exception:
-                # Keep confirmation usable when all live providers are down;
-                # /api/predict will retry and disclose any cache fallback.
-                pass
+            except Exception as exc:
+                return jsonify({'error': str(exc)}), 400
         df, error, _, symbol = resolve_request_data(data)
         if error:
             if requested_symbol and re.fullmatch(r'(sh|sz|bj)\.\d{6}', requested_symbol):
@@ -1315,6 +1140,7 @@ def load_data():
             'prediction_columns': ['open', 'high', 'low', 'close'] + (['volume'] if 'volume' in df.columns else []),
             'timeframe': detect_timeframe(df),
             'symbol': symbol,
+            'name': None,
             'size_bucket': int(df['size_bucket'].iloc[-1]) if 'size_bucket' in df.columns else None,
             'size_percentile': (
                 float(df['size_percentile'].iloc[-1])
@@ -1684,6 +1510,7 @@ def predict_latest():
         return jsonify({
             'success': True,
             'symbol': symbol,
+            'name': inputs['stock_name'],
             'model_key': current_model_key,
             'model_device': model_device,
             'prediction_type': prediction_type,
