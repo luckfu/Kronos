@@ -1,0 +1,25 @@
+[Unit]
+Description=Kronos remote-only web gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opc
+Group=opc
+WorkingDirectory=/opt/kronos-web/webui
+Environment=KRONOS_REMOTE_ONLY=1
+Environment=KRONOS_INFERENCE_BACKEND=remote
+Environment=KRONOS_INFERENCE_URL=https://luckfu--kronos-v6-inference-web.modal.run
+Environment=KRONOS_INFERENCE_TIMEOUT=210
+Environment=KRONOS_HISTORY_DIR=/opt/kronos-web/data/prediction_results
+Environment=KRONOS_MARKET_DATA_CACHE_DIR=/opt/kronos-web/data/market_data_cache
+Environment=FLASK_DEBUG=0
+ExecStart=/opt/kronos-web/.venv/bin/gunicorn --workers 2 --threads 4 --timeout 240 --bind 127.0.0.1:7072 app:app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

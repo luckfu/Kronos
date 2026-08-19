@@ -63,6 +63,7 @@ Desktop.ini
 /outputs/
 /artifacts/
 /webui/prediction_results/
+/webui/market_data_cache/
 
 # Logs
 *.log

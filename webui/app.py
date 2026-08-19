@@ -5,16 +5,23 @@ import threading
 import pandas as pd
 import numpy as np
 import json
+import uuid
+from pathlib import Path
 import plotly.graph_objects as go
-import plotly.utils
+import plotly.io as pio
 from plotly.subplots import make_subplots
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import sys
 import warnings
 import datetime
 import subprocess
+import urllib.error
+import urllib.request
 from urllib.parse import urlencode
 warnings.filterwarnings('ignore')
 
@@ -27,7 +34,11 @@ except ImportError:
 
 # Add project root directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+KRONOS_REMOTE_ONLY = os.getenv('KRONOS_REMOTE_ONLY', '0').lower() in ('1', 'true', 'yes')
+
 try:
+    if KRONOS_REMOTE_ONLY:
+        raise ImportError('local model disabled by KRONOS_REMOTE_ONLY')
     from model import Kronos, KronosTokenizer, KronosPredictor
     MODEL_AVAILABLE = True
 except ImportError:
@@ -50,6 +61,32 @@ A_SHARE_MODEL_PATH = os.path.join(
     'checkpoints',
     'last_model',
 )
+KRONOS_INFERENCE_URL = os.getenv(
+    'KRONOS_INFERENCE_URL',
+    'https://luckfu--kronos-v6-inference-web.modal.run',
+).rstrip('/')
+KRONOS_API_KEY = os.getenv('KRONOS_API_KEY')
+KRONOS_INFERENCE_TIMEOUT = float(os.getenv('KRONOS_INFERENCE_TIMEOUT', '210'))
+KRONOS_MODEL_ID = 'luckfu/Kronos-A-Share-Forecast'
+PREDICTION_RESULTS_DIR = os.getenv(
+    'KRONOS_HISTORY_DIR',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prediction_results'),
+)
+MARKET_DATA_CACHE_DIR = os.getenv(
+    'KRONOS_MARKET_DATA_CACHE_DIR',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'market_data_cache'),
+)
+KRONOS_INFERENCE_BACKEND = (
+    'remote' if KRONOS_REMOTE_ONLY
+    else os.getenv('KRONOS_INFERENCE_BACKEND', 'local').lower()
+)
+
+def selected_backend(value=None):
+    """Return the configured inference backend, enforcing server policy."""
+    backend = str(value or KRONOS_INFERENCE_BACKEND).lower()
+    if KRONOS_REMOTE_ONLY:
+        return 'remote'
+    return backend
 
 # Global variables to store models
 tokenizer = None
@@ -63,6 +100,7 @@ baostock_lock = threading.Lock()
 inference_lock = threading.Lock()
 size_reference_cache = None
 size_reference_lock = threading.Lock()
+market_data_cache_lock = threading.Lock()
 
 # Available model configurations
 AVAILABLE_MODELS = {
@@ -77,9 +115,9 @@ AVAILABLE_MODELS = {
         'use_size_percentile': False,
         'default_lookback': 120,
         'default_pred_len': 10,
-        'default_temperature': 0.6,
-        'default_top_p': 0.9,
-        'default_sample_count': 20,
+        'default_temperature': 0.65,
+        'default_top_p': 0.8,
+        'default_sample_count': 50,
         'model_kwargs': {
             'num_sectors': 0,
             'num_size_buckets': 10,
@@ -94,9 +132,9 @@ AVAILABLE_MODELS = {
 
 def automatic_device():
     """Choose the accelerator without exposing device selection in the UI."""
-    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+    if torch is not None and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         return 'mps'
-    if torch.cuda.is_available():
+    if torch is not None and torch.cuda.is_available():
         return 'cuda:0'
     return 'cpu'
 
@@ -144,9 +182,95 @@ def read_baostock_result(result):
     return rows
 
 
+stock_name_cache = {}
+
+MARKET_DATA_COLUMNS = [
+    'timestamps', 'open', 'high', 'low', 'close', 'volume', 'amount',
+    'turn', 'pctChg',
+]
+
+
+def _market_cache_path(symbol):
+    """Return a safe per-symbol path for the incremental market cache."""
+    normalized = normalize_a_share_symbol(symbol)
+    if not re.fullmatch(r'(sh|sz|bj)\.\d{6}', normalized):
+        raise ValueError(f'Invalid A-share symbol for market cache: {symbol}')
+    return os.path.join(MARKET_DATA_CACHE_DIR, f'{normalized.replace(".", "_")}.csv')
+
+
+def _read_market_data_cache(symbol):
+    path = _market_cache_path(symbol)
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+    try:
+        frame = pd.read_csv(path, parse_dates=['timestamps'])
+        if not set(MARKET_DATA_COLUMNS).issubset(frame.columns):
+            return pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+        frame = frame[MARKET_DATA_COLUMNS].copy()
+        for column in MARKET_DATA_COLUMNS[1:]:
+            frame[column] = pd.to_numeric(frame[column], errors='coerce')
+        frame = frame.dropna(subset=MARKET_DATA_COLUMNS)
+        return frame.sort_values('timestamps').drop_duplicates(
+            'timestamps', keep='last'
+        ).reset_index(drop=True)
+    except (OSError, ValueError, pd.errors.ParserError):
+        return pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+
+
+def _merge_market_data_cache(symbol, frame):
+    """Merge fresh rows into the per-symbol cache atomically."""
+    with market_data_cache_lock:
+        if frame is None or frame.empty:
+            return _read_market_data_cache(symbol)
+        merged = pd.concat([_read_market_data_cache(symbol), frame], ignore_index=True)
+        merged['timestamps'] = pd.to_datetime(merged['timestamps'], errors='coerce')
+        for column in MARKET_DATA_COLUMNS[1:]:
+            merged[column] = pd.to_numeric(merged[column], errors='coerce')
+        merged = merged.dropna(subset=MARKET_DATA_COLUMNS)
+        merged = merged.sort_values('timestamps').drop_duplicates(
+            'timestamps', keep='last'
+        ).reset_index(drop=True)
+        path = _market_cache_path(symbol)
+        os.makedirs(MARKET_DATA_CACHE_DIR, exist_ok=True)
+        temporary_path = f'{path}.tmp.{os.getpid()}'
+        merged.to_csv(temporary_path, index=False, date_format='%Y-%m-%d')
+        os.replace(temporary_path, path)
+        return merged
+
+
+def query_baostock_stock_name(symbol):
+    """Resolve a stock name through the same market-data service as quotes."""
+    if not BAOSTOCK_AVAILABLE:
+        return None
+    try:
+        with baostock_lock:
+            login = bs.login()
+            if getattr(login, 'error_code', '1') != '0':
+                return None
+            try:
+                result = bs.query_stock_basic(code=str(symbol).strip().lower())
+                if getattr(result, 'error_code', '1') != '0' or not result.next():
+                    return None
+                row = result.get_row_data()
+                return str(row[1]).strip() if len(row) > 1 and row[1] else None
+            finally:
+                bs.logout()
+    except Exception:
+        return None
+
+
 def query_remote_stock_name(symbol):
-    """Resolve the Chinese display name without coupling prediction to local metadata."""
-    market, code = str(symbol).lower().split('.', 1)
+    """Resolve a Chinese display name with BaoStock and a network fallback."""
+    normalized_symbol = str(symbol).strip().lower()
+    if normalized_symbol in stock_name_cache:
+        return stock_name_cache[normalized_symbol]
+    if '.' not in normalized_symbol:
+        return None
+    name = query_baostock_stock_name(normalized_symbol)
+    if name:
+        stock_name_cache[normalized_symbol] = name
+        return name
+    market, code = normalized_symbol.split('.', 1)
     secid = f"1.{code}" if market == 'sh' else f"0.{code}"
     query = urlencode({'secid': secid, 'fields': 'f57,f58'})
     url = f'https://push2.eastmoney.com/api/qt/stock/get?{query}'
@@ -161,6 +285,8 @@ def query_remote_stock_name(symbol):
         )
         payload = json.loads(response.stdout)
         name = ((payload.get('data') or {}).get('f58') or '').strip()
+        if name:
+            stock_name_cache[normalized_symbol] = name
         return name or None
     except Exception:
         return None
@@ -180,13 +306,17 @@ def require_fresh_market_data(history, source):
 
 
 def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
-    """Fetch a fresh adjusted context and the next exchange trading dates."""
+    """Incrementally refresh the cached adjusted context via BaoStock."""
     if not BAOSTOCK_AVAILABLE:
         raise RuntimeError('BaoStock is not installed')
 
     retained_rows = max(lookback, int(history_rows or lookback))
     today = pd.Timestamp.now().normalize()
-    history_start = today - pd.Timedelta(days=max(365, retained_rows * 4))
+    cached = _read_market_data_cache(symbol)
+    history_start = (
+        pd.Timestamp(cached['timestamps'].iloc[-1]) - pd.Timedelta(days=7)
+        if not cached.empty else today - pd.Timedelta(days=max(365, retained_rows * 4))
+    )
     fields = 'date,code,open,high,low,close,volume,amount,turn,pctChg'
 
     with baostock_lock:
@@ -203,11 +333,6 @@ def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
                 adjustflag='2',
             )
             history_rows = read_baostock_result(history_result)
-            if len(history_rows) < lookback:
-                raise RuntimeError(
-                    f'BaoStock returned {len(history_rows)} rows; {lookback} are required'
-                )
-
             history = pd.DataFrame(history_rows, columns=fields.split(','))
             history = history.rename(columns={'date': 'timestamps'})
             history['timestamps'] = pd.to_datetime(history['timestamps'], errors='coerce')
@@ -219,6 +344,7 @@ def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
             history = history.dropna(subset=['timestamps', *numeric_columns])
             history = history[(history['close'] > 0) & (history['volume'] >= 0)]
             history = history.sort_values('timestamps').drop_duplicates('timestamps', keep='last')
+            history = _merge_market_data_cache(symbol, history)
             history = history.tail(retained_rows).reset_index(drop=True)
             require_fresh_market_data(history, 'BaoStock')
 
@@ -243,10 +369,14 @@ def query_latest_daily_data(symbol, lookback, pred_len, history_rows=None):
 
 
 def query_eastmoney_daily_data(symbol, lookback, pred_len, history_rows=None):
-    """Fetch a fresh adjusted daily context from Eastmoney as a fallback."""
+    """Incrementally refresh the cached adjusted daily context from Eastmoney."""
     retained_rows = max(lookback, int(history_rows or lookback))
     today = pd.Timestamp.now().normalize()
-    history_start = today - pd.Timedelta(days=max(365, retained_rows * 4))
+    cached = _read_market_data_cache(symbol)
+    history_start = (
+        pd.Timestamp(cached['timestamps'].iloc[-1]) - pd.Timedelta(days=7)
+        if not cached.empty else today - pd.Timedelta(days=max(365, retained_rows * 4))
+    )
     market, code = str(symbol).lower().split('.', 1)
     secid = f"1.{code}" if market == 'sh' else f"0.{code}"
     query = urlencode({
@@ -272,10 +402,6 @@ def query_eastmoney_daily_data(symbol, lookback, pred_len, history_rows=None):
     payload = json.loads(response.stdout)
     data = payload.get('data') or {}
     klines = data.get('klines') or []
-    if len(klines) < lookback:
-        raise RuntimeError(
-            f'Eastmoney returned {len(klines)} rows; {lookback} are required'
-        )
     columns = [
         'timestamps', 'open', 'close', 'high', 'low', 'volume', 'amount',
         'amplitude', 'pctChg', 'change', 'turn',
@@ -291,9 +417,10 @@ def query_eastmoney_daily_data(symbol, lookback, pred_len, history_rows=None):
         history[column] = pd.to_numeric(history[column], errors='coerce')
     history = history.dropna(subset=['timestamps', *numeric_columns])
     history = history[(history['close'] > 0) & (history['volume'] >= 0)]
-    history = history.sort_values('timestamps').drop_duplicates(
-        'timestamps', keep='last'
-    ).tail(retained_rows).reset_index(drop=True)
+    history = _merge_market_data_cache(symbol, history)
+    history = history.tail(retained_rows).reset_index(drop=True)
+    history = _merge_market_data_cache(symbol, history)
+    history = history.tail(retained_rows).reset_index(drop=True)
     if len(history) < lookback:
         raise RuntimeError(
             f'Eastmoney returned only {len(history)} usable rows; {lookback} are required'
@@ -566,6 +693,96 @@ def forecast_return_summary(close_samples, latest_close):
     }
 
 
+def call_remote_inference(payload, endpoint='predict', expected_key='predictions'):
+    """Call the model-only Modal service without moving market collection there."""
+    body = json.dumps(payload).encode('utf-8')
+    headers = {'Content-Type': 'application/json'}
+    if KRONOS_API_KEY:
+        headers['Authorization'] = f'Bearer {KRONOS_API_KEY}'
+    request_obj = urllib.request.Request(
+        f'{KRONOS_INFERENCE_URL}/{endpoint}', data=body, headers=headers, method='POST'
+    )
+    try:
+        with urllib.request.urlopen(request_obj, timeout=KRONOS_INFERENCE_TIMEOUT) as response:
+            response_body = response.read().decode('utf-8')
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode('utf-8', errors='replace')
+        raise RuntimeError(f'Modal inference HTTP {exc.code}: {detail}') from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f'Modal inference request failed: {exc}') from exc
+    try:
+        result = json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError('Modal inference returned invalid JSON') from exc
+    if not isinstance(result, dict) or expected_key not in result:
+        raise RuntimeError(f'Modal inference returned an invalid response: {result}')
+    return result
+
+
+def portfolio_ranking_batch(symbols, lookback, pred_len):
+    """Collect and align several stocks locally for comparable batch inference."""
+    collected = [
+        (symbol, latest_prediction_inputs(symbol, lookback, pred_len, history_rows=lookback + 20))
+        for symbol in symbols
+    ]
+    as_of_date = min(pd.Timestamp(item['context']['timestamps'].iloc[-1]) for _, item in collected)
+    records = []
+    x_rows = []
+    y_stamps = []
+    for symbol, item in collected:
+        context = item['context'].loc[item['context']['timestamps'] <= as_of_date].tail(lookback).reset_index(drop=True)
+        if len(context) != lookback:
+            raise ValueError(f'{symbol} 在共同截止日之前不足 {lookback} 个交易日')
+        future_dates = pd.Series(pd.bdate_range(as_of_date + pd.Timedelta(days=1), periods=pred_len), name='timestamps')
+        record = {**item, 'symbol': symbol, 'context': context, 'future_dates': future_dates}
+        records.append(record)
+        x_rows.append(context[['open', 'high', 'low', 'close', 'volume', 'amount']].to_numpy(dtype=np.float32))
+        y_stamps.append(pd.DataFrame({
+            'minute': future_dates.dt.minute, 'hour': future_dates.dt.hour,
+            'weekday': future_dates.dt.weekday, 'day': future_dates.dt.day, 'month': future_dates.dt.month,
+        }).to_numpy(dtype=np.float32))
+    return {'as_of_date': as_of_date, 'x': np.stack(x_rows), 'y_stamp': np.stack(y_stamps), 'records': records}
+
+
+def local_inference(context, future_dates, pred_len, temperature, top_p, sample_count, size_bucket, size_percentile):
+    """Run the same production checkpoint locally when local mode is selected."""
+    ensure_model_loaded()
+    feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
+    x_df = context[feature_columns]
+    x_timestamp = pd.Series(pd.to_datetime(context['timestamps']).to_numpy(), name='timestamps')
+    y_timestamp = pd.Series(pd.to_datetime(future_dates).to_numpy(), name='timestamps')
+    with inference_lock:
+        prediction_samples = predictor.predict(
+            df=x_df, x_timestamp=x_timestamp, y_timestamp=y_timestamp,
+            pred_len=pred_len, T=temperature, top_p=top_p, sample_count=sample_count,
+            verbose=False, size_bucket=size_bucket, size_percentile=None, return_samples=True,
+        )
+    expected_shape = (sample_count, pred_len, len(feature_columns))
+    if prediction_samples.shape != expected_shape:
+        raise RuntimeError(f'Unexpected prediction sample shape: {prediction_samples.shape}')
+    mean_prediction = prediction_samples.mean(axis=0)
+    pred_df = pd.DataFrame(mean_prediction, columns=feature_columns, index=pd.DatetimeIndex(y_timestamp))
+    pred_df['high'] = pred_df[['open', 'high', 'low', 'close']].max(axis=1)
+    pred_df['low'] = pred_df[['open', 'high', 'low', 'close']].min(axis=1)
+    pred_df['volume'] = pred_df['volume'].clip(lower=0)
+    pred_df['amount'] = pred_df['amount'].clip(lower=0)
+    close_samples = prediction_samples[:, :, feature_columns.index('close')]
+    close_quantiles = np.quantile(close_samples, [0.1, 0.5, 0.9], axis=0)
+    prediction_results = []
+    for index, timestamp in enumerate(y_timestamp):
+        row = pred_df.iloc[index]
+        prediction_results.append({
+            'timestamp': pd.Timestamp(timestamp).isoformat(),
+            **{column: float(row[column]) for column in feature_columns},
+            'close_p10': float(close_quantiles[0, index]),
+            'close_p50': float(close_quantiles[1, index]),
+            'close_p90': float(close_quantiles[2, index]),
+        })
+    return prediction_results, pred_df, pd.DataFrame({
+        'close_p10': close_quantiles[0], 'close_p50': close_quantiles[1], 'close_p90': close_quantiles[2]
+    }, index=pd.DatetimeIndex(y_timestamp)), close_samples, str(next(predictor.model.parameters()).device)
+
+
 def resolve_request_data(data):
     """Resolve either a built-in A-share symbol or a user-selected data file."""
     symbol = normalize_a_share_symbol(data.get('symbol'))
@@ -648,12 +865,12 @@ def save_prediction_results(file_path, prediction_type, prediction_results, actu
     """Save prediction results to file"""
     try:
         # Create prediction results directory
-        results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prediction_results')
+        results_dir = PREDICTION_RESULTS_DIR
         os.makedirs(results_dir, exist_ok=True)
         
         # Generate filename
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'prediction_{timestamp}.json'
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        filename = f'prediction_{timestamp}_{uuid.uuid4().hex[:8]}.json'
         filepath = os.path.join(results_dir, filename)
         
         # Prepare data for saving
@@ -727,6 +944,163 @@ def save_prediction_results(file_path, prediction_type, prediction_results, actu
     except Exception as e:
         print(f"Failed to save prediction results: {e}")
         return None
+
+
+def save_prediction_record(record):
+    """Persist the complete response needed to reopen a prediction later."""
+    results_dir = Path(PREDICTION_RESULTS_DIR)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    record_id = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{uuid.uuid4().hex[:8]}"
+    payload = {**record, 'record_id': record_id, 'created_at': created_at}
+    path = results_dir / f'{record_id}.json'
+    with path.open('w', encoding='utf-8') as handle:
+        json.dump(payload, handle, ensure_ascii=False, separators=(',', ':'), default=str)
+    return payload
+
+
+INFERENCE_PROFILES = {
+    'single_stock_entry': '单股买点判断',
+    'cross_section_ranking': '横截面排序',
+}
+
+
+def prediction_profile(payload):
+    """Return the saved inference profile, including compatibility for old records."""
+    params = payload.get('prediction_params') or {}
+    profile = payload.get('inference_profile') or params.get('inference_profile')
+    if profile not in INFERENCE_PROFILES:
+        profile = (
+            'cross_section_ranking'
+            if payload.get('batch_id') or str(payload.get('prediction_type', '')).startswith('批量排名')
+            else 'single_stock_entry'
+        )
+    return profile, INFERENCE_PROFILES[profile]
+
+
+def prediction_record_summary(payload):
+    predictions = payload.get('prediction_results') or []
+    params = payload.get('prediction_params') or {}
+    symbol = payload.get('symbol') or params.get('symbol')
+    name = payload.get('name')
+    # Older records could persist the normalized symbol as the name when the
+    # quote endpoint was unavailable. Re-query those records so the history
+    # view can recover the real Chinese name without rewriting old files.
+    if name and symbol and str(name).strip().lower() == str(symbol).strip().lower():
+        name = None
+    if not name and symbol:
+        name = query_remote_stock_name(symbol)
+    profile, profile_label = prediction_profile(payload)
+    return {
+        'record_id': payload.get('record_id'),
+        'created_at': payload.get('created_at') or payload.get('timestamp'),
+        'symbol': symbol,
+        'name': name,
+        'prediction_type': payload.get('prediction_type'),
+        'latest_close': payload.get('latest_close'),
+        'predicted_return_p50': payload.get('predicted_return_p50'),
+        'positive_path_rate': payload.get('positive_path_rate'),
+        'timing_signal': payload.get('timing_signal') or {'key': 'neutral', 'label': '观望'},
+        'final_close_p50': payload.get('final_close_p50'),
+        'pred_len': payload.get('pred_len') or len(predictions),
+        'backend': payload.get('backend', 'remote'),
+        'batch_id': payload.get('batch_id'),
+        'inference_profile': profile,
+        'inference_profile_label': profile_label,
+    }
+
+
+@app.route('/api/prediction-history')
+def prediction_history():
+    """List saved prediction summaries; Nginx protects this endpoint in production."""
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+    symbol_filter = request.args.get('symbol', '').strip().lower()
+    direction = request.args.get('direction', '').strip().lower()
+    backend = request.args.get('backend', '').strip().lower()
+    profile = request.args.get('profile', '').strip().lower()
+    for value, label in ((date_from, '开始日期'), (date_to, '结束日期')):
+        if value:
+            try:
+                datetime.date.fromisoformat(value)
+            except ValueError:
+                return jsonify({'error': f'{label}格式无效，应为 YYYY-MM-DD'}), 400
+    if date_from and date_to and date_from > date_to:
+        return jsonify({'error': '开始日期不能晚于结束日期'}), 400
+    if direction not in ('', 'positive', 'negative'):
+        return jsonify({'error': '无效的涨跌方向筛选'}), 400
+    if backend not in ('', 'remote', 'local'):
+        return jsonify({'error': '无效的推理来源筛选'}), 400
+    if profile not in ('', *INFERENCE_PROFILES):
+        return jsonify({'error': '无效的预测策略筛选'}), 400
+    results_dir = Path(PREDICTION_RESULTS_DIR)
+    if not results_dir.exists():
+        return jsonify({'records': [], 'total': 0})
+    records = []
+    for path in sorted(results_dir.glob('*.json'), reverse=True):
+        try:
+            with path.open(encoding='utf-8') as handle:
+                payload = json.load(handle)
+                if payload.get('record_id') and payload.get('chart'):
+                    summary = prediction_record_summary(payload)
+                    if summary.get('name') and payload.get('name') != summary['name']:
+                        payload['name'] = summary['name']
+                        try:
+                            with path.open('w', encoding='utf-8') as handle:
+                                json.dump(payload, handle, ensure_ascii=False, separators=(',', ':'), default=str)
+                        except OSError:
+                            pass
+                    created_date = str(summary.get('created_at') or '')[:10]
+                    record_symbol = str(summary.get('symbol') or '').lower()
+                    record_return = summary.get('predicted_return_p50')
+                    if date_from and created_date < date_from:
+                        continue
+                    if date_to and created_date > date_to:
+                        continue
+                    if symbol_filter and symbol_filter not in record_symbol:
+                        continue
+                    if direction == 'positive' and (record_return is None or record_return < 0):
+                        continue
+                    if direction == 'negative' and (record_return is None or record_return >= 0):
+                        continue
+                    if backend and summary.get('backend', 'remote') != backend:
+                        continue
+                    if profile and summary.get('inference_profile') != profile:
+                        continue
+                    records.append(summary)
+        except (OSError, ValueError, TypeError):
+            continue
+    return jsonify({'records': records[:100], 'total': len(records)})
+
+
+@app.route('/api/prediction-history/<record_id>')
+def prediction_history_detail(record_id):
+    """Return one saved prediction, including its chart and forecast rows."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8,80}', record_id):
+        return jsonify({'error': '无效的记录编号'}), 400
+    path = Path(PREDICTION_RESULTS_DIR) / f'{record_id}.json'
+    if not path.is_file():
+        return jsonify({'error': '预测记录不存在'}), 404
+    try:
+        with path.open(encoding='utf-8') as handle:
+            return jsonify(json.load(handle))
+    except (OSError, ValueError) as exc:
+        return jsonify({'error': f'读取预测记录失败: {exc}'}), 500
+
+
+@app.route('/api/prediction-history/<record_id>', methods=['DELETE'])
+def delete_prediction_history(record_id):
+    """Delete one saved prediction record by its generated identifier."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8,80}', record_id):
+        return jsonify({'error': '无效的记录编号'}), 400
+    path = Path(PREDICTION_RESULTS_DIR) / f'{record_id}.json'
+    if not path.is_file():
+        return jsonify({'error': '预测记录不存在'}), 404
+    try:
+        path.unlink()
+    except OSError as exc:
+        return jsonify({'error': f'删除预测记录失败: {exc}'}), 500
+    return jsonify({'deleted': True, 'record_id': record_id})
 
 def create_prediction_chart(df, pred_df, lookback, pred_len, actual_df=None, historical_start_idx=0):
     """Create prediction chart"""
@@ -851,7 +1225,7 @@ def create_prediction_chart(df, pred_df, lookback, pred_len, actual_df=None, his
                 type='date'
             )
     
-    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    return pio.to_json(fig, pretty=False)
 
 
 def create_operational_chart(context, pred_df, interval_df):
@@ -1004,12 +1378,24 @@ def create_operational_chart(context, pred_df, interval_df):
     figure.update_xaxes(title_text='交易日', row=2, col=1)
     figure.update_yaxes(title_text='价格', row=1, col=1)
     figure.update_yaxes(title_text='成交量', rangemode='tozero', row=2, col=1)
-    return json.dumps(figure, cls=plotly.utils.PlotlyJSONEncoder)
+    return pio.to_json(figure, pretty=False)
 
 @app.route('/')
 def index():
     """Home page"""
     return render_template('index.html')
+
+
+@app.route('/health')
+def health():
+    """Lightweight health endpoint for the reverse proxy and systemd checks."""
+    return jsonify({
+        'status': 'ok',
+        'service': 'kronos-web',
+        'backend': 'remote' if KRONOS_REMOTE_ONLY else KRONOS_INFERENCE_BACKEND,
+        'model': 'luckfu/Kronos-A-Share-Forecast',
+        'model_loaded': False if KRONOS_REMOTE_ONLY else predictor is not None,
+    })
 
 
 @app.route('/api/data-files')
@@ -1021,7 +1407,7 @@ def get_data_files():
 
 @app.route('/api/a-share/symbols')
 def get_a_share_symbols():
-    """Return built-in A-share symbols and their latest size buckets."""
+    """Return training-panel symbols used for autocomplete, not a market limit."""
     try:
         splits = load_a_share_splits()
         symbols = sorted(set(splits['train']) | set(splits['val']))
@@ -1037,7 +1423,19 @@ def get_a_share_symbols():
                 'size_bucket': int(latest['size_bucket']),
                 'close': float(latest['close']),
             })
-        return jsonify({'symbols': result, 'count': len(result)})
+        return jsonify({
+            'symbols': result,
+            'count': len(result),  # Backward compatibility for older web clients.
+            'training_panel_count': len(result),
+            'market_scope': 'all-a-share',
+        })
+    except (FileNotFoundError, KeyError):
+        # The production Oracle instance intentionally has no training dataset.
+        return jsonify({
+            'symbols': [], 'count': 0, 'training_panel_count': 0,
+            'market_scope': 'all-a-share',
+            'message': '生产网关不保存训练面板，可直接输入股票代码',
+        })
     except Exception as exc:
         return jsonify({'error': f'Failed to load A-share symbols: {exc}'}), 500
 
@@ -1065,12 +1463,12 @@ def load_data():
                         'start_date': pd.Timestamp(frame['timestamps'].min()).isoformat(),
                         'end_date': pd.Timestamp(frame['timestamps'].max()).isoformat(),
                         'symbol': requested_symbol,
-                        'name': latest['stock_name'],
+                        'name': latest.get('stock_name'),
                         'size_bucket': int(latest['size_bucket']),
                         'size_percentile': float(latest['size_percentile']),
                         'latest_close': float(frame['close'].iloc[-1]),
                         'latest_volume': float(frame['volume'].iloc[-1]),
-                        'remote_only': not latest['in_local_panel'],
+                        'remote_only': not latest.get('in_local_panel', False),
                         'data_source': latest['data_source'],
                     },
                     'message': (
@@ -1078,8 +1476,17 @@ def load_data():
                         f"{pd.Timestamp(frame['timestamps'].iloc[-1]):%Y-%m-%d}"
                     ),
                 })
-            except Exception as exc:
-                return jsonify({'error': str(exc)}), 400
+            except Exception:
+                return jsonify({
+                    'success': True,
+                    'data_info': {
+                        'rows': 0, 'columns': [], 'start_date': None, 'end_date': None,
+                        'symbol': requested_symbol, 'name': None, 'size_bucket': None,
+                        'size_percentile': None, 'latest_close': None, 'latest_volume': None,
+                        'remote_only': True,
+                    },
+                    'message': f'{requested_symbol} 将在预测时刷新最新行情',
+                })
         df, error, _, symbol = resolve_request_data(data)
         if error:
             if requested_symbol and re.fullmatch(r'(sh|sz|bj)\.\d{6}', requested_symbol):
@@ -1160,10 +1567,133 @@ def load_data():
     except Exception as e:
         return jsonify({'error': f'Failed to load data: {str(e)}'}), 500
 
+
+@app.route('/api/a-share/rankings', methods=['POST'])
+def a_share_rankings():
+    """Collect a stock pool locally and forecast it with the selected backend."""
+    try:
+        data = request.get_json() or {}
+        raw_symbols = data.get('symbols')
+        if not isinstance(raw_symbols, list):
+            return jsonify({'error': 'symbols 必须是股票代码数组'}), 400
+        symbols = list(dict.fromkeys(normalize_a_share_symbol(value) for value in raw_symbols))
+        if not 2 <= len(symbols) <= 12 or any(not value for value in symbols):
+            return jsonify({'error': '批量预测需要 2 到 12 个有效股票代码'}), 400
+        config = AVAILABLE_MODELS['a-share-size-kronos-base']
+        lookback = int(config['default_lookback'])
+        pred_len = int(config['default_pred_len'])
+        sample_count = int(data.get('sample_count', config['default_sample_count']))
+        temperature = float(data.get('temperature', config['default_temperature']))
+        top_p = float(data.get('top_p', config['default_top_p']))
+        backend = selected_backend(data.get('backend'))
+        if backend not in ('local', 'remote'):
+            return jsonify({'error': 'backend must be local or remote'}), 400
+        batch = portfolio_ranking_batch(symbols, lookback, pred_len)
+        feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        inference_results = []
+        if backend == 'remote':
+            items = []
+            for record in batch['records']:
+                items.append({
+                    'id': record['symbol'],
+                    'data': [
+                        {'timestamp': pd.Timestamp(row['timestamps']).isoformat(), **{
+                            column: float(row[column]) for column in feature_columns
+                        }} for _, row in record['context'].iterrows()
+                    ],
+                    'future_timestamps': [
+                        pd.Timestamp(value).isoformat() for value in record['future_dates']
+                    ],
+                    'size_bucket': int(record['size_bucket']),
+                })
+            remote = call_remote_inference({
+                'items': items, 'pred_len': pred_len, 'sample_count': sample_count,
+                'temperature': temperature, 'top_p': top_p,
+            }, endpoint='predict-batch', expected_key='results')
+            inference_results = remote['results']
+            model_device = remote.get('meta', {}).get('model_device', 'remote')
+        else:
+            model_device = None
+            for record in batch['records']:
+                predictions, _, _, close_samples, model_device = local_inference(
+                    record['context'], record['future_dates'], pred_len, temperature,
+                    top_p, sample_count, record['size_bucket'], record['size_percentile'],
+                )
+                inference_results.append({
+                    'id': record['symbol'],
+                    'predictions': predictions,
+                    'samples': {'close': close_samples.tolist()},
+                })
+
+        record_by_symbol = {record['symbol']: record for record in batch['records']}
+        rankings = []
+        for result in inference_results:
+            record = record_by_symbol[result['id']]
+            predictions = result['predictions']
+            future_dates = pd.DatetimeIndex(record['future_dates'])
+            pred_df = pd.DataFrame(predictions).set_index(future_dates)
+            interval_df = pred_df[['close_p10', 'close_p50', 'close_p90']]
+            latest_close = float(record['context']['close'].iloc[-1])
+            close_samples = np.asarray(result['samples']['close'], dtype=np.float64)
+            summary = forecast_return_summary(close_samples, latest_close)
+            rankings.append({
+                'symbol': result['id'],
+                'name': (
+                    None if record['stock_name'] and str(record['stock_name']).strip().lower() == result['id'].lower()
+                    else record['stock_name']
+                ),
+                'latest_close': latest_close, 'size_bucket': int(record['size_bucket']),
+                'size_percentile': float(record['size_percentile']),
+                'data_source': record['data_source'], 'in_local_panel': record['in_local_panel'],
+                'latest_data_date': pd.Timestamp(record['context']['timestamps'].iloc[-1]).isoformat(),
+                'forecast_start': future_dates[0].isoformat(),
+                'forecast_end': future_dates[-1].isoformat(),
+                'pred_len': pred_len, 'prediction_results': predictions,
+                'chart': create_operational_chart(record['context'], pred_df, interval_df),
+                'interval': {
+                    'lower_quantile': 0.1, 'center_quantile': 0.5,
+                    'upper_quantile': 0.9, 'sample_count': sample_count,
+                },
+                'final_close_p50': float(predictions[-1]['close_p50']),
+                **summary,
+            })
+        rankings.sort(key=lambda row: row['predicted_return_p50'], reverse=True)
+        batch_id = f"batch_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        for ranking in rankings:
+            saved = save_prediction_record({
+                **ranking,
+                'backend': backend,
+                'batch_id': batch_id,
+                'inference_profile': 'cross_section_ranking',
+                'inference_profile_label': INFERENCE_PROFILES['cross_section_ranking'],
+                'prediction_type': f'批量排名 · 最新 {lookback} 个交易日 → 未来 {pred_len} 个交易日',
+                'prediction_params': {
+                    'lookback': lookback, 'pred_len': pred_len,
+                    'temperature': temperature, 'top_p': top_p,
+                    'sample_count': sample_count, 'symbol': ranking['symbol'],
+                    'inference_profile': 'cross_section_ranking',
+                },
+            })
+            ranking['record_id'] = saved['record_id']
+        return jsonify({
+            'success': True, 'as_of_date': batch['as_of_date'].isoformat(),
+            'rankings': rankings, 'sample_count': sample_count,
+            'backend': backend, 'model_device': model_device, 'batch_id': batch_id,
+            'inference_profile': 'cross_section_ranking',
+            'inference_profile_label': INFERENCE_PROFILES['cross_section_ranking'],
+            'message': f'已完成 {len(rankings)} 只股票的{"远端" if backend == "remote" else "本地"}批量预测',
+        })
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        return jsonify({'error': f'批量预测失败: {exc}'}), 500
+
 @app.route('/api/predict-history', methods=['POST'])
 def predict_history():
     """Perform prediction"""
     try:
+        if KRONOS_REMOTE_ONLY:
+            return jsonify({'error': '生产网关仅支持 Modal 最新预测，不提供本地历史回测'}), 400
         data = request.get_json() or {}
         defaults = current_model_config or {}
         lookback = int(data.get('lookback', defaults.get('default_lookback', 400)))
@@ -1382,6 +1912,7 @@ def predict_latest():
     """Refresh the selected stock and forecast the next trading days."""
     try:
         data = request.get_json() or {}
+        backend = selected_backend(data.get('backend'))
         symbol = normalize_a_share_symbol(data.get('symbol'))
         if not symbol:
             return jsonify({'error': '请输入股票代码'}), 400
@@ -1395,7 +1926,6 @@ def predict_latest():
         if not 5 <= sample_count <= 50:
             return jsonify({'error': 'sample_count 必须在 5 到 50 之间'}), 400
 
-        ensure_model_loaded()
         inputs = latest_prediction_inputs(symbol, lookback, pred_len)
         context = inputs['context']
         future_dates = inputs['future_dates']
@@ -1404,72 +1934,43 @@ def predict_latest():
 
         feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
         x_df = context[feature_columns]
-        x_timestamp = pd.Series(
-            pd.to_datetime(context['timestamps']).to_numpy(),
-            name='timestamps',
-        )
         y_timestamp = pd.Series(
             pd.to_datetime(future_dates).to_numpy(),
             name='timestamps',
         )
-        with inference_lock:
-            prediction_samples = predictor.predict(
-                df=x_df,
-                x_timestamp=x_timestamp,
-                y_timestamp=y_timestamp,
-                pred_len=pred_len,
-                T=temperature,
-                top_p=top_p,
-                sample_count=sample_count,
-                verbose=False,
-                size_bucket=size_bucket,
-                size_percentile=(
-                    size_percentile if config.get('use_size_percentile') else None
-                ),
-                return_samples=True,
+        remote_payload = {
+            'data': [
+                {'timestamp': pd.Timestamp(row['timestamps']).isoformat(), **{
+                    column: float(row[column]) for column in feature_columns
+                }}
+                for _, row in context.iterrows()
+            ],
+            'future_timestamps': [pd.Timestamp(value).isoformat() for value in y_timestamp],
+            'pred_len': pred_len,
+            'temperature': temperature,
+            'top_p': top_p,
+            'sample_count': sample_count,
+            'size_bucket': size_bucket,
+        }
+        if config.get('use_size_percentile'):
+            remote_payload['size_percentile'] = size_percentile
+        if backend == 'remote':
+            remote_result = call_remote_inference(remote_payload)
+            prediction_results = remote_result['predictions']
+            if len(prediction_results) != pred_len:
+                raise RuntimeError(f'Unexpected prediction count from Modal: {len(prediction_results)}')
+            pred_df = pd.DataFrame(prediction_results).set_index(pd.DatetimeIndex(y_timestamp))
+            interval_df = pred_df[['close_p10', 'close_p50', 'close_p90']]
+            close_samples = np.asarray(remote_result.get('samples', {}).get('close', []), dtype=np.float64)
+            if close_samples.shape != (sample_count, pred_len):
+                raise RuntimeError(f'Unexpected close sample shape from Modal: {close_samples.shape}')
+            model_device = remote_result.get('meta', {}).get('model_device', 'remote')
+        elif backend == 'local':
+            prediction_results, pred_df, interval_df, close_samples, model_device = local_inference(
+                context, future_dates, pred_len, temperature, top_p, sample_count, size_bucket, size_percentile
             )
-
-        feature_count = len(feature_columns)
-        if prediction_samples.shape != (sample_count, pred_len, feature_count):
-            raise RuntimeError(
-                f'Unexpected prediction sample shape: {prediction_samples.shape}'
-            )
-        mean_prediction = prediction_samples.mean(axis=0)
-        pred_df = pd.DataFrame(
-            mean_prediction,
-            columns=feature_columns,
-            index=pd.DatetimeIndex(y_timestamp),
-        )
-        pred_df['high'] = pred_df[['open', 'high', 'low', 'close']].max(axis=1)
-        pred_df['low'] = pred_df[['open', 'high', 'low', 'close']].min(axis=1)
-        pred_df['volume'] = pred_df['volume'].clip(lower=0)
-        pred_df['amount'] = pred_df['amount'].clip(lower=0)
-
-        close_samples = prediction_samples[:, :, feature_columns.index('close')]
-        close_quantiles = np.quantile(close_samples, [0.1, 0.5, 0.9], axis=0)
-        interval_df = pd.DataFrame(
-            {
-                'close_p10': close_quantiles[0],
-                'close_p50': close_quantiles[1],
-                'close_p90': close_quantiles[2],
-            },
-            index=pd.DatetimeIndex(y_timestamp),
-        )
-
-        prediction_results = []
-        for row_index, (timestamp, (_, row)) in enumerate(zip(y_timestamp, pred_df.iterrows())):
-            prediction_results.append({
-                'timestamp': pd.Timestamp(timestamp).isoformat(),
-                'open': float(row['open']),
-                'high': float(row['high']),
-                'low': float(row['low']),
-                'close': float(row['close']),
-                'volume': float(row['volume']),
-                'amount': float(row['amount']),
-                'close_p10': float(interval_df.iloc[row_index]['close_p10']),
-                'close_p50': float(interval_df.iloc[row_index]['close_p50']),
-                'close_p90': float(interval_df.iloc[row_index]['close_p90']),
-            })
+        else:
+            raise RuntimeError('backend must be local or remote')
 
         chart_json = create_operational_chart(
             context,
@@ -1480,32 +1981,7 @@ def predict_latest():
         latest_close = float(context['close'].iloc[-1])
         forecast_summary = forecast_return_summary(close_samples, latest_close)
         prediction_type = f'最新 {lookback} 个交易日 → 未来 {pred_len} 个交易日'
-        model_device = str(next(predictor.model.parameters()).device)
-
-        save_prediction_results(
-            file_path=f'a-share:{symbol}',
-            prediction_type=prediction_type,
-            prediction_results=prediction_results,
-            actual_data=[],
-            input_data=x_df,
-            prediction_params={
-                'lookback': lookback,
-                'pred_len': pred_len,
-                'temperature': temperature,
-                'top_p': top_p,
-                'sample_count': sample_count,
-                'symbol': symbol,
-                'size_bucket': size_bucket,
-                'size_percentile': size_percentile,
-                'size_bucket_asof': inputs['size_bucket_asof'].strftime('%Y-%m-%d'),
-                'size_reference_date': inputs['size_reference_date'].strftime('%Y-%m-%d'),
-                'size_source': inputs['size_source'],
-                'estimated_market_cap': inputs['estimated_market_cap'],
-                'in_local_panel': inputs['in_local_panel'],
-                'model_key': current_model_key,
-                'data_source': inputs['data_source'],
-            },
-        )
+        inference_profile = 'single_stock_entry'
 
         return jsonify({
             'success': True,
@@ -1513,6 +1989,8 @@ def predict_latest():
             'name': inputs['stock_name'],
             'model_key': current_model_key,
             'model_device': model_device,
+            'inference_profile': inference_profile,
+            'inference_profile_label': INFERENCE_PROFILES[inference_profile],
             'prediction_type': prediction_type,
             'lookback': lookback,
             'pred_len': pred_len,
@@ -1541,6 +2019,35 @@ def predict_latest():
             },
             'actual_data': [],
             'has_comparison': False,
+            'record_id': save_prediction_record({
+                'symbol': symbol,
+                'name': inputs['stock_name'],
+                'backend': backend,
+                'inference_profile': inference_profile,
+                'inference_profile_label': INFERENCE_PROFILES[inference_profile],
+                'prediction_type': prediction_type,
+                'prediction_params': {
+                    'lookback': lookback, 'pred_len': pred_len,
+                    'temperature': temperature, 'top_p': top_p,
+                    'sample_count': sample_count, 'symbol': symbol,
+                    'inference_profile': inference_profile,
+                },
+                'latest_close': latest_close,
+                'predicted_return_p50': forecast_summary['predicted_return_p50'],
+                'chart': chart_json,
+                'prediction_results': prediction_results,
+                'actual_data': [],
+                'lookback': lookback, 'pred_len': pred_len,
+                'latest_data_date': latest_date.isoformat(),
+                'forecast_start': pd.Timestamp(y_timestamp.iloc[0]).isoformat(),
+                'forecast_end': pd.Timestamp(y_timestamp.iloc[-1]).isoformat(),
+                'size_bucket': size_bucket, 'size_percentile': size_percentile,
+                'data_source': inputs['data_source'],
+                'in_local_panel': inputs['in_local_panel'],
+                'interval': {'lower_quantile': 0.1, 'center_quantile': 0.5,
+                             'upper_quantile': 0.9, 'sample_count': sample_count},
+                'timing_signal': forecast_summary['timing_signal'],
+            })['record_id'],
             'message': f'{symbol} 已使用截至 {latest_date:%Y-%m-%d} 的最新数据完成预测',
         })
     except ValueError as exc:
@@ -1553,6 +2060,20 @@ def predict_latest():
 def load_model():
     """Load the production model on the automatically selected device."""
     try:
+        requested_backend = selected_backend((request.get_json(silent=True) or {}).get('backend'))
+        if KRONOS_REMOTE_ONLY and requested_backend != 'remote':
+            return jsonify({'error': '本部署仅支持 Modal 远端推理'}), 400
+        if requested_backend == 'remote':
+            return jsonify({
+                'success': True,
+                'message': 'Modal 远端模式已就绪，将在预测时按需启动',
+                'model_info': {
+                    'name': KRONOS_MODEL_ID,
+                    'params': AVAILABLE_MODELS['a-share-size-kronos-base']['params'],
+                    'device': 'modal',
+                    'backend': 'remote',
+                },
+            })
         device = ensure_model_loaded()
         model_config = AVAILABLE_MODELS['a-share-size-kronos-base']
         return jsonify({
@@ -1564,6 +2085,7 @@ def load_model():
                 'device': str(next(predictor.model.parameters()).device),
                 'context_length': model_config['context_length'],
                 'description': model_config['description'],
+                'backend': 'local',
                 'num_size_buckets': model_config.get('num_size_buckets', 0),
                 'default_lookback': model_config.get('default_lookback', 400),
                 'default_pred_len': model_config.get('default_pred_len', 120),
@@ -1577,20 +2099,33 @@ def load_model():
 def get_available_models():
     """Get available model list"""
     return jsonify({
-        'models': AVAILABLE_MODELS,
-        'model_available': MODEL_AVAILABLE,
+        'models': (
+            {**AVAILABLE_MODELS, 'a-share-size-kronos-base': {
+                **AVAILABLE_MODELS['a-share-size-kronos-base'], 'model_id': KRONOS_MODEL_ID,
+            }} if KRONOS_REMOTE_ONLY else AVAILABLE_MODELS
+        ),
+        'model_available': MODEL_AVAILABLE and not KRONOS_REMOTE_ONLY,
+        'remote_only': KRONOS_REMOTE_ONLY,
         'recommended_model': 'a-share-size-kronos-base',
-        'recommended_device': automatic_device(),
+        'recommended_device': 'modal' if KRONOS_REMOTE_ONLY else automatic_device(),
         'devices': {
             'cpu': True,
-            'mps': bool(hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()),
-            'cuda': bool(torch.cuda.is_available()),
+            'mps': bool(torch is not None and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()),
+            'cuda': bool(torch is not None and torch.cuda.is_available()),
         },
     })
 
 @app.route('/api/model-status')
 def get_model_status():
-    """Get model status"""
+    """Return the local or remote runtime status without loading a model."""
+    if KRONOS_REMOTE_ONLY:
+        return jsonify({
+            'available': True,
+            'loaded': True,
+            'remote_only': True,
+            'message': 'Modal 远端推理已就绪',
+            'current_model': {'key': KRONOS_MODEL_ID, 'device': 'modal'},
+        })
     if MODEL_AVAILABLE:
         if predictor is not None:
             return jsonify({

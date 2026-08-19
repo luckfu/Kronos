@@ -690,7 +690,7 @@ class KronosPredictor:
         return pred_df
 
 
-    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None):
+    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
         """
         Perform parallel (batch) prediction on multiple time series. All series must have the same historical length and prediction length (pred_len).
 
@@ -785,8 +785,16 @@ class KronosPredictor:
             T, top_k, top_p, sample_count, verbose,
             sector_id=sector_id, size_bucket=size_bucket,
             size_percentile=size_percentile,
+            return_samples=return_samples,
         )
-        # preds: (B, pred_len, feat)
+        if return_samples:
+            preds = preds[:, :, -pred_len:, :]
+            return [
+                preds[i] * (stds[i][None, None, :] + 1e-5) + means[i][None, None, :]
+                for i in range(num_series)
+            ]
+
+        preds = preds[:, -pred_len:, :]
 
         pred_dfs = []
         for i in range(num_series):

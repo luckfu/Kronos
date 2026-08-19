@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
     <title>Kronos A股预测台</title>
-    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
         :root {
@@ -355,6 +356,38 @@
             overflow: hidden;
         }
 
+        .result-tabs {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-height: 48px;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .result-tab {
+            align-self: stretch;
+            min-width: 92px;
+            padding: 0 14px;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .result-tab:hover {
+            color: var(--text);
+        }
+
+        .result-tab.active {
+            border-bottom-color: var(--accent);
+            color: var(--accent-dark);
+        }
+
         .result-toolbar {
             min-height: 68px;
             display: flex;
@@ -392,6 +425,43 @@
             border-color: #ead5ad;
             background: #fff5df;
             color: var(--warning);
+        }
+
+        .toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toolbar-button {
+            min-height: 30px;
+            padding: 0 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: #fff;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .toolbar-button:hover {
+            border-color: #aeb7b1;
+            background: var(--surface-soft);
+        }
+
+        .view-badge {
+            display: none;
+            align-items: center;
+            min-height: 28px;
+            padding: 0 8px;
+            border: 1px solid #d7b7b9;
+            border-radius: 3px;
+            background: #fbefef;
+            color: #8e292e;
+            font-size: 10px;
+            font-weight: 750;
+            white-space: nowrap;
         }
 
         .empty-state {
@@ -530,6 +600,91 @@
             font-size: 14px;
         }
 
+        .history-filters {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(120px, 1fr)) auto;
+            gap: 10px;
+            align-items: end;
+            margin: 16px 20px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface-soft);
+        }
+
+        .history-subtabs {
+            display: flex;
+            gap: 0;
+            margin: 4px 20px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .history-subtab {
+            padding: 10px 18px;
+            border: 0;
+            border-bottom: 3px solid transparent;
+            background: transparent;
+            color: var(--muted);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .history-subtab.active {
+            border-bottom-color: #b62f35;
+            color: #b62f35;
+        }
+
+        .history-filter-field {
+            display: grid;
+            gap: 5px;
+            min-width: 0;
+        }
+
+        .history-filter-field span {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .history-filter-field input,
+        .history-filter-field select {
+            width: 100%;
+            height: 32px;
+            min-width: 0;
+            padding: 0 8px;
+            border: 1px solid #aeb7b1;
+            border-radius: 3px;
+            background: #fff;
+            color: var(--text);
+            font: inherit;
+            font-size: 12px;
+        }
+
+        .history-filter-field input:focus,
+        .history-filter-field select:focus {
+            outline: 0;
+            border-color: #b62f35;
+            box-shadow: 0 0 0 2px rgba(182, 47, 53, 0.12);
+        }
+
+        .history-filter-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .history-filter-actions .toolbar-button {
+            height: 32px;
+        }
+
+        .history-filter-summary {
+            margin: 0 20px 12px;
+        }
+
+        #history-results > .table-section:first-child {
+            padding-bottom: 0;
+        }
+
         .table-wrap {
             overflow-x: auto;
             border: 1px solid var(--border);
@@ -564,6 +719,44 @@
 
         tr:last-child td {
             border-bottom: 0;
+        }
+
+        #batch-body tr,
+        #history-body tr {
+            cursor: pointer;
+        }
+
+        #batch-body tr:focus,
+        #history-body tr:focus {
+            outline: 2px solid rgba(182, 47, 53, 0.35);
+            outline-offset: -2px;
+        }
+
+        .history-delete-button {
+            min-width: 52px;
+            padding: 5px 8px;
+            border: 1px solid #d8b1b3;
+            border-radius: 3px;
+            background: #fff;
+            color: #b62f35;
+            font: inherit;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .history-delete-button:hover {
+            background: #fbefef;
+        }
+
+        .history-group-button {
+            padding: 5px 8px;
+            border: 1px solid #b9c8c0;
+            border-radius: 3px;
+            background: #fff;
+            color: #315f4c;
+            font: inherit;
+            font-size: 11px;
+            cursor: pointer;
         }
 
         .toast {
@@ -636,9 +829,480 @@
                 grid-template-columns: 1fr 1fr;
             }
 
+            .history-filters {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .history-filter-field:nth-child(3),
+            .history-filter-actions {
+                grid-column: 1 / -1;
+            }
+
             .result-toolbar {
                 align-items: start;
                 flex-direction: column;
+            }
+
+            .toolbar-actions {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+        }
+
+        /* Professional market-terminal skin */
+        :root {
+            --bg: #eef1ef;
+            --surface: #ffffff;
+            --surface-soft: #f5f7f6;
+            --border: #d5dad7;
+            --text: #171c19;
+            --muted: #66706a;
+            --accent: #b62f35;
+            --accent-dark: #92242a;
+            --accent-soft: #f8e9ea;
+            --danger: #b62f35;
+            --warning: #8b6418;
+            --shadow: 0 1px 2px rgba(20, 27, 23, 0.05);
+            --radius: 6px;
+        }
+
+        body {
+            background:
+                linear-gradient(#e7ebe8 1px, transparent 1px),
+                linear-gradient(90deg, #e7ebe8 1px, transparent 1px),
+                var(--bg);
+            background-size: 24px 24px;
+            font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        .topbar {
+            height: 58px;
+            background: #171c19;
+            border-bottom: 3px solid #b62f35;
+        }
+
+        .brand-mark {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #d45156;
+            border-radius: 3px;
+            background: #b62f35;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            letter-spacing: 0;
+        }
+
+        .brand-copy strong {
+            font-size: 15px;
+            letter-spacing: 0;
+        }
+
+        .brand-copy span {
+            color: #919b95;
+            font-size: 10px;
+        }
+
+        .runtime-status {
+            min-height: 28px;
+            padding: 0 10px;
+            border: 1px solid #3b4540;
+            border-radius: 3px;
+            background: #212824;
+            color: #cbd1cd;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 11px;
+        }
+
+        .page {
+            max-width: 1560px;
+            padding-top: 20px;
+        }
+
+        .page-heading {
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 0 2px 11px;
+            border-bottom: 1px solid #cbd1cd;
+        }
+
+        .page-heading h1 {
+            font-size: 21px;
+            font-weight: 750;
+            letter-spacing: 0;
+        }
+
+        .page-heading p {
+            margin-top: 4px;
+            font-size: 12px;
+        }
+
+        .model-caption {
+            padding: 5px 8px;
+            border: 1px solid #cbd1cd;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.7);
+            color: #4e5953;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 10px;
+        }
+
+        .workspace {
+            grid-template-columns: 310px minmax(0, 1fr);
+            gap: 12px;
+        }
+
+        .sidebar {
+            gap: 10px;
+        }
+
+        .card {
+            border-color: #cbd1cd;
+            border-radius: 6px;
+            box-shadow: var(--shadow);
+        }
+
+        .control-card {
+            padding: 16px;
+        }
+
+        .section-label {
+            margin-bottom: 10px;
+            color: #424c46;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+        }
+
+        .stock-input {
+            height: 42px;
+            border-color: #aeb7b1;
+            border-radius: 4px;
+            background: #fbfcfb;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 18px;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0;
+        }
+
+        .stock-input:focus {
+            border-color: #b62f35;
+            box-shadow: 0 0 0 2px rgba(182, 47, 53, 0.12);
+        }
+
+        /* The service status is a display field, not a multiline code input. */
+        .stock-input[aria-label="Modal 远端推理"] {
+            display: flex;
+            align-items: center;
+            height: 42px;
+            min-height: 42px;
+            padding: 0 11px;
+            overflow: hidden;
+            font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-size: 14px;
+            font-weight: 650;
+            line-height: 1.25;
+            letter-spacing: 0;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        textarea.stock-input {
+            min-height: 78px;
+            padding: 9px 11px;
+            resize: vertical;
+            line-height: 1.45;
+        }
+
+        .summary-title {
+            flex-wrap: wrap;
+            gap: 6px 9px;
+        }
+
+        .summary-title strong,
+        .summary-item strong,
+        .metric strong,
+        td {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .summary-title strong {
+            color: #202723;
+            font-size: 16px;
+        }
+
+        .stock-name {
+            color: #333c37;
+        }
+
+        .bucket-pill,
+        .source-badge {
+            border: 1px solid #d7b7b9;
+            border-radius: 3px;
+            background: #fbefef;
+            color: #8e292e;
+        }
+
+        .summary-grid {
+            gap: 0;
+            border: 1px solid var(--border);
+        }
+
+        .summary-item {
+            padding: 9px 10px;
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .summary-item:nth-child(2n) {
+            border-right: 0;
+        }
+
+        .summary-item:nth-last-child(-n + 2) {
+            border-bottom: 0;
+        }
+
+        .plan-list {
+            border-radius: 4px;
+        }
+
+        .plan-list li {
+            padding: 9px 10px;
+            background: #f7f8f7;
+        }
+
+        .plan-list strong {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .predict-button {
+            min-height: 43px;
+            border: 1px solid #8d2227;
+            border-radius: 4px;
+            background: #b62f35;
+            box-shadow: inset 0 1px rgba(255, 255, 255, 0.18);
+            font-size: 13px;
+        }
+
+        .predict-button:hover:not(:disabled) {
+            background: #98272c;
+            transform: none;
+        }
+
+        .result-card {
+            min-height: 740px;
+        }
+
+        .result-toolbar {
+            min-height: 62px;
+            padding: 12px 16px;
+            background: #f7f8f7;
+            border-bottom-color: #cbd1cd;
+        }
+
+        .toolbar-actions {
+            flex: 0 0 auto;
+            gap: 10px;
+            white-space: nowrap;
+        }
+
+        .toolbar-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+            min-height: 28px;
+            padding: 0 9px;
+            border: 1px solid #cbd1cd;
+            border-radius: 3px;
+            background: transparent;
+            color: #424c46;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .toolbar-button:hover {
+            border-color: #9ea8a2;
+            background: #eef1ef;
+            color: #171c19;
+        }
+
+        .toolbar-actions .source-badge {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            min-height: 28px;
+            padding: 0 8px 0 20px;
+            border: 0;
+            border-left: 1px solid #d5dad7;
+            border-radius: 0;
+            background: transparent;
+            color: #66706a;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .toolbar-actions .source-badge::before {
+            content: "";
+            position: absolute;
+            left: 9px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #26845e;
+        }
+
+        .result-title h2 {
+            font-size: 16px;
+        }
+
+        .metric-strip {
+            gap: 0;
+            padding: 0;
+            border-bottom: 1px solid #cbd1cd;
+        }
+
+        .metric {
+            min-height: 78px;
+            padding: 13px 16px;
+            border: 0;
+            border-right: 1px solid #d6dcd8;
+            border-radius: 0;
+            background: #fff;
+        }
+
+        .metric:last-child {
+            border-right: 0;
+        }
+
+        .metric span {
+            margin-bottom: 8px;
+            font-size: 10px;
+            letter-spacing: 0.04em;
+        }
+
+        .metric strong {
+            font-size: 18px;
+        }
+
+        .metric strong.positive,
+        td.positive {
+            color: #c12f36;
+        }
+
+        .metric strong.negative,
+        td.negative {
+            color: #15825b;
+        }
+
+        .timing-signal {
+            min-height: 26px;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        #chart {
+            height: 610px;
+            border-bottom: 1px solid #d6dcd8;
+        }
+
+        .table-section {
+            padding: 16px;
+        }
+
+        .table-section h3 {
+            margin-top: 0;
+            font-size: 12px;
+            letter-spacing: 0.04em;
+        }
+
+        .table-wrap {
+            border-radius: 4px;
+        }
+
+        th,
+        td {
+            padding: 9px 11px;
+        }
+
+        th {
+            background: #eef1ef;
+            color: #424c46;
+            font-size: 10px;
+            letter-spacing: 0.03em;
+        }
+
+        tbody tr:hover {
+            background: #f7f8f7;
+        }
+
+        .empty-state {
+            min-height: 670px;
+            background: repeating-linear-gradient(
+                0deg,
+                #fff,
+                #fff 31px,
+                #f0f2f1 32px
+            );
+        }
+
+        .empty-visual {
+            width: 68px;
+            height: 68px;
+            border-color: #d4afb1;
+            border-radius: 4px;
+            background: #fbefef;
+            color: #b62f35;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        .toast {
+            border-radius: 4px;
+            background: #222a25;
+        }
+
+        @media (max-width: 980px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 680px) {
+            .topbar {
+                height: 56px;
+            }
+
+            .page {
+                padding: 14px 10px 24px;
+            }
+
+            .sidebar {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-strip {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .metric {
+                border-right: 1px solid #d6dcd8;
+                border-bottom: 1px solid #d6dcd8;
+            }
+
+            .metric:nth-child(2n) {
+                border-right: 0;
+            }
+
+            .metric:last-child {
+                border-bottom: 0;
             }
         }
     </style>
@@ -649,7 +1313,7 @@
             <div class="brand-mark">K</div>
             <div class="brand-copy">
                 <strong>Kronos A股预测台</strong>
-                <span>市值分层条件预测</span>
+                <span>120D CONTEXT · 10D FORECAST</span>
             </div>
         </div>
         <div id="runtime-status" class="runtime-status">
@@ -662,26 +1326,27 @@
         <div class="page-heading">
             <div>
                 <h1>A股预测工作台</h1>
-                <p id="view-subtitle">单股预测</p>
+                <p id="view-subtitle">单股详情 · 股票池排名 · 概率路径</p>
             </div>
-            <div class="model-caption">A-share Size Kronos-base · 102.3M</div>
+            <div class="model-caption">V6 SEGMENT 542 LAST · 102.3M PARAMS</div>
         </div>
 
         <div class="workspace">
             <aside class="sidebar">
                 <section class="card control-card">
-                    <p class="section-label">股票</p>
-                    <input
+                    <p class="section-label">推理服务</p>
+                    <div class="stock-input" aria-label="Modal 远端推理">Modal Serverless · 生产模型</div>
+                    <p class="section-label">股票代码</p>
+                    <textarea
                         id="stock-input"
                         class="stock-input"
-                        list="stock-options"
                         inputmode="numeric"
                         autocomplete="off"
-                        placeholder="输入代码，如 300395"
-                        aria-label="股票代码"
-                    >
-                    <datalist id="stock-options"></datalist>
-                    <div id="stock-help" class="field-help">输入六位代码后按 Enter 确认</div>
+                        rows="3"
+                        placeholder="输入一个或多个代码，如 600519, 300750"
+                        aria-label="一个或多个股票代码"
+                    ></textarea>
+                    <div id="stock-help" class="field-help">一个代码显示详情，多个代码自动排名</div>
 
                     <div id="stock-summary" class="stock-summary">
                         <div class="summary-title">
@@ -715,29 +1380,38 @@
                     <ul class="plan-list">
                         <li><span>行情上下文</span><strong>最新 120 日</strong></li>
                         <li><span>预测区间</span><strong>未来 10 日</strong></li>
-                        <li><span>生成路径</span><strong>20 条</strong></li>
+                        <li><span>生成路径</span><strong>10 条</strong></li>
                         <li><span>预测区间</span><strong>P10 – P90</strong></li>
                         <li><span>市值条件</span><strong>最新可用分层</strong></li>
                     </ul>
-                    <button id="predict-button" class="predict-button" disabled>刷新最新数据并预测</button>
+                    <button id="predict-button" class="predict-button" disabled>输入股票代码</button>
                     <p class="predict-note">查询时刷新最新复权日线；行情过期或查询失败时停止预测，不使用本地旧缓存。</p>
                 </section>
             </aside>
 
             <section class="card result-card">
+                <nav class="result-tabs" aria-label="预测结果视图">
+                    <button id="current-view-tab" class="result-tab active" aria-selected="true">当前预测</button>
+                    <button id="history-view-tab" class="result-tab" aria-selected="false">预测历史</button>
+                </nav>
                 <div class="result-toolbar">
                     <div class="result-title">
                         <h2 id="result-heading">预测结果</h2>
                         <p id="result-subtitle">等待选择股票</p>
                     </div>
-                    <span id="source-badge" class="source-badge" style="display: none;">BaoStock 最新日线</span>
+                    <div class="toolbar-actions">
+                        <span id="snapshot-badge" class="view-badge">历史快照</span>
+                        <button id="back-to-history" class="toolbar-button" style="display: none;" aria-label="返回预测历史列表">← 返回历史列表</button>
+                        <button id="back-to-ranking" class="toolbar-button" style="display: none;" aria-label="返回股票池排名">← 返回排名</button>
+                        <span id="source-badge" class="source-badge" style="display: none;">BaoStock 最新日线</span>
+                    </div>
                 </div>
 
                 <div id="empty-state" class="empty-state">
                     <div class="empty-panel">
                         <div class="empty-visual">10D</div>
-                        <h3>选择一只股票开始预测</h3>
-                        <p>输入代码并确认后，系统会在点击预测时刷新最新行情，使用最近 120 个交易日生成未来 10 个交易日的 K 线。</p>
+                        <h3>输入股票代码开始预测</h3>
+                        <p>输入一个代码查看完整预测；输入 2–12 个代码自动生成股票池排名，点击排名可查看对应 K 线详情。</p>
                     </div>
                 </div>
 
@@ -785,6 +1459,38 @@
                         </div>
                     </div>
                 </div>
+                <div id="batch-results" class="result-content">
+                    <div class="table-section">
+                        <h3>股票池预测排名</h3>
+                        <div class="table-wrap"><table><thead><tr>
+                            <th>排名</th><th>股票</th><th>最新收盘</th><th>预测收益</th><th>正向路径</th><th>判断</th>
+                        </tr></thead><tbody id="batch-body"></tbody></table></div>
+                    </div>
+                </div>
+                <div id="history-results" class="result-content">
+                    <div class="table-section">
+                        <h3>已保存的预测快照</h3>
+                        <p class="field-help">这里是已经完成并保存的预测，不会重新请求行情或模型；点击记录查看当时的 K 线和预测路径。</p>
+                    </div>
+                    <div class="history-subtabs" role="tablist" aria-label="历史预测类型">
+                        <button id="history-single-tab" class="history-subtab active" type="button" role="tab" aria-selected="true">单股买点判断</button>
+                        <button id="history-ranking-tab" class="history-subtab" type="button" role="tab" aria-selected="false">横截面排序</button>
+                    </div>
+                    <div class="history-filters" aria-label="预测历史筛选">
+                        <label class="history-filter-field"><span>开始日期</span><input id="history-date-from" type="date"></label>
+                        <label class="history-filter-field"><span>结束日期</span><input id="history-date-to" type="date"></label>
+                        <label class="history-filter-field"><span>股票代码</span><input id="history-symbol-filter" type="search" placeholder="如 600519"></label>
+                        <label class="history-filter-field"><span>方向</span><select id="history-direction-filter"><option value="">全部方向</option><option value="positive">上涨</option><option value="negative">下跌</option></select></label>
+                        <label class="history-filter-field"><span>来源</span><select id="history-backend-filter"><option value="">全部来源</option><option value="remote">Modal</option><option value="local">本地</option></select></label>
+                        <div class="history-filter-actions"><button id="history-filter-submit" class="toolbar-button" type="button">筛选</button><button id="history-filter-reset" class="toolbar-button" type="button">清空</button></div>
+                    </div>
+                    <p id="history-filter-summary" class="field-help history-filter-summary"></p>
+                    <div class="table-section">
+                        <div class="table-wrap"><table><thead><tr>
+                            <th id="history-col-time">时间</th><th id="history-col-symbol">股票</th><th>最新收盘</th><th>预测收益</th><th id="history-col-extra">来源</th><th>操作</th>
+                        </tr></thead><tbody id="history-body"></tbody></table></div>
+                    </div>
+                </div>
             </section>
         </div>
     </main>
@@ -794,13 +1500,37 @@
     <script>
         const state = {
             modelReady: false,
+            backend: 'remote',
             symbol: null,
             dataInfo: null,
-            symbolCount: 0,
+            trainingPanelCount: 0,
+            batchResult: null,
+            view: 'current-empty',
+            currentMode: 'empty',
+            currentResult: null,
+            historyRecordId: null,
+            historyProfile: 'single_stock_entry',
+            historyGroups: {},
+            historyGroupMode: false,
         };
 
         const stockInput = document.getElementById('stock-input');
         const predictButton = document.getElementById('predict-button');
+        const backToRankingButton = document.getElementById('back-to-ranking');
+        const backToHistoryButton = document.getElementById('back-to-history');
+        const currentViewTab = document.getElementById('current-view-tab');
+        const historyViewTab = document.getElementById('history-view-tab');
+        const historyDateFrom = document.getElementById('history-date-from');
+        const historyDateTo = document.getElementById('history-date-to');
+        const historySymbolFilter = document.getElementById('history-symbol-filter');
+        const historyDirectionFilter = document.getElementById('history-direction-filter');
+        const historyBackendFilter = document.getElementById('history-backend-filter');
+        const historySingleTab = document.getElementById('history-single-tab');
+        const historyRankingTab = document.getElementById('history-ranking-tab');
+        const historyFilterSubmit = document.getElementById('history-filter-submit');
+        const historyFilterReset = document.getElementById('history-filter-reset');
+        const basePath = document.querySelector('meta[name="kronos-base-path"]')?.content.replace(/\/$/, '') || '';
+        const apiUrl = path => basePath + path;
         document.addEventListener('DOMContentLoaded', initialize);
 
         async function initialize() {
@@ -809,22 +1539,34 @@
         }
 
         function setupEvents() {
-            stockInput.addEventListener('keydown', event => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    confirmStock();
-                }
-            });
-            stockInput.addEventListener('change', () => {
-                if (stockInput.value.trim()) confirmStock();
-            });
-            predictButton.addEventListener('click', runPrediction);
+            stockInput.addEventListener('input', syncPredictButton);
+            predictButton.addEventListener('click', runUnifiedPrediction);
+            backToRankingButton.addEventListener('click', showBatchRanking);
+            backToHistoryButton.addEventListener('click', loadHistory);
+            currentViewTab.addEventListener('click', showCurrentView);
+            historyViewTab.addEventListener('click', loadHistory);
+            historySingleTab.addEventListener('click', () => selectHistoryProfile('single_stock_entry'));
+            historyRankingTab.addEventListener('click', () => selectHistoryProfile('cross_section_ranking'));
+            historyFilterSubmit.addEventListener('click', loadHistory);
+            historyFilterReset.addEventListener('click', resetHistoryFilters);
+            [historyDateFrom, historyDateTo, historySymbolFilter].forEach(input => input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') loadHistory();
+            }));
+        }
+
+        function selectHistoryProfile(profile) {
+            state.historyProfile = profile;
+            historySingleTab.classList.toggle('active', profile === 'single_stock_entry');
+            historyRankingTab.classList.toggle('active', profile === 'cross_section_ranking');
+            historySingleTab.setAttribute('aria-selected', String(profile === 'single_stock_entry'));
+            historyRankingTab.setAttribute('aria-selected', String(profile === 'cross_section_ranking'));
+            loadHistory();
         }
 
         async function loadModel() {
-            setRuntime('loading', '模型启动中');
+            setRuntime('loading', '连接推理服务');
             try {
-                const response = await axios.post('/api/load-model', {});
+                const response = await axios.post(apiUrl('/api/load-model'), {});
                 state.modelReady = true;
                 const device = response.data.model_info.device.toUpperCase();
                 setRuntime('ready', `${device} · 模型就绪`);
@@ -838,17 +1580,10 @@
 
         async function loadSymbols() {
             try {
-                const response = await axios.get('/api/a-share/symbols');
-                const options = document.getElementById('stock-options');
-                options.innerHTML = '';
-                response.data.symbols.forEach(item => {
-                    const option = document.createElement('option');
-                    option.value = item.symbol.replace(/^\w+\./, '');
-                    option.label = `${item.symbol} · 市值层 ${item.size_bucket}`;
-                    options.appendChild(option);
-                });
-                state.symbolCount = response.data.count;
-                document.getElementById('stock-help').textContent = `${state.symbolCount} 只股票可用，输入后按 Enter 确认`;
+                const response = await axios.get(apiUrl('/api/a-share/symbols'));
+                state.trainingPanelCount = response.data.training_panel_count ?? response.data.count;
+                document.getElementById('stock-help').textContent =
+                    `支持全市场 A 股；一个代码显示详情，2–12 个代码自动排名`;
             } catch (error) {
                 document.getElementById('stock-help').textContent = '股票列表加载失败，可直接输入六位代码';
             }
@@ -861,14 +1596,14 @@
             stockInput.disabled = true;
             document.getElementById('stock-help').textContent = '正在确认股票…';
             try {
-                const response = await axios.post('/api/load-data', {symbol: value});
+                const response = await axios.post(apiUrl('/api/load-data'), {symbol: value});
                 const info = response.data.data_info;
                 state.symbol = info.symbol;
                 state.dataInfo = info;
                 stockInput.value = info.symbol.replace(/^\w+\./, '');
                 renderStockSummary(info);
                 const displayName = info.name ? ` · ${info.name}` : '';
-                document.getElementById('stock-help').textContent = `${info.symbol}${displayName} 已确认；点击预测时将刷新最新行情`;
+                document.getElementById('stock-help').textContent = `${info.symbol}${displayName} 已确认；点击预测时将通过 Modal 刷新行情并推理`;
                 document.getElementById('result-subtitle').textContent = `${info.symbol}${displayName} · 等待预测`;
                 syncPredictButton();
             } catch (error) {
@@ -898,21 +1633,41 @@
             document.getElementById('summary-rows').textContent = `${info.rows.toLocaleString('zh-CN')} 条`;
         }
 
-        async function runPrediction() {
-            if (!state.symbol || !state.modelReady) return;
+        function parseStockSymbols() {
+            return [...new Set(
+                stockInput.value.split(/[\s,，;；]+/).map(value => value.trim()).filter(Boolean)
+            )];
+        }
+
+        async function runUnifiedPrediction() {
+            const symbols = parseStockSymbols();
+            if (!state.modelReady || symbols.length < 1 || symbols.length > 12) return;
+            if (symbols.length === 1) {
+                await runPrediction(symbols[0]);
+            } else {
+                await runBatchPrediction(symbols);
+            }
+        }
+
+        async function runPrediction(symbol) {
+            state.symbol = symbol;
+            state.historyGroupMode = false;
 
             setPredicting(true);
-            const pendingName = state.dataInfo?.name ? ` · ${state.dataInfo.name}` : '';
-            document.getElementById('result-heading').textContent = `${state.symbol}${pendingName} 正在预测`;
+            document.getElementById('result-heading').textContent = `${symbol} 正在预测`;
             document.getElementById('result-subtitle').textContent = '刷新最新行情并生成未来交易日…';
             try {
-                const response = await axios.post('/api/predict', {
-                    symbol: state.symbol,
-                    sample_count: 20,
-                    temperature: 0.6,
-                    top_p: 0.9,
+                const response = await axios.post(apiUrl('/api/predict'), {
+                    symbol,
+                    sample_count: 50,
+                    temperature: 0.65,
+                    top_p: 1.0,
                 });
-                renderPrediction(response.data);
+                state.batchResult = null;
+                state.currentResult = response.data;
+                state.currentMode = 'single';
+                state.historyRecordId = null;
+                renderPrediction(response.data, false);
                 showToast(response.data.message);
             } catch (error) {
                 document.getElementById('result-heading').textContent = '预测失败';
@@ -923,15 +1678,238 @@
             }
         }
 
-        function renderPrediction(result) {
+        async function runBatchPrediction(symbols) {
+            state.historyGroupMode = false;
+            setPredicting(true);
+            document.getElementById('result-heading').textContent = '股票池正在批量预测';
+            document.getElementById('result-subtitle').textContent = '刷新行情并提交 Modal 批处理…';
+            try {
+                const response = await axios.post(apiUrl('/api/a-share/rankings'), {
+                    symbols,
+                    sample_count: 50,
+                    temperature: 0.65,
+                    top_p: 0.8,
+                });
+                state.batchResult = response.data;
+                state.currentMode = 'batch';
+                state.currentResult = null;
+                state.historyRecordId = null;
+                const body = document.getElementById('batch-body');
+                body.innerHTML = '';
+                response.data.rankings.forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    row.tabIndex = 0;
+                    row.innerHTML = `<td>${index + 1}</td><td>${formatStockLabel(item.symbol, item.name)}</td>` +
+                        `<td>${formatPrice(item.latest_close)}</td><td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${(item.predicted_return_p50 * 100).toFixed(2)}%</td>` +
+                        `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>`;
+                    const showDetail = () => state.historyGroupMode
+                        ? openHistoryRecord(item.record_id)
+                        : renderPrediction(item, true);
+                    row.addEventListener('click', showDetail);
+                    row.addEventListener('keydown', event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            showDetail();
+                        }
+                    });
+                    body.appendChild(row);
+                });
+                showBatchRanking();
+                showToast(response.data.message);
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            } finally {
+                setPredicting(false);
+            }
+        }
+
+        function showOnlyResultContent(activeId) {
+            ['result-content', 'batch-results', 'history-results'].forEach(id => {
+                document.getElementById(id).classList.toggle('visible', id === activeId);
+            });
+        }
+
+        function showBatchRanking() {
+            if (!state.batchResult) return;
+            state.view = 'batch-ranking';
+            setResultTab('current');
+            document.getElementById('empty-state').style.display = 'none';
+            showOnlyResultContent('batch-results');
+            document.getElementById('back-to-ranking').style.display = 'none';
+            document.getElementById('back-to-history').style.display = 'none';
+            document.getElementById('snapshot-badge').style.display = 'none';
+            document.getElementById('source-badge').style.display = 'none';
+            document.getElementById('result-heading').textContent = `股票池排名 · ${state.batchResult.rankings.length} 只`;
+            document.getElementById('result-subtitle').textContent =
+                `共同数据截止 ${formatDate(state.batchResult.as_of_date)} · ${state.batchResult.sample_count} 条路径 · ${state.batchResult.model_device}`;
+        }
+
+        function setResultTab(active) {
+            const current = active === 'current';
+            currentViewTab.classList.toggle('active', current);
+            historyViewTab.classList.toggle('active', !current);
+            currentViewTab.setAttribute('aria-selected', String(current));
+            historyViewTab.setAttribute('aria-selected', String(!current));
+        }
+
+        function showCurrentView() {
+            setResultTab('current');
+            state.historyRecordId = null;
+            if (state.currentMode === 'batch' && state.batchResult) {
+                showBatchRanking();
+                return;
+            }
+            if (state.currentMode === 'single' && state.currentResult) {
+                renderPrediction(state.currentResult, false);
+                return;
+            }
+            state.view = 'current-empty';
+            document.getElementById('empty-state').style.display = 'grid';
+            showOnlyResultContent(null);
+            document.getElementById('result-heading').textContent = '当前预测';
+            document.getElementById('result-subtitle').textContent = '等待选择股票';
+            document.getElementById('back-to-ranking').style.display = 'none';
+            document.getElementById('back-to-history').style.display = 'none';
+            document.getElementById('snapshot-badge').style.display = 'none';
+            document.getElementById('source-badge').style.display = 'none';
+        }
+
+        async function loadHistory() {
+            try {
+                const params = new URLSearchParams();
+                if (historyDateFrom.value) params.set('date_from', historyDateFrom.value);
+                if (historyDateTo.value) params.set('date_to', historyDateTo.value);
+                if (historySymbolFilter.value.trim()) params.set('symbol', historySymbolFilter.value.trim());
+                if (historyDirectionFilter.value) params.set('direction', historyDirectionFilter.value);
+                if (historyBackendFilter.value) params.set('backend', historyBackendFilter.value);
+                params.set('profile', state.historyProfile);
+                const query = params.toString();
+                const historyUrl = '/api/prediction-history' + (query ? '?' + query : '');
+                const response = await axios.get(apiUrl(historyUrl));
+                const body = document.getElementById('history-body');
+                body.innerHTML = '';
+                const records = response.data.records;
+                const isRanking = state.historyProfile === 'cross_section_ranking';
+                document.getElementById('history-col-time').textContent = isRanking ? '排序时间' : '时间';
+                document.getElementById('history-col-symbol').textContent = isRanking ? '股票数 / 股票列表' : '股票';
+                document.getElementById('history-col-extra').textContent = isRanking ? '来源' : '来源';
+                if (!records.length) {
+                    body.innerHTML = '<tr><td colspan="7">暂无预测记录</td></tr>';
+                }
+                const rows = isRanking ? Object.values(records.reduce((groups, record) => {
+                    const key = record.batch_id || record.record_id;
+                    if (!groups[key]) groups[key] = { ...record, records: [] };
+                    groups[key].records.push(record);
+                    return groups;
+                }, {})) : records;
+                state.historyGroups = {};
+                rows.forEach(record => {
+                    const row = document.createElement('tr');
+                    row.tabIndex = 0;
+                    if (isRanking) {
+                        state.historyGroups[record.batch_id || record.record_id] = record.records;
+                        const symbols = record.records.map(item => formatStockLabel(item.symbol, item.name)).join('、');
+                        row.innerHTML = `<td>${formatDateTime(record.created_at)}</td><td>${record.records.length} 只 · ${symbols}</td>` +
+                            `<td>—</td><td>组内排名</td><td>${record.backend === 'remote' ? 'Modal' : '本地'}</td>` +
+                            '<td><button class="history-group-button" type="button">查看排名</button></td>';
+                        row.querySelector('.history-group-button').addEventListener('click', event => { event.stopPropagation(); openHistoryGroup(record.batch_id || record.record_id); });
+                        row.addEventListener('click', () => openHistoryGroup(record.batch_id || record.record_id));
+                    } else {
+                        row.innerHTML = `<td>${formatDateTime(record.created_at)}</td><td>${formatStockLabel(record.symbol, record.name)}</td>` +
+                            `<td>${formatPrice(record.latest_close)}</td><td class="${record.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${record.predicted_return_p50 == null ? '—' : `${record.predicted_return_p50 >= 0 ? '+' : ''}${(record.predicted_return_p50 * 100).toFixed(2)}%`}</td><td>${record.backend === 'remote' ? 'Modal' : '本地'}</td>` +
+                            '<td><button class="history-delete-button" type="button" aria-label="删除这条预测记录">删除</button></td>';
+                        const deleteButton = row.querySelector('.history-delete-button');
+                        deleteButton.addEventListener('click', event => { event.stopPropagation(); deleteHistoryRecord(record); });
+                        row.addEventListener('click', () => openHistoryRecord(record.record_id));
+                    }
+                    row.addEventListener('keydown', event => {
+                        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); isRanking ? openHistoryGroup(record.batch_id || record.record_id) : openHistoryRecord(record.record_id); }
+                    });
+                    body.appendChild(row);
+                });
+                document.getElementById('empty-state').style.display = 'none';
+                showOnlyResultContent('history-results');
+                state.view = 'history-list';
+                state.historyRecordId = null;
+                setResultTab('history');
+                document.getElementById('result-heading').textContent = '预测历史';
+                document.getElementById('result-subtitle').textContent = `${isRanking ? rows.length + ' 个排序组' : records.length + ' 条记录'} · 点击查看完整预测`;
+                const total = response.data.total ?? response.data.records.length;
+                const truncated = total > response.data.records.length ? ' · 仅显示最近 100 条' : '';
+                document.getElementById('history-filter-summary').textContent =
+                    (query ? '筛选结果 ' : '共 ') + (isRanking ? rows.length + ' 个排序组' : total + ' 条记录') + truncated;
+                document.getElementById('back-to-ranking').style.display = 'none';
+                document.getElementById('back-to-history').style.display = 'none';
+                document.getElementById('snapshot-badge').style.display = 'none';
+                document.getElementById('source-badge').style.display = 'none';
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        function openHistoryGroup(batchId) {
+            const records = state.historyGroups[batchId] || [];
+            if (!records.length) return;
+            state.batchResult = { rankings: records, sample_count: records[0]?.interval?.sample_count || 50, as_of_date: records[0]?.latest_data_date, model_device: records[0]?.backend === 'remote' ? 'remote' : 'local' };
+            state.currentMode = 'batch';
+            state.historyRecordId = null;
+            state.historyGroupMode = true;
+            showBatchRanking();
+        }
+
+        function resetHistoryFilters() {
+            historyDateFrom.value = '';
+            historyDateTo.value = '';
+            historySymbolFilter.value = '';
+            historyDirectionFilter.value = '';
+            historyBackendFilter.value = '';
+            loadHistory();
+        }
+
+        async function deleteHistoryRecord(record) {
+            const label = formatStockLabel(record.symbol, record.name);
+            if (!window.confirm(`确定删除 ${label} 的这条预测记录吗？删除后无法恢复。`)) return;
+            try {
+                await axios.delete(apiUrl(`/api/prediction-history/${encodeURIComponent(record.record_id)}`));
+                if (state.historyRecordId === record.record_id) {
+                    state.historyRecordId = null;
+                    showCurrentView();
+                }
+                await loadHistory();
+                showToast('预测记录已删除');
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        async function openHistoryRecord(recordId) {
+            try {
+                const response = await axios.get(apiUrl(`/api/prediction-history/${encodeURIComponent(recordId)}`));
+                state.historyRecordId = recordId;
+                renderPrediction(response.data, false, true);
+                showToast('已打开历史预测记录');
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        function renderPrediction(result, fromBatch = false, fromHistory = false) {
+            state.view = fromHistory ? 'history-detail' : 'current-detail';
+            setResultTab(fromHistory ? 'history' : 'current');
+            showOnlyResultContent('result-content');
             const predictions = result.prediction_results;
             const finalPrediction = predictions[predictions.length - 1];
             const predictedReturnPct = result.predicted_return_p50 * 100;
 
             document.getElementById('empty-state').style.display = 'none';
-            document.getElementById('result-content').classList.add('visible');
-            const resultName = result.name ? ` · ${result.name}` : '';
-            document.getElementById('result-heading').textContent = `${result.symbol}${resultName} 未来 ${result.pred_len} 日预测`;
+            document.getElementById('back-to-ranking').style.display = fromBatch ? 'inline-flex' : 'none';
+            document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
+            document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
+            document.getElementById('snapshot-badge').textContent = fromHistory
+                ? '历史快照 · ' + formatDateTime(result.created_at)
+                : '当前预测';
+            const resultName = formatStockLabel(result.symbol, result.name);
+            document.getElementById('result-heading').textContent = `${resultName} 未来 ${result.pred_len} 日预测`;
             document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · 市值层 ${result.size_bucket}（${(result.size_percentile * 100).toFixed(1)}%） · ${result.interval.sample_count} 条路径`;
 
             const sourceBadge = document.getElementById('source-badge');
@@ -985,7 +1963,12 @@
         }
 
         function syncPredictButton() {
-            predictButton.disabled = !(state.modelReady && state.symbol);
+            const count = parseStockSymbols().length;
+            predictButton.disabled = !(state.modelReady && count >= 1 && count <= 12);
+            if (count === 0) predictButton.textContent = '输入股票代码';
+            else if (count === 1) predictButton.textContent = '预测该股票';
+            else if (count <= 12) predictButton.textContent = `预测并排名 ${count} 只股票`;
+            else predictButton.textContent = '每次最多预测 12 只股票';
         }
 
         function setPredicting(isPredicting) {
@@ -1016,6 +1999,22 @@
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
+            }).format(new Date(value));
+        }
+
+        function formatStockLabel(symbol, name) {
+            const code = symbol || '—';
+            const displayName = String(name || '').trim();
+            return displayName && displayName.toLowerCase() !== String(code).toLowerCase()
+                ? `${code} · ${displayName}`
+                : code;
+        }
+
+        function formatDateTime(value) {
+            if (!value) return '—';
+            return new Intl.DateTimeFormat('zh-CN', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: false,
             }).format(new Date(value));
         }
 

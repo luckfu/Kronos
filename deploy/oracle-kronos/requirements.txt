@@ -1,0 +1,7 @@
+Flask>=3.0,<4
+flask-cors>=4,<7
+gunicorn>=22,<24
+numpy>=1.26,<3
+pandas>=2.2,<3
+plotly==6.9.0
+baostock==0.9.3
