@@ -573,26 +573,34 @@ def compute_predictor_losses(head, logits, targets, config):
         targets[0][:, forecast_slice], targets[1][:, forecast_slice],
     )
     forecast_weights = torch.as_tensor(
-        config.get('forecast_horizon_weights', (1.0,) * forecast_slice.stop),
+        config.get(
+            'forecast_horizon_weights',
+            (1.0,) * (forecast_slice.stop - forecast_slice.start),
+        ),
         device=logits[0].device,
         dtype=logits[0].dtype,
     )
     if forecast_weights.numel() != forecast_slice.stop - forecast_slice.start:
         raise ValueError('forecast_horizon_weights length does not match predict_window')
     forecast_weights = forecast_weights / forecast_weights.sum()
-    weighted_s1 = F.cross_entropy(
-        logits[0][:, forecast_slice].transpose(1, 2),
-        targets[0][:, forecast_slice],
-        reduction='none',
-    ).mean(0)
-    weighted_s2 = F.cross_entropy(
-        logits[1][:, forecast_slice].transpose(1, 2),
-        targets[1][:, forecast_slice],
-        reduction='none',
-    ).mean(0)
-    weighted_forecast_s1 = torch.sum(weighted_s1 * forecast_weights)
-    weighted_forecast_s2 = torch.sum(weighted_s2 * forecast_weights)
-    weighted_forecast_loss = (weighted_forecast_s1 + weighted_forecast_s2) / 2
+    if torch.all(forecast_weights == forecast_weights[0]):
+        weighted_forecast_loss = forecast_loss
+        weighted_forecast_s1 = forecast_s1
+        weighted_forecast_s2 = forecast_s2
+    else:
+        weighted_s1 = F.cross_entropy(
+            logits[0][:, forecast_slice].transpose(1, 2),
+            targets[0][:, forecast_slice],
+            reduction='none',
+        ).mean(0)
+        weighted_s2 = F.cross_entropy(
+            logits[1][:, forecast_slice].transpose(1, 2),
+            targets[1][:, forecast_slice],
+            reduction='none',
+        ).mean(0)
+        weighted_forecast_s1 = torch.sum(weighted_s1 * forecast_weights)
+        weighted_forecast_s2 = torch.sum(weighted_s2 * forecast_weights)
+        weighted_forecast_loss = (weighted_forecast_s1 + weighted_forecast_s2) / 2
     if config.get('predictor_loss_mode', 'full_sequence') == 'forecast':
         history_weight = float(config.get('history_loss_weight', 0.0))
         objective = weighted_forecast_loss + history_weight * history_loss

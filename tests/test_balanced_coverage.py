@@ -90,6 +90,7 @@ def test_signal_filter_keeps_preperiod_rows_as_context(tmp_path, monkeypatch):
     monkeypatch.setenv('KRONOS_TRAIN_SIGNAL_END', '2026-06-17')
     monkeypatch.setenv('KRONOS_TRAIN_SAMPLES_PER_SEGMENT', '0')
     monkeypatch.setenv('KRONOS_HISTORY_REPLAY_RATIO', '0')
+    monkeypatch.setenv('KRONOS_USE_SECTOR_FEATURES', '0')
 
     dataset = QlibDataset('train')
     signal_dates = {
