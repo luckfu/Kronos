@@ -1,5 +1,8 @@
+import hashlib
+import json
 import pickle
 import math
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
@@ -89,6 +92,117 @@ def load_merged_panels(paths):
     return merged
 
 
+_SHA256_CACHE = {}
+
+
+def sha256_file(path):
+    path = Path(path).resolve()
+    stat = path.stat()
+    cache_key = (str(path), stat.st_size, stat.st_mtime_ns)
+    if cache_key in _SHA256_CACHE:
+        return _SHA256_CACHE[cache_key]
+    digest = hashlib.sha256()
+    with path.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+    result = digest.hexdigest()
+    _SHA256_CACHE[cache_key] = result
+    return result
+
+
+def load_fixed_validation_artifacts(config):
+    """Load signed fixed-validation metadata and its ordered sample records."""
+    manifest_path = Path(config.fixed_validation_manifest_path).resolve()
+    if not manifest_path.is_file():
+        raise ValueError(f'Fixed validation manifest does not exist: {manifest_path}')
+    actual_manifest_sha = sha256_file(manifest_path)
+    expected_manifest_sha = str(config.fixed_validation_manifest_sha256)
+    if not expected_manifest_sha:
+        raise ValueError('Fixed validation requires KRONOS_FIXED_VALIDATION_MANIFEST_SHA256')
+    if actual_manifest_sha != expected_manifest_sha:
+        raise ValueError(
+            'Fixed validation manifest SHA mismatch: '
+            f'{actual_manifest_sha} != {expected_manifest_sha}'
+        )
+
+    manifest = json.loads(manifest_path.read_text())
+    source = manifest.get('source', {})
+    selection = manifest.get('selection', {})
+    if source.get('data_manifest_sha256') != config.dataset_manifest_sha256:
+        raise ValueError('Fixed validation source data manifest SHA does not match training data')
+    if int(source.get('lookback', -1)) != int(config.lookback_window):
+        raise ValueError('Fixed validation lookback does not match training config')
+    if int(source.get('predict', -1)) != int(config.predict_window):
+        raise ValueError('Fixed validation horizon does not match training config')
+    samples_path = manifest_path.parent / str(selection.get('samples_file', ''))
+    if not samples_path.is_file():
+        raise ValueError(f'Fixed validation sample file does not exist: {samples_path}')
+    if sha256_file(samples_path) != selection.get('samples_file_sha256'):
+        raise ValueError('Fixed validation sample file SHA mismatch')
+    records = [
+        json.loads(line)
+        for line in samples_path.read_text().splitlines()
+        if line.strip()
+    ]
+    quick_count = int(selection.get('quick_samples', -1))
+    large_count = int(selection.get('large_samples', -1))
+    if quick_count != int(config.validation_quick_samples):
+        raise ValueError('Fixed validation quick sample count does not match config')
+    if large_count != int(config.validation_large_samples) or len(records) != large_count:
+        raise ValueError('Fixed validation large sample count does not match config')
+    quick_flags = [bool(record.get('quick', False)) for record in records]
+    if quick_flags != [True] * quick_count + [False] * (large_count - quick_count):
+        raise ValueError('Fixed validation quick samples must be the ordered large-set prefix')
+    return manifest, records, actual_manifest_sha
+
+
+def load_fixed_validation_selection(config, indices, timestamps_by_symbol):
+    """Validate and map a signed fixed-validation manifest to dataset positions."""
+    manifest, records, actual_manifest_sha = load_fixed_validation_artifacts(config)
+    if len(config.val_data_paths) != 1:
+        raise ValueError('Fixed validation currently requires exactly one validation panel')
+    actual_val_sha = sha256_file(config.val_data_paths[0])
+    if actual_val_sha != manifest['source'].get('val_data_sha256'):
+        raise ValueError('Fixed validation panel SHA does not match its manifest')
+
+    position_by_identity = {
+        (str(symbol), int(start)): position
+        for position, (symbol, start) in enumerate(indices)
+    }
+    mapped = []
+    identities = set()
+    for record in records:
+        identity = (str(record['symbol']), int(record['start_index']))
+        if identity in identities:
+            raise ValueError(f'Duplicate fixed validation identity: {identity}')
+        identities.add(identity)
+        if identity not in position_by_identity:
+            raise ValueError(f'Fixed validation sample is absent from the panel: {identity}')
+        timestamps = timestamps_by_symbol[identity[0]]
+        asof_position = identity[1] + int(config.lookback_window) - 1
+        target_position = asof_position + int(config.predict_window)
+        asof_date = str(pd.Timestamp(timestamps.iloc[asof_position]).date())
+        target_date = str(pd.Timestamp(timestamps.iloc[target_position]).date())
+        if asof_date != record.get('asof_date') or target_date != record.get('target_date'):
+            raise ValueError(f'Fixed validation dates do not match the panel: {identity}')
+        mapped.append(position_by_identity[identity])
+    periods = list(manifest.get('selection', {}).get('periods', []))
+    period_codes = {name: code for code, name in enumerate(periods)}
+    record_period_codes = []
+    for record in records:
+        period = str(record.get('period', ''))
+        if period not in period_codes:
+            raise ValueError(
+                f'Fixed validation record has unknown period {period!r}; '
+                f'expected one of {periods}'
+            )
+        record_period_codes.append(period_codes[period])
+    return (
+        np.asarray(mapped, dtype=np.int64), manifest, actual_manifest_sha,
+        np.asarray(record_period_codes, dtype=np.int16), period_codes,
+    )
+
+
 def balanced_stratum_quotas(strata, target):
     """Allocate a replay target evenly across available year/size strata."""
     strata = np.asarray(strata, dtype=np.int32)
@@ -173,6 +287,39 @@ class QlibDataset(Dataset):
 
         self.data = load_merged_panels(self.data_paths)
 
+        fixed_manifest_path = str(
+            getattr(self.config, 'fixed_validation_manifest_path', '')
+        ).strip()
+        excluded_validation_dates = {}
+        expected_training_exclusions = 0
+        if (
+            data_type == 'train'
+            and fixed_manifest_path
+            and bool(self.config.exclude_fixed_validation_from_training)
+        ):
+            fixed_manifest, fixed_records, _ = load_fixed_validation_artifacts(
+                self.config
+            )
+            for record in fixed_records:
+                excluded_validation_dates.setdefault(
+                    str(record['symbol']), set()
+                ).add(np.datetime64(record['asof_date'], 'D'))
+            isolation = fixed_manifest.get('training_isolation', {})
+            expected_training_exclusions = int(
+                isolation.get('training_candidate_overlap_samples', -1)
+            )
+            absent_training_samples = int(
+                isolation.get('not_in_training_candidate_samples', -1)
+            )
+            if (
+                expected_training_exclusions < 0
+                or absent_training_samples < 0
+                or expected_training_exclusions + absent_training_samples
+                != len(fixed_records)
+                or not isolation.get('all_training_overlaps_must_be_excluded')
+            ):
+                raise ValueError('Fixed validation training-isolation audit is invalid')
+
         self.window = self.config.lookback_window + self.config.predict_window + 1
 
         self.symbols = list(self.data.keys())
@@ -205,6 +352,7 @@ class QlibDataset(Dataset):
         replay_starts = []
         replay_buckets = []
         replay_strata = []
+        excluded_fixed_validation_samples = 0
         signal_dates_seen = set()
         replay_ratio = (
             float(self.config.history_replay_ratio) if data_type == 'train' else 0.0
@@ -263,6 +411,16 @@ class QlibDataset(Dataset):
                     eligible &= dates >= signal_start
                 if signal_end is not None:
                     eligible &= dates <= signal_end
+                symbol_exclusions = excluded_validation_dates.get(str(symbol))
+                if symbol_exclusions:
+                    excluded = np.isin(
+                        dates,
+                        np.asarray(sorted(symbol_exclusions), dtype='datetime64[D]'),
+                    )
+                    excluded_fixed_validation_samples += int(
+                        np.count_nonzero(eligible & excluded)
+                    )
+                    eligible &= ~excluded
                 eligible_positions = np.flatnonzero(eligible)
                 for position in eligible_positions:
                     self.indices.append((symbol, int(starts[position])))
@@ -287,6 +445,15 @@ class QlibDataset(Dataset):
                             years * 256 + buckets[replay_positions].astype(np.int32)
                         )
 
+        if (
+            expected_training_exclusions
+            and excluded_fixed_validation_samples != expected_training_exclusions
+        ):
+            raise ValueError(
+                'Fixed validation training exclusion count mismatch: '
+                f'{excluded_fixed_validation_samples} != '
+                f'{expected_training_exclusions}'
+            )
         recent_samples = len(self.indices)
         replay_samples = 0
         if replay_ratio:
@@ -308,7 +475,33 @@ class QlibDataset(Dataset):
         requested = int(self.configured_samples)
         self.n_samples = self.total_samples if requested <= 0 else min(requested, self.total_samples)
         permutation_seed = self.config.seed + (0 if data_type == 'train' else 1)
-        if (
+        self.quick_validation_count = self.n_samples
+        self.fixed_validation_manifest_sha256 = None
+        self.validation_period_codes = None
+        self.validation_period_names = {}
+        if data_type == 'val' and fixed_manifest_path:
+            (
+                self.coverage_order, fixed_manifest, manifest_sha,
+                self.validation_period_codes, period_codes,
+            ) = (
+                load_fixed_validation_selection(
+                    self.config, self.indices, self.timestamps_by_symbol
+                )
+            )
+            self.validation_period_names = {
+                code: name for name, code in period_codes.items()
+            }
+            self.n_samples = len(self.coverage_order)
+            self.quick_validation_count = int(
+                fixed_manifest['selection']['quick_samples']
+            )
+            self.fixed_validation_manifest_sha256 = manifest_sha
+            print(
+                '[VAL] Fixed manifest validation enabled: '
+                f'{self.quick_validation_count:,} quick / {self.n_samples:,} large; '
+                f'manifest_sha256={manifest_sha}'
+            )
+        elif (
             data_type == 'train'
             and bool(getattr(self.config, 'balance_size_buckets', False))
         ):
@@ -331,6 +524,23 @@ class QlibDataset(Dataset):
             'signal_days': len(signal_dates_seen),
             'signal_start': str(min(signal_dates_seen)) if signal_dates_seen else None,
             'signal_end': str(max(signal_dates_seen)) if signal_dates_seen else None,
+            'fixed_validation_manifest_sha256': self.fixed_validation_manifest_sha256,
+            'quick_validation_samples': self.quick_validation_count,
+            'large_validation_samples': self.n_samples if data_type == 'val' else None,
+            'excluded_fixed_validation_samples': excluded_fixed_validation_samples,
+            'fixed_validation_samples_absent_from_training': (
+                absent_training_samples if data_type == 'train' and fixed_manifest_path
+                else 0
+            ),
+            'validation_period_counts': (
+                {
+                    self.validation_period_names[int(code)]: int(count)
+                    for code, count in zip(
+                        *np.unique(self.validation_period_codes, return_counts=True)
+                    )
+                }
+                if self.validation_period_codes is not None else {}
+            ),
         }
         print(
             f"[{data_type.upper()}] Found {self.total_samples} possible samples. "
@@ -422,7 +632,16 @@ class QlibDataset(Dataset):
             size_bucket = torch.tensor(size_value, dtype=torch.long)
             if self.use_size_percentile:
                 size_percentile = torch.tensor(size_percentile_value, dtype=torch.float32)
-                return x_tensor, x_stamp_tensor, sector_id, size_bucket, size_percentile
+                result = (
+                    x_tensor, x_stamp_tensor, sector_id, size_bucket,
+                    size_percentile,
+                )
+                if self.data_type == 'val' and self.validation_period_codes is not None:
+                    period_code = torch.tensor(
+                        int(self.validation_period_codes[idx]), dtype=torch.int16
+                    )
+                    return (*result, period_code)
+                return result
             return x_tensor, x_stamp_tensor, sector_id, size_bucket
         return x_tensor, x_stamp_tensor
 

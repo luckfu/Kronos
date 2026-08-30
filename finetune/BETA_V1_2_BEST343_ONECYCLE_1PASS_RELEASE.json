@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "stage_id": "beta_v1_2_best871_full_every_segment_onecycle_1pass",
+  "status": "completed",
+  "completed_at": "2026-08-30T14:33:13Z",
+  "parent": {
+    "release": "Beta v1.2",
+    "checkpoint": "Best@871",
+    "validation_full_loss": 2.416529655456543
+  },
+  "training": {
+    "segments_completed": 528,
+    "segments_total": 528,
+    "coverage_passes": 1,
+    "train_metric_records": 1649,
+    "validation_large_records": 528,
+    "validation_quick_records": 0,
+    "nonfinite_values": 0,
+    "batch_size": 64,
+    "amp_dtype": "bfloat16",
+    "scheduler": "one_cycle",
+    "predictor_peak_learning_rate": 1e-6,
+    "condition_peak_learning_rate": 1e-6,
+    "trainable_predictor": "all"
+  },
+  "best": {
+    "segment": 343,
+    "validation_full_loss": 2.4104652404785156,
+    "periods": {
+      "2025H2": 2.399127244949341,
+      "2026H1": 2.415733575820923
+    },
+    "model_sha256": "b2e90710d7619f3ae3a1b488726b2885adff11dcd45834f2560766f49bbc20f3"
+  },
+  "last": {
+    "segment": 528,
+    "validation_full_loss": 2.4107725620269775,
+    "periods": {
+      "2025H2": 2.3988070487976074,
+      "2026H1": 2.416428804397583
+    },
+    "model_sha256": "fde230a9a370c495c00063cf31bae7036e77a7efa21ea2e3f869f9ca887c4e82",
+    "state_sha256": "4bf824bcc9150b5171afb8daa8e47de0b114e13e15c0b2dec3f6f9a5e871aeba"
+  },
+  "validation": {
+    "mode": "full_only",
+    "samples": 24000,
+    "batches": 375,
+    "manifest_sha256": "f329b1ca2a6f94c373403563d941d05c66de3754e7e3206c002cb5e475be1ac7",
+    "independent_best_result_sha256": "3483bbc9800b046ceb82fb560c7bdb619bb143bc4e5ef5375a3012d0c87b7516",
+    "independent_last_result_sha256": "bbfcfcd8b772b789599fa1f76ae888a09838688262f9bf7f5e9116393a69f3fb"
+  },
+  "artifacts": {
+    "experiment_manifest_sha256": "9830d747322c2e2dac8e4db225b1877bc5fda75fe7a714222851274932956781",
+    "launcher_log_sha256": "15d6d633504015d2457267eaf715f32d02313cdcf9417bb460920dfcddf46967",
+    "metrics_sha256": "4df43ed52a374aca21179787bf268b6e8f3db6692812b0ddddda8adafad2cf61",
+    "progress_sha256": "b0c2ea8e10b2d10ea33a2e394c996303f23157c6feffffa857861e07ad3a21b5",
+    "summary_sha256": "3fb8e2e444952187ef104674f805292353d40a428a8ba5be1789356ff7bee4dd",
+    "local_archive": "models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100",
+    "local_sha256_manifest": "models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100/SHA256SUMS"
+  },
+  "source": {
+    "a800_config_sha256": "ad0a6a7f6f38beb3d4b6f0a7259db18bffebe3a89fd52d77fa40be6b75604ac4",
+    "a800_dataset_sha256": "fda5acc783ed54f5ad0a670367ed9cc159e624d8d64d5f76c72d60acc938f51f",
+    "a800_train_predictor_sha256": "cce0d2601e68a095cdaa7b10c4f9e5d750f8d67f4d808e88cef33c1ff92a1c6e",
+    "a800_model_kronos_sha256": "7eb56e4fdfd29f36d297ff531f36728175a917fe8a0bb4f880af7ee50cca8d76",
+    "a800_run_script_sha256": "dee909c3d693c247aba6903f5147c7ece69c666a5db4eddc8b25c49ba5b6afd7"
+  },
+  "lineage": {
+    "lineage_id": "lin-d2a39f2905ecfe8f",
+    "parent_handoff_id": "20260830-175409-codex-kronos-local-migration-and-beta-v1.2-tra-01a04158-9ea1-7921-b9c2-",
+    "git_baseline": "450f913dcaa52fda65ba0e2e749c55c265d20310"
+  }
+}
