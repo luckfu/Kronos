@@ -267,18 +267,19 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
 
     def _add_context(self, x, sector_id=None, size_bucket=None, size_percentile=None):
         """Add static asset metadata to every timestep in a token sequence."""
+        context_parts = []
         if sector_id is not None:
             if self.sector_emb is None:
                 raise ValueError("sector_id was provided but num_sectors is 0")
             if sector_id.ndim != 1 or sector_id.shape[0] != x.shape[0]:
                 raise ValueError(f"sector_id must have shape [batch], got {tuple(sector_id.shape)}")
-            x = x + self.sector_emb(sector_id.long()).unsqueeze(1)
+            context_parts.append(self.sector_emb(sector_id.long()))
         if size_bucket is not None:
             if self.size_emb is None:
                 raise ValueError("size_bucket was provided but num_size_buckets is 0")
             if size_bucket.ndim != 1 or size_bucket.shape[0] != x.shape[0]:
                 raise ValueError(f"size_bucket must have shape [batch], got {tuple(size_bucket.shape)}")
-            x = x + self.size_emb(size_bucket.long()).unsqueeze(1)
+            context_parts.append(self.size_emb(size_bucket.long()))
         if size_percentile is not None:
             if self.size_mlp is None:
                 raise ValueError("size_percentile was provided but use_size_percentile is false")
@@ -290,7 +291,29 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             known = torch.isfinite(percentile)
             percentile = torch.nan_to_num(percentile, nan=0.5).clamp(0.0, 1.0)
             continuous_features = torch.stack([percentile, known.to(x.dtype)], dim=-1)
-            x = x + self.size_mlp(continuous_features).unsqueeze(1)
+            context_parts.append(self.size_mlp(continuous_features))
+        if context_parts:
+            condition = torch.stack(context_parts, dim=0).sum(dim=0)
+            if getattr(self, "collect_condition_stats", False):
+                with torch.no_grad():
+                    trunk_norm = x.detach().float().norm(dim=-1).mean()
+                    condition_norm = condition.detach().float().norm(dim=-1).mean()
+                    self.last_condition_stats = {
+                        "condition_output_norm": float(condition_norm.item()),
+                        "trunk_input_norm": float(trunk_norm.item()),
+                        "condition_trunk_norm_ratio": float(
+                            (condition_norm / (trunk_norm + 1e-8)).item()
+                        ),
+                    }
+            x = x + condition.unsqueeze(1)
+        elif getattr(self, "collect_condition_stats", False):
+            self.last_condition_stats = {
+                "condition_output_norm": 0.0,
+                "trunk_input_norm": float(
+                    x.detach().float().norm(dim=-1).mean().item()
+                ),
+                "condition_trunk_norm_ratio": 0.0,
+            }
         return x
 
     def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None, size_percentile=None):

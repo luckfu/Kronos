@@ -2,14 +2,20 @@
 
 > 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
 
-当前 Web UI 与 Serverless 推理契约已适配 **Beta V1.2**，默认使用 `Best@871`；发布同时
-保留 `Last@1056` 作为完整两遍训练终点。稳定本地入口为
+最新全市场训练版本为 **Beta V1.3**，同时发布 `Best@343` 与 `Last@528`。稳定本地入口为
+`models/a_share_v1_beta/releases/beta_v1.3/best_model` 和
+`models/a_share_v1_beta/releases/beta_v1.3/last_model`。发布依据和使用边界见
+[`finetune/BETA_V1_3_RELEASE_CN.md`](finetune/BETA_V1_3_RELEASE_CN.md)。该训练版本没有自动
+替换推理部署。
+
+当前 Web UI 与 Serverless 推理契约仍按 **Beta V1.2** 运行，默认使用 `Best@871`，并保留
+`Last@1056` 作为完整两遍训练终点。稳定本地入口为
 `models/a_share_v1_beta/releases/beta_v1.2/best_model` 和
-`models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布依据和使用边界见
+`models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布依据见
 [`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)。Beta V1.2 的 Modal
 配置使用独立 App 名，不会覆盖旧 V6 服务；线上切换仍需显式执行部署。
 
-Beta v1.2 的推理输入和全市场市值百分位准备规则见
+Beta 系列的推理输入和全市场市值百分位准备规则见
 [`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。该契约与 V6
 不同，不接受离散 `size_bucket`。
 
@@ -22,7 +28,7 @@ Beta v1.2 的推理输入和全市场市值百分位准备规则见
 
 > 本项目用于研究和回测，不构成投资建议。模型预测、回测收益和排名都可能失效，不能直接替代交易系统或风险管理。
 
-## 当前模型
+## 当前推理部署
 
 - 模型：A-share Full-Market Beta V1.2（约 102.4M 参数）
 - 输入：120 个交易日的 `open/high/low/close/volume/amount`

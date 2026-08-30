@@ -2,10 +2,10 @@
 
 更新日期：2026-08-30。所有模型均为 120 个交易日输入、10 个交易日路径预测。
 
-当前正式 Beta 版本为 **Beta v1.2**，同时包含 `Best@871` 与 `Last@1056` 两个产出物。稳定入口：
-`models/a_share_v1_beta/releases/beta_v1.2/best_model` 和
-`models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布说明见
-`finetune/BETA_V1_2_RELEASE_CN.md`。Beta v1.1 保留为不可变父版本；Beta v1.2 没有自动替换旧 V6 Web/Modal 生产服务。
+当前正式 Beta 版本为 **Beta v1.3**，同时包含 `Best@343` 与 `Last@528` 两个产出物。稳定入口：
+`models/a_share_v1_beta/releases/beta_v1.3/best_model` 和
+`models/a_share_v1_beta/releases/beta_v1.3/last_model`。发布说明见
+`finetune/BETA_V1_3_RELEASE_CN.md`。Beta v1.1/v1.2 保留为不可变父版本；Beta v1.3 没有自动替换旧 V6 Web/Modal 生产服务。
 
 ## 本地路径
 
@@ -17,6 +17,8 @@
 | `models/a_share_v1_beta/v6_natural_twospeed_v2_bf16_seed100/checkpoints/last_model` | 与上项同一训练，完整两轮后的 Last@1058 | 固定 24k objective 为 2.448726；严格未来集多头 Top 20% 为 54.75%、Rank IC 0.0736。保留作稳定末点对照；同目录 `last_state.pt` 可恢复 optimizer/scheduler。 |
 | `models/a_share_v1_beta/beta_v1_2_full_predictor_bs64_seed100/checkpoints/best_model` | 从 Beta v1.1 Best@818 只加载权重，保留行业/连续市值条件分支，fresh AdamW + 统一 OneCycle，全 Predictor 训练；Best@871 | **Beta v1.2 推荐 checkpoint**。固定 24k objective 为 **2.416530**；尚未使用新的严格未来时间段复评。 |
 | `models/a_share_v1_beta/beta_v1_2_full_predictor_bs64_seed100/checkpoints/last_model` | 与上项同一训练，完整两遍覆盖后的 Last@1056 | **Beta v1.2 完整训练终点与恢复锚点**。固定 24k objective 为 2.416884；同目录 `last_state.pt` 保存 optimizer/scheduler/RNG 状态。 |
+| `models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100/.../checkpoints/best_model` | 从 Beta v1.2 Best@871 只加载权重，fresh AdamW + 统一 OneCycle，全 Predictor 单遍覆盖；Best@343 | **Beta v1.3 默认 checkpoint**。固定 24k objective 为 **2.410465**。 |
+| `models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100/.../checkpoints/last_model` | 与上项同一训练，完整单遍覆盖后的 Last@528 | **Beta v1.3 完整训练终点与恢复锚点**。固定 24k objective 为 2.410773；`last_state.pt` 保存 optimizer/scheduler/RNG 状态。 |
 
 其余自然 Last@528 与 late10 条件/去条件 Best/Last 已全部否决，本地保留它们的完整逐样本
 评估结果和血缘名称，不重复保存约 2 GB 权重。需要审计时见
@@ -47,6 +49,27 @@ Beta v1.1 在旧 6 个未来信号日上的结果。
 
 完整训练日志、指标、manifest 和独立复评位于
 `finetune/artifacts/a800_20260828/runs/beta_v1_1_best818_full_predictor_bs64_seed100/`。
+
+## Beta v1.3 全 Predictor 单遍续训（2026-08-30）
+
+父权重为正式 Beta v1.2 Best@871（SHA-256 `965c3bc4...62393dd`）。本阶段只加载模型权重，
+行业层和连续市值层均保留；fresh AdamW、统一 OneCycle 峰值 `1e-6`、batch size 64、BF16、
+seed 100，完成 528 Segment 的一次全市场覆盖。每个 Segment 都只执行固定 24k full-only
+验证，528 条 `validation_large`、0 条 quick、0 个 NaN/Inf。
+
+| checkpoint | Combined | 2025H2 | 2026H1 | 相对 Beta v1.2 Best@871 Combined |
+|---|---:|---:|---:|---:|
+| Beta v1.2 Best@871 | 2.416530 | 2.403448 | 2.423210 | - |
+| Beta v1.3 Best@343 | **2.410465** | 2.399127 | **2.415734** | **-0.2510%** |
+| Beta v1.3 Last@528 | 2.410773 | **2.398807** | 2.416429 | -0.2382% |
+
+Best@343 Combined 与 2026H1 更低，因此作为 Beta v1.3 默认 checkpoint；Last@528 的 2025H2
+略低，但总体不替代 Best。训练退出后对两者分别重新加载权重并执行独立固定 24k 复评，结果与
+训练记录逐项一致。完整模型、resume state、日志、实际源码快照和 29 项 SHA-256 manifest 位于
+`models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100/`。
+
+Beta v1.3 尚未获得全新严格未来时间段评估，不能继承 Beta v1.2 的旧未来数据结论。本次定版
+也不自动切换 Web、Modal 或其他线上生产服务。
 
 ## V6 Natural two-speed v2 BF16（2026-08-29）
 

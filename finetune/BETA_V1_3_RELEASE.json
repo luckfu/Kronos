@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "release_id": "beta-v1.3",
+  "display_name": "A-share Full-Market Beta v1.3",
+  "released_at": "2026-08-30",
+  "status": "beta",
+  "parent_release": "beta-v1.2",
+  "outputs": {
+    "best_model": {
+      "checkpoint_alias": "models/a_share_v1_beta/releases/beta_v1.3/best_model",
+      "lineage_key": "beta_v1_3_full_onepass_best343",
+      "training_checkpoint": "Best@343",
+      "role": "recommended_fixed_24k_full_only_checkpoint",
+      "model_sha256": "b2e90710d7619f3ae3a1b488726b2885adff11dcd45834f2560766f49bbc20f3"
+    },
+    "last_model": {
+      "checkpoint_alias": "models/a_share_v1_beta/releases/beta_v1.3/last_model",
+      "lineage_key": "beta_v1_3_full_onepass_last528",
+      "training_checkpoint": "Last@528",
+      "role": "completed_one_pass_checkpoint_and_resume_anchor",
+      "model_sha256": "fde230a9a370c495c00063cf31bae7036e77a7efa21ea2e3f869f9ca887c4e82"
+    },
+    "last_state": {
+      "checkpoint_alias": "models/a_share_v1_beta/releases/beta_v1.3/last_state.pt",
+      "sha256": "4bf824bcc9150b5171afb8daa8e47de0b114e13e15c0b2dec3f6f9a5e871aeba"
+    }
+  },
+  "tokenizer": {
+    "path_alias": "models/a_share_v1_beta/releases/beta_v1.3/tokenizer"
+  },
+  "contract": {
+    "lookback_sessions": 120,
+    "prediction_sessions": 10,
+    "features": ["open", "high", "low", "close", "volume", "amount"],
+    "conditions": ["sector_id", "size_percentile"],
+    "size_percentile_type": "same-date full-market cross-sectional percentile"
+  },
+  "training": {
+    "parent_release": "beta-v1.2",
+    "parent_checkpoint": "Best@871",
+    "parent_model_sha256": "965c3bc40f6ca17d2fbff16bcb7b1c15ab4ac5d47204d5714108b813462393dd",
+    "trainable_predictor_fraction": 1.0,
+    "optimizer": "AdamW",
+    "scheduler": "one_cycle",
+    "predictor_peak_learning_rate": 1e-6,
+    "condition_peak_learning_rate": 1e-6,
+    "batch_size": 64,
+    "coverage_passes": 1,
+    "completed_segments": 528,
+    "amp_dtype": "bfloat16",
+    "seed": 100,
+    "validation_mode": "full_only"
+  },
+  "evaluation": {
+    "profile": "fixed_natural_2025h2_2026h1",
+    "samples": 24000,
+    "manifest_sha256": "f329b1ca2a6f94c373403563d941d05c66de3754e7e3206c002cb5e475be1ac7",
+    "objective": "forecast_loss + 0.02 * history_loss",
+    "best_model": {
+      "combined": 2.4104652404785156,
+      "2025H2": 2.399127244949341,
+      "2026H1": 2.415733575820923
+    },
+    "last_model": {
+      "combined": 2.4107725620269775,
+      "2025H2": 2.3988070487976074,
+      "2026H1": 2.416428804397583
+    },
+    "strict_future_status": "not_yet_evaluated_on_a_new_time_period"
+  },
+  "limitations": [
+    "The fixed 24k validation set was observed during checkpoint selection and is not a sealed future evaluation.",
+    "Beta v1.3 must not inherit Beta v1.2 strict-future metrics.",
+    "The aggressive 1e-5 child experiment is not part of this release."
+  ],
+  "artifact_root": "models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100",
+  "sha256_manifest": "models/a_share_v1_beta/beta_v1_2_best871_full_every_segment_onecycle_1pass_seed100/SHA256SUMS",
+  "retrieval_manifest": "models/a_share_v1_beta/releases/beta_v1.3/A800_RETRIEVAL.json"
+}

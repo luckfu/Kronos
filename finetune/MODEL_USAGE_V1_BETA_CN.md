@@ -1,16 +1,16 @@
-# A-share Full-Market Beta v1.2 模型使用说明
+# A-share Full-Market Beta v1.3 模型使用说明
 
-当前 Beta 版本为 `Beta v1.2`，包含两个模型产出物：
-`models/a_share_v1_beta/releases/beta_v1.2/best_model`（Best@871）和
-`models/a_share_v1_beta/releases/beta_v1.2/last_model`（Last@1056）。配套 tokenizer 入口为
-`models/a_share_v1_beta/releases/beta_v1.2/tokenizer`。本文档只适用于该全市场模型系列。它与当前 V6 生产模型的
+当前 Beta 版本为 `Beta v1.3`，包含两个模型产出物：
+`models/a_share_v1_beta/releases/beta_v1.3/best_model`（Best@343）和
+`models/a_share_v1_beta/releases/beta_v1.3/last_model`（Last@528）。配套 tokenizer 入口为
+`models/a_share_v1_beta/releases/beta_v1.3/tokenizer`。本文档只适用于该全市场模型系列。它与当前 V6 生产模型的
 离散市值桶条件不同：v1-beta 使用行业 embedding 和连续 `size_percentile`，
 不使用离散市值桶。
 
-Beta v1.2 当前仅作为研究候选：它尚未在全新严格未来时间段完成评估，不能继承 Beta v1.1
+Beta v1.3 当前仍是研究 Beta：它尚未在全新严格未来时间段完成评估，不能继承 Beta v1.2
 在旧 6 个信号日上的多头或空头成绩。发布依据和限制见
-[`BETA_V1_2_RELEASE_CN.md`](BETA_V1_2_RELEASE_CN.md)。日志、评估和预测结果必须同时记录
-`Best@871` 或 `Last@1056`，避免两个产出物混淆。
+[`BETA_V1_3_RELEASE_CN.md`](BETA_V1_3_RELEASE_CN.md)。日志、评估和预测结果必须同时记录
+`Best@343` 或 `Last@528`，避免两个产出物混淆。
 
 ## 推理输入
 
