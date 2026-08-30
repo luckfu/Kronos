@@ -2,6 +2,11 @@
   "schema_version": 1,
   "stage_id": "beta_v1_2_best871_full_every_segment_onecycle_1pass",
   "status": "completed",
+  "promotion": {
+    "release_id": "beta-v1.3",
+    "promoted_at": "2026-08-30",
+    "default_checkpoint": "Best@343"
+  },
   "completed_at": "2026-08-30T14:33:13Z",
   "parent": {
     "release": "Beta v1.2",

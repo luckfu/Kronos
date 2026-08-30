@@ -2,13 +2,13 @@
 
 > 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
 
-新的全市场模型版本为 **Beta v1.2**，同时发布 `Best@871` 与 `Last@1056`。稳定本地入口为
-`models/a_share_v1_beta/releases/beta_v1.2/best_model` 和
-`models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布依据和使用边界见
-[`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)。该版本当前没有自动
+新的全市场模型版本为 **Beta v1.3**，同时发布 `Best@343` 与 `Last@528`。稳定本地入口为
+`models/a_share_v1_beta/releases/beta_v1.3/best_model` 和
+`models/a_share_v1_beta/releases/beta_v1.3/last_model`。发布依据和使用边界见
+[`finetune/BETA_V1_3_RELEASE_CN.md`](finetune/BETA_V1_3_RELEASE_CN.md)。该版本当前没有自动
 替换下文所述旧 V6 Web/Modal 生产服务。
 
-Beta v1.2 的推理输入和全市场市值百分位准备规则见
+Beta v1.3 的推理输入和全市场市值百分位准备规则见
 [`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。该文档
 适用于全市场行业条件模型，不改变当前 V6 生产模型的兼容方式。
 
