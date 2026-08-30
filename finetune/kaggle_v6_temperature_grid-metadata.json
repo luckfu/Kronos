@@ -1,0 +1,16 @@
+{
+  "id": "user281434/kronos-a-share-v6-temperature-grid-50-paths",
+  "title": "Kronos A-share V6 temperature top-p grid 50 paths",
+  "code_file": "kaggle_v6_temperature_grid.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "luckfu/kronos-a-share-v5-120d",
+    "user281434/kronos-v6-segment568-last-model"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

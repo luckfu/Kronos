@@ -10,7 +10,10 @@ import re
 import sys
 import time
 
-import baostock as bs
+try:
+    import baostock as bs
+except ModuleNotFoundError:  # Offline holdout evaluation does not need Baostock.
+    bs = None
 import numpy as np
 import pandas as pd
 import torch
@@ -258,6 +261,7 @@ def run_model(
     sample_count,
     seed,
     temperature=0.6,
+    top_p=0.9,
 ):
     model = Kronos.from_pretrained(
         path, num_sectors=0, num_size_buckets=10, context_layer=10,
@@ -276,7 +280,7 @@ def run_model(
                 torch.as_tensor(batch['x_stamp'], device=device),
                 torch.as_tensor(batch['y_stamp'], device=device),
                 max_context=512, pred_len=PRED_LEN, clip=5, T=temperature,
-                top_k=0, top_p=0.9, sample_count=sample_count, verbose=False,
+                top_k=0, top_p=top_p, sample_count=sample_count, verbose=False,
                 size_bucket=torch.as_tensor(batch['buckets'], device=device),
             )[:, -PRED_LEN:, :]
             close_index = FEATURE_COLUMNS.index('close')

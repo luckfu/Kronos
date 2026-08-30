@@ -1,0 +1,8 @@
+{
+  "title": "Kronos V6.01 120 to 5 resume checkpoint",
+  "id": "luckfu/kronos-v6-01-context120-predict5-resume",
+  "subtitle": "Complete V6.01 checkpoint bundle including best and last",
+  "description": "Upload the full output bundle from a V6.01 Kaggle run before continuing. The bundle must retain last_state.pt, best_model, last_model, progress.json, metrics.jsonl, and summary.json.",
+  "licenses": [{"name": "CC0-1.0"}],
+  "keywords": ["finance", "time-series", "kronos", "checkpoint", "resume"]
+}

@@ -24,7 +24,15 @@ bash deploy/oracle-kronos/deploy.sh
 
 A different alias can be supplied with `SSH_TARGET=opc@example-host`. The service enforces `KRONOS_REMOTE_ONLY=1`, so request payloads cannot select local inference.
 
-The `/kronos/` location reuses the server's existing `/etc/nginx/.htpasswd_clawd` credentials. The deployment never creates, replaces, or prints that password file.
+The `/kronos/` location uses `/etc/nginx/.htpasswd_clawd`. This is standard Nginx Basic Auth, so each person can have a separate username and password. The deployment never creates, replaces, or prints that password file.
+
+Add or change a user without exposing the password in shell history:
+
+```bash
+bash deploy/oracle-kronos/add-user.sh analyst
+```
+
+The script prompts securely on the Oracle host, validates the Nginx configuration, and reloads Nginx. Set `SSH_TARGET=opc@example-host` when using a different SSH target. Existing users remain valid; use the same command with an existing username to change its password. The browser will show a username/password prompt when opening `https://allmoneybymehold.com/kronos/`.
 
 ## Verify
 

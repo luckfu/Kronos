@@ -1,0 +1,20 @@
+{
+  "id": "luckfu/kronos-v1-beta-two-speed-from-best-11",
+  "title": "Kronos v1 beta two-speed from Best 11",
+  "code_file": "kaggle_v1_beta.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "Gpu",
+  "dataset_sources": [
+    "luckfu/kronos-a-share-full-market-v1-beta-120d"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "luckfu/kronos-v1-beta-warmup-best11-recovery"
+  ],
+  "model_sources": []
+}

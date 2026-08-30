@@ -48,6 +48,7 @@ Desktop.ini
 *.parquet
 *.h5
 *.hdf5
+/data/
 /data/a_share/
 /data/a_share_v3/
 /data/a_share_v5/
@@ -59,9 +60,14 @@ Desktop.ini
 *.pt
 *.ckpt
 *.bin
+*.safetensors
+/models/
 /outputs/models/a_share_size_kronos_base/
 /outputs/
 /artifacts/
+/finetune/artifacts/
+/finetune/kaggle_v1_beta_kernel/
+/finetune/kaggle_v1_beta_minimal.tar.gz
 /webui/prediction_results/
 /webui/market_data_cache/
 
@@ -79,6 +85,8 @@ env.bak/
 venv.bak/
 
 # Temporary files
+.pytest_cache/
+/Kronos/
 *.tmp
 *.temp
 temp/

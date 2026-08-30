@@ -44,6 +44,13 @@ def load_input(path: str) -> pd.DataFrame:
         frame['amount'] = frame['amount'].fillna(
             frame[['open', 'high', 'low', 'close']].mean(axis=1) * frame['volume']
         )
+    if 'market_cap' in frame.columns:
+        frame['market_cap'] = pd.to_numeric(frame['market_cap'], errors='coerce')
+        frame['market_cap'] = (
+            frame.sort_values(['symbol', 'date'])
+            .groupby('symbol', group_keys=False)['market_cap']
+            .transform(lambda values: values.ffill().bfill())
+        )
     frame = frame.sort_values(['symbol', 'date']).drop_duplicates(['symbol', 'date'], keep='last')
     return frame.reset_index(drop=True)
 
@@ -74,13 +81,25 @@ def add_size_buckets(frame: pd.DataFrame, bucket_count: int) -> pd.DataFrame:
     return frame
 
 
-def split_data(frame: pd.DataFrame, train_end: str, val_start: str, val_end: str, test_start: str, test_end: str):
+def split_data(
+    frame: pd.DataFrame,
+    train_end: str,
+    val_start: str,
+    val_end: str,
+    test_start: str,
+    test_end: str,
+    val_context_start: str = None,
+):
     train_end = pd.Timestamp(train_end)
     val_start, val_end = pd.Timestamp(val_start), pd.Timestamp(val_end)
     test_start, test_end = pd.Timestamp(test_start), pd.Timestamp(test_end)
+    val_context_start = pd.Timestamp(val_context_start or val_start)
     masks = {
         'train': frame['date'] <= train_end,
-        'val': frame['date'].between(val_start, val_end),
+        # Keep a history prefix in the pickle. QlibDataset applies the
+        # point-in-time val_signal_start/end filter to the as-of date, so
+        # these rows provide context without becoming validation targets.
+        'val': frame['date'].between(val_context_start, val_end),
         'test': frame['date'].between(test_start, test_end),
     }
     result = {}
@@ -125,6 +144,10 @@ def main():
     parser.add_argument('--train-end', default='2025-12-31')
     parser.add_argument('--val-start', default='2026-01-01')
     parser.add_argument('--val-end', default='2026-12-31')
+    parser.add_argument(
+        '--val-context-start', default='2025-07-01',
+        help='Earliest date retained in val_data.pkl for the 120-day lookback history.',
+    )
     parser.add_argument('--test-start', default='2027-01-01')
     parser.add_argument('--test-end', default='2027-12-31')
     args = parser.parse_args()
@@ -172,12 +195,15 @@ def main():
                     'reference_date': reference_date.strftime('%Y-%m-%d'),
                     'market_caps': market_caps,
                     'count': len(market_caps),
-                    'method': 'close * volume / (turnover_pct / 100)',
+                    'method': 'amount / (turnover_pct / 100)',
                     'universe': args.universe_label,
                 }, handle, separators=(',', ':'))
             print(f'size reference: {args.size_reference_out} ({len(market_caps)} stocks)')
 
-    splits = split_data(frame, args.train_end, args.val_start, args.val_end, args.test_start, args.test_end)
+    splits = split_data(
+        frame, args.train_end, args.val_start, args.val_end,
+        args.test_start, args.test_end, args.val_context_start,
+    )
     for split, data in splits.items():
         with open(os.path.join(args.output_dir, f'{split}_data.pkl'), 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)

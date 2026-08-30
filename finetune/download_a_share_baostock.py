@@ -32,12 +32,33 @@ def read_result(result):
 
 
 def query_universe(universe: str):
+    if universe == 'all_a':
+        # BaoStock's all-stock snapshot is the practical full A-share manifest.
+        # Use the requested end date so delisted historical symbols are not
+        # silently mixed into a current-market training download.
+        raise ValueError('all_a requires query_all_a_shares(end_date)')
     functions = ['query_hs300_stocks'] if universe == 'csi300' else ['query_hs300_stocks', 'query_zz500_stocks']
     symbols = set()
     for date in SNAPSHOT_DATES:
         for function in functions:
             for row in read_result(getattr(bs, function)(date)):
                 symbols.add(row[1])
+    return sorted(symbols)
+
+
+def query_all_a_shares(asof: str):
+    """Return the A-share symbols in BaoStock's snapshot for ``asof``."""
+    rows = read_result(bs.query_all_stock(day=asof))
+    # This BaoStock endpoint only supports historical daily queries for the
+    # Shanghai and Shenzhen prefixes.  Keep A-share board prefixes and
+    # exclude indices, funds, bonds, and unsupported Beijing symbols.
+    symbols = {
+        str(row[0]) for row in rows
+        if row and (
+            str(row[0]).startswith(('sh.600', 'sh.601', 'sh.603', 'sh.605', 'sh.688'))
+            or str(row[0]).startswith(('sz.000', 'sz.001', 'sz.002', 'sz.003', 'sz.300', 'sz.301'))
+        )
+    }
     return sorted(symbols)
 
 
@@ -72,9 +93,13 @@ def download_symbol(symbol, start_date, end_date, industry_history=None):
     frame['date'] = pd.to_datetime(frame['date'], errors='coerce')
     frame = frame.dropna(subset=['date', 'open', 'high', 'low', 'close', 'volume'])
     frame = frame[(frame['close'] > 0) & (frame['volume'] >= 0)]
-    # volume / turnover approximates float shares; use it only for cross-sectional size ranking.
+    # ``close`` is front-adjusted (adjustflag='2'), so it must not be used to
+    # estimate historical market cap: corporate-action factors would distort
+    # the size bucket.  BaoStock's ``amount`` and ``turn`` remain in trading
+    # units, so amount / turnover approximates the *unadjusted* float market
+    # value while keeping the download to one request per symbol.
     turn_fraction = frame['turn'].replace(0, np.nan) / 100.0
-    frame['market_cap'] = frame['close'] * frame['volume'] / turn_fraction
+    frame['market_cap'] = frame['amount'] / turn_fraction
     frame['market_cap'] = frame['market_cap'].replace([np.inf, -np.inf], np.nan)
     frame['market_cap'] = frame['market_cap'].ffill()
     frame['symbol'] = symbol
@@ -87,14 +112,22 @@ def download_symbol(symbol, start_date, end_date, industry_history=None):
 
 def main():
     parser = argparse.ArgumentParser(description='Download A-share daily data with BaoStock')
-    parser.add_argument('--universe', choices=['csi300', 'csi800'], default='csi800')
+    parser.add_argument('--universe', choices=['csi300', 'csi800', 'all_a'], default='csi800')
     parser.add_argument('--symbols-file', default=None, help='CSV manifest containing a symbol column')
+    parser.add_argument(
+        '--manifest-out', default=None,
+        help='Write the resolved universe snapshot to this CSV before downloading',
+    )
     parser.add_argument('--start', default='2015-01-01')
     parser.add_argument('--end', default='2026-07-31')
     parser.add_argument('--output', default='./data/a_share/a_share_daily.csv')
     parser.add_argument('--resume', action='store_true', help='Skip symbols already present in output')
     parser.add_argument('--with-sector', action='store_true', help='Also query BaoStock industry labels; slower and optional')
+    parser.add_argument('--interval-seconds', type=float, default=1.3, help='Delay between symbol requests')
+    parser.add_argument('--relogin-every', type=int, default=100, help='Re-login after this many symbol requests')
     args = parser.parse_args()
+    if args.interval_seconds < 0 or args.relogin_every < 1:
+        parser.error('--interval-seconds must be non-negative and --relogin-every must be positive')
 
     os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
     existing = pd.read_csv(args.output, usecols=['symbol']) if args.resume and os.path.exists(args.output) else None
@@ -116,38 +149,51 @@ def main():
             symbols = sorted(set(manifest['symbol'].astype(str)))
             universe_label = os.path.basename(args.symbols_file)
         else:
-            symbols = query_universe(args.universe)
+            if args.universe == 'all_a':
+                symbols = query_all_a_shares(args.end)
+            else:
+                symbols = query_universe(args.universe)
             universe_label = args.universe
+        if args.manifest_out:
+            os.makedirs(os.path.dirname(args.manifest_out) or '.', exist_ok=True)
+            pd.DataFrame({'symbol': symbols}).to_csv(args.manifest_out, index=False)
+            print(f'manifest: {args.manifest_out}')
         industry_history = query_industry_history() if args.with_sector else None
         print(f'universe={universe_label}, symbols={len(symbols)}, skip={len(completed)}')
         rows = []
+        requests_since_login = 0
         for idx, symbol in enumerate(symbols, 1):
             if symbol in completed:
                 continue
-            if idx > 1 and idx % 100 == 1:
+            if requests_since_login >= args.relogin_every:
                 bs.logout()
-                time.sleep(0.5)
+                time.sleep(args.interval_seconds)
                 login_baostock()
+                requests_since_login = 0
             try:
                 rows.extend(download_symbol(symbol, args.start, args.end, industry_history))
+                requests_since_login += 1
             except Exception as exc:
                 if '10001001' in str(exc):
                     bs.logout()
-                    time.sleep(0.5)
+                    time.sleep(args.interval_seconds)
                     login_baostock()
+                    requests_since_login = 0
                     try:
                         rows.extend(download_symbol(symbol, args.start, args.end, industry_history))
+                        requests_since_login += 1
                     except Exception as retry_exc:
                         print(f'warning: {symbol}: {retry_exc}')
                 else:
                     print(f'warning: {symbol}: {exc}')
+                    requests_since_login += 1
             if idx % 10 == 0:
                 print(f'{idx}/{len(symbols)} symbols, rows={len(rows)}')
                 if rows:
                     pd.DataFrame(rows).to_csv(args.output, mode='a' if wrote_output else 'w', index=False, header=not wrote_output)
                     wrote_output = True
                     rows.clear()
-            time.sleep(0.02)
+            time.sleep(args.interval_seconds)
         if rows:
             pd.DataFrame(rows).to_csv(args.output, mode='a' if wrote_output else 'w', index=False, header=not wrote_output)
         print(f'written: {args.output}')

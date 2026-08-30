@@ -1,5 +1,7 @@
 # Kaggle V3 GPU Benchmark
 
+> 所有 Kaggle 任务必须先遵守 [`KAGGLE_RUNBOOK_CN.md`](KAGGLE_RUNBOOK_CN.md) 的统一 preflight、单任务并发、输出完整性和服务端接力规则。
+
 ## V4 连续上下文 A/B 实验
 
 V4 B 的正式两轮版本只运行回放组，不重复训练 A。它完整覆盖

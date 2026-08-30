@@ -50,6 +50,8 @@ def main():
     parser.add_argument('--period-count', type=int, default=20)
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--sample-count', type=int, default=5)
+    parser.add_argument('--lookback', type=int, default=90)
+    parser.add_argument('--top-p', type=float, default=0.9)
     parser.add_argument('--seed', type=int, default=20260807)
     parser.add_argument('--temperatures', default='0.4,0.6,0.8,1.0')
     args = parser.parse_args()
@@ -59,6 +61,10 @@ def main():
     temperatures = [float(value) for value in args.temperatures.split(',') if value.strip()]
     if not temperatures or any(value <= 0 for value in temperatures):
         parser.error('--temperatures must contain positive comma-separated values')
+    if args.lookback < 1:
+        parser.error('--lookback must be positive')
+    if not 0 < args.top_p <= 1:
+        parser.error('--top-p must be in (0, 1]')
 
     panel, calendar = load_holdout(args.holdout, args.manifest)
     periods = build_signal_periods(
@@ -67,6 +73,7 @@ def main():
         args.signal_start,
         args.signal_end,
         args.period_count,
+        lookback=args.lookback,
     )
     device = torch.device(
         'mps' if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
@@ -93,6 +100,7 @@ def main():
             args.sample_count,
             args.seed,
             temperature=temperature,
+            top_p=args.top_p,
         )
         predictions['temperature'] = temperature
         summary, per_period = summarize_temperature(predictions)
@@ -110,8 +118,9 @@ def main():
         'configuration': {
             'model': args.model,
             'holdout': args.holdout,
-            'lookback': 90,
+            'lookback': args.lookback,
             'forecast_days': 10,
+            'top_p': args.top_p,
             'signal_start': args.signal_start,
             'signal_end': args.signal_end,
             'period_count': len(periods),

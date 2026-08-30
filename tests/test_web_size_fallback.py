@@ -231,6 +231,26 @@ def test_prediction_history_can_delete_only_the_requested_record(monkeypatch, tm
     assert other_path.exists()
 
 
+def test_prediction_history_can_delete_a_complete_ranking_group(monkeypatch, tmp_path):
+    grouped_first = tmp_path / 'ranking-001.json'
+    grouped_second = tmp_path / 'ranking-002.json'
+    unrelated = tmp_path / 'single-001.json'
+    grouped_first.write_text(json.dumps({'record_id': 'ranking-001', 'batch_id': 'batch_20260820_abc123'}), encoding='utf-8')
+    grouped_second.write_text(json.dumps({'record_id': 'ranking-002', 'batch_id': 'batch_20260820_abc123'}), encoding='utf-8')
+    unrelated.write_text(json.dumps({'record_id': 'single-001'}), encoding='utf-8')
+    monkeypatch.setattr(web_app, 'PREDICTION_RESULTS_DIR', str(tmp_path))
+
+    response = web_app.app.test_client().delete(
+        '/api/prediction-history/groups/batch_20260820_abc123'
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['records_deleted'] == 2
+    assert not grouped_first.exists()
+    assert not grouped_second.exists()
+    assert unrelated.exists()
+
+
 def test_prediction_history_rejects_invalid_delete_id(tmp_path, monkeypatch):
     monkeypatch.setattr(web_app, 'PREDICTION_RESULTS_DIR', str(tmp_path))
 

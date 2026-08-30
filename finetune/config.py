@@ -136,6 +136,9 @@ class Config:
         self.condition_learning_rate = float(
             os.getenv("KRONOS_CONDITION_LEARNING_RATE", "1e-3")
         )
+        self.scheduler = os.getenv("KRONOS_SCHEDULER", "one_cycle").strip().lower()
+        if self.scheduler not in {"one_cycle", "two_speed", "fixed"}:
+            raise ValueError("KRONOS_SCHEDULER must be one_cycle, two_speed, or fixed")
         self.trainable_transformer_layers = 2
         self.context_layer = 10
 
@@ -181,7 +184,9 @@ class Config:
         # =================================================================
         # TODO: Update these paths to your pretrained model locations.
         # These can be local paths or Hugging Face Hub model identifiers.
-        self.pretrained_tokenizer_path = "NeoQuasar/Kronos-Tokenizer-base"
+        self.pretrained_tokenizer_path = os.getenv(
+            "KRONOS_TOKENIZER_PATH", "NeoQuasar/Kronos-Tokenizer-base"
+        )
         self.pretrained_predictor_path = os.getenv(
             "KRONOS_PREDICTOR_PATH", "./Kronos-base"
         )

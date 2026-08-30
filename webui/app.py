@@ -80,6 +80,7 @@ KRONOS_INFERENCE_BACKEND = (
     'remote' if KRONOS_REMOTE_ONLY
     else os.getenv('KRONOS_INFERENCE_BACKEND', 'local').lower()
 )
+KRONOS_INFERENCE_SEED = int(os.getenv('KRONOS_INFERENCE_SEED', '20260817'))
 
 def selected_backend(value=None):
     """Return the configured inference backend, enforcing server policy."""
@@ -87,6 +88,18 @@ def selected_backend(value=None):
     if KRONOS_REMOTE_ONLY:
         return 'remote'
     return backend
+
+
+def _seed_inference(seed):
+    """Pin the sampling RNG so predictions are reproducible across calls."""
+    if torch is None:
+        return
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+
 
 # Global variables to store models
 tokenizer = None
@@ -752,6 +765,7 @@ def local_inference(context, future_dates, pred_len, temperature, top_p, sample_
     x_timestamp = pd.Series(pd.to_datetime(context['timestamps']).to_numpy(), name='timestamps')
     y_timestamp = pd.Series(pd.to_datetime(future_dates).to_numpy(), name='timestamps')
     with inference_lock:
+        _seed_inference(KRONOS_INFERENCE_SEED)
         prediction_samples = predictor.predict(
             df=x_df, x_timestamp=x_timestamp, y_timestamp=y_timestamp,
             pred_len=pred_len, T=temperature, top_p=top_p, sample_count=sample_count,
@@ -1101,6 +1115,34 @@ def delete_prediction_history(record_id):
     except OSError as exc:
         return jsonify({'error': f'删除预测记录失败: {exc}'}), 500
     return jsonify({'deleted': True, 'record_id': record_id})
+
+
+@app.route('/api/prediction-history/groups/<batch_id>', methods=['DELETE'])
+def delete_prediction_history_group(batch_id):
+    """Delete every saved record belonging to one cross-section ranking."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]{8,80}', batch_id):
+        return jsonify({'error': '无效的排序组编号'}), 400
+    results_dir = Path(PREDICTION_RESULTS_DIR)
+    if not results_dir.exists():
+        return jsonify({'error': '预测排序组不存在'}), 404
+
+    paths = []
+    for path in results_dir.glob('*.json'):
+        try:
+            with path.open(encoding='utf-8') as handle:
+                if json.load(handle).get('batch_id') == batch_id:
+                    paths.append(path)
+        except (OSError, ValueError, TypeError):
+            continue
+    if not paths:
+        return jsonify({'error': '预测排序组不存在'}), 404
+
+    try:
+        for path in paths:
+            path.unlink()
+    except OSError as exc:
+        return jsonify({'error': f'删除预测排序组失败: {exc}'}), 500
+    return jsonify({'deleted': True, 'batch_id': batch_id, 'records_deleted': len(paths)})
 
 def create_prediction_chart(df, pred_df, lookback, pred_len, actual_df=None, historical_start_idx=0):
     """Create prediction chart"""
@@ -1778,6 +1820,7 @@ def predict_history():
                 if isinstance(y_timestamp, pd.DatetimeIndex):
                     y_timestamp = pd.Series(y_timestamp, name='timestamps')
                 
+                _seed_inference(KRONOS_INFERENCE_SEED)
                 pred_df = predictor.predict(
                     df=x_df,
                     x_timestamp=x_timestamp,

@@ -189,7 +189,10 @@ def configure_trainable_parameters(model, config):
                 parameter.requires_grad = True
 
     layer_count = int(config.get('trainable_transformer_layers', 0))
-    if layer_count > 0:
+    if layer_count < 0:
+        for parameter in model.parameters():
+            parameter.requires_grad = True
+    elif layer_count > 0:
         for layer in model.transformer[-layer_count:]:
             for parameter in layer.parameters():
                 parameter.requires_grad = True
@@ -393,10 +396,17 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         )
         for segment in range(effective_epochs)
     )
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer, max_lr=max_lrs, total_steps=scheduler_steps,
-        pct_start=0.03, div_factor=10
-    )
+    scheduler_mode = str(config.get('scheduler', 'one_cycle')).strip().lower()
+    if scheduler_mode == 'fixed':
+        # Keep each optimizer group's configured LR unchanged for the full run.
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=[lambda _: 1.0 for _ in optimizer.param_groups]
+        )
+    else:
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=max_lrs, total_steps=scheduler_steps,
+            pct_start=0.03, div_factor=10
+        )
 
     best_val_loss = float('inf')
     epochs_without_improvement = 0

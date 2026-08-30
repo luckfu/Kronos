@@ -25,6 +25,7 @@ MAX_PRED_LEN = 30
 MAX_SAMPLE_COUNT = 50
 DEFAULT_SAMPLE_COUNT = 50
 MAX_BATCH_SIZE = 12
+INFERENCE_SEED = int(os.getenv("KRONOS_INFERENCE_SEED", "20260817"))
 
 
 class RequestError(ValueError):
@@ -47,6 +48,15 @@ class InferenceRequest:
 _predictor: KronosPredictor | None = None
 _model_lock = threading.Lock()
 _inference_lock = threading.Lock()
+
+
+def _seed_inference(seed: int) -> None:
+    """Pin sampling RNGs so the same inputs produce the same paths."""
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
 
 
 def _device() -> str:
@@ -207,6 +217,7 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     request = parse_request(payload)
     predictor = get_predictor()
     with _inference_lock, torch.inference_mode():
+        _seed_inference(INFERENCE_SEED)
         samples = predictor.predict(
             df=request.frame,
             x_timestamp=request.timestamps,
@@ -288,6 +299,7 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     if any(value is None for value in size_buckets):
         size_buckets = None
     with _inference_lock, torch.inference_mode():
+        _seed_inference(INFERENCE_SEED)
         batch_samples = predictor.predict_batch(
             df_list=[req.frame for req in requests],
             x_timestamp_list=[req.timestamps for req in requests],

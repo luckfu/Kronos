@@ -29,15 +29,15 @@ def main() -> None:
     save_file(tensors, output / "model.safetensors")
     shutil.copy2(config_path, output / "config.json")
     metadata = {
-        "source": "completed A-share V3 two-pass Last checkpoint",
+        "source": "resumable training Last checkpoint",
         "source_next_epoch": state.get("next_epoch"),
         "source_best_val_loss": state.get("best_val_loss"),
         "optimizer_state_included": False,
         "scheduler_state_included": False,
     }
     (output / "README.md").write_text(
-        "# A-share V3 Last model\n\n"
-        "Model-only weights extracted from the completed two-pass V3 checkpoint. "
+        "# Extracted Last model\n\n"
+        "Model-only weights extracted from a resumable training checkpoint. "
         "A fresh optimizer and scheduler must be used for incremental training.\n",
         encoding="utf-8",
     )

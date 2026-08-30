@@ -202,17 +202,6 @@
             line-height: 1.5;
         }
 
-        .stock-summary {
-            display: none;
-            margin-top: 18px;
-            padding-top: 17px;
-            border-top: 1px solid var(--border);
-        }
-
-        .stock-summary.visible {
-            display: block;
-        }
-
         .summary-title {
             display: flex;
             align-items: center;
@@ -602,7 +591,7 @@
 
         .history-filters {
             display: grid;
-            grid-template-columns: repeat(5, minmax(120px, 1fr)) auto;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 10px;
             align-items: end;
             margin: 16px 20px;
@@ -757,6 +746,11 @@
             font: inherit;
             font-size: 11px;
             cursor: pointer;
+        }
+
+        .history-action-group {
+            display: inline-flex;
+            gap: 6px;
         }
 
         .toast {
@@ -951,6 +945,8 @@
         }
 
         .sidebar {
+            position: sticky;
+            top: 16px;
             gap: 10px;
         }
 
@@ -988,13 +984,17 @@
         }
 
         /* The service status is a display field, not a multiline code input. */
-        .stock-input[aria-label="Modal 远端推理"] {
+        #inference-service {
             display: flex;
             align-items: center;
             height: 42px;
             min-height: 42px;
             padding: 0 11px;
             overflow: hidden;
+            border-style: dashed;
+            background: #eef1ef;
+            color: #424c46;
+            cursor: default;
             font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
             font-size: 14px;
             font-weight: 650;
@@ -1335,7 +1335,7 @@
             <aside class="sidebar">
                 <section class="card control-card">
                     <p class="section-label">推理服务</p>
-                    <div class="stock-input" aria-label="Modal 远端推理">Modal Serverless · 生产模型</div>
+                    <div id="inference-service" class="stock-input" aria-label="推理服务状态">正在连接推理服务…</div>
                     <p class="section-label">股票代码</p>
                     <textarea
                         id="stock-input"
@@ -1348,31 +1348,6 @@
                     ></textarea>
                     <div id="stock-help" class="field-help">一个代码显示详情，多个代码自动排名</div>
 
-                    <div id="stock-summary" class="stock-summary">
-                        <div class="summary-title">
-                            <strong id="summary-symbol">—</strong>
-                            <span id="summary-name" class="stock-name">—</span>
-                            <span id="summary-bucket" class="bucket-pill">市值层 —</span>
-                        </div>
-                        <div class="summary-grid">
-                            <div class="summary-item">
-                                <span>行情数据截止</span>
-                                <strong id="summary-date">—</strong>
-                            </div>
-                            <div class="summary-item">
-                                <span>最新收盘</span>
-                                <strong id="summary-close">—</strong>
-                            </div>
-                            <div class="summary-item">
-                                <span>历史交易日</span>
-                                <strong id="summary-rows">—</strong>
-                            </div>
-                            <div class="summary-item">
-                                <span>数据频率</span>
-                                <strong>日线</strong>
-                            </div>
-                        </div>
-                    </div>
                 </section>
 
                 <section class="card control-card">
@@ -1479,8 +1454,8 @@
                     <div class="history-filters" aria-label="预测历史筛选">
                         <label class="history-filter-field"><span>开始日期</span><input id="history-date-from" type="date"></label>
                         <label class="history-filter-field"><span>结束日期</span><input id="history-date-to" type="date"></label>
-                        <label class="history-filter-field"><span>股票代码</span><input id="history-symbol-filter" type="search" placeholder="如 600519"></label>
-                        <label class="history-filter-field"><span>方向</span><select id="history-direction-filter"><option value="">全部方向</option><option value="positive">上涨</option><option value="negative">下跌</option></select></label>
+                        <label id="history-symbol-field" class="history-filter-field"><span>股票代码</span><input id="history-symbol-filter" type="search" placeholder="如 600519"></label>
+                        <label id="history-direction-field" class="history-filter-field"><span>方向</span><select id="history-direction-filter"><option value="">全部方向</option><option value="positive">上涨</option><option value="negative">下跌</option></select></label>
                         <label class="history-filter-field"><span>来源</span><select id="history-backend-filter"><option value="">全部来源</option><option value="remote">Modal</option><option value="local">本地</option></select></label>
                         <div class="history-filter-actions"><button id="history-filter-submit" class="toolbar-button" type="button">筛选</button><button id="history-filter-reset" class="toolbar-button" type="button">清空</button></div>
                     </div>
@@ -1501,6 +1476,8 @@
         const state = {
             modelReady: false,
             backend: 'remote',
+            inferenceBackend: null,
+            inferenceDevice: null,
             symbol: null,
             dataInfo: null,
             trainingPanelCount: 0,
@@ -1512,6 +1489,7 @@
             historyProfile: 'single_stock_entry',
             historyGroups: {},
             historyGroupMode: false,
+            historyBatchResult: null,
         };
 
         const stockInput = document.getElementById('stock-input');
@@ -1560,6 +1538,13 @@
             historyRankingTab.classList.toggle('active', profile === 'cross_section_ranking');
             historySingleTab.setAttribute('aria-selected', String(profile === 'single_stock_entry'));
             historyRankingTab.setAttribute('aria-selected', String(profile === 'cross_section_ranking'));
+            const isRanking = profile === 'cross_section_ranking';
+            document.getElementById('history-symbol-field').style.display = isRanking ? 'none' : '';
+            document.getElementById('history-direction-field').style.display = isRanking ? 'none' : '';
+            if (isRanking) {
+                historySymbolFilter.value = '';
+                historyDirectionFilter.value = '';
+            }
             loadHistory();
         }
 
@@ -1568,12 +1553,22 @@
             try {
                 const response = await axios.post(apiUrl('/api/load-model'), {});
                 state.modelReady = true;
-                const device = response.data.model_info.device.toUpperCase();
-                setRuntime('ready', `${device} · 模型就绪`);
+                const info = response.data.model_info;
+                state.inferenceBackend = info.backend;
+                state.inferenceDevice = info.device;
+                const sourceLabel = info.backend === 'remote'
+                    ? 'Modal 远端'
+                    : '本地 ' + String(info.device).toUpperCase();
+                setRuntime('ready', sourceLabel + ' · 模型就绪');
+                document.getElementById('inference-service').textContent =
+                    info.backend === 'remote'
+                        ? 'Modal Serverless · 生产模型'
+                        : '本地模型 · ' + String(info.device).toUpperCase();
                 syncPredictButton();
             } catch (error) {
                 state.modelReady = false;
                 setRuntime('error', '模型加载失败');
+                document.getElementById('inference-service').textContent = '推理服务不可用';
                 showToast(error.response?.data?.error || error.message, true);
             }
         }
@@ -1587,50 +1582,6 @@
             } catch (error) {
                 document.getElementById('stock-help').textContent = '股票列表加载失败，可直接输入六位代码';
             }
-        }
-
-        async function confirmStock() {
-            const value = stockInput.value.trim();
-            if (!value) return;
-
-            stockInput.disabled = true;
-            document.getElementById('stock-help').textContent = '正在确认股票…';
-            try {
-                const response = await axios.post(apiUrl('/api/load-data'), {symbol: value});
-                const info = response.data.data_info;
-                state.symbol = info.symbol;
-                state.dataInfo = info;
-                stockInput.value = info.symbol.replace(/^\w+\./, '');
-                renderStockSummary(info);
-                const displayName = info.name ? ` · ${info.name}` : '';
-                document.getElementById('stock-help').textContent = `${info.symbol}${displayName} 已确认；点击预测时将通过 Modal 刷新行情并推理`;
-                document.getElementById('result-subtitle').textContent = `${info.symbol}${displayName} · 等待预测`;
-                syncPredictButton();
-            } catch (error) {
-                state.symbol = null;
-                state.dataInfo = null;
-                document.getElementById('stock-summary').classList.remove('visible');
-                document.getElementById('stock-help').textContent = error.response?.data?.error || '股票确认失败';
-                syncPredictButton();
-                showToast(error.response?.data?.error || error.message, true);
-            } finally {
-                stockInput.disabled = false;
-            }
-        }
-
-        function renderStockSummary(info) {
-            document.getElementById('stock-summary').classList.add('visible');
-            document.getElementById('summary-symbol').textContent = info.symbol;
-            document.getElementById('summary-name').textContent = info.name || '名称未知';
-            const percentile = Number.isFinite(info.size_percentile)
-                ? ` · ${(info.size_percentile * 100).toFixed(1)}%`
-                : '';
-            document.getElementById('summary-bucket').textContent = Number.isInteger(info.size_bucket)
-                ? `市值层 ${info.size_bucket} / 9${percentile}`
-                : '市值层待预测计算';
-            document.getElementById('summary-date').textContent = info.end_date ? formatDate(info.end_date) : '待刷新';
-            document.getElementById('summary-close').textContent = Number.isFinite(info.latest_close) ? formatPrice(info.latest_close) : '—';
-            document.getElementById('summary-rows').textContent = `${info.rows.toLocaleString('zh-CN')} 条`;
         }
 
         function parseStockSymbols() {
@@ -1682,7 +1633,8 @@
             state.historyGroupMode = false;
             setPredicting(true);
             document.getElementById('result-heading').textContent = '股票池正在批量预测';
-            document.getElementById('result-subtitle').textContent = '刷新行情并提交 Modal 批处理…';
+            const backendLabel = state.inferenceBackend === 'remote' ? 'Modal' : '本地';
+            document.getElementById('result-subtitle').textContent = '刷新行情并提交 ' + backendLabel + ' 批量推理…';
             try {
                 const response = await axios.post(apiUrl('/api/a-share/rankings'), {
                     symbols,
@@ -1694,26 +1646,8 @@
                 state.currentMode = 'batch';
                 state.currentResult = null;
                 state.historyRecordId = null;
-                const body = document.getElementById('batch-body');
-                body.innerHTML = '';
-                response.data.rankings.forEach((item, index) => {
-                    const row = document.createElement('tr');
-                    row.tabIndex = 0;
-                    row.innerHTML = `<td>${index + 1}</td><td>${formatStockLabel(item.symbol, item.name)}</td>` +
-                        `<td>${formatPrice(item.latest_close)}</td><td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${(item.predicted_return_p50 * 100).toFixed(2)}%</td>` +
-                        `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>`;
-                    const showDetail = () => state.historyGroupMode
-                        ? openHistoryRecord(item.record_id)
-                        : renderPrediction(item, true);
-                    row.addEventListener('click', showDetail);
-                    row.addEventListener('keydown', event => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            showDetail();
-                        }
-                    });
-                    body.appendChild(row);
-                });
+                state.historyGroupMode = false;
+                state.historyBatchResult = null;
                 showBatchRanking();
                 showToast(response.data.message);
             } catch (error) {
@@ -1729,19 +1663,46 @@
             });
         }
 
+        function renderBatchRankingTable(rankings, fromHistory) {
+            const body = document.getElementById('batch-body');
+            body.innerHTML = '';
+            rankings.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.tabIndex = 0;
+                row.innerHTML = `<td>${index + 1}</td><td>${formatStockLabel(item.symbol, item.name)}</td>` +
+                    `<td>${formatPrice(item.latest_close)}</td><td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${(item.predicted_return_p50 * 100).toFixed(2)}%</td>` +
+                    `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>`;
+                const showDetail = () => fromHistory
+                    ? openHistoryRecord(item.record_id)
+                    : renderPrediction(item, true);
+                row.addEventListener('click', showDetail);
+                row.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        showDetail();
+                    }
+                });
+                body.appendChild(row);
+            });
+        }
+
         function showBatchRanking() {
-            if (!state.batchResult) return;
+            const fromHistory = state.historyGroupMode === true;
+            const result = fromHistory ? state.historyBatchResult : state.batchResult;
+            if (!result) return;
+            renderBatchRankingTable(result.rankings, fromHistory);
             state.view = 'batch-ranking';
-            setResultTab('current');
+            setResultTab(fromHistory ? 'history' : 'current');
             document.getElementById('empty-state').style.display = 'none';
             showOnlyResultContent('batch-results');
             document.getElementById('back-to-ranking').style.display = 'none';
-            document.getElementById('back-to-history').style.display = 'none';
-            document.getElementById('snapshot-badge').style.display = 'none';
+            document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
+            document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
+            document.getElementById('snapshot-badge').textContent = fromHistory ? '历史快照' : '';
             document.getElementById('source-badge').style.display = 'none';
-            document.getElementById('result-heading').textContent = `股票池排名 · ${state.batchResult.rankings.length} 只`;
+            document.getElementById('result-heading').textContent = `股票池排名 · ${result.rankings.length} 只`;
             document.getElementById('result-subtitle').textContent =
-                `共同数据截止 ${formatDate(state.batchResult.as_of_date)} · ${state.batchResult.sample_count} 条路径 · ${state.batchResult.model_device}`;
+                `共同数据截止 ${formatDate(result.as_of_date)} · ${result.sample_count} 条路径 · ${result.model_device}`;
         }
 
         function setResultTab(active) {
@@ -1755,6 +1716,8 @@
         function showCurrentView() {
             setResultTab('current');
             state.historyRecordId = null;
+            state.historyGroupMode = false;
+            state.historyBatchResult = null;
             if (state.currentMode === 'batch' && state.batchResult) {
                 showBatchRanking();
                 return;
@@ -1776,11 +1739,15 @@
 
         async function loadHistory() {
             try {
+                state.historyGroupMode = false;
+                state.historyBatchResult = null;
                 const params = new URLSearchParams();
                 if (historyDateFrom.value) params.set('date_from', historyDateFrom.value);
                 if (historyDateTo.value) params.set('date_to', historyDateTo.value);
-                if (historySymbolFilter.value.trim()) params.set('symbol', historySymbolFilter.value.trim());
-                if (historyDirectionFilter.value) params.set('direction', historyDirectionFilter.value);
+                if (state.historyProfile !== 'cross_section_ranking') {
+                    if (historySymbolFilter.value.trim()) params.set('symbol', historySymbolFilter.value.trim());
+                    if (historyDirectionFilter.value) params.set('direction', historyDirectionFilter.value);
+                }
                 if (historyBackendFilter.value) params.set('backend', historyBackendFilter.value);
                 params.set('profile', state.historyProfile);
                 const query = params.toString();
@@ -1794,7 +1761,7 @@
                 document.getElementById('history-col-symbol').textContent = isRanking ? '股票数 / 股票列表' : '股票';
                 document.getElementById('history-col-extra').textContent = isRanking ? '来源' : '来源';
                 if (!records.length) {
-                    body.innerHTML = '<tr><td colspan="7">暂无预测记录</td></tr>';
+                    body.innerHTML = '<tr><td colspan="6">暂无预测记录</td></tr>';
                 }
                 const rows = isRanking ? Object.values(records.reduce((groups, record) => {
                     const key = record.batch_id || record.record_id;
@@ -1811,8 +1778,9 @@
                         const symbols = record.records.map(item => formatStockLabel(item.symbol, item.name)).join('、');
                         row.innerHTML = `<td>${formatDateTime(record.created_at)}</td><td>${record.records.length} 只 · ${symbols}</td>` +
                             `<td>—</td><td>组内排名</td><td>${record.backend === 'remote' ? 'Modal' : '本地'}</td>` +
-                            '<td><button class="history-group-button" type="button">查看排名</button></td>';
+                            '<td><span class="history-action-group"><button class="history-group-button" type="button">查看排名</button><button class="history-delete-button" type="button" aria-label="删除这个排序组">删除整组</button></span></td>';
                         row.querySelector('.history-group-button').addEventListener('click', event => { event.stopPropagation(); openHistoryGroup(record.batch_id || record.record_id); });
+                        row.querySelector('.history-delete-button').addEventListener('click', event => { event.stopPropagation(); deleteHistoryGroup(record.batch_id || record.record_id, record.records); });
                         row.addEventListener('click', () => openHistoryGroup(record.batch_id || record.record_id));
                     } else {
                         row.innerHTML = `<td>${formatDateTime(record.created_at)}</td><td>${formatStockLabel(record.symbol, record.name)}</td>` +
@@ -1848,10 +1816,10 @@
         }
 
         function openHistoryGroup(batchId) {
-            const records = state.historyGroups[batchId] || [];
+            const records = [...(state.historyGroups[batchId] || [])];
             if (!records.length) return;
-            state.batchResult = { rankings: records, sample_count: records[0]?.interval?.sample_count || 50, as_of_date: records[0]?.latest_data_date, model_device: records[0]?.backend === 'remote' ? 'remote' : 'local' };
-            state.currentMode = 'batch';
+            records.sort((a, b) => (b.predicted_return_p50 ?? -Infinity) - (a.predicted_return_p50 ?? -Infinity));
+            state.historyBatchResult = { rankings: records, sample_count: records[0]?.interval?.sample_count || 50, as_of_date: records[0]?.latest_data_date, model_device: records[0]?.backend === 'remote' ? 'remote' : 'local' };
             state.historyRecordId = null;
             state.historyGroupMode = true;
             showBatchRanking();
@@ -1877,6 +1845,22 @@
                 }
                 await loadHistory();
                 showToast('预测记录已删除');
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        async function deleteHistoryGroup(batchId, records) {
+            const count = records.length;
+            if (!window.confirm(`确定删除这个排序组及其 ${count} 条股票预测吗？删除后无法恢复。`)) return;
+            try {
+                await axios.delete(apiUrl(`/api/prediction-history/groups/${encodeURIComponent(batchId)}`));
+                if (state.historyGroupMode && state.batchResult?.rankings?.some(record => record.batch_id === batchId)) {
+                    state.batchResult = null;
+                    state.historyGroupMode = false;
+                }
+                await loadHistory();
+                showToast(`已删除排序组及 ${count} 条预测记录`);
             } catch (error) {
                 showToast(error.response?.data?.error || error.message, true);
             }
@@ -1955,10 +1939,6 @@
                 `;
                 tableBody.appendChild(row);
             });
-
-            document.getElementById('summary-date').textContent = formatDate(result.latest_data_date);
-            document.getElementById('summary-close').textContent = formatPrice(result.latest_close);
-            document.getElementById('summary-bucket').textContent = `市值层 ${result.size_bucket} / 9 · ${(result.size_percentile * 100).toFixed(1)}%`;
 
         }
 

@@ -1,5 +1,22 @@
 # Kronos A 股预测工作台
 
+> 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
+
+新的全市场模型版本为 **Beta v1.2**，同时发布 `Best@871` 与 `Last@1056`。稳定本地入口为
+`models/a_share_v1_beta/releases/beta_v1.2/best_model` 和
+`models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布依据和使用边界见
+[`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)。该版本当前没有自动
+替换下文所述旧 V6 Web/Modal 生产服务。
+
+Beta v1.2 的推理输入和全市场市值百分位准备规则见
+[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。该文档
+适用于全市场行业条件模型，不改变当前 V6 生产模型的兼容方式。
+
+2026-08-28 从 A800 迁回的 v1-beta 模型、严格未来评估数据和全部评估结果已直接合并
+到项目目录。当前模型血缘、精确 SHA-256、晋级状态与路径事件结论见
+[`finetune/V1_BETA_MODEL_LINEAGE_CN.md`](finetune/V1_BETA_MODEL_LINEAGE_CN.md)；机器可读
+清单为 [`models/a_share_v1_beta/LINEAGE.json`](models/a_share_v1_beta/LINEAGE.json)。
+
 这是一个基于 [Kronos](https://github.com/shiyu-coder/Kronos) 的 A 股日线预测项目。当前交付版本固定使用经过市值分层增训的 `Kronos-base`，提供单股区间预测、自选股票池横截面排序、增训脚本和样本外回测脚本。
 
 > 本项目用于研究和回测，不构成投资建议。模型预测、回测收益和排名都可能失效，不能直接替代交易系统或风险管理。
