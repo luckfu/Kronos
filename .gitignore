@@ -70,6 +70,7 @@ Desktop.ini
 /finetune/kaggle_v1_beta_minimal.tar.gz
 /webui/prediction_results/
 /webui/market_data_cache/
+/webui/symbol_sector_map.json.bak
 
 # Logs
 *.log

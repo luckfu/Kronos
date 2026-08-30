@@ -1,4 +1,4 @@
-"""Modal deployment for the V6 model-only public inference API."""
+"""Modal deployment for the Beta V1.2 model-only inference API."""
 
 import os
 from pathlib import Path
@@ -9,23 +9,24 @@ from fastapi.responses import JSONResponse
 
 
 DEPLOY_DIR = Path(__file__).resolve().parent
-MODEL_REPO_ID = "luckfu/Kronos-A-Share-Forecast"
-REMOTE_MODEL_PATH = "/opt/kronos/models/a_share_forecast"
-TOKENIZER_ID = os.getenv(
-    "KRONOS_TOKENIZER_ID", "NeoQuasar/Kronos-Tokenizer-base"
-)
+MODEL_REPO_ID = "luckfu/Kronos-A-Share-Beta-V1-2"
+REMOTE_REPO_PATH = "/opt/kronos/models/a_share_beta_v1_2"
+REMOTE_MODEL_PATH = REMOTE_REPO_PATH
+REMOTE_TOKENIZER_PATH = f"{REMOTE_REPO_PATH}/tokenizer"
+TOKENIZER_ID = os.getenv("KRONOS_TOKENIZER_ID", REMOTE_TOKENIZER_PATH)
 SECRET_NAME = os.getenv("MODAL_KRONOS_SECRET_NAME", "")
 
 
-app = modal.App("kronos-v6-inference")
+app = modal.App("kronos-beta-v1-2-inference")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install_from_requirements(str(DEPLOY_DIR / "requirements.txt"))
     .run_commands(
         "python -c \"from modelscope import snapshot_download; "
-        f"snapshot_download('{MODEL_REPO_ID}', local_dir='{REMOTE_MODEL_PATH}')\"",
-        # The production repository is mutable, so every deployment must fetch
-        # its current snapshot instead of reusing Modal's previous image layer.
+        f"snapshot_download('{MODEL_REPO_ID}', local_dir='{REMOTE_REPO_PATH}', "
+        "allow_patterns=['config.json', 'model.safetensors', 'tokenizer/*'])\"",
+        # Re-read the release snapshot on every deployment so a replaced remote
+        # artifact cannot remain hidden in a cached Modal image layer.
         force_build=True,
     )
     .env({
@@ -59,14 +60,16 @@ def _check_api_key(authorization: str | None) -> None:
 def web():
     from serverless.service import RequestError, predict, predict_batch
 
-    api = FastAPI(title="Kronos V6 Inference API", version="1.0")
+    api = FastAPI(title="Kronos Beta V1.2 Inference API", version="1.2")
 
     @api.get("/health")
     def health():
         return {
             "status": "ok",
-            "service": "kronos-v6-inference",
+            "service": "kronos-beta-v1-2-inference",
             "model": MODEL_REPO_ID,
+            "release": "beta-v1.2",
+            "checkpoint": "Best@871",
         }
 
     @api.post("/predict")

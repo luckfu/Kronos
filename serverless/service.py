@@ -15,11 +15,16 @@ from model import Kronos, KronosPredictor, KronosTokenizer
 
 FEATURE_COLUMNS = ("open", "high", "low", "close", "volume", "amount")
 DEFAULT_MODEL_PATH = (
-    "outputs/models/a_share_v6_segment542_latest/checkpoints/last_model"
+    "models/a_share_v1_beta/releases/beta_v1.2/best_model"
 )
-DEFAULT_TOKENIZER_ID = "NeoQuasar/Kronos-Tokenizer-base"
+DEFAULT_TOKENIZER_ID = "models/a_share_v1_beta/releases/beta_v1.2/tokenizer"
 MAX_CONTEXT = 512
-MAX_PRED_LEN = 30
+REQUIRED_CONTEXT = 120
+REQUIRED_PRED_LEN = 10
+NUM_SECTORS = 86
+UNKNOWN_SECTOR_ID = NUM_SECTORS
+MODEL_RELEASE = "beta-v1.2"
+MODEL_CHECKPOINT = "Best@871"
 # 10 paths makes P10/P50/P90 very sensitive to a single sampled trajectory.
 # The grid-optimized production configuration uses the API maximum of 50 paths.
 MAX_SAMPLE_COUNT = 50
@@ -41,8 +46,8 @@ class InferenceRequest:
     temperature: float
     top_p: float
     sample_count: int
-    size_bucket: int | None
-    size_percentile: float | None
+    sector_id: int
+    size_percentile: float
 
 
 _predictor: KronosPredictor | None = None
@@ -84,10 +89,10 @@ def get_predictor() -> KronosPredictor:
         ).eval()
         model = Kronos.from_pretrained(
             os.getenv("KRONOS_MODEL_ID", DEFAULT_MODEL_PATH),
-            num_sectors=0,
-            num_size_buckets=10,
+            num_sectors=NUM_SECTORS,
+            num_size_buckets=0,
             context_layer=10,
-            use_size_percentile=False,
+            use_size_percentile=True,
             size_mlp_hidden_dim=64,
         ).eval()
         _predictor = KronosPredictor(
@@ -125,8 +130,8 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
     rows = payload.get("data")
     if not isinstance(rows, list) or not rows:
         raise RequestError("data must be a non-empty array of OHLCVA rows")
-    if len(rows) > MAX_CONTEXT:
-        rows = rows[-MAX_CONTEXT:]
+    if len(rows) != REQUIRED_CONTEXT:
+        raise RequestError(f"data must contain exactly {REQUIRED_CONTEXT} OHLCVA rows")
     if not all(isinstance(row, Mapping) for row in rows):
         raise RequestError("every data item must be an object")
 
@@ -157,9 +162,9 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
     if (frame[["volume", "amount"]] < 0).any().any():
         raise RequestError("volume and amount must be non-negative")
 
-    pred_len = _integer(payload.get("pred_len", 10), "pred_len")
-    if not 1 <= pred_len <= MAX_PRED_LEN:
-        raise RequestError(f"pred_len must be between 1 and {MAX_PRED_LEN}")
+    pred_len = _integer(payload.get("pred_len", REQUIRED_PRED_LEN), "pred_len")
+    if pred_len != REQUIRED_PRED_LEN:
+        raise RequestError(f"pred_len must equal {REQUIRED_PRED_LEN} for Beta V1.2")
     future_values = payload.get("future_timestamps")
     if not isinstance(future_values, list) or len(future_values) != pred_len:
         raise RequestError("future_timestamps length must equal pred_len")
@@ -187,16 +192,18 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
             f"sample_count must be between 1 and {MAX_SAMPLE_COUNT}"
         )
 
-    size_bucket = payload.get("size_bucket")
-    if size_bucket is not None:
-        size_bucket = _integer(size_bucket, "size_bucket")
-        if not 0 <= size_bucket <= 9:
-            raise RequestError("size_bucket must be between 0 and 9")
-    size_percentile = payload.get("size_percentile")
-    if size_percentile is not None:
-        size_percentile = _number(size_percentile, "size_percentile")
-        if not 0 <= size_percentile <= 1:
-            raise RequestError("size_percentile must be between 0 and 1")
+    if "size_bucket" in payload:
+        raise RequestError("size_bucket is not supported by Beta V1.2")
+    if "sector_id" not in payload:
+        raise RequestError("sector_id is required by Beta V1.2")
+    sector_id = _integer(payload["sector_id"], "sector_id")
+    if not 0 <= sector_id <= UNKNOWN_SECTOR_ID:
+        raise RequestError(f"sector_id must be between 0 and {UNKNOWN_SECTOR_ID}")
+    if "size_percentile" not in payload:
+        raise RequestError("size_percentile is required by Beta V1.2")
+    size_percentile = _number(payload["size_percentile"], "size_percentile")
+    if not 0 <= size_percentile <= 1:
+        raise RequestError("size_percentile must be between 0 and 1")
 
     return InferenceRequest(
         frame=frame.reset_index(drop=True),
@@ -208,7 +215,7 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
         temperature=temperature,
         top_p=top_p,
         sample_count=sample_count,
-        size_bucket=size_bucket,
+        sector_id=sector_id,
         size_percentile=size_percentile,
     )
 
@@ -227,7 +234,8 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             top_p=request.top_p,
             sample_count=request.sample_count,
             verbose=False,
-            size_bucket=request.size_bucket,
+            sector_id=request.sector_id,
+            size_bucket=None,
             size_percentile=request.size_percentile,
             return_samples=True,
         )
@@ -269,6 +277,8 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             "pred_len": request.pred_len,
             "sample_count": request.sample_count,
             "model_device": str(predictor.device),
+            "model_release": MODEL_RELEASE,
+            "model_checkpoint": MODEL_CHECKPOINT,
         },
     }
 
@@ -295,9 +305,8 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         raise RequestError("all batch items must use the same context, pred_len, and sample_count")
 
     predictor = get_predictor()
-    size_buckets = [req.size_bucket for req in requests]
-    if any(value is None for value in size_buckets):
-        size_buckets = None
+    sector_ids = [req.sector_id for req in requests]
+    size_percentiles = [req.size_percentile for req in requests]
     with _inference_lock, torch.inference_mode():
         _seed_inference(INFERENCE_SEED)
         batch_samples = predictor.predict_batch(
@@ -309,7 +318,9 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             top_p=requests[0].top_p,
             sample_count=requests[0].sample_count,
             verbose=False,
-            size_bucket=size_buckets,
+            sector_id=sector_ids,
+            size_bucket=None,
+            size_percentile=size_percentiles,
             return_samples=True,
         )
 
@@ -341,5 +352,6 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         "meta": {
             "batch_size": len(results), "pred_len": requests[0].pred_len,
             "sample_count": requests[0].sample_count, "model_device": str(predictor.device),
+            "model_release": MODEL_RELEASE, "model_checkpoint": MODEL_CHECKPOINT,
         },
     }

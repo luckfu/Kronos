@@ -13,6 +13,9 @@ mkdir -p "$release_dir/webui/templates" "$release_dir/deploy"
 cp "$PROJECT_DIR/webui/app.py" "$release_dir/webui/app.py"
 cp "$PROJECT_DIR/webui/templates/index.html" "$release_dir/webui/templates/index.html"
 cp "$PROJECT_DIR/webui/size_reference.json" "$release_dir/webui/size_reference.json"
+cp "$PROJECT_DIR/webui/sector_vocabulary.json" "$release_dir/webui/sector_vocabulary.json"
+cp "$PROJECT_DIR/webui/symbol_sector_map.json" "$release_dir/webui/symbol_sector_map.json"
+cp "$PROJECT_DIR/webui/update_sector_mapping.py" "$release_dir/webui/update_sector_mapping.py"
 cp "$SCRIPT_DIR/requirements.txt" "$release_dir/deploy/requirements.txt"
 cp "$SCRIPT_DIR/kronos-web.service" "$release_dir/deploy/kronos-web.service"
 cp "$SCRIPT_DIR/nginx-kronos-location.conf" "$release_dir/deploy/nginx-kronos-location.conf"
@@ -32,6 +35,14 @@ sudo chown -R opc:opc "$root/data"
 sudo install -o opc -g opc -m 0644 "$stage/webui/app.py" "$root/webui/app.py"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/index.html" "$root/webui/templates/index.html"
 sudo install -o opc -g opc -m 0644 "$stage/webui/size_reference.json" "$root/webui/size_reference.json"
+sudo install -o opc -g opc -m 0644 "$stage/webui/sector_vocabulary.json" "$root/webui/sector_vocabulary.json"
+sudo install -o opc -g opc -m 0755 "$stage/webui/update_sector_mapping.py" "$root/webui/update_sector_mapping.py"
+if [[ ! -f "$root/webui/symbol_sector_map.json" ]]; then
+  sudo install -o opc -g opc -m 0644 "$stage/webui/symbol_sector_map.json" "$root/webui/symbol_sector_map.json"
+fi
+if [[ -f "$root/webui/sector_reference.json" ]]; then
+  sudo mv "$root/webui/sector_reference.json" "$root/data/sector_reference.legacy.$stamp.json"
+fi
 sudo install -o opc -g opc -m 0644 "$stage/deploy/requirements.txt" "$root/deploy/requirements.txt"
 if [[ ! -x "$root/.venv/bin/python" ]]; then python3 -m venv "$root/.venv"; fi
 "$root/.venv/bin/python" -m pip install --no-cache-dir --upgrade pip

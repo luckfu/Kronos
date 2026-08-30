@@ -1,6 +1,6 @@
-# Oracle Kronos Web Gateway
+# Oracle Kronos Beta V1.2 Web Gateway
 
-This directory deploys only the lightweight Kronos web UI and market-data gateway. The Oracle host does not receive a model, checkpoint, training dataset, PyTorch, ModelScope, or Hugging Face tooling. Inference is sent to the Modal production service using model `luckfu/Kronos-A-Share-Forecast`.
+This directory deploys only the lightweight Kronos web UI and market-data gateway. The Oracle host does not receive a model, checkpoint, training dataset, PyTorch, ModelScope, or Hugging Face tooling. Inference is sent to the independent Beta V1.2 Modal service backed by `luckfu/Kronos-A-Share-Beta-V1-2` `Best@871`.
 
 ## Architecture
 
@@ -9,10 +9,12 @@ Browser -> https://allmoneybymehold.com/kronos/
         -> existing Nginx Basic Auth (/etc/nginx/.htpasswd_clawd)
         -> Gunicorn at 127.0.0.1:7072
         -> incremental market-data cache and collection
-        -> Modal Serverless inference API
+        -> fixed sector vocabulary + replaceable symbol mapping
+        -> full-market size-percentile reference
+        -> Beta V1.2 Modal Serverless inference API
 ```
 
-The deployment creates only `/opt/kronos-web`, an isolated `kronos-web.service`, and `/etc/nginx/default.d/kronos.conf`. It does not modify the main Nginx file or stop existing services. Existing Kronos-specific files are timestamp-backed up before replacement. Supabase is not used. Prediction records are stored as JSON under `/opt/kronos-web/data/prediction_results` and survive redeployments. Adjusted daily market data is cached per stock under `/opt/kronos-web/data/market_data_cache`; refreshes request a small overlap after the cached last date, merge and deduplicate rows, and then send only the requested context to Modal.
+The deployment creates only `/opt/kronos-web`, an isolated `kronos-web.service`, and `/etc/nginx/default.d/kronos.conf`. It does not modify the main Nginx file or stop existing services. Existing Kronos-specific files are timestamp-backed up before replacement. Supabase is not used. Prediction records are stored as JSON under `/opt/kronos-web/data/prediction_results`, survive redeployments, and are grouped in the UI by their market-data cutoff date rather than submission mode. Adjusted daily market data is cached per stock under `/opt/kronos-web/data/market_data_cache`; refreshes request a small overlap after the cached last date, merge and deduplicate rows, and then send only the requested context to Modal.
 
 ## Deploy
 
@@ -22,9 +24,23 @@ Prerequisites are the SSH alias `oracle4C24G`, `ssh`, and `rsync`. The server ne
 bash deploy/oracle-kronos/deploy.sh
 ```
 
-A different alias can be supplied with `SSH_TARGET=opc@example-host`. The service enforces `KRONOS_REMOTE_ONLY=1`, so request payloads cannot select local inference.
+A different alias can be supplied with `SSH_TARGET=opc@example-host`. The service enforces `KRONOS_REMOTE_ONLY=1`, so request payloads cannot select local inference. Deploy the Modal Beta V1.2 App first; this gateway points to `https://luckfu--kronos-beta-v1-2-inference-web.modal.run`.
 
 The `/kronos/` location uses `/etc/nginx/.htpasswd_clawd`. This is standard Nginx Basic Auth, so each person can have a separate username and password. The deployment never creates, replaces, or prints that password file.
+
+## Update Industry Mapping
+
+The Beta V1.2 sector vocabulary and ID order are immutable. The per-symbol mapping can be
+refreshed manually from BaoStock and is preserved by later web deployments:
+
+```bash
+bash deploy/oracle-kronos/update-sector-mapping.sh
+```
+
+An optional historical snapshot date can be supplied as `YYYY-MM-DD`. The updater validates
+the fixed vocabulary, refuses unexpectedly small provider responses, creates
+`symbol_sector_map.json.bak`, and atomically replaces the mapping. The wrapper restarts the
+gateway so both Gunicorn workers use the new mapping.
 
 Add or change a user without exposing the password in shell history:
 
@@ -52,6 +68,10 @@ ssh oracle4C24G 'curl -fsS http://127.0.0.1:7072/health'
 
 ## Release Contents
 
-Only `webui/app.py`, `webui/templates/index.html`, `webui/size_reference.json`, and the three deployment configuration files are uploaded. Model directories, checkpoints, datasets, outputs, artifacts, training code, and credentials are never included.
+Only the Web gateway, template, size reference, fixed sector vocabulary, initial symbol-sector
+mapping, mapping updater, and deployment configuration files are uploaded. Model directories,
+checkpoints, datasets, outputs, artifacts, training code, and credentials are never included.
+After the first installation, ordinary deployments preserve the Oracle host's current
+`symbol_sector_map.json`; only the manual updater replaces it.
 
-The Oracle gateway stores per-stock adjusted daily cache files in `/opt/kronos-web/data/market_data_cache` and prediction snapshots in `/opt/kronos-web/data/prediction_results`. Both directories are persistent runtime data and are not replaced by the release upload. The gateway owns market-data collection; Modal receives only the prepared OHLCVA context and performs inference.
+The Oracle gateway stores per-stock adjusted daily cache files in `/opt/kronos-web/data/market_data_cache` and prediction snapshots in `/opt/kronos-web/data/prediction_results`. Both directories are persistent runtime data and are not replaced by the release upload. The gateway owns market-data collection and derives the signal-date industry ID and continuous size percentile. Modal receives only the prepared 120-row OHLCVA context, 10 future timestamps, and those two conditions.

@@ -49,25 +49,47 @@ app = Flask(__name__)
 CORS(app)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-A_SHARE_DATASET_DIR = os.path.join(PROJECT_ROOT, 'data', 'a_share_v5', 'processed_datasets')
+A_SHARE_DATASET_DIR = os.path.join(
+    PROJECT_ROOT, 'data', 'a_share_full_market_v1_beta', 'processed_datasets'
+)
 A_SHARE_RAW_DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'a_share', 'a_share_daily.csv')
 A_SHARE_SIZE_REFERENCE_PATH = os.path.join(PROJECT_ROOT, 'webui', 'size_reference.json')
+A_SHARE_SECTOR_VOCABULARY_PATH = os.getenv(
+    'KRONOS_SECTOR_VOCABULARY_PATH',
+    os.path.join(PROJECT_ROOT, 'webui', 'sector_vocabulary.json'),
+)
+A_SHARE_SYMBOL_SECTOR_MAP_PATH = os.getenv(
+    'KRONOS_SYMBOL_SECTOR_MAP_PATH',
+    os.path.join(PROJECT_ROOT, 'webui', 'symbol_sector_map.json'),
+)
 MAX_MARKET_DATA_AGE_DAYS = 10
 A_SHARE_MODEL_PATH = os.path.join(
     PROJECT_ROOT,
-    'outputs',
     'models',
-    'a_share_v6_segment542_latest',
-    'checkpoints',
-    'last_model',
+    'a_share_v1_beta',
+    'releases',
+    'beta_v1.2',
+    'best_model',
+)
+A_SHARE_TOKENIZER_PATH = os.path.join(
+    PROJECT_ROOT,
+    'models',
+    'a_share_v1_beta',
+    'releases',
+    'beta_v1.2',
+    'tokenizer',
 )
 KRONOS_INFERENCE_URL = os.getenv(
     'KRONOS_INFERENCE_URL',
-    'https://luckfu--kronos-v6-inference-web.modal.run',
+    'https://luckfu--kronos-beta-v1-2-inference-web.modal.run',
 ).rstrip('/')
 KRONOS_API_KEY = os.getenv('KRONOS_API_KEY')
 KRONOS_INFERENCE_TIMEOUT = float(os.getenv('KRONOS_INFERENCE_TIMEOUT', '210'))
-KRONOS_MODEL_ID = 'luckfu/Kronos-A-Share-Forecast'
+KRONOS_MODEL_ID = 'luckfu/Kronos-A-Share-Beta-V1-2'
+KRONOS_MODEL_KEY = 'a-share-beta-v1-2'
+KRONOS_RELEASE_ID = 'beta-v1.2'
+KRONOS_CHECKPOINT = 'Best@871'
+KRONOS_NUM_SECTORS = 86
 PREDICTION_RESULTS_DIR = os.getenv(
     'KRONOS_HISTORY_DIR',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prediction_results'),
@@ -113,29 +135,34 @@ baostock_lock = threading.Lock()
 inference_lock = threading.Lock()
 size_reference_cache = None
 size_reference_lock = threading.Lock()
+sector_reference_cache = None
+sector_reference_lock = threading.Lock()
 market_data_cache_lock = threading.Lock()
 
 # Available model configurations
 AVAILABLE_MODELS = {
-    'a-share-size-kronos-base': {
-        'name': 'A-share V6 Segment 542 Last Kronos',
+    KRONOS_MODEL_KEY: {
+        'name': 'A-share Full-Market Beta V1.2',
         'model_id': A_SHARE_MODEL_PATH,
-        'tokenizer_id': 'NeoQuasar/Kronos-Tokenizer-base',
+        'tokenizer_id': A_SHARE_TOKENIZER_PATH,
         'context_length': 512,
-        'params': '102.3M',
-        'description': 'Production A-share single-stock timing model with 120-day context and 10-day forecast',
-        'num_size_buckets': 10,
-        'use_size_percentile': False,
+        'params': '102.4M',
+        'release_id': KRONOS_RELEASE_ID,
+        'checkpoint': KRONOS_CHECKPOINT,
+        'description': 'Full-market A-share Beta V1.2 with sector and continuous size-percentile conditioning',
+        'num_sectors': KRONOS_NUM_SECTORS,
+        'num_size_buckets': 0,
+        'use_size_percentile': True,
         'default_lookback': 120,
         'default_pred_len': 10,
         'default_temperature': 0.65,
         'default_top_p': 0.8,
         'default_sample_count': 50,
         'model_kwargs': {
-            'num_sectors': 0,
-            'num_size_buckets': 10,
+            'num_sectors': KRONOS_NUM_SECTORS,
+            'num_size_buckets': 0,
             'context_layer': 10,
-            'use_size_percentile': False,
+            'use_size_percentile': True,
             'size_mlp_hidden_dim': 64,
         },
         'local': True,
@@ -164,7 +191,7 @@ def ensure_model_loaded():
         if not MODEL_AVAILABLE:
             raise RuntimeError('Kronos model library is not available')
 
-        model_key = 'a-share-size-kronos-base'
+        model_key = KRONOS_MODEL_KEY
         model_config = AVAILABLE_MODELS[model_key]
         if not os.path.exists(model_config['model_id']):
             raise FileNotFoundError(f'Local checkpoint not found: {model_config["model_id"]}')
@@ -451,7 +478,7 @@ def query_eastmoney_daily_data(symbol, lookback, pred_len, history_rows=None):
 
 
 def load_latest_size_reference():
-    """Load the latest available cross-section used to size unseen stocks."""
+    """Load the full-market cross-section used for continuous size ranks."""
     global size_reference_cache
     if size_reference_cache is not None:
         return size_reference_cache
@@ -460,7 +487,7 @@ def load_latest_size_reference():
         if size_reference_cache is not None:
             return size_reference_cache
         if os.path.exists(A_SHARE_SIZE_REFERENCE_PATH):
-            with open(A_SHARE_SIZE_REFERENCE_PATH) as handle:
+            with open(A_SHARE_SIZE_REFERENCE_PATH, encoding='utf-8') as handle:
                 payload = json.load(handle)
             reference_date = pd.Timestamp(payload['reference_date'])
             market_caps = np.sort(np.asarray(payload['market_caps'], dtype=np.float64))
@@ -495,26 +522,130 @@ def load_latest_size_reference():
         return size_reference_cache
 
 
+def load_sector_reference():
+    """Load the immutable model vocabulary and replaceable symbol mapping."""
+    global sector_reference_cache
+    if sector_reference_cache is not None:
+        return sector_reference_cache
+
+    with sector_reference_lock:
+        if sector_reference_cache is not None:
+            return sector_reference_cache
+        with open(A_SHARE_SECTOR_VOCABULARY_PATH, encoding='utf-8') as handle:
+            vocabulary = json.load(handle)
+        with open(A_SHARE_SYMBOL_SECTOR_MAP_PATH, encoding='utf-8') as handle:
+            mapping = json.load(handle)
+        labels = vocabulary.get('sector_labels') or []
+        if len(labels) != KRONOS_NUM_SECTORS:
+            raise ValueError(
+                f'Sector reference has {len(labels)} labels; {KRONOS_NUM_SECTORS} are required'
+            )
+        if len(set(labels)) != len(labels):
+            raise ValueError('Sector vocabulary contains duplicate labels')
+        unknown_sector_id = int(
+            vocabulary.get('unknown_sector_id', KRONOS_NUM_SECTORS)
+        )
+        if unknown_sector_id != KRONOS_NUM_SECTORS:
+            raise ValueError('Sector reference unknown ID does not match the model contract')
+        vocabulary_id = str(vocabulary.get('vocabulary_id') or '')
+        if not vocabulary_id or mapping.get('vocabulary_id') != vocabulary_id:
+            raise ValueError('Symbol-sector mapping does not match the model vocabulary')
+        label_to_id = {str(value): index for index, value in enumerate(labels)}
+        symbols = {}
+        for symbol, raw_record in (mapping.get('symbols') or {}).items():
+            sector_label = str(raw_record.get('sector_label') or 'unknown')
+            sector_id = int(raw_record['sector_id'])
+            expected_id = label_to_id.get(sector_label, unknown_sector_id)
+            if sector_id != expected_id:
+                raise ValueError(
+                    f'Symbol-sector mapping has an invalid ID for {symbol}: '
+                    f'{sector_id} != {expected_id}'
+                )
+            reference_date = pd.Timestamp(raw_record['reference_date'])
+            if pd.isna(reference_date):
+                raise ValueError(f'Symbol-sector mapping has an invalid date for {symbol}')
+            symbols[str(symbol)] = {
+                'sector_id': sector_id,
+                'sector_label': sector_label,
+                'reference_date': reference_date.date().isoformat(),
+            }
+        sector_reference_cache = {
+            'date': pd.Timestamp(mapping['reference_date']),
+            'vocabulary_id': vocabulary_id,
+            'labels': tuple(str(value) for value in labels),
+            'label_to_id': label_to_id,
+            'unknown_sector_id': unknown_sector_id,
+            'symbols': symbols,
+        }
+        return sector_reference_cache
+
+
+def sector_condition_from_local_frame(local_frame, asof=None):
+    """Resolve a point-in-time sector from a prepared local symbol frame."""
+    if local_frame is None or 'sector' not in local_frame.columns:
+        return None
+    rows = local_frame.dropna(subset=['sector']).copy()
+    if asof is not None:
+        rows = rows[rows['timestamps'] <= pd.Timestamp(asof)]
+    if rows.empty:
+        return None
+    latest = rows.iloc[-1]
+    label = str(latest['sector'])
+    reference = load_sector_reference()
+    sector_id = int(reference['label_to_id'].get(label, reference['unknown_sector_id']))
+    return {
+        'sector_id': sector_id,
+        'sector_label': label,
+        'sector_reference_date': pd.Timestamp(latest['timestamps']),
+        'sector_source': 'local_point_in_time_panel',
+    }
+
+
+def sector_condition_for_symbol(symbol, asof, local_frame=None):
+    """Resolve the latest non-future sector, falling back to the unknown ID."""
+    local = sector_condition_from_local_frame(local_frame, asof=asof)
+    if local is not None:
+        return local
+
+    reference = load_sector_reference()
+    record = reference['symbols'].get(normalize_a_share_symbol(symbol))
+    if record is not None:
+        reference_date = pd.Timestamp(record['reference_date'])
+        if reference_date <= pd.Timestamp(asof):
+            sector_id = int(record['sector_id'])
+            if not 0 <= sector_id < KRONOS_NUM_SECTORS:
+                sector_id = reference['unknown_sector_id']
+            return {
+                'sector_id': sector_id,
+                'sector_label': str(record['sector_label']),
+                'sector_reference_date': reference_date,
+                'sector_source': 'portable_sector_snapshot',
+            }
+    return {
+        'sector_id': reference['unknown_sector_id'],
+        'sector_label': 'unknown',
+        'sector_reference_date': None,
+        'sector_source': 'unknown_sector_fallback',
+    }
+
+
 def size_condition_from_remote_context(context):
-    """Estimate float market cap and map it to the training cross-section."""
+    """Map amount/turnover market-cap proxy to the training cross-section."""
     ordered = context.sort_values('timestamps').copy()
-    for column in ('close', 'volume', 'turn'):
+    for column in ('amount', 'turn'):
         ordered[column] = pd.to_numeric(ordered[column], errors='coerce')
     usable = ordered[
-        np.isfinite(ordered['close'])
-        & np.isfinite(ordered['volume'])
+        np.isfinite(ordered['amount'])
         & np.isfinite(ordered['turn'])
-        & (ordered['close'] > 0)
-        & (ordered['volume'] > 0)
+        & (ordered['amount'] > 0)
         & (ordered['turn'] > 0)
     ]
     if usable.empty:
-        raise ValueError('BaoStock history has no usable turnover row for market-cap sizing')
+        raise ValueError('Market history has no usable amount/turnover row for size conditioning')
     latest = usable.iloc[-1]
-    close = float(latest['close'])
-    volume = float(latest['volume'])
+    amount = float(latest['amount'])
     turnover = float(latest['turn'])
-    market_cap = close * volume / (turnover / 100.0)
+    market_cap = amount / (turnover / 100.0)
     if not np.isfinite(market_cap) or market_cap <= 0:
         raise ValueError('Unable to estimate a positive float market cap from BaoStock')
 
@@ -524,41 +655,37 @@ def size_condition_from_remote_context(context):
         / reference['count']
     )
     percentile = float(np.clip(percentile, 0.0, 1.0))
-    size_bucket = min(int(np.floor(percentile * 10)), 9)
     return {
-        'size_bucket': size_bucket,
         'size_percentile': percentile,
-        'size_bucket_asof': pd.Timestamp(latest['timestamps']),
+        'size_percentile_asof': pd.Timestamp(latest['timestamps']),
         'size_reference_date': reference['date'],
-        'size_source': 'baostock_proxy_vs_local_cross_section',
+        'size_source': 'amount_turnover_proxy_vs_full_market_cross_section',
         'estimated_market_cap': float(market_cap),
     }
 
 
-def size_condition_from_local_frame(local_frame):
-    if local_frame is None or 'size_bucket' not in local_frame.columns:
+def size_condition_from_local_frame(local_frame, asof=None):
+    if local_frame is None or 'size_percentile' not in local_frame.columns:
         return None
-    rows = local_frame.dropna(subset=['size_bucket'])
+    rows = local_frame.dropna(subset=['size_percentile']).copy()
+    if asof is not None:
+        rows = rows[rows['timestamps'] <= pd.Timestamp(asof)]
     if rows.empty:
         return None
     latest = rows.iloc[-1]
-    size_bucket = int(latest['size_bucket'])
-    percentile = latest.get('size_percentile', np.nan)
-    if not np.isfinite(percentile):
-        percentile = (size_bucket + 0.5) / 10.0
+    percentile = float(latest['size_percentile'])
     asof = pd.Timestamp(latest['timestamps'])
     return {
-        'size_bucket': size_bucket,
         'size_percentile': float(np.clip(percentile, 0.0, 1.0)),
-        'size_bucket_asof': asof,
+        'size_percentile_asof': asof,
         'size_reference_date': asof,
-        'size_source': 'local_panel',
+        'size_source': 'local_point_in_time_panel',
         'estimated_market_cap': None,
     }
 
 
 def latest_prediction_inputs(symbol, lookback, pred_len, history_rows=None):
-    """Refresh a stock and derive size context even when it is outside the panel."""
+    """Refresh a stock and derive the two Beta V1.2 conditions."""
     symbol = normalize_a_share_symbol(symbol)
     retained_rows = max(lookback, int(history_rows or lookback))
     local_frame, local_error = get_a_share_symbol_frame(symbol)
@@ -615,11 +742,18 @@ def latest_prediction_inputs(symbol, lookback, pred_len, history_rows=None):
 
     if len(context) < lookback:
         raise ValueError(f'{symbol} has only {len(context)} rows; {lookback} are required')
+    signal_date = pd.Timestamp(context['timestamps'].iloc[-1])
+    sector_context = sector_condition_for_symbol(
+        symbol,
+        asof=signal_date,
+        local_frame=local_frame,
+    )
     return {
         'context': context.tail(retained_rows).reset_index(drop=True),
         'future_dates': future_dates,
         'stock_name': query_remote_stock_name(symbol),
         **size_context,
+        **sector_context,
         'in_local_panel': local_frame is not None,
         'local_panel_error': local_error,
         'data_source': data_source,
@@ -747,7 +881,16 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
         if len(context) != lookback:
             raise ValueError(f'{symbol} 在共同截止日之前不足 {lookback} 个交易日')
         future_dates = pd.Series(pd.bdate_range(as_of_date + pd.Timedelta(days=1), periods=pred_len), name='timestamps')
-        record = {**item, 'symbol': symbol, 'context': context, 'future_dates': future_dates}
+        size_context = size_condition_from_remote_context(context)
+        sector_context = sector_condition_for_symbol(symbol, asof=as_of_date)
+        record = {
+            **item,
+            **size_context,
+            **sector_context,
+            'symbol': symbol,
+            'context': context,
+            'future_dates': future_dates,
+        }
         records.append(record)
         x_rows.append(context[['open', 'high', 'low', 'close', 'volume', 'amount']].to_numpy(dtype=np.float32))
         y_stamps.append(pd.DataFrame({
@@ -757,8 +900,11 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
     return {'as_of_date': as_of_date, 'x': np.stack(x_rows), 'y_stamp': np.stack(y_stamps), 'records': records}
 
 
-def local_inference(context, future_dates, pred_len, temperature, top_p, sample_count, size_bucket, size_percentile):
-    """Run the same production checkpoint locally when local mode is selected."""
+def local_inference(
+    context, future_dates, pred_len, temperature, top_p, sample_count,
+    sector_id, size_percentile,
+):
+    """Run Beta V1.2 locally with both required conditioning inputs."""
     ensure_model_loaded()
     feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
     x_df = context[feature_columns]
@@ -769,7 +915,8 @@ def local_inference(context, future_dates, pred_len, temperature, top_p, sample_
         prediction_samples = predictor.predict(
             df=x_df, x_timestamp=x_timestamp, y_timestamp=y_timestamp,
             pred_len=pred_len, T=temperature, top_p=top_p, sample_count=sample_count,
-            verbose=False, size_bucket=size_bucket, size_percentile=None, return_samples=True,
+            verbose=False, sector_id=sector_id, size_bucket=None,
+            size_percentile=size_percentile, return_samples=True,
         )
     expected_shape = (sample_count, pred_len, len(feature_columns))
     if prediction_samples.shape != expected_shape:
@@ -973,23 +1120,20 @@ def save_prediction_record(record):
     return payload
 
 
-INFERENCE_PROFILES = {
-    'single_stock_entry': '单股买点判断',
-    'cross_section_ranking': '横截面排序',
-}
-
-
-def prediction_profile(payload):
-    """Return the saved inference profile, including compatibility for old records."""
+def prediction_signal_date(payload):
+    """Return the market-data cutoff used to group a cross-section."""
     params = payload.get('prediction_params') or {}
-    profile = payload.get('inference_profile') or params.get('inference_profile')
-    if profile not in INFERENCE_PROFILES:
-        profile = (
-            'cross_section_ranking'
-            if payload.get('batch_id') or str(payload.get('prediction_type', '')).startswith('批量排名')
-            else 'single_stock_entry'
-        )
-    return profile, INFERENCE_PROFILES[profile]
+    value = (
+        payload.get('latest_data_date')
+        or params.get('latest_data_date')
+        or payload.get('created_at')
+        or payload.get('timestamp')
+    )
+    try:
+        parsed = pd.Timestamp(value)
+        return None if pd.isna(parsed) else parsed.date().isoformat()
+    except (TypeError, ValueError):
+        return None
 
 
 def prediction_record_summary(payload):
@@ -1004,10 +1148,11 @@ def prediction_record_summary(payload):
         name = None
     if not name and symbol:
         name = query_remote_stock_name(symbol)
-    profile, profile_label = prediction_profile(payload)
     return {
         'record_id': payload.get('record_id'),
         'created_at': payload.get('created_at') or payload.get('timestamp'),
+        'signal_date': prediction_signal_date(payload),
+        'latest_data_date': payload.get('latest_data_date'),
         'symbol': symbol,
         'name': name,
         'prediction_type': payload.get('prediction_type'),
@@ -1018,9 +1163,10 @@ def prediction_record_summary(payload):
         'final_close_p50': payload.get('final_close_p50'),
         'pred_len': payload.get('pred_len') or len(predictions),
         'backend': payload.get('backend', 'remote'),
-        'batch_id': payload.get('batch_id'),
-        'inference_profile': profile,
-        'inference_profile_label': profile_label,
+        'sector_id': payload.get('sector_id'),
+        'sector_label': payload.get('sector_label'),
+        'size_percentile': payload.get('size_percentile'),
+        'interval': payload.get('interval'),
     }
 
 
@@ -1032,7 +1178,6 @@ def prediction_history():
     symbol_filter = request.args.get('symbol', '').strip().lower()
     direction = request.args.get('direction', '').strip().lower()
     backend = request.args.get('backend', '').strip().lower()
-    profile = request.args.get('profile', '').strip().lower()
     for value, label in ((date_from, '开始日期'), (date_to, '结束日期')):
         if value:
             try:
@@ -1045,8 +1190,6 @@ def prediction_history():
         return jsonify({'error': '无效的涨跌方向筛选'}), 400
     if backend not in ('', 'remote', 'local'):
         return jsonify({'error': '无效的推理来源筛选'}), 400
-    if profile not in ('', *INFERENCE_PROFILES):
-        return jsonify({'error': '无效的预测策略筛选'}), 400
     results_dir = Path(PREDICTION_RESULTS_DIR)
     if not results_dir.exists():
         return jsonify({'records': [], 'total': 0})
@@ -1064,12 +1207,12 @@ def prediction_history():
                                 json.dump(payload, handle, ensure_ascii=False, separators=(',', ':'), default=str)
                         except OSError:
                             pass
-                    created_date = str(summary.get('created_at') or '')[:10]
+                    signal_date = summary.get('signal_date') or ''
                     record_symbol = str(summary.get('symbol') or '').lower()
                     record_return = summary.get('predicted_return_p50')
-                    if date_from and created_date < date_from:
+                    if date_from and signal_date < date_from:
                         continue
-                    if date_to and created_date > date_to:
+                    if date_to and signal_date > date_to:
                         continue
                     if symbol_filter and symbol_filter not in record_symbol:
                         continue
@@ -1079,11 +1222,20 @@ def prediction_history():
                         continue
                     if backend and summary.get('backend', 'remote') != backend:
                         continue
-                    if profile and summary.get('inference_profile') != profile:
-                        continue
                     records.append(summary)
         except (OSError, ValueError, TypeError):
             continue
+    latest_by_cross_section_symbol = {}
+    for summary in records:
+        key = (summary.get('signal_date') or '', str(summary.get('symbol') or '').lower())
+        previous = latest_by_cross_section_symbol.get(key)
+        if previous is None or str(summary.get('created_at') or '') > str(previous.get('created_at') or ''):
+            latest_by_cross_section_symbol[key] = summary
+    records = sorted(
+        latest_by_cross_section_symbol.values(),
+        key=lambda summary: str(summary.get('created_at') or ''),
+        reverse=True,
+    )
     return jsonify({'records': records[:100], 'total': len(records)})
 
 
@@ -1117,32 +1269,80 @@ def delete_prediction_history(record_id):
     return jsonify({'deleted': True, 'record_id': record_id})
 
 
-@app.route('/api/prediction-history/groups/<batch_id>', methods=['DELETE'])
-def delete_prediction_history_group(batch_id):
-    """Delete every saved record belonging to one cross-section ranking."""
-    if not re.fullmatch(r'[A-Za-z0-9_-]{8,80}', batch_id):
-        return jsonify({'error': '无效的排序组编号'}), 400
+@app.route('/api/prediction-history/dates/<signal_date>', methods=['DELETE'])
+def delete_prediction_history_date(signal_date):
+    """Delete every saved prediction belonging to one signal-date cross-section."""
+    try:
+        signal_date = datetime.date.fromisoformat(signal_date).isoformat()
+    except ValueError:
+        return jsonify({'error': '无效的信号日期'}), 400
     results_dir = Path(PREDICTION_RESULTS_DIR)
     if not results_dir.exists():
-        return jsonify({'error': '预测排序组不存在'}), 404
+        return jsonify({'error': '预测截面不存在'}), 404
 
     paths = []
     for path in results_dir.glob('*.json'):
         try:
             with path.open(encoding='utf-8') as handle:
-                if json.load(handle).get('batch_id') == batch_id:
+                if prediction_signal_date(json.load(handle)) == signal_date:
                     paths.append(path)
         except (OSError, ValueError, TypeError):
             continue
     if not paths:
-        return jsonify({'error': '预测排序组不存在'}), 404
+        return jsonify({'error': '预测截面不存在'}), 404
 
     try:
         for path in paths:
             path.unlink()
     except OSError as exc:
-        return jsonify({'error': f'删除预测排序组失败: {exc}'}), 500
-    return jsonify({'deleted': True, 'batch_id': batch_id, 'records_deleted': len(paths)})
+        return jsonify({'error': f'删除预测截面失败: {exc}'}), 500
+    return jsonify({
+        'deleted': True,
+        'signal_date': signal_date,
+        'records_deleted': len(paths),
+    })
+
+
+@app.route('/api/prediction-history/dates/<signal_date>/symbols/<symbol>', methods=['DELETE'])
+def delete_prediction_history_symbol(signal_date, symbol):
+    """Delete one stock, including duplicates, from a signal-date cross-section."""
+    try:
+        signal_date = datetime.date.fromisoformat(signal_date).isoformat()
+    except ValueError:
+        return jsonify({'error': '无效的信号日期'}), 400
+    symbol = normalize_a_share_symbol(symbol)
+    if not re.fullmatch(r'(?:sh|sz|bj)\.\d{6}', symbol):
+        return jsonify({'error': '无效的股票代码'}), 400
+
+    results_dir = Path(PREDICTION_RESULTS_DIR)
+    if not results_dir.exists():
+        return jsonify({'error': '截面中不存在该股票'}), 404
+    paths = []
+    for path in results_dir.glob('*.json'):
+        try:
+            with path.open(encoding='utf-8') as handle:
+                payload = json.load(handle)
+            if (
+                prediction_signal_date(payload) == signal_date
+                and normalize_a_share_symbol(payload.get('symbol')) == symbol
+            ):
+                paths.append(path)
+        except (OSError, ValueError, TypeError):
+            continue
+    if not paths:
+        return jsonify({'error': '截面中不存在该股票'}), 404
+
+    try:
+        for path in paths:
+            path.unlink()
+    except OSError as exc:
+        return jsonify({'error': f'删除个股预测失败: {exc}'}), 500
+    return jsonify({
+        'deleted': True,
+        'signal_date': signal_date,
+        'symbol': symbol,
+        'records_deleted': len(paths),
+    })
 
 def create_prediction_chart(df, pred_df, lookback, pred_len, actual_df=None, historical_start_idx=0):
     """Create prediction chart"""
@@ -1435,7 +1635,9 @@ def health():
         'status': 'ok',
         'service': 'kronos-web',
         'backend': 'remote' if KRONOS_REMOTE_ONLY else KRONOS_INFERENCE_BACKEND,
-        'model': 'luckfu/Kronos-A-Share-Forecast',
+        'model': KRONOS_MODEL_ID,
+        'release': KRONOS_RELEASE_ID,
+        'checkpoint': KRONOS_CHECKPOINT,
         'model_loaded': False if KRONOS_REMOTE_ONLY else predictor is not None,
     })
 
@@ -1449,32 +1651,33 @@ def get_data_files():
 
 @app.route('/api/a-share/symbols')
 def get_a_share_symbols():
-    """Return training-panel symbols used for autocomplete, not a market limit."""
+    """Return the replaceable symbol-sector mapping used for autocomplete."""
     try:
-        splits = load_a_share_splits()
-        symbols = sorted(set(splits['train']) | set(splits['val']))
-        result = []
-        for symbol in symbols:
-            rows = splits['val'].get(symbol)
-            if rows is None or rows.empty:
-                rows = splits['train'].get(symbol)
-            latest = rows.iloc[-1]
-            result.append({
+        reference = load_sector_reference()
+        result = [
+            {
                 'symbol': symbol,
-                'latest_date': pd.Timestamp(rows.index[-1]).strftime('%Y-%m-%d'),
-                'size_bucket': int(latest['size_bucket']),
-                'close': float(latest['close']),
-            })
+                'latest_date': record['reference_date'],
+                'sector_id': int(record['sector_id']),
+                'sector_label': record['sector_label'],
+            }
+            for symbol, record in sorted(reference['symbols'].items())
+        ]
         return jsonify({
             'symbols': result,
             'count': len(result),  # Backward compatibility for older web clients.
-            'training_panel_count': len(result),
+            'mapping_count': len(result),
+            'mapping_reference_date': reference['date'].date().isoformat(),
+            'sector_vocabulary_id': reference['vocabulary_id'],
+            'training_panel_count': len(result),  # Backward compatibility.
             'market_scope': 'all-a-share',
         })
     except (FileNotFoundError, KeyError):
         # The production Oracle instance intentionally has no training dataset.
         return jsonify({
-            'symbols': [], 'count': 0, 'training_panel_count': 0,
+            'symbols': [], 'count': 0, 'mapping_count': 0,
+            'mapping_reference_date': None, 'sector_vocabulary_id': None,
+            'training_panel_count': 0,
             'market_scope': 'all-a-share',
             'message': '生产网关不保存训练面板，可直接输入股票代码',
         })
@@ -1489,7 +1692,7 @@ def load_data():
         data = request.get_json() or {}
         requested_symbol = normalize_a_share_symbol(data.get('symbol'))
         if requested_symbol and re.fullmatch(r'(sh|sz|bj)\.\d{6}', requested_symbol):
-            config = AVAILABLE_MODELS['a-share-size-kronos-base']
+            config = AVAILABLE_MODELS[KRONOS_MODEL_KEY]
             try:
                 latest = latest_prediction_inputs(
                     requested_symbol,
@@ -1506,8 +1709,14 @@ def load_data():
                         'end_date': pd.Timestamp(frame['timestamps'].max()).isoformat(),
                         'symbol': requested_symbol,
                         'name': latest.get('stock_name'),
-                        'size_bucket': int(latest['size_bucket']),
                         'size_percentile': float(latest['size_percentile']),
+                        'size_reference_date': latest['size_reference_date'].isoformat(),
+                        'sector_id': int(latest['sector_id']),
+                        'sector_label': latest['sector_label'],
+                        'sector_reference_date': (
+                            latest['sector_reference_date'].isoformat()
+                            if latest['sector_reference_date'] is not None else None
+                        ),
                         'latest_close': float(frame['close'].iloc[-1]),
                         'latest_volume': float(frame['volume'].iloc[-1]),
                         'remote_only': not latest.get('in_local_panel', False),
@@ -1523,8 +1732,9 @@ def load_data():
                     'success': True,
                     'data_info': {
                         'rows': 0, 'columns': [], 'start_date': None, 'end_date': None,
-                        'symbol': requested_symbol, 'name': None, 'size_bucket': None,
-                        'size_percentile': None, 'latest_close': None, 'latest_volume': None,
+                        'symbol': requested_symbol, 'name': None,
+                        'size_percentile': None, 'sector_id': None, 'sector_label': None,
+                        'latest_close': None, 'latest_volume': None,
                         'remote_only': True,
                     },
                     'message': f'{requested_symbol} 将在预测时刷新最新行情',
@@ -1540,8 +1750,9 @@ def load_data():
                         'start_date': None,
                         'end_date': None,
                         'symbol': requested_symbol,
-                        'size_bucket': None,
                         'size_percentile': None,
+                        'sector_id': None,
+                        'sector_label': None,
                         'latest_close': None,
                         'latest_volume': None,
                         'remote_only': True,
@@ -1577,6 +1788,9 @@ def load_data():
                 return f"{avg_diff.days} days"
         
         # Return data information
+        asof = pd.Timestamp(df['timestamps'].iloc[-1])
+        local_size = size_condition_from_local_frame(df, asof=asof)
+        local_sector = sector_condition_from_local_frame(df, asof=asof)
         data_info = {
             'rows': len(df),
             'columns': list(df.columns),
@@ -1590,11 +1804,9 @@ def load_data():
             'timeframe': detect_timeframe(df),
             'symbol': symbol,
             'name': None,
-            'size_bucket': int(df['size_bucket'].iloc[-1]) if 'size_bucket' in df.columns else None,
-            'size_percentile': (
-                float(df['size_percentile'].iloc[-1])
-                if 'size_percentile' in df.columns else None
-            ),
+            'size_percentile': local_size['size_percentile'] if local_size else None,
+            'sector_id': local_sector['sector_id'] if local_sector else None,
+            'sector_label': local_sector['sector_label'] if local_sector else None,
             'latest_close': float(df['close'].iloc[-1]),
             'latest_volume': float(df['volume'].iloc[-1]) if 'volume' in df.columns else None,
             'remote_only': False,
@@ -1621,7 +1833,7 @@ def a_share_rankings():
         symbols = list(dict.fromkeys(normalize_a_share_symbol(value) for value in raw_symbols))
         if not 2 <= len(symbols) <= 12 or any(not value for value in symbols):
             return jsonify({'error': '批量预测需要 2 到 12 个有效股票代码'}), 400
-        config = AVAILABLE_MODELS['a-share-size-kronos-base']
+        config = AVAILABLE_MODELS[KRONOS_MODEL_KEY]
         lookback = int(config['default_lookback'])
         pred_len = int(config['default_pred_len'])
         sample_count = int(data.get('sample_count', config['default_sample_count']))
@@ -1646,7 +1858,8 @@ def a_share_rankings():
                     'future_timestamps': [
                         pd.Timestamp(value).isoformat() for value in record['future_dates']
                     ],
-                    'size_bucket': int(record['size_bucket']),
+                    'sector_id': int(record['sector_id']),
+                    'size_percentile': float(record['size_percentile']),
                 })
             remote = call_remote_inference({
                 'items': items, 'pred_len': pred_len, 'sample_count': sample_count,
@@ -1659,7 +1872,7 @@ def a_share_rankings():
             for record in batch['records']:
                 predictions, _, _, close_samples, model_device = local_inference(
                     record['context'], record['future_dates'], pred_len, temperature,
-                    top_p, sample_count, record['size_bucket'], record['size_percentile'],
+                    top_p, sample_count, record['sector_id'], record['size_percentile'],
                 )
                 inference_results.append({
                     'id': record['symbol'],
@@ -1684,9 +1897,17 @@ def a_share_rankings():
                     None if record['stock_name'] and str(record['stock_name']).strip().lower() == result['id'].lower()
                     else record['stock_name']
                 ),
-                'latest_close': latest_close, 'size_bucket': int(record['size_bucket']),
+                'latest_close': latest_close,
                 'size_percentile': float(record['size_percentile']),
+                'size_reference_date': record['size_reference_date'].isoformat(),
+                'sector_id': int(record['sector_id']),
+                'sector_label': record['sector_label'],
+                'sector_reference_date': (
+                    record['sector_reference_date'].isoformat()
+                    if record['sector_reference_date'] is not None else None
+                ),
                 'data_source': record['data_source'], 'in_local_panel': record['in_local_panel'],
+                'model_release': KRONOS_RELEASE_ID, 'model_checkpoint': KRONOS_CHECKPOINT,
                 'latest_data_date': pd.Timestamp(record['context']['timestamps'].iloc[-1]).isoformat(),
                 'forecast_start': future_dates[0].isoformat(),
                 'forecast_end': future_dates[-1].isoformat(),
@@ -1706,14 +1927,11 @@ def a_share_rankings():
                 **ranking,
                 'backend': backend,
                 'batch_id': batch_id,
-                'inference_profile': 'cross_section_ranking',
-                'inference_profile_label': INFERENCE_PROFILES['cross_section_ranking'],
                 'prediction_type': f'批量排名 · 最新 {lookback} 个交易日 → 未来 {pred_len} 个交易日',
                 'prediction_params': {
                     'lookback': lookback, 'pred_len': pred_len,
                     'temperature': temperature, 'top_p': top_p,
                     'sample_count': sample_count, 'symbol': ranking['symbol'],
-                    'inference_profile': 'cross_section_ranking',
                 },
             })
             ranking['record_id'] = saved['record_id']
@@ -1721,8 +1939,6 @@ def a_share_rankings():
             'success': True, 'as_of_date': batch['as_of_date'].isoformat(),
             'rankings': rankings, 'sample_count': sample_count,
             'backend': backend, 'model_device': model_device, 'batch_id': batch_id,
-            'inference_profile': 'cross_section_ranking',
-            'inference_profile_label': INFERENCE_PROFILES['cross_section_ranking'],
             'message': f'已完成 {len(rankings)} 只股票的{"远端" if backend == "remote" else "本地"}批量预测',
         })
     except ValueError as exc:
@@ -1799,20 +2015,16 @@ def predict_history():
                     y_timestamp = df.iloc[lookback:lookback+pred_len]['timestamps']
                     prediction_type = "Kronos model prediction (latest data)"
 
-                size_bucket = data.get('size_bucket')
                 context_frame = time_range_df if start_date else df
-                if size_bucket is None and 'size_bucket' in context_frame.columns:
-                    size_bucket = int(context_frame.iloc[lookback - 1]['size_bucket'])
-
-                bucket_count = int((current_model_config or {}).get('num_size_buckets', 0))
-                if bucket_count > 0:
-                    if size_bucket is None:
-                        return jsonify({'error': 'The selected model requires a market-cap bucket'}), 400
-                    size_bucket = int(size_bucket)
-                    if not 0 <= size_bucket < bucket_count:
-                        return jsonify({'error': f'Market-cap bucket must be between 0 and {bucket_count - 1}'}), 400
-                else:
-                    size_bucket = None
+                signal_date = pd.Timestamp(context_frame.iloc[lookback - 1]['timestamps'])
+                size_condition = size_condition_from_local_frame(context_frame, asof=signal_date)
+                sector_condition = sector_condition_from_local_frame(context_frame, asof=signal_date)
+                if size_condition is None:
+                    return jsonify({'error': 'Beta V1.2 requires a point-in-time size_percentile'}), 400
+                if sector_condition is None:
+                    return jsonify({'error': 'Beta V1.2 requires a point-in-time sector label'}), 400
+                size_percentile = size_condition['size_percentile']
+                sector_id = sector_condition['sector_id']
                 
                 # Ensure timestamps are Series format, not DatetimeIndex, to avoid .dt attribute error in Kronos model
                 if isinstance(x_timestamp, pd.DatetimeIndex):
@@ -1829,7 +2041,9 @@ def predict_history():
                     T=temperature,
                     top_p=top_p,
                     sample_count=sample_count,
-                    size_bucket=size_bucket,
+                    sector_id=sector_id,
+                    size_bucket=None,
+                    size_percentile=size_percentile,
                 )
                 
             except Exception as e:
@@ -1927,7 +2141,9 @@ def predict_history():
                     'sample_count': sample_count,
                     'start_date': start_date if start_date else 'latest',
                     'symbol': symbol,
-                    'size_bucket': size_bucket,
+                    'size_percentile': size_percentile,
+                    'sector_id': sector_id,
+                    'sector_label': sector_condition['sector_label'],
                     'model_key': current_model_key,
                 }
             )
@@ -1942,7 +2158,9 @@ def predict_history():
             'actual_data': actual_data,
             'has_comparison': len(actual_data) > 0,
             'symbol': symbol,
-            'size_bucket': size_bucket,
+            'size_percentile': size_percentile,
+            'sector_id': sector_id,
+            'sector_label': sector_condition['sector_label'],
             'model_key': current_model_key,
             'message': f'Prediction completed, generated {pred_len} prediction points' + (f', including {len(actual_data)} actual data points for comparison' if len(actual_data) > 0 else '')
         })
@@ -1960,7 +2178,7 @@ def predict_latest():
         if not symbol:
             return jsonify({'error': '请输入股票代码'}), 400
 
-        config = AVAILABLE_MODELS['a-share-size-kronos-base']
+        config = AVAILABLE_MODELS[KRONOS_MODEL_KEY]
         lookback = int(config['default_lookback'])
         pred_len = int(config['default_pred_len'])
         temperature = float(data.get('temperature', config['default_temperature']))
@@ -1972,8 +2190,8 @@ def predict_latest():
         inputs = latest_prediction_inputs(symbol, lookback, pred_len)
         context = inputs['context']
         future_dates = inputs['future_dates']
-        size_bucket = inputs['size_bucket']
         size_percentile = inputs['size_percentile']
+        sector_id = inputs['sector_id']
 
         feature_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
         x_df = context[feature_columns]
@@ -1993,10 +2211,9 @@ def predict_latest():
             'temperature': temperature,
             'top_p': top_p,
             'sample_count': sample_count,
-            'size_bucket': size_bucket,
+            'sector_id': sector_id,
+            'size_percentile': size_percentile,
         }
-        if config.get('use_size_percentile'):
-            remote_payload['size_percentile'] = size_percentile
         if backend == 'remote':
             remote_result = call_remote_inference(remote_payload)
             prediction_results = remote_result['predictions']
@@ -2010,7 +2227,8 @@ def predict_latest():
             model_device = remote_result.get('meta', {}).get('model_device', 'remote')
         elif backend == 'local':
             prediction_results, pred_df, interval_df, close_samples, model_device = local_inference(
-                context, future_dates, pred_len, temperature, top_p, sample_count, size_bucket, size_percentile
+                context, future_dates, pred_len, temperature, top_p, sample_count,
+                sector_id, size_percentile,
             )
         else:
             raise RuntimeError('backend must be local or remote')
@@ -2024,16 +2242,14 @@ def predict_latest():
         latest_close = float(context['close'].iloc[-1])
         forecast_summary = forecast_return_summary(close_samples, latest_close)
         prediction_type = f'最新 {lookback} 个交易日 → 未来 {pred_len} 个交易日'
-        inference_profile = 'single_stock_entry'
-
         return jsonify({
             'success': True,
             'symbol': symbol,
             'name': inputs['stock_name'],
-            'model_key': current_model_key,
+            'model_key': current_model_key or KRONOS_MODEL_KEY,
+            'model_release': KRONOS_RELEASE_ID,
+            'model_checkpoint': KRONOS_CHECKPOINT,
             'model_device': model_device,
-            'inference_profile': inference_profile,
-            'inference_profile_label': INFERENCE_PROFILES[inference_profile],
             'prediction_type': prediction_type,
             'lookback': lookback,
             'pred_len': pred_len,
@@ -2042,12 +2258,18 @@ def predict_latest():
             **forecast_summary,
             'forecast_start': pd.Timestamp(y_timestamp.iloc[0]).isoformat(),
             'forecast_end': pd.Timestamp(y_timestamp.iloc[-1]).isoformat(),
-            'size_bucket': size_bucket,
             'size_percentile': size_percentile,
-            'size_bucket_asof': inputs['size_bucket_asof'].isoformat(),
+            'size_percentile_asof': inputs['size_percentile_asof'].isoformat(),
             'size_reference_date': inputs['size_reference_date'].isoformat(),
             'size_source': inputs['size_source'],
             'estimated_market_cap': inputs['estimated_market_cap'],
+            'sector_id': sector_id,
+            'sector_label': inputs['sector_label'],
+            'sector_reference_date': (
+                inputs['sector_reference_date'].isoformat()
+                if inputs['sector_reference_date'] is not None else None
+            ),
+            'sector_source': inputs['sector_source'],
             'in_local_panel': inputs['in_local_panel'],
             'data_source': inputs['data_source'],
             'calendar_source': inputs['calendar_source'],
@@ -2066,14 +2288,11 @@ def predict_latest():
                 'symbol': symbol,
                 'name': inputs['stock_name'],
                 'backend': backend,
-                'inference_profile': inference_profile,
-                'inference_profile_label': INFERENCE_PROFILES[inference_profile],
                 'prediction_type': prediction_type,
                 'prediction_params': {
                     'lookback': lookback, 'pred_len': pred_len,
                     'temperature': temperature, 'top_p': top_p,
                     'sample_count': sample_count, 'symbol': symbol,
-                    'inference_profile': inference_profile,
                 },
                 'latest_close': latest_close,
                 'predicted_return_p50': forecast_summary['predicted_return_p50'],
@@ -2084,7 +2303,18 @@ def predict_latest():
                 'latest_data_date': latest_date.isoformat(),
                 'forecast_start': pd.Timestamp(y_timestamp.iloc[0]).isoformat(),
                 'forecast_end': pd.Timestamp(y_timestamp.iloc[-1]).isoformat(),
-                'size_bucket': size_bucket, 'size_percentile': size_percentile,
+                'model_key': KRONOS_MODEL_KEY,
+                'model_release': KRONOS_RELEASE_ID,
+                'model_checkpoint': KRONOS_CHECKPOINT,
+                'size_percentile': size_percentile,
+                'size_percentile_asof': inputs['size_percentile_asof'].isoformat(),
+                'size_reference_date': inputs['size_reference_date'].isoformat(),
+                'sector_id': sector_id,
+                'sector_label': inputs['sector_label'],
+                'sector_reference_date': (
+                    inputs['sector_reference_date'].isoformat()
+                    if inputs['sector_reference_date'] is not None else None
+                ),
                 'data_source': inputs['data_source'],
                 'in_local_panel': inputs['in_local_panel'],
                 'interval': {'lower_quantile': 0.1, 'center_quantile': 0.5,
@@ -2101,7 +2331,7 @@ def predict_latest():
 
 @app.route('/api/load-model', methods=['POST'])
 def load_model():
-    """Load the production model on the automatically selected device."""
+    """Load the Beta V1.2 candidate on the selected inference backend."""
     try:
         requested_backend = selected_backend((request.get_json(silent=True) or {}).get('backend'))
         if KRONOS_REMOTE_ONLY and requested_backend != 'remote':
@@ -2112,13 +2342,17 @@ def load_model():
                 'message': 'Modal 远端模式已就绪，将在预测时按需启动',
                 'model_info': {
                     'name': KRONOS_MODEL_ID,
-                    'params': AVAILABLE_MODELS['a-share-size-kronos-base']['params'],
+                    'params': AVAILABLE_MODELS[KRONOS_MODEL_KEY]['params'],
                     'device': 'modal',
                     'backend': 'remote',
+                    'release_id': KRONOS_RELEASE_ID,
+                    'checkpoint': KRONOS_CHECKPOINT,
+                    'num_sectors': KRONOS_NUM_SECTORS,
+                    'use_size_percentile': True,
                 },
             })
         device = ensure_model_loaded()
-        model_config = AVAILABLE_MODELS['a-share-size-kronos-base']
+        model_config = AVAILABLE_MODELS[KRONOS_MODEL_KEY]
         return jsonify({
             'success': True,
             'message': f'模型已就绪，运行设备：{device}',
@@ -2129,6 +2363,10 @@ def load_model():
                 'context_length': model_config['context_length'],
                 'description': model_config['description'],
                 'backend': 'local',
+                'release_id': model_config['release_id'],
+                'checkpoint': model_config['checkpoint'],
+                'num_sectors': model_config['num_sectors'],
+                'use_size_percentile': model_config['use_size_percentile'],
                 'num_size_buckets': model_config.get('num_size_buckets', 0),
                 'default_lookback': model_config.get('default_lookback', 400),
                 'default_pred_len': model_config.get('default_pred_len', 120),
@@ -2143,13 +2381,15 @@ def get_available_models():
     """Get available model list"""
     return jsonify({
         'models': (
-            {**AVAILABLE_MODELS, 'a-share-size-kronos-base': {
-                **AVAILABLE_MODELS['a-share-size-kronos-base'], 'model_id': KRONOS_MODEL_ID,
+            {**AVAILABLE_MODELS, KRONOS_MODEL_KEY: {
+                **AVAILABLE_MODELS[KRONOS_MODEL_KEY],
+                'model_id': KRONOS_MODEL_ID,
+                'tokenizer_id': f'{KRONOS_MODEL_ID}/tokenizer',
             }} if KRONOS_REMOTE_ONLY else AVAILABLE_MODELS
         ),
         'model_available': MODEL_AVAILABLE and not KRONOS_REMOTE_ONLY,
         'remote_only': KRONOS_REMOTE_ONLY,
-        'recommended_model': 'a-share-size-kronos-base',
+        'recommended_model': KRONOS_MODEL_KEY,
         'recommended_device': 'modal' if KRONOS_REMOTE_ONLY else automatic_device(),
         'devices': {
             'cpu': True,
@@ -2167,7 +2407,12 @@ def get_model_status():
             'loaded': True,
             'remote_only': True,
             'message': 'Modal 远端推理已就绪',
-            'current_model': {'key': KRONOS_MODEL_ID, 'device': 'modal'},
+            'current_model': {
+                'key': KRONOS_MODEL_ID,
+                'device': 'modal',
+                'release_id': KRONOS_RELEASE_ID,
+                'checkpoint': KRONOS_CHECKPOINT,
+            },
         })
     if MODEL_AVAILABLE:
         if predictor is not None:
@@ -2179,6 +2424,10 @@ def get_model_status():
                     'key': current_model_key,
                     'name': (current_model_config or {}).get('name', predictor.model.__class__.__name__),
                     'device': str(next(predictor.model.parameters()).device),
+                    'release_id': (current_model_config or {}).get('release_id'),
+                    'checkpoint': (current_model_config or {}).get('checkpoint'),
+                    'num_sectors': (current_model_config or {}).get('num_sectors', 0),
+                    'use_size_percentile': (current_model_config or {}).get('use_size_percentile', False),
                     'num_size_buckets': (current_model_config or {}).get('num_size_buckets', 0),
                 }
             })

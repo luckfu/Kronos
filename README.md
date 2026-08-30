@@ -2,74 +2,72 @@
 
 > 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
 
-新的全市场模型版本为 **Beta v1.2**，同时发布 `Best@871` 与 `Last@1056`。稳定本地入口为
+当前 Web UI 与 Serverless 推理契约已适配 **Beta V1.2**，默认使用 `Best@871`；发布同时
+保留 `Last@1056` 作为完整两遍训练终点。稳定本地入口为
 `models/a_share_v1_beta/releases/beta_v1.2/best_model` 和
 `models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布依据和使用边界见
-[`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)。该版本当前没有自动
-替换下文所述旧 V6 Web/Modal 生产服务。
+[`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)。Beta V1.2 的 Modal
+配置使用独立 App 名，不会覆盖旧 V6 服务；线上切换仍需显式执行部署。
 
 Beta v1.2 的推理输入和全市场市值百分位准备规则见
-[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。该文档
-适用于全市场行业条件模型，不改变当前 V6 生产模型的兼容方式。
+[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。该契约与 V6
+不同，不接受离散 `size_bucket`。
 
 2026-08-28 从 A800 迁回的 v1-beta 模型、严格未来评估数据和全部评估结果已直接合并
 到项目目录。当前模型血缘、精确 SHA-256、晋级状态与路径事件结论见
 [`finetune/V1_BETA_MODEL_LINEAGE_CN.md`](finetune/V1_BETA_MODEL_LINEAGE_CN.md)；机器可读
 清单为 [`models/a_share_v1_beta/LINEAGE.json`](models/a_share_v1_beta/LINEAGE.json)。
 
-这是一个基于 [Kronos](https://github.com/shiyu-coder/Kronos) 的 A 股日线预测项目。当前交付版本固定使用经过市值分层增训的 `Kronos-base`，提供单股区间预测、自选股票池横截面排序、增训脚本和样本外回测脚本。
+这是一个基于 [Kronos](https://github.com/shiyu-coder/Kronos) 的 A 股日线预测项目，提供单股区间预测、自选股票池横截面排序、增训脚本和样本外回测脚本。
 
 > 本项目用于研究和回测，不构成投资建议。模型预测、回测收益和排名都可能失效，不能直接替代交易系统或风险管理。
 
 ## 当前模型
 
-- 模型：A-share Size-Conditioned Kronos-base
+- 模型：A-share Full-Market Beta V1.2（约 102.4M 参数）
 - 输入：120 个交易日的 `open/high/low/close/volume/amount`
 - 输出：未来 10 个交易日的采样路径及 P10/P50/P90 区间
-- 条件：按交易日横截面流通市值划分为 10 桶（`0` 最小，`9` 最大）
-- 训练信号期：2015-01-05 至 2026-07-16；行情保留至 2026-07-31 以提供完整标签
-- 生产 checkpoint：`outputs/models/a_share_v6_segment542_latest/checkpoints/last_model`
-- 覆盖：5,678,350 个窗口完整遍历两遍，生产使用第 568 段导出的 `last_model`
+- 条件：信号日行业 ID + 同日全市场连续市值百分位
+- 行业配置：86 个行业标签，未知行业 ID 为 `86`
+- 模型配置：`num_sectors=86`、`num_size_buckets=0`、`use_size_percentile=True`、`context_layer=10`
+- 默认 checkpoint：`models/a_share_v1_beta/releases/beta_v1.2/best_model`（`Best@871`）
+- 完整训练终点：`models/a_share_v1_beta/releases/beta_v1.2/last_model`（`Last@1056`）
 - 设备：自动选择 `MPS → CUDA → CPU`
 
-公开权重发布在 [ModelScope: `luckfu/a-share-size-kronos-base-earlystop50`](https://modelscope.cn/models/luckfu/a-share-size-kronos-base-earlystop50)。本机前端与 serverless 当前使用 V6 Segment 542 生产 `last_model`；V5 仅是 V6 的训练基座，不是当前生产模型。
+公开权重发布在 [ModelScope: `luckfu/Kronos-A-Share-Beta-V1-2`](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V1-2)。`Best@871` 在固定 24k 验证集上优于 `Last@1056`，因此作为页面和 Serverless 默认模型。它尚未在全新严格未来时间段完成评估，仍是研究候选，不构成生产交易系统。
 
-旧 V3+2026 增量权重存在已确认的数据构造限制：2026 面板在生成 101 行窗口前被裁到 2026 年，90 日观察长度使 1 月至 5 月上旬无法成为监督信号，最终只训练了 39 个偏空信号日。V5 使用连续的 2014-2026 面板、120 日上下文和完整市场训练池；V6 在此基座上只对未来 10 日预测目标计算训练损失，当前生产使用 V6 Segment 542 的 `last_model`。
+## 行业与连续市值条件
 
-## 市值桶如何接入原版 Kronos
-
-市值桶不是 OHLCVA 之外的第七个连续行情字段，也不是十个分别训练的模型。项目保留原版 tokenizer 的六维输入和归一化方式，在同一个 `Kronos-base` 中增加一个市值类别 Embedding：
+Beta V1.2 保留 tokenizer 的六维 OHLCVA 输入。行业和规模不是额外行情列，而是在 Transformer 第 10 层之后注入的静态条件：
 
 ```text
 原版：归一化 OHLCVA → Tokenizer → K线 Token + 时间编码 → 12层 Transformer → 预测
 当前：归一化 OHLCVA → Tokenizer → 前10层 Transformer
-                                       + 市值桶 Embedding
+                                       + 行业 Embedding
+                                       + 连续市值百分位 MLP
                                      → 后2层 Transformer → 预测
 ```
 
 ### 数据侧
 
-BaoStock 不提供稳定的历史流通市值字段，因此数据准备阶段使用 `收盘价 × 成交量 ÷ 换手率` 估算流通市值。这个代理值只用于同一交易日的横截面排名，不作为精确财务市值使用。每天将可用股票从小到大划分为十个近似等量分组，`0` 表示最小的约 10%，`9` 表示最大的约 10%。
+BaoStock 不提供稳定的历史流通市值字段，因此使用同一交易日的
+`market_cap_proxy = amount / (turn / 100)` 作为代理值。代理值仅用于全市场横截面排序，
+不能当作精确财务市值。每个样本使用 120 日观察窗口最后一个交易日的行业和市值百分位，
+不读取未来窗口信息。
 
-每个训练样本使用其观察窗口最后一个交易日对应的桶；V5 和 V6 的观察窗口均为 120 日，不使用预测窗口中的未来市值信息。具体实现见 [`finetune/prepare_a_share.py`](finetune/prepare_a_share.py) 和 [`finetune/dataset.py`](finetune/dataset.py)。
+Web 网关将行业配置拆成两层：`webui/sector_vocabulary.json` 固定保存 Beta V1.2 训练时
+使用的 86 项行业顺序，`webui/symbol_sector_map.json` 保存可更新的股票行业映射；
+`webui/size_reference.json` 保存 2026-07-31 全市场市值横截面。股票不在映射内，或数据源
+返回训练词表之外的行业时，使用未知行业 ID `86`；所有结果都会记录条件来源与参考日期。
+行业映射可通过 `python webui/update_sector_mapping.py` 从 BaoStock 手动更新，模型词表不会
+被该脚本修改。
 
 ### 模型侧
 
-增训模型增加一张 `11 × 832` 的 Embedding 表：十个有效市值桶加一个未知桶，每个桶对应一个与模型隐藏维度相同的向量。该向量会广播到序列的所有时间步，并在 12 层 Transformer 的第 10 层之后注入，使顶部两层能够针对不同市值风格调整预测。
-
-新增 Embedding 从全零初始化，因此刚加载原始 `Kronos-base` 权重时不会改变原始输出。增训时冻结 tokenizer 和底部十层，只训练市值 Embedding、顶部两层、归一化层、依赖层和输出头。这样可以保留基础模型已经学到的通用 K 线规律，同时让顶部网络学习小盘股与大盘股在波动、流动性和走势持续性方面的差异。实现位于 [`model/kronos.py`](model/kronos.py) 和 [`finetune/train_predictor.py`](finetune/train_predictor.py)。
-
-市值条件解决的是归一化造成的体量信息缺失：两只绝对市值差异很大的股票可能具有相似的归一化 K 线，而桶标签可以让模型区分它们所属的规模风格。当前 `6.082%` 的验证 loss 改善来自“市值条件 + 顶部两层增训”的整体效果；若要单独量化市值桶的贡献，还需要训练一个数据和参数完全相同、但关闭市值条件的消融对照模型。
-
-### 连续百分位消融
-
-数据管线同时保留 `size_percentile`（当日横截面市值百分位）。实验模型在离散桶 Embedding 之外增加一个两层 MLP，将 `[size_percentile, is_known]` 映射到 832 维并在同一位置注入。该分支同样以零输出层初始化，旧离散 checkpoint 默认关闭，因此向后兼容。
-
-混合模型从原始 `Kronos-base` 独立训练，连续运行 26 轮后早停。固定随机序列评估中，旧离散模型 loss 为 `2.951176`，混合模型为 `2.951893`；混合模型高 `0.000717`，没有胜出。129 日滚动回测中，混合模型 Rank IC 从 `0.04152` 小幅升至 `0.04250`，但方向准确率从 `55.31%` 降至 `55.05%`，计成本净收益从 `-33.30%` 恶化至 `-43.41%`。因此当前生产页面和 ModelScope 使用完整覆盖的离散桶模型，混合 checkpoint 仅作为消融实验保留。
-
-### 早停耐心消融
-
-离散桶模型还测试了“连续 5 轮无改善才早停”。候选模型运行 43 轮，最佳点出现在第 38 轮；固定种子 loss 为 `2.954815`，比现有生产模型的 `2.951176` 高 `0.003639`（约 `0.123%`），十个市值桶全部略差。因此默认训练耐心调整为 5，避免未来实验过早退出，但本次长训候选不替换生产 checkpoint。
+模型使用 `87 × 832` 行业 Embedding（86 个有效行业加 1 个未知行业），并用两层 MLP
+把 `[size_percentile, is_known]` 映射到 832 维。两个条件广播到序列各时间步，在第 10 层
+之后与隐藏状态相加。Beta V1.2 对完整 Predictor 继续训练；实现见
+[`model/kronos.py`](model/kronos.py) 和 [`finetune/train_predictor.py`](finetune/train_predictor.py)。
 
 ## 快速部署
 
@@ -85,12 +83,12 @@ python -m pip install -r webui/requirements.txt
 python -m pip install modelscope
 ```
 
-下载公开的 V5 增训基座到默认目录（也可以直接使用已有的本地 checkpoint；当前生产服务使用 V6 Segment 542 checkpoint）：
+下载 Beta V1.2 模型仓库到默认发布目录：
 
 ```bash
-modelscope download luckfu/a-share-size-kronos-base-earlystop50 \
+modelscope download luckfu/Kronos-A-Share-Beta-V1-2 \
   --repo-type model \
-  --local-dir outputs/models/a_share_v5_context120_latest/checkpoints/last_model
+  --local-dir models/a_share_v1_beta/releases/beta_v1.2
 ```
 
 启动页面：
@@ -107,28 +105,33 @@ PYTHONPATH=. python webui/app.py
 
 ### 单股预测
 
-输入一个代码时执行单股买点判断。系统由 Web 网关优先从 Eastmoney 获取最新复权日线，失败时回退到 BaoStock；行情按股票写入 `webui/market_data_cache/`，后续请求只补缓存末日之后的增量并保留约 7 天重叠区间来覆盖数据修订。股票不在训练面板时，系统使用最新收盘价、成交量和换手率估算流通市值，再与仓库内 `webui/size_reference.json` 的全市场参考横截面比较，得到可审计的百分位和市值桶；页面会标记“训练面板外”。该路径不要求部署完整训练面板，但至少需要 120 个有效交易日，且超出训练横截面分布的股票预测风险更高。
+输入一个代码时执行单股买点判断。系统由 Web 网关优先从 Eastmoney 获取最新复权日线，失败时回退到 BaoStock；行情按股票写入 `webui/market_data_cache/`，后续请求只补缓存末日之后的增量并保留约 7 天重叠区间来覆盖数据修订。网关按 `amount / (turn / 100)` 估算市值代理，与 `webui/size_reference.json` 比较得到连续百分位，并从 `webui/symbol_sector_map.json` 取得行业条件。该路径至少需要 120 个有效交易日，页面会展示行业、百分位和参考日期。
 
 ### 股票池排序
 
-输入 2–12 只股票，支持逗号、空格或换行分隔，前端自动切换为横截面排序。系统为每只股票增量刷新行情，并以股票池中最早的最新可用交易日作为共同截面；训练面板外股票使用成交量和换手率估算流通市值，再映射到便携式参考横截面的市值桶。每只股票生成 50 条路径，按未来 10 日预测收益的 P50 中位数排序，并展示正向路径比例。单股买点判断使用 `sample_count=50, temperature=0.65, top_p=1.0`；横截面排序使用 `sample_count=50, temperature=0.65, top_p=0.8`。本地和远端后端共用同一界面，预测历史按“单股买点判断”和“横截面排序”分组保存。
+输入 2–12 只股票，支持逗号、空格或换行分隔，前端自动切换为横截面排序。系统为每只股票增量刷新行情，并以股票池中最早的最新可用交易日作为共同截面，再按该截止日重新计算行业和连续市值百分位。每只股票生成 50 条路径，按未来 10 日预测收益的 P50 中位数排序，并展示行业、百分位和正向路径比例。前端的单股和横截面排序共用一份采样配置，当前为 `sample_count=50, temperature=0.65, top_p=0.8`。
+
+预测历史不区分单股和批量入口，统一按行情截止日（信号日）归组。同一天分开提交的股票
+会与批量提交结果进入同一个截面并按预测收益排序；同日同股重复预测只展示最近一次结果。
+历史日期筛选同样使用信号日，而不是请求提交时间。
 
 ## API
 
-- `POST /api/load-model`：加载唯一生产模型并返回实际运行设备。
+- `POST /api/load-model`：加载 Beta V1.2 `Best@871` 并返回实际运行设备。
 - `POST /api/predict`：提交 `{"symbol": "300395"}`，刷新行情并返回单股区间预测。
 - `POST /api/a-share/rankings`：提交 `{"symbols": ["300395", "600519"]}`，返回自选股票池排名。
-- `GET /api/a-share/symbols`：返回本地面板中的可用股票和最新市值桶。
+- `GET /api/a-share/symbols`：返回当前行业映射中的股票、行业 ID 和行业标签。
 
 行情采集、缓存和预测结果保存都属于 Web 网关职责；`webui/market_data_cache/` 与
 `webui/prediction_results/` 是运行时目录，不纳入 Git。Modal Serverless 只接收已整理的
-OHLCVA 数据和未来时间戳，执行模型调用并返回预测路径。
+OHLCVA 数据、未来时间戳、行业 ID 和连续市值百分位，执行模型调用并返回预测路径。
 
 ### 轻量 Serverless 推理服务
 
 Serverless 入口与上面的完整 Web UI 分离，位于 `api/index.py`。它只负责模型调用：
-调用方必须传入已经采集并清洗好的 OHLCVA 历史数据和未来时间戳。该服务不会按股票
-代码采集行情、读取本地数据面板、计算市值、生成图表或保存预测结果。
+调用方必须传入已经采集并清洗好的 OHLCVA 历史数据、未来时间戳、行业 ID 和连续市值
+百分位。该服务不会按股票代码采集行情、读取本地数据面板、计算条件、生成图表或保存
+预测结果。
 
 安装最小依赖并启动：
 
@@ -137,38 +140,34 @@ python -m pip install -r requirements-serverless.txt
 flask --app api.index run --port 8080
 ```
 
-`POST /predict` 请求示例：
+`POST /predict` 请求结构如下；`data` 必须恰好包含 120 行，`future_timestamps` 必须恰好
+包含 10 个递增交易日。可执行的完整样例见 [`deploy/modal/curl_test.sh`](deploy/modal/curl_test.sh)。
 
 ```json
 {
-  "data": [
-    {
-      "timestamp": "2026-08-13T00:00:00",
-      "open": 10.0,
-      "high": 10.5,
-      "low": 9.8,
-      "close": 10.2,
-      "volume": 1000000,
-      "amount": 10200000
-    }
-  ],
-  "future_timestamps": ["2026-08-14T00:00:00"],
-  "pred_len": 1,
-  "sample_count": 20,
-  "size_bucket": 5
+  "data": "120 OHLCVA row objects",
+  "future_timestamps": "10 ISO-8601 timestamp strings",
+  "pred_len": 10,
+  "sample_count": 50,
+  "temperature": 0.65,
+  "top_p": 0.8,
+  "sector_id": 42,
+  "size_percentile": 0.5
 }
 ```
 
-默认生产模型是 `outputs/models/a_share_v6_segment542_latest/checkpoints/last_model`。
-模型和 tokenizer 可分别通过 `KRONOS_MODEL_ID`、`KRONOS_TOKENIZER_ID` 显式覆盖，
-设备可通过 `KRONOS_DEVICE` 指定。运行时会懒加载一次模型并在热实例中复用。
+默认模型是 `models/a_share_v1_beta/releases/beta_v1.2/best_model`，默认 tokenizer 是
+同一发布目录内的 `tokenizer`。两者可分别通过 `KRONOS_MODEL_ID`、
+`KRONOS_TOKENIZER_ID` 显式覆盖，设备可通过 `KRONOS_DEVICE` 指定。运行时会懒加载一次
+并在热实例中复用。服务会拒绝非 `120→10`、缺少条件或包含旧 `size_bucket` 的请求。
 
 ### 部署到 Modal
 
 Modal 部署已经独立整理到 [`deploy/modal/`](deploy/modal/README.md)。该目录只包含
 线上模型调用所需的入口、最小依赖和测试脚本；本地训练、评估、数据与 Web UI 不会
-进入 Modal 镜像。镜像构建时直接从公开 ModelScope 仓库下载 V6 Segment 542 权重，
-不上传本地 checkpoint。
+进入 Modal 镜像。镜像构建时直接从公开 ModelScope 仓库
+`luckfu/Kronos-A-Share-Beta-V1-2` 下载 `Best@871` 和配套 tokenizer，不上传本地
+checkpoint，也不会覆盖旧 V6 App。
 
 ```bash
 python -m pip install modal
@@ -177,8 +176,8 @@ modal deploy deploy/modal/modal_app.py
 ./deploy/modal/curl_test.sh
 ```
 
-当前公网地址是 `https://luckfu--kronos-v6-inference-web.modal.run`，可直接调用
-`/health` 和 `/predict`。鉴权、日志、强制重建和新模型发布步骤见独立部署说明。
+部署后的公网地址是 `https://luckfu--kronos-beta-v1-2-inference-web.modal.run`，提供
+`/health`、`/predict` 和 `/predict-batch`。鉴权、日志、强制重建和发布检查见独立说明。
 
 ## 增训与数据准备
 
@@ -229,7 +228,7 @@ python finetune/train_predictor.py
 
 训练脚本默认使用完整覆盖分段：每段内部无放回、段间沿同一排列继续，完成要求的覆盖遍数后再应用验证集早停。`KRONOS_TRAIN_SAMPLES_PER_SEGMENT`、`KRONOS_COVERAGE_PASSES`、`KRONOS_VALIDATION_SAMPLES` 和 `KRONOS_EARLY_STOPPING_PATIENCE` 可覆盖页面默认值。Apple Silicon 直接运行即可自动使用 MPS；CUDA 可使用 `torchrun`。停止请求会在当前 batch 完成后立即暂停计算并保存 `last_state.pt`；状态包含模型、优化器、学习率调度器、分段和 batch 位置及随机数状态，设置 `KRONOS_RESUME_TRAINING=1` 可从下一 batch 恢复。训练指标同时写入 `metrics.jsonl`，旧任务可从 `training.log` 恢复曲线。`Kronos-base` 基础权重可放在任意目录，通过 `KRONOS_PREDICTOR_PATH` 指定。
 
-V3 全覆盖基线 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留；当前预测页面加载的是以 V5 为训练基座的 V6 Segment 542 `last_model`。
+V3 全覆盖基线 checkpoint 已完成一轮全覆盖训练：1,509,252 个有效窗口按固定排列无放回遍历，共推进 81 个保存分段。早期“每轮随机抽取 800 个窗口”的 checkpoint 仅作为历史实验保留；V6 Segment 542 `last_model` 曾作为页面默认模型，现已由 Beta V1.2 `Best@871` 替代。
 
 ## 评估与回测
 

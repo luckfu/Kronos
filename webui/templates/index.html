@@ -501,7 +501,7 @@
 
         .metric-strip {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
+            grid-template-columns: repeat(6, minmax(0, 1fr));
             gap: 10px;
             padding: 16px 20px 0;
         }
@@ -598,30 +598,6 @@
             padding: 12px;
             border: 1px solid var(--border);
             background: var(--surface-soft);
-        }
-
-        .history-subtabs {
-            display: flex;
-            gap: 0;
-            margin: 4px 20px 16px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .history-subtab {
-            padding: 10px 18px;
-            border: 0;
-            border-bottom: 3px solid transparent;
-            background: transparent;
-            color: var(--muted);
-            font: inherit;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .history-subtab.active {
-            border-bottom-color: #b62f35;
-            color: #b62f35;
         }
 
         .history-filter-field {
@@ -1236,6 +1212,48 @@
             letter-spacing: 0.03em;
         }
 
+        .batch-sort-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+            width: 100%;
+            padding: 3px 0;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-weight: 700;
+            letter-spacing: 0;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .batch-sort-button:hover,
+        .batch-sort-button:focus-visible {
+            color: #a62b31;
+        }
+
+        .batch-sort-button:focus-visible {
+            outline: 2px solid rgba(182, 47, 53, 0.35);
+            outline-offset: 2px;
+        }
+
+        .batch-sort-indicator {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 12px;
+            height: 14px;
+            color: #79827d;
+            font-size: 11px;
+            line-height: 1;
+        }
+
+        th[aria-sort] .batch-sort-indicator {
+            color: #a62b31;
+        }
+
         tbody tr:hover {
             background: #f7f8f7;
         }
@@ -1272,6 +1290,8 @@
 
             .sidebar {
                 grid-template-columns: 1fr 1fr;
+                position: static;
+                top: auto;
             }
         }
 
@@ -1328,7 +1348,7 @@
                 <h1>A股预测工作台</h1>
                 <p id="view-subtitle">单股详情 · 股票池排名 · 概率路径</p>
             </div>
-            <div class="model-caption">V6 SEGMENT 542 LAST · 102.3M PARAMS</div>
+            <div id="model-caption" class="model-caption">BETA V1.2 · BEST@871 · 102.4M PARAMS</div>
         </div>
 
         <div class="workspace">
@@ -1355,12 +1375,13 @@
                     <ul class="plan-list">
                         <li><span>行情上下文</span><strong>最新 120 日</strong></li>
                         <li><span>预测区间</span><strong>未来 10 日</strong></li>
-                        <li><span>生成路径</span><strong>10 条</strong></li>
+                        <li><span>生成路径</span><strong>50 条</strong></li>
                         <li><span>预测区间</span><strong>P10 – P90</strong></li>
-                        <li><span>市值条件</span><strong>最新可用分层</strong></li>
+                        <li><span>行业条件</span><strong>信号日行业 ID</strong></li>
+                        <li><span>市值条件</span><strong>全市场连续百分位</strong></li>
                     </ul>
                     <button id="predict-button" class="predict-button" disabled>输入股票代码</button>
-                    <p class="predict-note">查询时刷新最新复权日线；行情过期或查询失败时停止预测，不使用本地旧缓存。</p>
+                    <p class="predict-note">查询时刷新最新复权日线，并记录行业与全市场市值参考日期；行情过期或条件缺失时停止预测。</p>
                 </section>
             </aside>
 
@@ -1412,6 +1433,10 @@
                             <span>末日 80% 区间</span>
                             <strong id="metric-range">—</strong>
                         </div>
+                        <div class="metric">
+                            <span>10 日预测最高 / 最低</span>
+                            <strong id="metric-high-low">—</strong>
+                        </div>
                     </div>
                     <div id="chart"></div>
                     <div class="table-section">
@@ -1438,31 +1463,35 @@
                     <div class="table-section">
                         <h3>股票池预测排名</h3>
                         <div class="table-wrap"><table><thead><tr>
-                            <th>排名</th><th>股票</th><th>最新收盘</th><th>预测收益</th><th>正向路径</th><th>判断</th>
+                            <th>排名</th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="symbol" data-sort-label="股票">股票<span class="batch-sort-indicator" aria-hidden="true">↕</span></button></th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="sector_label" data-sort-label="行业">行业<span class="batch-sort-indicator" aria-hidden="true">↕</span></button></th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="size_percentile" data-sort-label="市值百分位">市值百分位<span class="batch-sort-indicator" aria-hidden="true">↕</span></button></th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="latest_close" data-sort-label="最新收盘">最新收盘<span class="batch-sort-indicator" aria-hidden="true">↕</span></button></th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="predicted_return_p50" data-sort-label="预测收益">预测收益<span class="batch-sort-indicator" aria-hidden="true">↓</span></button></th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="positive_path_rate" data-sort-label="正向路径">正向路径<span class="batch-sort-indicator" aria-hidden="true">↕</span></button></th>
+                            <th><button class="batch-sort-button" type="button" data-sort-key="timing_signal" data-sort-label="判断">判断<span class="batch-sort-indicator" aria-hidden="true">↕</span></button></th>
+                            <th id="batch-action-heading" style="display: none;">操作</th>
                         </tr></thead><tbody id="batch-body"></tbody></table></div>
                     </div>
                 </div>
                 <div id="history-results" class="result-content">
                     <div class="table-section">
-                        <h3>已保存的预测快照</h3>
-                        <p class="field-help">这里是已经完成并保存的预测，不会重新请求行情或模型；点击记录查看当时的 K 线和预测路径。</p>
-                    </div>
-                    <div class="history-subtabs" role="tablist" aria-label="历史预测类型">
-                        <button id="history-single-tab" class="history-subtab active" type="button" role="tab" aria-selected="true">单股买点判断</button>
-                        <button id="history-ranking-tab" class="history-subtab" type="button" role="tab" aria-selected="false">横截面排序</button>
+                        <h3>已保存的历史截面</h3>
+                        <p class="field-help">预测按行情截止日自动归组，同一天分开提交或批量提交的股票进入同一个截面。</p>
                     </div>
                     <div class="history-filters" aria-label="预测历史筛选">
-                        <label class="history-filter-field"><span>开始日期</span><input id="history-date-from" type="date"></label>
-                        <label class="history-filter-field"><span>结束日期</span><input id="history-date-to" type="date"></label>
-                        <label id="history-symbol-field" class="history-filter-field"><span>股票代码</span><input id="history-symbol-filter" type="search" placeholder="如 600519"></label>
-                        <label id="history-direction-field" class="history-filter-field"><span>方向</span><select id="history-direction-filter"><option value="">全部方向</option><option value="positive">上涨</option><option value="negative">下跌</option></select></label>
+                        <label class="history-filter-field"><span>信号日开始</span><input id="history-date-from" type="date"></label>
+                        <label class="history-filter-field"><span>信号日结束</span><input id="history-date-to" type="date"></label>
+                        <label class="history-filter-field"><span>股票代码</span><input id="history-symbol-filter" type="search" placeholder="如 600519"></label>
+                        <label class="history-filter-field"><span>方向</span><select id="history-direction-filter"><option value="">全部方向</option><option value="positive">上涨</option><option value="negative">下跌</option></select></label>
                         <label class="history-filter-field"><span>来源</span><select id="history-backend-filter"><option value="">全部来源</option><option value="remote">Modal</option><option value="local">本地</option></select></label>
                         <div class="history-filter-actions"><button id="history-filter-submit" class="toolbar-button" type="button">筛选</button><button id="history-filter-reset" class="toolbar-button" type="button">清空</button></div>
                     </div>
                     <p id="history-filter-summary" class="field-help history-filter-summary"></p>
                     <div class="table-section">
                         <div class="table-wrap"><table><thead><tr>
-                            <th id="history-col-time">时间</th><th id="history-col-symbol">股票</th><th>最新收盘</th><th>预测收益</th><th id="history-col-extra">来源</th><th>操作</th>
+                            <th>信号日</th><th>股票截面</th><th>预测收益范围</th><th>最高预测</th><th>来源</th><th>操作</th>
                         </tr></thead><tbody id="history-body"></tbody></table></div>
                     </div>
                 </div>
@@ -1473,6 +1502,12 @@
     <div id="toast" class="toast"></div>
 
     <script>
+        const PRODUCTION_SAMPLING = Object.freeze({
+            sample_count: 50,
+            temperature: 0.65,
+            top_p: 0.8,
+        });
+
         const state = {
             modelReady: false,
             backend: 'remote',
@@ -1480,16 +1515,16 @@
             inferenceDevice: null,
             symbol: null,
             dataInfo: null,
-            trainingPanelCount: 0,
+            sectorMappingCount: 0,
             batchResult: null,
             view: 'current-empty',
             currentMode: 'empty',
             currentResult: null,
             historyRecordId: null,
-            historyProfile: 'single_stock_entry',
             historyGroups: {},
             historyGroupMode: false,
             historyBatchResult: null,
+            batchSort: {key: 'predicted_return_p50', direction: 'desc'},
         };
 
         const stockInput = document.getElementById('stock-input');
@@ -1503,8 +1538,6 @@
         const historySymbolFilter = document.getElementById('history-symbol-filter');
         const historyDirectionFilter = document.getElementById('history-direction-filter');
         const historyBackendFilter = document.getElementById('history-backend-filter');
-        const historySingleTab = document.getElementById('history-single-tab');
-        const historyRankingTab = document.getElementById('history-ranking-tab');
         const historyFilterSubmit = document.getElementById('history-filter-submit');
         const historyFilterReset = document.getElementById('history-filter-reset');
         const basePath = document.querySelector('meta[name="kronos-base-path"]')?.content.replace(/\/$/, '') || '';
@@ -1523,29 +1556,14 @@
             backToHistoryButton.addEventListener('click', loadHistory);
             currentViewTab.addEventListener('click', showCurrentView);
             historyViewTab.addEventListener('click', loadHistory);
-            historySingleTab.addEventListener('click', () => selectHistoryProfile('single_stock_entry'));
-            historyRankingTab.addEventListener('click', () => selectHistoryProfile('cross_section_ranking'));
             historyFilterSubmit.addEventListener('click', loadHistory);
             historyFilterReset.addEventListener('click', resetHistoryFilters);
+            document.querySelectorAll('.batch-sort-button').forEach(button => {
+                button.addEventListener('click', () => setBatchSort(button.dataset.sortKey));
+            });
             [historyDateFrom, historyDateTo, historySymbolFilter].forEach(input => input.addEventListener('keydown', event => {
                 if (event.key === 'Enter') loadHistory();
             }));
-        }
-
-        function selectHistoryProfile(profile) {
-            state.historyProfile = profile;
-            historySingleTab.classList.toggle('active', profile === 'single_stock_entry');
-            historyRankingTab.classList.toggle('active', profile === 'cross_section_ranking');
-            historySingleTab.setAttribute('aria-selected', String(profile === 'single_stock_entry'));
-            historyRankingTab.setAttribute('aria-selected', String(profile === 'cross_section_ranking'));
-            const isRanking = profile === 'cross_section_ranking';
-            document.getElementById('history-symbol-field').style.display = isRanking ? 'none' : '';
-            document.getElementById('history-direction-field').style.display = isRanking ? 'none' : '';
-            if (isRanking) {
-                historySymbolFilter.value = '';
-                historyDirectionFilter.value = '';
-            }
-            loadHistory();
         }
 
         async function loadModel() {
@@ -1556,14 +1574,17 @@
                 const info = response.data.model_info;
                 state.inferenceBackend = info.backend;
                 state.inferenceDevice = info.device;
+                state.modelInfo = info;
                 const sourceLabel = info.backend === 'remote'
                     ? 'Modal 远端'
                     : '本地 ' + String(info.device).toUpperCase();
                 setRuntime('ready', sourceLabel + ' · 模型就绪');
                 document.getElementById('inference-service').textContent =
                     info.backend === 'remote'
-                        ? 'Modal Serverless · 生产模型'
-                        : '本地模型 · ' + String(info.device).toUpperCase();
+                        ? 'Modal Serverless · Beta V1.2'
+                        : '本地 Beta V1.2 · ' + String(info.device).toUpperCase();
+                document.getElementById('model-caption').textContent =
+                    `${String(info.release_id || 'beta-v1.2').toUpperCase()} · ${String(info.checkpoint || 'Best@871').toUpperCase()} · ${info.params} PARAMS`;
                 syncPredictButton();
             } catch (error) {
                 state.modelReady = false;
@@ -1576,7 +1597,7 @@
         async function loadSymbols() {
             try {
                 const response = await axios.get(apiUrl('/api/a-share/symbols'));
-                state.trainingPanelCount = response.data.training_panel_count ?? response.data.count;
+                state.sectorMappingCount = response.data.mapping_count ?? response.data.count;
                 document.getElementById('stock-help').textContent =
                     `支持全市场 A 股；一个代码显示详情，2–12 个代码自动排名`;
             } catch (error) {
@@ -1610,9 +1631,7 @@
             try {
                 const response = await axios.post(apiUrl('/api/predict'), {
                     symbol,
-                    sample_count: 50,
-                    temperature: 0.65,
-                    top_p: 1.0,
+                    ...PRODUCTION_SAMPLING,
                 });
                 state.batchResult = null;
                 state.currentResult = response.data;
@@ -1638,9 +1657,7 @@
             try {
                 const response = await axios.post(apiUrl('/api/a-share/rankings'), {
                     symbols,
-                    sample_count: 50,
-                    temperature: 0.65,
-                    top_p: 0.8,
+                    ...PRODUCTION_SAMPLING,
                 });
                 state.batchResult = response.data;
                 state.currentMode = 'batch';
@@ -1648,6 +1665,7 @@
                 state.historyRecordId = null;
                 state.historyGroupMode = false;
                 state.historyBatchResult = null;
+                state.batchSort = {key: 'predicted_return_p50', direction: 'desc'};
                 showBatchRanking();
                 showToast(response.data.message);
             } catch (error) {
@@ -1670,13 +1688,22 @@
                 const row = document.createElement('tr');
                 row.tabIndex = 0;
                 row.innerHTML = `<td>${index + 1}</td><td>${formatStockLabel(item.symbol, item.name)}</td>` +
+                    `<td>${formatSectorLabel(item)}</td><td>${formatPercentile(item.size_percentile)}</td>` +
                     `<td>${formatPrice(item.latest_close)}</td><td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${(item.predicted_return_p50 * 100).toFixed(2)}%</td>` +
-                    `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>`;
+                    `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>` +
+                    (fromHistory ? '<td><button class="history-delete-button" type="button" aria-label="从截面删除个股">删除个股</button></td>' : '');
+                if (fromHistory) {
+                    row.querySelector('.history-delete-button').addEventListener('click', event => {
+                        event.stopPropagation();
+                        deleteHistoryStock(item);
+                    });
+                }
                 const showDetail = () => fromHistory
-                    ? openHistoryRecord(item.record_id)
+                    ? openHistoryRecord(item.record_id, true)
                     : renderPrediction(item, true);
                 row.addEventListener('click', showDetail);
                 row.addEventListener('keydown', event => {
+                    if (event.target.closest('button')) return;
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         showDetail();
@@ -1686,21 +1713,79 @@
             });
         }
 
+        function batchSortValue(item, key) {
+            if (key === 'symbol') return `${item.symbol || ''} ${item.name || ''}`;
+            if (key === 'sector_label') return item.sector_label || '';
+            if (key === 'timing_signal') return item.timing_signal?.label || '';
+            return item[key];
+        }
+
+        function sortedBatchRankings(rankings) {
+            const {key, direction} = state.batchSort;
+            const factor = direction === 'asc' ? 1 : -1;
+            return [...rankings].sort((left, right) => {
+                const leftValue = batchSortValue(left, key);
+                const rightValue = batchSortValue(right, key);
+                const leftMissing = leftValue == null || (typeof leftValue === 'number' && !Number.isFinite(leftValue));
+                const rightMissing = rightValue == null || (typeof rightValue === 'number' && !Number.isFinite(rightValue));
+                if (leftMissing || rightMissing) {
+                    if (leftMissing && rightMissing) return 0;
+                    return leftMissing ? 1 : -1;
+                }
+                const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+                    ? leftValue - rightValue
+                    : String(leftValue).localeCompare(String(rightValue), 'zh-CN', {numeric: true});
+                return comparison * factor;
+            });
+        }
+
+        function updateBatchSortHeaders() {
+            document.querySelectorAll('.batch-sort-button').forEach(button => {
+                const active = button.dataset.sortKey === state.batchSort.key;
+                const heading = button.closest('th');
+                const indicator = button.querySelector('.batch-sort-indicator');
+                if (active) {
+                    const ascending = state.batchSort.direction === 'asc';
+                    heading.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+                    indicator.textContent = ascending ? '↑' : '↓';
+                    button.setAttribute('aria-label', `按${button.dataset.sortLabel}${ascending ? '降序' : '升序'}排列`);
+                } else {
+                    heading.removeAttribute('aria-sort');
+                    indicator.textContent = '↕';
+                    button.setAttribute('aria-label', `按${button.dataset.sortLabel}排序`);
+                }
+            });
+        }
+
+        function setBatchSort(key) {
+            if (!state.batchResult && !state.historyBatchResult) return;
+            if (state.batchSort.key === key) {
+                state.batchSort.direction = state.batchSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                const textKeys = ['symbol', 'sector_label', 'timing_signal'];
+                state.batchSort = {key, direction: textKeys.includes(key) ? 'asc' : 'desc'};
+            }
+            showBatchRanking();
+        }
+
         function showBatchRanking() {
             const fromHistory = state.historyGroupMode === true;
             const result = fromHistory ? state.historyBatchResult : state.batchResult;
             if (!result) return;
-            renderBatchRankingTable(result.rankings, fromHistory);
+            renderBatchRankingTable(sortedBatchRankings(result.rankings), fromHistory);
+            updateBatchSortHeaders();
             state.view = 'batch-ranking';
             setResultTab(fromHistory ? 'history' : 'current');
             document.getElementById('empty-state').style.display = 'none';
             showOnlyResultContent('batch-results');
+            document.getElementById('batch-action-heading').style.display = fromHistory ? 'table-cell' : 'none';
             document.getElementById('back-to-ranking').style.display = 'none';
             document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
             document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
             document.getElementById('snapshot-badge').textContent = fromHistory ? '历史快照' : '';
             document.getElementById('source-badge').style.display = 'none';
-            document.getElementById('result-heading').textContent = `股票池排名 · ${result.rankings.length} 只`;
+            document.getElementById('result-heading').textContent =
+                `${fromHistory ? '历史截面' : '股票池排名'} · ${result.rankings.length} 只`;
             document.getElementById('result-subtitle').textContent =
                 `共同数据截止 ${formatDate(result.as_of_date)} · ${result.sample_count} 条路径 · ${result.model_device}`;
         }
@@ -1744,54 +1829,59 @@
                 const params = new URLSearchParams();
                 if (historyDateFrom.value) params.set('date_from', historyDateFrom.value);
                 if (historyDateTo.value) params.set('date_to', historyDateTo.value);
-                if (state.historyProfile !== 'cross_section_ranking') {
-                    if (historySymbolFilter.value.trim()) params.set('symbol', historySymbolFilter.value.trim());
-                    if (historyDirectionFilter.value) params.set('direction', historyDirectionFilter.value);
-                }
+                if (historySymbolFilter.value.trim()) params.set('symbol', historySymbolFilter.value.trim());
+                if (historyDirectionFilter.value) params.set('direction', historyDirectionFilter.value);
                 if (historyBackendFilter.value) params.set('backend', historyBackendFilter.value);
-                params.set('profile', state.historyProfile);
                 const query = params.toString();
                 const historyUrl = '/api/prediction-history' + (query ? '?' + query : '');
                 const response = await axios.get(apiUrl(historyUrl));
                 const body = document.getElementById('history-body');
                 body.innerHTML = '';
                 const records = response.data.records;
-                const isRanking = state.historyProfile === 'cross_section_ranking';
-                document.getElementById('history-col-time').textContent = isRanking ? '排序时间' : '时间';
-                document.getElementById('history-col-symbol').textContent = isRanking ? '股票数 / 股票列表' : '股票';
-                document.getElementById('history-col-extra').textContent = isRanking ? '来源' : '来源';
                 if (!records.length) {
                     body.innerHTML = '<tr><td colspan="6">暂无预测记录</td></tr>';
                 }
-                const rows = isRanking ? Object.values(records.reduce((groups, record) => {
-                    const key = record.batch_id || record.record_id;
-                    if (!groups[key]) groups[key] = { ...record, records: [] };
+                const rows = Object.values(records.reduce((groups, record) => {
+                    const key = record.signal_date || 'unknown';
+                    if (!groups[key]) groups[key] = { signalDate: key, records: [] };
                     groups[key].records.push(record);
                     return groups;
-                }, {})) : records;
+                }, {}));
                 state.historyGroups = {};
-                rows.forEach(record => {
+                rows.forEach(group => {
+                    group.records.sort((a, b) =>
+                        (b.predicted_return_p50 ?? -Infinity) - (a.predicted_return_p50 ?? -Infinity)
+                    );
+                    state.historyGroups[group.signalDate] = group.records;
+                    const returns = group.records
+                        .map(item => item.predicted_return_p50)
+                        .filter(value => value != null);
+                    const minReturn = returns.length ? Math.min(...returns) : null;
+                    const maxReturn = returns.length ? Math.max(...returns) : null;
+                    const topRecord = group.records[0];
+                    const stockLabels = group.records.map(item => formatStockLabel(item.symbol, item.name));
+                    const stockSummary = stockLabels.length <= 4
+                        ? stockLabels.join('、')
+                        : `${stockLabels.slice(0, 4).join('、')} 等 ${stockLabels.length} 只`;
+                    const sources = [...new Set(group.records.map(item =>
+                        item.backend === 'remote' ? 'Modal' : '本地'
+                    ))].join(' / ');
+                    const rangeText = minReturn == null
+                        ? '—'
+                        : `${minReturn >= 0 ? '+' : ''}${(minReturn * 100).toFixed(2)}% – ${maxReturn >= 0 ? '+' : ''}${(maxReturn * 100).toFixed(2)}%`;
                     const row = document.createElement('tr');
                     row.tabIndex = 0;
-                    if (isRanking) {
-                        state.historyGroups[record.batch_id || record.record_id] = record.records;
-                        const symbols = record.records.map(item => formatStockLabel(item.symbol, item.name)).join('、');
-                        row.innerHTML = `<td>${formatDateTime(record.created_at)}</td><td>${record.records.length} 只 · ${symbols}</td>` +
-                            `<td>—</td><td>组内排名</td><td>${record.backend === 'remote' ? 'Modal' : '本地'}</td>` +
-                            '<td><span class="history-action-group"><button class="history-group-button" type="button">查看排名</button><button class="history-delete-button" type="button" aria-label="删除这个排序组">删除整组</button></span></td>';
-                        row.querySelector('.history-group-button').addEventListener('click', event => { event.stopPropagation(); openHistoryGroup(record.batch_id || record.record_id); });
-                        row.querySelector('.history-delete-button').addEventListener('click', event => { event.stopPropagation(); deleteHistoryGroup(record.batch_id || record.record_id, record.records); });
-                        row.addEventListener('click', () => openHistoryGroup(record.batch_id || record.record_id));
-                    } else {
-                        row.innerHTML = `<td>${formatDateTime(record.created_at)}</td><td>${formatStockLabel(record.symbol, record.name)}</td>` +
-                            `<td>${formatPrice(record.latest_close)}</td><td class="${record.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${record.predicted_return_p50 == null ? '—' : `${record.predicted_return_p50 >= 0 ? '+' : ''}${(record.predicted_return_p50 * 100).toFixed(2)}%`}</td><td>${record.backend === 'remote' ? 'Modal' : '本地'}</td>` +
-                            '<td><button class="history-delete-button" type="button" aria-label="删除这条预测记录">删除</button></td>';
-                        const deleteButton = row.querySelector('.history-delete-button');
-                        deleteButton.addEventListener('click', event => { event.stopPropagation(); deleteHistoryRecord(record); });
-                        row.addEventListener('click', () => openHistoryRecord(record.record_id));
-                    }
+                    row.innerHTML = `<td>${formatDate(group.signalDate)}</td><td>${group.records.length} 只 · ${stockSummary}</td>` +
+                        `<td>${rangeText}</td><td>${formatStockLabel(topRecord.symbol, topRecord.name)}</td><td>${sources}</td>` +
+                        '<td><span class="history-action-group"><button class="history-group-button" type="button">查看排名</button><button class="history-delete-button" type="button" aria-label="删除这个历史截面">删除截面</button></span></td>';
+                    row.querySelector('.history-group-button').addEventListener('click', event => { event.stopPropagation(); openHistoryGroup(group.signalDate); });
+                    row.querySelector('.history-delete-button').addEventListener('click', event => { event.stopPropagation(); deleteHistoryGroup(group.signalDate, group.records); });
+                    row.addEventListener('click', () => openHistoryGroup(group.signalDate));
                     row.addEventListener('keydown', event => {
-                        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); isRanking ? openHistoryGroup(record.batch_id || record.record_id) : openHistoryRecord(record.record_id); }
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openHistoryGroup(group.signalDate);
+                        }
                     });
                     body.appendChild(row);
                 });
@@ -1801,11 +1891,11 @@
                 state.historyRecordId = null;
                 setResultTab('history');
                 document.getElementById('result-heading').textContent = '预测历史';
-                document.getElementById('result-subtitle').textContent = `${isRanking ? rows.length + ' 个排序组' : records.length + ' 条记录'} · 点击查看完整预测`;
+                document.getElementById('result-subtitle').textContent = `${rows.length} 个信号日截面 · 点击查看当日排名`;
                 const total = response.data.total ?? response.data.records.length;
                 const truncated = total > response.data.records.length ? ' · 仅显示最近 100 条' : '';
                 document.getElementById('history-filter-summary').textContent =
-                    (query ? '筛选结果 ' : '共 ') + (isRanking ? rows.length + ' 个排序组' : total + ' 条记录') + truncated;
+                    (query ? '筛选结果 ' : '共 ') + `${rows.length} 个截面 · ${total} 只股票` + truncated;
                 document.getElementById('back-to-ranking').style.display = 'none';
                 document.getElementById('back-to-history').style.display = 'none';
                 document.getElementById('snapshot-badge').style.display = 'none';
@@ -1815,13 +1905,21 @@
             }
         }
 
-        function openHistoryGroup(batchId) {
-            const records = [...(state.historyGroups[batchId] || [])];
+        function openHistoryGroup(signalDate) {
+            const records = [...(state.historyGroups[signalDate] || [])];
             if (!records.length) return;
             records.sort((a, b) => (b.predicted_return_p50 ?? -Infinity) - (a.predicted_return_p50 ?? -Infinity));
-            state.historyBatchResult = { rankings: records, sample_count: records[0]?.interval?.sample_count || 50, as_of_date: records[0]?.latest_data_date, model_device: records[0]?.backend === 'remote' ? 'remote' : 'local' };
+            state.historyBatchResult = {
+                signal_date: signalDate,
+                records,
+                rankings: records,
+                sample_count: records[0]?.interval?.sample_count || 50,
+                as_of_date: records[0]?.latest_data_date,
+                model_device: records[0]?.backend === 'remote' ? 'remote' : 'local',
+            };
             state.historyRecordId = null;
             state.historyGroupMode = true;
+            state.batchSort = {key: 'predicted_return_p50', direction: 'desc'};
             showBatchRanking();
         }
 
@@ -1834,43 +1932,50 @@
             loadHistory();
         }
 
-        async function deleteHistoryRecord(record) {
-            const label = formatStockLabel(record.symbol, record.name);
-            if (!window.confirm(`确定删除 ${label} 的这条预测记录吗？删除后无法恢复。`)) return;
-            try {
-                await axios.delete(apiUrl(`/api/prediction-history/${encodeURIComponent(record.record_id)}`));
-                if (state.historyRecordId === record.record_id) {
-                    state.historyRecordId = null;
-                    showCurrentView();
-                }
-                await loadHistory();
-                showToast('预测记录已删除');
-            } catch (error) {
-                showToast(error.response?.data?.error || error.message, true);
-            }
-        }
-
-        async function deleteHistoryGroup(batchId, records) {
+        async function deleteHistoryGroup(signalDate, records) {
             const count = records.length;
-            if (!window.confirm(`确定删除这个排序组及其 ${count} 条股票预测吗？删除后无法恢复。`)) return;
+            if (!window.confirm(`确定删除 ${formatDate(signalDate)} 截面的 ${count} 条股票预测吗？删除后无法恢复。`)) return;
             try {
-                await axios.delete(apiUrl(`/api/prediction-history/groups/${encodeURIComponent(batchId)}`));
-                if (state.historyGroupMode && state.batchResult?.rankings?.some(record => record.batch_id === batchId)) {
-                    state.batchResult = null;
-                    state.historyGroupMode = false;
-                }
+                await axios.delete(apiUrl(`/api/prediction-history/dates/${encodeURIComponent(signalDate)}`));
+                state.historyGroupMode = false;
+                state.historyBatchResult = null;
                 await loadHistory();
-                showToast(`已删除排序组及 ${count} 条预测记录`);
+                showToast(`已删除 ${formatDate(signalDate)} 截面的 ${count} 条预测记录`);
             } catch (error) {
                 showToast(error.response?.data?.error || error.message, true);
             }
         }
 
-        async function openHistoryRecord(recordId) {
+        async function deleteHistoryStock(record) {
+            const group = state.historyBatchResult;
+            if (!state.historyGroupMode || !group?.signal_date) return;
+            const signalDate = group.signal_date;
+            const label = formatStockLabel(record.symbol, record.name);
+            if (!window.confirm(`确定从 ${formatDate(signalDate)} 截面删除 ${label} 吗？该股票在这个信号日的历史预测将全部删除，删除后无法恢复。`)) return;
+            try {
+                await axios.delete(apiUrl(`/api/prediction-history/dates/${encodeURIComponent(signalDate)}/symbols/${encodeURIComponent(record.symbol)}`));
+                const symbol = String(record.symbol || '').toLowerCase();
+                const remaining = group.rankings.filter(item => String(item.symbol || '').toLowerCase() !== symbol);
+                state.historyGroups[signalDate] = remaining;
+                if (!remaining.length) {
+                    state.historyGroupMode = false;
+                    state.historyBatchResult = null;
+                    await loadHistory();
+                } else {
+                    state.historyBatchResult = {...group, records: remaining, rankings: remaining};
+                    showBatchRanking();
+                }
+                showToast(`已从 ${formatDate(signalDate)} 截面删除 ${label}`);
+            } catch (error) {
+                showToast(error.response?.data?.error || error.message, true);
+            }
+        }
+
+        async function openHistoryRecord(recordId, fromGroup = false) {
             try {
                 const response = await axios.get(apiUrl(`/api/prediction-history/${encodeURIComponent(recordId)}`));
                 state.historyRecordId = recordId;
-                renderPrediction(response.data, false, true);
+                renderPrediction(response.data, fromGroup, true);
                 showToast('已打开历史预测记录');
             } catch (error) {
                 showToast(error.response?.data?.error || error.message, true);
@@ -1894,7 +1999,9 @@
                 : '当前预测';
             const resultName = formatStockLabel(result.symbol, result.name);
             document.getElementById('result-heading').textContent = `${resultName} 未来 ${result.pred_len} 日预测`;
-            document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · 市值层 ${result.size_bucket}（${(result.size_percentile * 100).toFixed(1)}%） · ${result.interval.sample_count} 条路径`;
+            const sectorReference = result.sector_reference_date ? formatDate(result.sector_reference_date) : '未知';
+            const sizeReference = result.size_reference_date ? formatDate(result.size_reference_date) : '未知';
+            document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · ${formatSectorLabel(result)} · 市值百分位 ${formatPercentile(result.size_percentile)} · 参考 ${sectorReference} / ${sizeReference} · ${result.interval.sample_count} 条路径`;
 
             const sourceBadge = document.getElementById('source-badge');
             sourceBadge.style.display = 'inline-flex';
@@ -1913,6 +2020,11 @@
             signalElement.textContent = result.timing_signal.label;
             signalElement.className = `timing-signal ${result.timing_signal.key}`;
             document.getElementById('metric-range').textContent = `${formatPrice(finalPrediction.close_p10)} – ${formatPrice(finalPrediction.close_p90)}`;
+            const predictedHighs = predictions.map(item => Number(item.high)).filter(Number.isFinite);
+            const predictedLows = predictions.map(item => Number(item.low)).filter(Number.isFinite);
+            document.getElementById('metric-high-low').textContent = predictedHighs.length && predictedLows.length
+                ? `${formatPrice(Math.max(...predictedHighs))} / ${formatPrice(Math.min(...predictedLows))}`
+                : '—';
 
             const chartData = JSON.parse(result.chart);
             chartData.layout.height = 600;
@@ -1988,6 +2100,18 @@
             return displayName && displayName.toLowerCase() !== String(code).toLowerCase()
                 ? `${code} · ${displayName}`
                 : code;
+        }
+
+        function formatSectorLabel(item) {
+            const label = String(item?.sector_label || '').trim();
+            const sectorId = Number(item?.sector_id);
+            if (!label || label.toLowerCase() === 'unknown') return '未知行业';
+            return Number.isInteger(sectorId) ? `${label} · ID ${sectorId}` : label;
+        }
+
+        function formatPercentile(value) {
+            const percentile = Number(value);
+            return Number.isFinite(percentile) ? `${(percentile * 100).toFixed(1)}%` : '—';
         }
 
         function formatDateTime(value) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-api_base_url="${1:-https://luckfu--kronos-v6-inference-web.modal.run}"
+api_base_url="${1:-https://luckfu--kronos-beta-v1-2-inference-web.modal.run}"
 api_base_url="${api_base_url%/}"
 payload_file="$(mktemp "${TMPDIR:-/tmp}/kronos-modal-payload.XXXXXX")"
 trap 'rm -f "$payload_file"' EXIT
@@ -32,17 +32,21 @@ while len(rows) < 120:
         index += 1
     current += timedelta(days=1)
 
-while current.weekday() >= 5:
+future_timestamps = []
+while len(future_timestamps) < 10:
+    if current.weekday() < 5:
+        future_timestamps.append(current.isoformat())
     current += timedelta(days=1)
 
 payload = {
     "data": rows,
-    "future_timestamps": [current.isoformat()],
-    "pred_len": 1,
-    "sample_count": 1,
-    "temperature": 0.6,
-    "top_p": 0.9,
-    "size_bucket": 5,
+    "future_timestamps": future_timestamps,
+    "pred_len": 10,
+    "sample_count": 50,
+    "temperature": 0.65,
+    "top_p": 0.8,
+    "sector_id": 42,
+    "size_percentile": 0.5,
 }
 with open(output_path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle)
