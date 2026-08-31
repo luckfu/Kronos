@@ -110,10 +110,10 @@ def profile_symbols(panel, reference_date, lookback, predict, signal_start, sign
 
 
 def assign_stratified_split(records, seed, train_fraction):
-    if not np.isclose(train_fraction, 0.5):
-        raise ValueError("This release requires an exact 50/50 symbol split")
-    if len(records) % 2:
-        raise ValueError("An exact 50/50 split requires an even symbol count")
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError("train_fraction must be strictly between 0 and 1")
+    if len(records) < 2:
+        raise ValueError("At least two symbols are required for a holdout split")
 
     groups = defaultdict(list)
     for record in records:
@@ -125,30 +125,45 @@ def assign_stratified_split(records, seed, train_fraction):
         groups[key].append(record)
 
     rng = np.random.default_rng(seed)
-    train = []
-    validation = []
-    leftovers = []
+    shuffled_groups = []
     for key in sorted(groups):
         rows = sorted(groups[key], key=lambda item: item["symbol"])
         order = rng.permutation(len(rows))
         rows = [rows[int(position)] for position in order]
-        paired = len(rows) // 2
-        train.extend(rows[:paired])
-        validation.extend(rows[paired:paired * 2])
-        if len(rows) % 2:
-            leftovers.append(rows[-1])
+        ideal_train = len(rows) * train_fraction
+        shuffled_groups.append(
+            {
+                "key": key,
+                "rows": rows,
+                "train_count": int(np.floor(ideal_train)),
+                "remainder": ideal_train - np.floor(ideal_train),
+            }
+        )
 
-    leftover_order = rng.permutation(len(leftovers))
-    target_train = len(records) // 2
-    needed_train = target_train - len(train)
-    for offset, position in enumerate(leftover_order):
-        if offset < needed_train:
-            train.append(leftovers[int(position)])
-        else:
-            validation.append(leftovers[int(position)])
+    target_train = int(round(len(records) * train_fraction))
+    target_train = min(max(target_train, 1), len(records) - 1)
+    remaining = target_train - sum(group["train_count"] for group in shuffled_groups)
+    allocation_order = sorted(
+        range(len(shuffled_groups)),
+        key=lambda position: (
+            -shuffled_groups[position]["remainder"],
+            shuffled_groups[position]["key"],
+        ),
+    )
+    if remaining < 0 or remaining > len(allocation_order):
+        raise RuntimeError("Largest-remainder allocation could not reach the target")
+    for position in allocation_order[:remaining]:
+        shuffled_groups[position]["train_count"] += 1
 
-    if len(train) != target_train or len(validation) != target_train:
-        raise RuntimeError("Stratified allocation did not produce an exact 50/50 split")
+    train = []
+    validation = []
+    for group in shuffled_groups:
+        train_count = group["train_count"]
+        train.extend(group["rows"][:train_count])
+        validation.extend(group["rows"][train_count:])
+
+    if len(train) != target_train or len(validation) != len(records) - target_train:
+        raise RuntimeError("Stratified allocation did not produce the target split")
     train_symbols = {row["symbol"] for row in train}
     validation_symbols = {row["symbol"] for row in validation}
     if train_symbols & validation_symbols:
@@ -357,7 +372,7 @@ def build_dataset(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Build an exact, stratified 50/50 symbol-holdout dataset"
+        description="Build a deterministic, stratified symbol-holdout dataset"
     )
     parser.add_argument(
         "--source-root", default="data/a_share_full_market_v1_beta"
@@ -367,13 +382,13 @@ def parse_args():
     )
     parser.add_argument(
         "--output-root",
-        default="data/a_share_full_market_v1_beta_symbol_holdout_50_50_v1",
+        default="data/a_share_full_market_v1_beta_symbol_holdout_80_20_v1",
     )
     parser.add_argument(
-        "--name", default="a_share_full_market_v1_beta_symbol_holdout_50_50_v1"
+        "--name", default="a_share_full_market_v1_beta_symbol_holdout_80_20_v1"
     )
     parser.add_argument("--seed", type=int, default=20260831)
-    parser.add_argument("--train-fraction", type=float, default=0.5)
+    parser.add_argument("--train-fraction", type=float, default=0.8)
     parser.add_argument("--reference-date", default="2026-06-30")
     parser.add_argument("--lookback", type=int, default=120)
     parser.add_argument("--predict", type=int, default=10)
