@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task": "beta-v1.3.2 clean-v1.1 symbol-holdout zero-training baseline",
+  "training_performed": false,
+  "evaluated_at": "2026-08-31",
+  "checkpoint": {
+    "release": "beta-v1.1",
+    "training_checkpoint": "Best@818",
+    "model_sha256": "b890771368737c6c93825165695afc16b57870f4692f87a563392cc96e405673",
+    "sector_embedding": "loaded_from_checkpoint",
+    "continuous_size_mlp": "loaded_from_checkpoint"
+  },
+  "validation": {
+    "profile": "symbol_holdout_90_10_2025h2_2026h1_full",
+    "manifest_sha256": "ea29ecdb318adf9789ddd47eb4c5d3df7cdadcbbd60471305241a469d357d184",
+    "samples": 123982,
+    "batches": 1938,
+    "objective_loss": 2.4111080169677734,
+    "forecast_loss": 2.3579556941986084,
+    "history_loss": 2.5424652099609375,
+    "full_sequence_loss": 2.5269112586975098,
+    "periods": {
+      "2025H2": {
+        "samples": 64441,
+        "objective_loss": 2.3862509727478027,
+        "forecast_loss": 2.336766004562378,
+        "history_loss": 2.5271785259246826,
+        "full_sequence_loss": 2.5112104415893555
+      },
+      "2026H1": {
+        "samples": 59541,
+        "objective_loss": 2.430586338043213,
+        "forecast_loss": 2.3806121349334717,
+        "history_loss": 2.5588879585266113,
+        "full_sequence_loss": 2.5437114238739014
+      }
+    }
+  },
+  "interpretation": "tuning baseline for cross-symbol transfer; not a sealed future test"
+}
