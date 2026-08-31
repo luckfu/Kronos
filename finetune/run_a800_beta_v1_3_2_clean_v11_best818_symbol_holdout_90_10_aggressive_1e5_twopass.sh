@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE="/nfsdata/models/2026/kronos-v1-beta"
+export KRONOS_LAUNCH_PARENT_RUN="$BASE/runs/v6_natural_twospeed_v2_seed100"
+export KRONOS_LAUNCH_PARENT_ROOT="$KRONOS_LAUNCH_PARENT_RUN/outputs/models/a_share_v1_beta_v6_natural_twospeed_v2_120d_to_10d/checkpoints/best_model"
+export KRONOS_LAUNCH_PARENT_RELEASE="Beta v1.1"
+export KRONOS_LAUNCH_PARENT_CHECKPOINT="Best@818"
+export KRONOS_LAUNCH_PARENT_SHA="b890771368737c6c93825165695afc16b57870f4692f87a563392cc96e405673"
+export KRONOS_LAUNCH_PARENT_OLD_TUNING_LOSS="2.4471969604492188"
+export KRONOS_LAUNCH_RUN_ROOT="$BASE/runs/beta_v1_3_2_clean_v11_best818_symbol_holdout_90_10_aggressive_1e5_twopass_seed100"
+export KRONOS_LAUNCH_OUTPUT_NAME="a_share_beta_v1_3_2_clean_v11_best818_symbol_holdout_90_10_aggressive_1e5_twopass_120d_to_10d"
+export KRONOS_LAUNCH_STAGE_ID="beta_v1_3_2_clean_v11_best818_symbol_holdout_90_10_aggressive_1e5_twopass"
+
+exec "$BASE/code/Kronos/finetune/run_a800_beta_v1_3_2_symbol_holdout_90_10_aggressive_1e5_twopass.sh" "${1:-start}"
