@@ -1,4 +1,14 @@
-# Beta v1.3.2 Clean-V1.1 训练计划
+# Beta v2.0 训练与定版计划
+
+## 版本定义
+
+- 正式发布目标为 **Beta v2.0**。
+- `beta_v1_3_2_clean_v11_best818_symbol_holdout_90_10_aggressive_1e5_twopass`
+  仅作为正在运行的内部实验 ID，保留其远端目录、tmux、SwanLab run 和 resume
+  血缘，不作为最终版本名。
+- Beta v1.2、v1.3 和 v1.3.1 保留为旧验证体系下的历史实验，不再作为可信泛化
+  版本继续晋级，也不删除或覆盖其权重和指标。
+- Beta v2.0 是首个以固定股票隔离验证作为主要定版依据的正式 Beta 版本。
 
 ## 父权重选择
 
@@ -26,3 +36,12 @@
 
 当前 Beta v1.3.1 父线只保留为历史污染/遗忘诊断，不与本线路混用 checkpoint、
 optimizer、SwanLab run 或 Best 结论。
+
+## 定版规则
+
+- 训练结束后以 123,982 窗口 Combined objective loss 最低的 Best checkpoint
+  作为 Beta v2.0 候选，不直接以 Last 定版。
+- 对候选 Best 独立重跑同一 full-only 股票隔离验证，并记录 Combined、2025H2、
+  2026H1、模型 SHA、父权重和数据 manifest。
+- 最终 release 目录、模型卡、评估报告和发布 manifest 统一使用 `beta-v2.0`；内部
+  实验路径只记录在 lineage 中。
