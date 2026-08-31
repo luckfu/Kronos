@@ -35,8 +35,9 @@ def main():
     config = Config().__dict__
     if not config.get("validation_full_only"):
         raise RuntimeError("KRONOS_VALIDATION_FULL_ONLY=1 is required")
-    if int(config["validation_large_samples"]) != 24000:
-        raise RuntimeError("Full-only evaluation requires exactly 24,000 samples")
+    expected_samples = int(config["validation_large_samples"])
+    if expected_samples <= 0:
+        raise RuntimeError("Full-only evaluation requires a positive sample count")
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if device.type != "cuda":
@@ -66,8 +67,10 @@ def main():
     model.eval().to(device)
 
     dataset = QlibDataset("val")
-    if len(dataset) != 24000:
-        raise RuntimeError(f"Expected 24,000 validation samples, found {len(dataset)}")
+    if len(dataset) != expected_samples:
+        raise RuntimeError(
+            f"Expected {expected_samples:,} validation samples, found {len(dataset):,}"
+        )
     loader = DataLoader(
         dataset,
         batch_size=config["batch_size"],

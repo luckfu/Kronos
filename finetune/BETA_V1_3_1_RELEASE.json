@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "release_id": "beta-v1.3.1",
+  "display_name": "A-share Full-Market Beta v1.3.1",
+  "released_at": "2026-08-31",
+  "status": "beta",
+  "parent_release": "beta-v1.3",
+  "default_checkpoint": {
+    "training_checkpoint": "Best@895",
+    "model_sha256": "ad6f2ffc84536795a5c88e0dfa74d5486aa720a2296bce4f669ff5e99bc8ed6a",
+    "remote_path": "/nfsdata/models/2026/kronos-v1-beta/runs/beta_v1_3_best343_aggressive_1e5_twopass_seed100/outputs/models/a_share_beta_v1_3_best343_aggressive_1e5_twopass_120d_to_10d/checkpoints/best_model",
+    "role": "recommended checkpoint and beta-v1.3.2 parent"
+  },
+  "training": {
+    "completed_segments": 953,
+    "planned_segments": 1056,
+    "stopped_by_owner": true,
+    "trainable_predictor_fraction": 1.0,
+    "scheduler": "one_cycle",
+    "predictor_peak_learning_rate": 1e-5,
+    "condition_peak_learning_rate": 1e-5,
+    "batch_size": 64,
+    "amp_dtype": "bfloat16",
+    "seed": 100
+  },
+  "evaluation": {
+    "profile": "fixed_natural_2025h2_2026h1_same_symbol_pool",
+    "samples": 24000,
+    "best_tuning_loss": 2.3491287231445312,
+    "best_segment": 895,
+    "2025H2": 2.3469862937927246,
+    "2026H1": 2.345519542694092,
+    "strict_future_status": "not_evaluated_for_this_release"
+  },
+  "limitations": [
+    "The fixed 24k set is a tuning set with same-symbol sliding-window overlap.",
+    "Beta v1.3.1 is an owner-stopped checkpoint release, not a completed two-pass run.",
+    "Model transfer to the local project archive is still pending."
+  ],
+  "training_manifest": "finetune/BETA_V1_3_1_TRAINING_MANIFEST.json"
+}

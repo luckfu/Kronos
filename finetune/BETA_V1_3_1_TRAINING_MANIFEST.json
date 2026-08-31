@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "release_id": "beta-v1.3.1",
+  "status": "stopped_by_owner",
+  "stopped_at": "2026-08-31T07:32:28Z",
+  "parent": {
+    "release": "beta-v1.3",
+    "checkpoint": "Best@343",
+    "model_sha256": "b2e90710d7619f3ae3a1b488726b2885adff11dcd45834f2560766f49bbc20f3"
+  },
+  "training": {
+    "run_id": "beta_v1_3_best343_aggressive_1e5_twopass_seed100",
+    "segments_completed": 953,
+    "segments_planned": 1056,
+    "coverage_passes_planned": 2,
+    "train_metric_records": 2982,
+    "validation_large_records": 953,
+    "validation_quick_records": 0,
+    "nonfinite_values": 0,
+    "trainable_predictor_fraction": 1.0,
+    "batch_size": 64,
+    "amp_dtype": "bfloat16",
+    "scheduler": "one_cycle",
+    "predictor_peak_learning_rate": 1e-5,
+    "condition_peak_learning_rate": 1e-5,
+    "seed": 100
+  },
+  "best": {
+    "checkpoint": "Best@895",
+    "validation_tuning_loss": 2.3491287231445312,
+    "periods": {
+      "2025H2": 2.3469862937927246,
+      "2026H1": 2.345519542694092
+    },
+    "model_sha256": "ad6f2ffc84536795a5c88e0dfa74d5486aa720a2296bce4f669ff5e99bc8ed6a",
+    "role": "beta-v1.3.1 default and beta-v1.3.2 parent"
+  },
+  "resume": {
+    "last_completed_segment": 953,
+    "next_segment": 954,
+    "state_available": true,
+    "state_sha256": "021ef5738f7af8904cd37f168f709813689e7104c52535787e0c15fb5c8880ed"
+  },
+  "validation": {
+    "profile": "fixed_natural_2025h2_2026h1_same_symbol_pool",
+    "samples": 24000,
+    "manifest_sha256": "f329b1ca2a6f94c373403563d941d05c66de3754e7e3206c002cb5e475be1ac7",
+    "interpretation": "tuning loss; not symbol-isolated and not sealed future"
+  },
+  "artifacts": {
+    "remote_run": "/nfsdata/models/2026/kronos-v1-beta/runs/beta_v1_3_best343_aggressive_1e5_twopass_seed100",
+    "best_config_sha256": "dc92f556ff33188755a1eabd99d16f12f1f0b9e1c47cf4f7889f03d9447dfd6d",
+    "metrics_sha256": "dde599e6b3b527d6369573604e1689acc212d27df3352e4d20b56bb89644d5f1",
+    "launcher_log_sha256": "f547f0ead030f4f15ad19d656f99c223abe31ea8f87befddaff67ca77e894608",
+    "local_archive_status": "pending_model_transfer"
+  },
+  "lineage": {
+    "lineage_id": "lin-d2a39f2905ecfe8f",
+    "parent_handoff_id": "20260830-175409-codex-kronos-local-migration-and-beta-v1.2-tra-01a04158-9ea1-7921-b9c2-"
+  }
+}
