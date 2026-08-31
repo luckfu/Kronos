@@ -105,7 +105,8 @@ def metric_payload(record):
 def baseline_payload(document):
     payload = {}
     flatten_numeric("baseline/quick", document.get("quick", {}), payload)
-    flatten_numeric("baseline/full", document.get("large", {}), payload)
+    full = document.get("large", document.get("validation_large", {}))
+    flatten_numeric("baseline/full", full, payload)
     return payload
 
 

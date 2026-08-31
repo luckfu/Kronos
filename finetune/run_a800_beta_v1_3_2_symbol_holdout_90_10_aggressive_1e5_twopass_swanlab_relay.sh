@@ -11,6 +11,7 @@ mkdir -p "$STATE_ROOT"
 exec "$VENV/bin/python" -u "$ROOT/finetune/relay_a800_metrics_to_swanlab.py" \
   --host A800 \
   --remote-metrics "$REMOTE_OUTPUT/metrics.jsonl" \
+  --remote-baseline "$REMOTE_RUN/baseline_beta_v1_3_1_best895_symbol_holdout_full.json" \
   --state "$STATE_ROOT/state.json" \
   --poll-seconds 10 \
   --project finance \
