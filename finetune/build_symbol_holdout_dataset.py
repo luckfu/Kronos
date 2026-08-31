@@ -115,52 +115,100 @@ def assign_stratified_split(records, seed, train_fraction):
     if len(records) < 2:
         raise ValueError("At least two symbols are required for a holdout split")
 
-    groups = defaultdict(list)
+    sector_counts = Counter(str(record["sector"]) for record in records)
+    allocation_units = defaultdict(list)
     for record in records:
-        key = (
-            record["sector"],
-            int(record["size_decile"]),
-            record["history_start_bucket"],
-        )
-        groups[key].append(record)
-
-    rng = np.random.default_rng(seed)
-    shuffled_groups = []
-    for key in sorted(groups):
-        rows = sorted(groups[key], key=lambda item: item["symbol"])
-        order = rng.permutation(len(rows))
-        rows = [rows[int(position)] for position in order]
-        ideal_train = len(rows) * train_fraction
-        shuffled_groups.append(
-            {
-                "key": key,
-                "rows": rows,
-                "train_count": int(np.floor(ideal_train)),
-                "remainder": ideal_train - np.floor(ideal_train),
-            }
-        )
+        sector = str(record["sector"])
+        if sector_counts[sector] >= 5:
+            unit_key = ("sector", sector)
+        else:
+            major_sector = sector[:1] if sector != "unknown" else "unknown"
+            unit_key = ("rare_major_sector", major_sector)
+        allocation_units[unit_key].append(record)
 
     target_train = int(round(len(records) * train_fraction))
     target_train = min(max(target_train, 1), len(records) - 1)
-    remaining = target_train - sum(group["train_count"] for group in shuffled_groups)
+    target_validation = len(records) - target_train
+    validation_fraction = 1.0 - train_fraction
+
+    unit_allocations = []
+    for key in sorted(allocation_units):
+        rows = allocation_units[key]
+        ideal_validation = len(rows) * validation_fraction
+        validation_count = int(np.floor(ideal_validation))
+        if key[0] == "sector":
+            validation_count = max(validation_count, 1)
+        unit_allocations.append(
+            {
+                "key": key,
+                "rows": rows,
+                "validation_count": validation_count,
+                "remainder": ideal_validation - np.floor(ideal_validation),
+            }
+        )
+
+    remaining = target_validation - sum(
+        unit["validation_count"] for unit in unit_allocations
+    )
+    if remaining < 0:
+        raise ValueError(
+            "Validation target is too small to preserve the minimum sector coverage"
+        )
     allocation_order = sorted(
-        range(len(shuffled_groups)),
+        range(len(unit_allocations)),
         key=lambda position: (
-            -shuffled_groups[position]["remainder"],
-            shuffled_groups[position]["key"],
+            -unit_allocations[position]["remainder"],
+            unit_allocations[position]["key"],
         ),
     )
-    if remaining < 0 or remaining > len(allocation_order):
-        raise RuntimeError("Largest-remainder allocation could not reach the target")
+    if remaining > len(allocation_order):
+        raise RuntimeError("Sector allocation could not reach the validation target")
     for position in allocation_order[:remaining]:
-        shuffled_groups[position]["train_count"] += 1
+        unit_allocations[position]["validation_count"] += 1
 
+    rng = np.random.default_rng(seed)
     train = []
     validation = []
-    for group in shuffled_groups:
-        train_count = group["train_count"]
-        train.extend(group["rows"][:train_count])
-        validation.extend(group["rows"][train_count:])
+    for unit in unit_allocations:
+        strata = defaultdict(list)
+        for record in unit["rows"]:
+            key = (int(record["size_decile"]), record["history_start_bucket"])
+            strata[key].append(record)
+
+        stratum_allocations = []
+        for key in sorted(strata):
+            rows = sorted(strata[key], key=lambda item: item["symbol"])
+            order = rng.permutation(len(rows))
+            rows = [rows[int(position)] for position in order]
+            ideal_validation = (
+                len(rows) * unit["validation_count"] / len(unit["rows"])
+            )
+            stratum_allocations.append(
+                {
+                    "key": key,
+                    "rows": rows,
+                    "validation_count": int(np.floor(ideal_validation)),
+                    "remainder": ideal_validation - np.floor(ideal_validation),
+                }
+            )
+
+        stratum_remaining = unit["validation_count"] - sum(
+            stratum["validation_count"] for stratum in stratum_allocations
+        )
+        stratum_order = sorted(
+            range(len(stratum_allocations)),
+            key=lambda position: (
+                -stratum_allocations[position]["remainder"],
+                stratum_allocations[position]["key"],
+            ),
+        )
+        for position in stratum_order[:stratum_remaining]:
+            stratum_allocations[position]["validation_count"] += 1
+
+        for stratum in stratum_allocations:
+            validation_count = stratum["validation_count"]
+            validation.extend(stratum["rows"][:validation_count])
+            train.extend(stratum["rows"][validation_count:])
 
     if len(train) != target_train or len(validation) != len(records) - target_train:
         raise RuntimeError("Stratified allocation did not produce the target split")
@@ -202,6 +250,11 @@ def build_audit(records, train_symbols, validation_symbols):
             ),
         }
     by_symbol = {record["symbol"]: record for record in records}
+    sector_counts = Counter(str(record["sector"]) for record in records)
+    validation_sector_counts = value_counts(records, validation_symbols, "sector")
+    required_validation_sectors = {
+        sector for sector, count in sector_counts.items() if count >= 5
+    }
     return {
         "symbols": {
             "total": len(records),
@@ -222,6 +275,15 @@ def build_audit(records, train_symbols, validation_symbols):
             "validation": sum(
                 by_symbol[symbol]["eligible_windows"]
                 for symbol in validation_symbols
+            ),
+        },
+        "sector_coverage": {
+            "source": len(sector_counts),
+            "validation": len(validation_sector_counts),
+            "minimum_source_symbols": 5,
+            "required": len(required_validation_sectors),
+            "missing_required": sorted(
+                required_validation_sectors - set(validation_sector_counts)
             ),
         },
         "distributions": distributions,
@@ -324,7 +386,10 @@ def build_dataset(args):
                 "train_fraction": args.train_fraction,
                 "validation_fraction": 1.0 - args.train_fraction,
                 "seed": args.seed,
+                "allocation": "sector quota followed by within-sector largest-remainder stratification",
                 "strata": ["sector", "size_decile", "history_start_bucket"],
+                "minimum_validation_sector_size": 5,
+                "rare_sector_pool": "first character of the sector code",
                 "reference_date": args.reference_date,
                 "history_start_semantics": "first date available in the source panel; proxy for listing age",
                 "train_label": "train",
@@ -382,13 +447,13 @@ def parse_args():
     )
     parser.add_argument(
         "--output-root",
-        default="data/a_share_full_market_v1_beta_symbol_holdout_80_20_v1",
+        default="data/a_share_full_market_v1_beta_symbol_holdout_90_10_v1",
     )
     parser.add_argument(
-        "--name", default="a_share_full_market_v1_beta_symbol_holdout_80_20_v1"
+        "--name", default="a_share_full_market_v1_beta_symbol_holdout_90_10_v1"
     )
     parser.add_argument("--seed", type=int, default=20260831)
-    parser.add_argument("--train-fraction", type=float, default=0.8)
+    parser.add_argument("--train-fraction", type=float, default=0.9)
     parser.add_argument("--reference-date", default="2026-06-30")
     parser.add_argument("--lookback", type=int, default=120)
     parser.add_argument("--predict", type=int, default=10)

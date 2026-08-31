@@ -86,6 +86,18 @@ def stratified_pick(frame, count, seed):
 
 
 def natural_select(frame, count, seed):
+    if count == len(frame):
+        return frame.sort_values(
+            [
+                "asof_date",
+                "direction",
+                "size_decile",
+                "sector",
+                "symbol",
+                "start_index",
+            ],
+            kind="stable",
+        ).reset_index(drop=True)
     quotas = daily_quotas(frame, count, seed)
     selected = []
     for offset, date in enumerate(sorted(quotas)):
@@ -191,7 +203,12 @@ def build_manifest(args):
         "direction_definition": {"return": "close[target_10] / close[input_last] - 1", "short": "return < -0.01", "neutral": "-0.01 <= return <= 0.01", "long": "return > 0.01"},
         "selection": {
             "seed": args.seed, "strata": ["asof_date", "direction", "size_decile", "sector"],
-            "method": "equal_daily_quota_with_proportional_daily_direction_mix",
+            "method": (
+                "all_tuning_pool_samples"
+                if len(large) == len(tuning_pool)
+                else "equal_daily_quota_with_proportional_daily_direction_mix"
+            ),
+            "large_is_full_tuning_pool": len(large) == len(tuning_pool),
             "period_split": args.period_split,
             "periods": ["2025H2", "2026H1"],
             "quick_samples": len(quick), "large_samples": len(large),
