@@ -147,10 +147,13 @@ def initialize_swanlab(manifest):
             from kaggle_secrets import UserSecretsClient
 
             api_key = UserSecretsClient().get_secret("SWANLAB_API_KEY").strip()
-        except Exception as exc:
-            raise RuntimeError(
-                "SWANLAB_API_KEY is required as a Kaggle Secret or environment variable"
-            ) from exc
+        except Exception:
+            print(
+                "SwanLab dashboard disabled: add Kaggle Secret "
+                "SWANLAB_API_KEY to enable live metrics; training continues with local logs.",
+                flush=True,
+            )
+            return None
     swanlab.login(api_key=api_key)
     run = swanlab.init(
         project=os.getenv("SWANLAB_PROJECT", "finance"),
@@ -198,7 +201,7 @@ def stream_training(command, env, run):
     )
     latest_segment = latest_step = 0
     latest_total_steps = 1
-    dashboard_active = True
+    dashboard_active = run is not None
     assert child.stdout is not None
     for line in child.stdout:
         print(line, end="", flush=True)

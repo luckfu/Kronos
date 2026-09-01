@@ -30,6 +30,7 @@ def test_v3_bootstrap_is_isolated_and_uses_two_thousand_windows():
     assert '"torch==2.5.1"' in source
     assert '"monitor/{key}"' in source
     assert '"progress/coverage_fraction"' in source
+    assert 'dashboard disabled' in source
 
 
 def test_v3_dashboard_parses_training_validation_and_condition_metrics():
