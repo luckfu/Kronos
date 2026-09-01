@@ -67,6 +67,7 @@ Desktop.ini
 /artifacts/
 /finetune/artifacts/
 /finetune/kaggle_v1_beta_kernel/
+/finetune/kaggle_v3_bootstrap_kernel/
 /finetune/kaggle_v1_beta_minimal.tar.gz
 /webui/prediction_results/
 /webui/market_data_cache/

@@ -84,6 +84,7 @@ def test_condition_parameter_names_are_isolated_from_adaptation_parameters():
 
     assert is_condition("sector_emb.weight")
     assert is_condition("size_mlp.2.weight")
+    assert is_condition("size_path_mlp.2.weight")
     assert not is_condition("transformer.10.attn.q_proj.weight")
 
 

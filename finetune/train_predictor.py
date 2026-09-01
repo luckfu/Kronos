@@ -154,6 +154,8 @@ def model_export_config(core_model, config):
         'context_layer': int(config.get('context_layer', 0)),
         'use_size_percentile': bool(config.get('use_size_percentile', False)),
         'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
+        'use_size_path': bool(config.get('use_size_path', False)),
+        'size_path_input_dim': int(config.get('size_path_input_dim', 4)),
     })
     return model_config
 
@@ -175,6 +177,7 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
         'best_selection_metric',
         'trainable_transformer_layers',
         'use_sector_features', 'use_size_features', 'use_size_percentile',
+        'use_size_path', 'size_path_input_dim',
         'disable_condition_inputs',
         'num_sectors', 'num_size_buckets', 'context_layer',
         'train_signal_start', 'train_signal_end', 'val_signal_start', 'val_signal_end',
@@ -290,7 +293,7 @@ def configure_trainable_parameters(model, config):
         parameter.requires_grad = False
 
     for module in [
-        model.sector_emb, model.size_emb, model.size_mlp,
+        model.sector_emb, model.size_emb, model.size_mlp, model.size_path_mlp,
         model.norm, model.dep_layer, model.head,
     ]:
         if module is not None:
@@ -327,6 +330,10 @@ def reset_conditioning(model, config):
             torch.nn.init.zeros_(model.size_mlp[-1].weight)
             torch.nn.init.zeros_(model.size_mlp[-1].bias)
             print('Reset size percentile output layer to zero.')
+        if model.size_path_mlp is not None:
+            torch.nn.init.zeros_(model.size_path_mlp[-1].weight)
+            torch.nn.init.zeros_(model.size_path_mlp[-1].bias)
+            print('Reset dynamic size-path output layer to zero.')
 
 
 def completed_coverage_windows(dataset, completed_segments, coverage_passes):
@@ -367,7 +374,9 @@ def segment_run_limit_reached(start_segment, next_segment, max_segments_per_run)
 
 
 def is_condition_parameter(name):
-    return name.startswith(('sector_emb.', 'size_emb.', 'size_mlp.'))
+    return name.startswith((
+        'sector_emb.', 'size_emb.', 'size_mlp.', 'size_path_mlp.'
+    ))
 
 
 def parameter_uses_weight_decay(name, parameter):
@@ -700,9 +709,19 @@ def evaluate_validation(
                 if len(batch) > 4 and config.get('use_size_percentile', False)
                 else None
             )
-            batch_period = batch[5] if len(batch) > 5 and period_names else None
+            batch_size_path = (
+                batch[5]
+                if len(batch) > 5 and config.get('use_size_path', False)
+                else None
+            )
+            period_index = 6 if config.get('use_size_path', False) else 5
+            batch_period = (
+                batch[period_index]
+                if len(batch) > period_index and period_names else None
+            )
             if config.get('disable_condition_inputs', False):
                 batch_sector = batch_size_bucket = batch_size_percentile = None
+                batch_size_path = None
             batch_x = batch_x.to(device, non_blocking=True)
             batch_x_stamp = batch_x_stamp.to(device, non_blocking=True)
             if batch_sector is not None:
@@ -713,6 +732,8 @@ def evaluate_validation(
                 batch_size_percentile = batch_size_percentile.to(
                     device, non_blocking=True
                 )
+            if batch_size_path is not None:
+                batch_size_path = batch_size_path.to(device, non_blocking=True)
 
             token_seq_0, token_seq_1 = tokenizer.encode(batch_x, half=True)
             token_in = [token_seq_0[:, :-1], token_seq_1[:, :-1]]
@@ -726,6 +747,10 @@ def evaluate_validation(
                     token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
                     sector_id=batch_sector, size_bucket=batch_size_bucket,
                     size_percentile=batch_size_percentile,
+                    size_path=(
+                        batch_size_path[:, :token_in[0].shape[1], :]
+                        if batch_size_path is not None else None
+                    ),
                     use_teacher_forcing=True, s1_targets=token_out[0],
                 )
                 losses = compute_predictor_losses(
@@ -756,6 +781,11 @@ def evaluate_validation(
                     and batch_size_percentile.shape[0] > 1
                     else batch_size_percentile
                 )
+                shuffled_size_path = (
+                    torch.roll(batch_size_path, shifts=1, dims=0)
+                    if batch_size_path is not None and batch_size_path.shape[0] > 1
+                    else batch_size_path
+                )
                 with torch.autocast(
                     device_type=device.type,
                     dtype=amp_dtype or torch.float16,
@@ -764,6 +794,7 @@ def evaluate_validation(
                     none_logits = model(
                         token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
                         sector_id=None, size_bucket=None, size_percentile=None,
+                        size_path=None,
                         use_teacher_forcing=True, s1_targets=token_out[0],
                     )
                     none_losses = compute_predictor_losses(
@@ -774,6 +805,10 @@ def evaluate_validation(
                         sector_id=shuffled_sector,
                         size_bucket=shuffled_bucket,
                         size_percentile=shuffled_percentile,
+                        size_path=(
+                            shuffled_size_path[:, :token_in[0].shape[1], :]
+                            if shuffled_size_path is not None else None
+                        ),
                         use_teacher_forcing=True, s1_targets=token_out[0],
                     )
                     shuffled_losses = compute_predictor_losses(
@@ -1418,8 +1453,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             batch_sector = batch[2] if len(batch) > 2 and config.get('use_sector_features', True) else None
             batch_size_bucket = batch[3] if len(batch) > 3 and config.get('use_size_features', True) else None
             batch_size_percentile = batch[4] if len(batch) > 4 and config.get('use_size_percentile', False) else None
+            batch_size_path = batch[5] if len(batch) > 5 and config.get('use_size_path', False) else None
             if config.get('disable_condition_inputs', False):
                 batch_sector = batch_size_bucket = batch_size_percentile = None
+                batch_size_path = None
             batch_x = batch_x.to(device, non_blocking=True)
             batch_x_stamp = batch_x_stamp.to(device, non_blocking=True)
             if batch_sector is not None:
@@ -1428,6 +1465,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 batch_size_bucket = batch_size_bucket.to(device, non_blocking=True)
             if batch_size_percentile is not None:
                 batch_size_percentile = batch_size_percentile.to(device, non_blocking=True)
+            if batch_size_path is not None:
+                batch_size_path = batch_size_path.to(device, non_blocking=True)
 
             # Tokenize input data on-the-fly
             with torch.no_grad():
@@ -1447,6 +1486,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
                     sector_id=batch_sector, size_bucket=batch_size_bucket,
                     size_percentile=batch_size_percentile,
+                    size_path=(
+                        batch_size_path[:, :token_in[0].shape[1], :]
+                        if batch_size_path is not None else None
+                    ),
                 )
                 core_model.collect_condition_stats = False
                 losses = compute_predictor_losses(core_model.head, logits, token_out, config)
@@ -1469,6 +1512,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 if core_model.size_mlp is not None:
                     monitoring_stats['size_mlp_output_weight_norm'] = float(
                         core_model.size_mlp[-1].weight.detach().float().norm().item()
+                    )
+                if core_model.size_path_mlp is not None:
+                    monitoring_stats['size_path_mlp_output_weight_norm'] = float(
+                        core_model.size_path_mlp[-1].weight.detach().float().norm().item()
                     )
                 for family in ('condition', 'adaptation'):
                     family_stats = parameter_family_statistics(
@@ -1670,8 +1717,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         large_interval = int(
             config.get('validation_large_interval_segments', 10)
         )
-        run_large_validation = validation_full_only or should_run_large_validation(
-            epoch_idx + 1, effective_epochs, large_interval
+        has_distinct_large_validation = (
+            int(config.get('validation_large_samples', 0))
+            > int(config.get('validation_quick_samples', 0))
+        )
+        run_large_validation = validation_full_only or (
+            has_distinct_large_validation
+            and should_run_large_validation(
+                epoch_idx + 1, effective_epochs, large_interval
+            )
         )
         large_metrics = None
         quick_metrics = None
@@ -2035,6 +2089,8 @@ def main(config: dict):
         'context_layer': int(config.get('context_layer', 0)),
         'use_size_percentile': bool(config.get('use_size_percentile', False)),
         'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
+        'use_size_path': bool(config.get('use_size_path', False)),
+        'size_path_input_dim': int(config.get('size_path_input_dim', 4)),
     })
     model = Kronos.from_pretrained(config['pretrained_predictor_path'], **model_kwargs)
     reset_conditioning(model, config)

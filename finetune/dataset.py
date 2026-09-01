@@ -95,6 +95,38 @@ def load_merged_panels(paths):
 _SHA256_CACHE = {}
 
 
+def build_causal_size_path(raw_history, predict_window):
+    """Build [percentile, delta, known, observed] without future values."""
+    raw_history = np.asarray(raw_history, dtype=np.float32)
+    if raw_history.ndim != 1 or len(raw_history) == 0:
+        raise ValueError('raw_history must be a non-empty one-dimensional array')
+    observed = np.isfinite(raw_history)
+    known = np.maximum.accumulate(observed).astype(np.float32)
+    filled = pd.Series(raw_history).ffill().fillna(0.5).to_numpy(dtype=np.float32)
+    delta = np.zeros(len(filled), dtype=np.float32)
+    delta[1:] = filled[1:] - filled[:-1]
+    history_path = np.stack([
+        filled, delta, known, observed.astype(np.float32)
+    ], axis=-1)
+    future_path = np.zeros((int(predict_window), 4), dtype=np.float32)
+    future_path[:, 0] = filled[-1]
+    future_path[:, 2] = known[-1]
+    return np.concatenate([history_path, future_path], axis=0)
+
+
+def fixed_validation_limits(config, manifest_quick, manifest_total):
+    """Resolve configured evaluation caps while preserving full-only evaluation."""
+    if bool(getattr(config, 'validation_full_only', False)):
+        return int(manifest_total), int(manifest_total)
+    large = int(config.validation_large_samples)
+    quick = int(config.validation_quick_samples)
+    if large > int(manifest_total):
+        raise ValueError('Requested large validation exceeds the fixed manifest')
+    if quick > int(manifest_quick):
+        raise ValueError('Requested quick validation exceeds the manifest quick prefix')
+    return large, min(quick, large)
+
+
 def sha256_file(path):
     path = Path(path).resolve()
     stat = path.stat()
@@ -146,10 +178,8 @@ def load_fixed_validation_artifacts(config):
     ]
     quick_count = int(selection.get('quick_samples', -1))
     large_count = int(selection.get('large_samples', -1))
-    if quick_count != int(config.validation_quick_samples):
-        raise ValueError('Fixed validation quick sample count does not match config')
-    if large_count != int(config.validation_large_samples) or len(records) != large_count:
-        raise ValueError('Fixed validation large sample count does not match config')
+    if quick_count < 0 or large_count < quick_count or len(records) != large_count:
+        raise ValueError('Fixed validation manifest sample counts are invalid')
     quick_flags = [bool(record.get('quick', False)) for record in records]
     if quick_flags != [True] * quick_count + [False] * (large_count - quick_count):
         raise ValueError('Fixed validation quick samples must be the ordered large-set prefix')
@@ -329,10 +359,21 @@ class QlibDataset(Dataset):
         self.use_sector_features = bool(getattr(self.config, 'use_sector_features', True))
         self.use_size_features = bool(getattr(self.config, 'use_size_features', True))
         self.use_size_percentile = bool(getattr(self.config, 'use_size_percentile', False))
+        self.use_size_path = bool(getattr(self.config, 'use_size_path', False))
         self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
-        self.has_inline_percentile = self.use_size_percentile and any(
+        self.has_inline_percentile = (self.use_size_percentile or self.use_size_path) and any(
             'size_percentile' in frame.columns for frame in self.data.values()
         )
+        if self.use_size_path:
+            missing = [
+                str(symbol) for symbol, frame in self.data.items()
+                if 'size_percentile' not in frame.columns
+            ]
+            if missing:
+                raise ValueError(
+                    "Dynamic size path requires inline daily size_percentile for "
+                    f"every symbol; missing {len(missing)} symbol(s)"
+                )
         metadata_path = getattr(self.config, 'asset_metadata_path', '')
         if self.has_inline_size and (self.has_inline_percentile or not self.use_size_percentile) and not self.use_sector_features:
             metadata_path = ''
@@ -491,10 +532,13 @@ class QlibDataset(Dataset):
             self.validation_period_names = {
                 code: name for name, code in period_codes.items()
             }
-            self.n_samples = len(self.coverage_order)
-            self.quick_validation_count = int(
-                fixed_manifest['selection']['quick_samples']
+            manifest_quick = int(fixed_manifest['selection']['quick_samples'])
+            self.n_samples, self.quick_validation_count = fixed_validation_limits(
+                self.config, manifest_quick, len(self.coverage_order)
             )
+            if not bool(getattr(self.config, 'validation_full_only', False)):
+                self.coverage_order = self.coverage_order[:self.n_samples]
+                self.validation_period_codes = self.validation_period_codes[:self.n_samples]
             self.fixed_validation_manifest_sha256 = manifest_sha
             print(
                 '[VAL] Fixed manifest validation enabled: '
@@ -584,7 +628,7 @@ class QlibDataset(Dataset):
         return len(self.active_positions)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        
+
         source_position = int(self.active_positions[idx])
         symbol, start_idx = self.indices[source_position]
 
@@ -630,12 +674,20 @@ class QlibDataset(Dataset):
                     size_percentile_value = float(inline_percentile)
             sector_id = torch.tensor(sector_value, dtype=torch.long)
             size_bucket = torch.tensor(size_value, dtype=torch.long)
-            if self.use_size_percentile:
+            if self.use_size_percentile or self.use_size_path:
                 size_percentile = torch.tensor(size_percentile_value, dtype=torch.float32)
                 result = (
                     x_tensor, x_stamp_tensor, sector_id, size_bucket,
                     size_percentile,
                 )
+                if self.use_size_path:
+                    raw_path = self.size_percentile_by_symbol[str(symbol)].iloc[
+                        start_idx:start_idx + past_len
+                    ].to_numpy(dtype=np.float32)
+                    size_path = torch.from_numpy(build_causal_size_path(
+                        raw_path, self.config.predict_window
+                    ))
+                    result = (*result, size_path)
                 if self.data_type == 'val' and self.validation_period_codes is not None:
                     period_code = torch.tensor(
                         int(self.validation_period_codes[idx]), dtype=torch.int16

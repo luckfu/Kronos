@@ -107,6 +107,21 @@ x_t = x_t + g_t * size_condition_t
 
 ## 实施顺序
 
+### 独立 Kaggle 初始化阶段
+
+- 在独立 Git 分支 `beta-v3-bootstrap` 开发和训练，不覆盖 Beta v2 的代码、数据或
+  模型输出。
+- 父模型固定为 `NeoQuasar/Kronos-base`，Tokenizer 固定为
+  `NeoQuasar/Kronos-Tokenizer-base`。
+- 新增 `sector_emb` 和逐 token 的 `size_path_mlp`；两者输出层从精确零开始，旧的
+  静态 `size_mlp` 默认关闭，避免把两个市值变量混进首次实验。
+- 预训练主干学习率为 `1e-6`，新增条件分支学习率为 `1e-5`。每次 Kaggle 调用最多
+  完成 10 个 Segment，并从 `last_state.pt` 继续。
+- 每个 Segment 只评估固定 2,000 个股票隔离窗口，不再重复运行另一套 large
+  validation。520只验证股票仍完全不参与梯度更新。
+- 123,982 个完整验证窗口只在筛选出初始化候选后独立运行一次，不参与每段 Best
+  选择。
+
 1. 将本次统计固化为可重复脚本和带数据 SHA 的 JSON 报告，并增加窗口数断言：
    train=`9,457,646`、validation=`123,982`。
 2. 扩展 Dataset，只返回历史120日市值条件，并增加未来条件不可见的单元测试。

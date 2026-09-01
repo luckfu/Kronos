@@ -45,6 +45,14 @@ class Config:
         self.use_size_percentile = os.getenv(
             "KRONOS_USE_SIZE_PERCENTILE", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        self.use_size_path = os.getenv(
+            "KRONOS_USE_SIZE_PATH", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.size_path_input_dim = int(
+            os.getenv("KRONOS_SIZE_PATH_INPUT_DIM", "4")
+        )
+        if self.use_size_path and self.size_path_input_dim != 4:
+            raise ValueError("KRONOS_SIZE_PATH_INPUT_DIM must be 4")
         self.disable_condition_inputs = os.getenv(
             "KRONOS_DISABLE_CONDITION_INPUTS", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
