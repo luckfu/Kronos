@@ -1,4 +1,7 @@
 import runpy
+import io
+import json
+import tarfile
 from pathlib import Path
 
 
@@ -23,10 +26,28 @@ def test_v3_bootstrap_is_isolated_and_uses_two_thousand_windows():
 
 
 def test_v3_kernel_uses_dedicated_data_and_no_v2_parent_kernel():
-    metadata = runpy.run_path(str(BUILDER))["METADATA"]
+    namespace = runpy.run_path(str(BUILDER))
+    metadata = namespace["METADATA"]
 
     assert metadata["id"] == "luckfu/kronos-beta-v3-base-dynamic-size-bootstrap"
     assert metadata["kernel_sources"] == []
     assert metadata["dataset_sources"] == [
         "luckfu/kronos-a-share-full-market-v1-beta-120d"
     ]
+
+
+def test_embedded_bootstrap_validation_contains_exactly_two_thousand_records():
+    archive = runpy.run_path(str(BUILDER))["build_archive"]()
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
+        manifest = json.load(bundle.extractfile(
+            "Kronos/finetune/v3_data_contract/natural_validation_manifest.json"
+        ))
+        records = bundle.extractfile(
+            "Kronos/finetune/v3_data_contract/natural_validation_samples.jsonl"
+        ).read().splitlines()
+
+    assert len(records) == 2000
+    assert manifest["selection"]["quick_samples"] == 2000
+    assert manifest["selection"]["large_samples"] == 2000
+    assert manifest["training_isolation"]["not_in_training_candidate_samples"] == 2000
+    assert manifest["bootstrap_subset"]["source_full_samples"] == 123982
