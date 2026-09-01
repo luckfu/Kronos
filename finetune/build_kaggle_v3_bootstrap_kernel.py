@@ -17,8 +17,8 @@ V3_DATA = ROOT.parent / "data/a_share_full_market_v1_beta_symbol_holdout_90_10_v
 RUNNER = ROOT / "kaggle_v3_bootstrap.py"
 STAGING = ROOT / "kaggle_v3_bootstrap_kernel"
 METADATA = {
-    "id": "luckfu/kronos-beta-v3-base-dynamic-size-bootstrap",
-    "title": "Kronos Beta v3 Base Dynamic Size Bootstrap",
+    "id": "luckfu/kronos-beta-v3-dynamic-size-continuation-01",
+    "title": "Kronos Beta v3 Dynamic Size Continuation 01",
     "code_file": RUNNER.name,
     "language": "python",
     "kernel_type": "script",
@@ -27,7 +27,9 @@ METADATA = {
     "enable_internet": True,
     "dataset_sources": ["luckfu/kronos-a-share-full-market-v1-beta-120d"],
     "competition_sources": [],
-    "kernel_sources": [],
+    "kernel_sources": [
+        "luckfu/kronos-beta-v3-base-dynamic-size-bootstrap",
+    ],
 }
 
 
@@ -51,11 +53,25 @@ def build_archive():
         full_manifest = json.loads(
             (validation_root / "natural_validation_manifest.json").read_text()
         )
-        records = [
-            line for line in
+        all_records = [
+            json.loads(line) for line in
             (validation_root / "natural_validation_samples.jsonl").read_text().splitlines()
             if line.strip()
-        ][:2000]
+        ]
+        by_period = {}
+        for record in all_records:
+            by_period.setdefault(record["period"], []).append(record)
+        if set(by_period) != {"2025H2", "2026H1"}:
+            raise ValueError("Bootstrap validation must contain both half-year periods")
+        records = []
+        for period in ("2025H2", "2026H1"):
+            pool = by_period[period]
+            quota = 1000
+            # Evenly sample each period while preserving the source ordering.
+            indices = [round(i * (len(pool) - 1) / (quota - 1)) for i in range(quota)]
+            records.extend(pool[index] for index in indices)
+        records.sort(key=lambda item: (item["asof_date"], item["symbol"], item["start_index"]))
+        records = [json.dumps(record, ensure_ascii=False, separators=(",", ":")) for record in records]
         samples = ("\n".join(records) + "\n").encode()
         selection = full_manifest["selection"]
         selection["quick_samples"] = 2000
@@ -66,6 +82,7 @@ def build_archive():
         isolation["not_in_training_candidate_samples"] = 2000
         full_manifest["bootstrap_subset"] = {
             "samples": 2000,
+            "period_samples": {"2025H2": 1000, "2026H1": 1000},
             "source_full_manifest_sha256": hashlib.sha256(
                 (validation_root / "natural_validation_manifest.json").read_bytes()
             ).hexdigest(),

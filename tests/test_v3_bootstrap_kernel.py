@@ -111,8 +111,10 @@ def test_v3_kernel_uses_dedicated_data_and_no_v2_parent_kernel():
     namespace = runpy.run_path(str(BUILDER))
     metadata = namespace["METADATA"]
 
-    assert metadata["id"] == "luckfu/kronos-beta-v3-base-dynamic-size-bootstrap"
-    assert metadata["kernel_sources"] == []
+    assert metadata["id"] == "luckfu/kronos-beta-v3-dynamic-size-continuation-01"
+    assert metadata["kernel_sources"] == [
+        "luckfu/kronos-beta-v3-base-dynamic-size-bootstrap"
+    ]
     assert metadata["dataset_sources"] == [
         "luckfu/kronos-a-share-full-market-v1-beta-120d"
     ]
@@ -133,6 +135,13 @@ def test_embedded_bootstrap_validation_contains_exactly_two_thousand_records():
     assert manifest["selection"]["large_samples"] == 2000
     assert manifest["training_isolation"]["not_in_training_candidate_samples"] == 2000
     assert manifest["bootstrap_subset"]["source_full_samples"] == 123982
+    assert manifest["bootstrap_subset"]["period_samples"] == {
+        "2025H2": 1000,
+        "2026H1": 1000,
+    }
+    periods = [json.loads(line)["period"] for line in records]
+    assert periods.count("2025H2") == 1000
+    assert periods.count("2026H1") == 1000
 
 
 def test_embedded_v3_source_contains_no_literal_swanlab_key():

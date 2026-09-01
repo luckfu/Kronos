@@ -515,7 +515,7 @@ def run(source_root):
         "KRONOS_NUM_WORKERS": "2",
         "KRONOS_USE_AMP": "1",
         "KRONOS_AMP_DTYPE": "float16",
-        "KRONOS_MAX_SEGMENTS_PER_RUN": "10",
+        "KRONOS_MAX_SEGMENTS_PER_RUN": "120",
         "KRONOS_RESUME_TRAINING": "1" if continuation is not None else "0",
         "PYTHONUNBUFFERED": "1",
     })
@@ -534,7 +534,7 @@ def run(source_root):
         },
         "learning_rates": {"pretrained_trunk": 1e-6, "new_conditions": 1e-5},
         "validation": {"fixed_windows_per_segment": 2000, "full_final_windows": 123982},
-        "segments_per_invocation": 10,
+        "segments_per_invocation": 120,
         "continuation": continuation is not None,
         "gpu": gpu_name,
         "dashboard": {
