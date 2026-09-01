@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "kaggle_v1_beta_minimal/Kronos"
+V3_DATA = ROOT.parent / "data/a_share_full_market_v1_beta_symbol_holdout_90_10_v1"
 RUNNER = ROOT / "kaggle_v3_bootstrap.py"
 STAGING = ROOT / "kaggle_v3_bootstrap_kernel"
 METADATA = {
@@ -23,10 +24,7 @@ METADATA = {
     "is_private": True,
     "enable_gpu": True,
     "enable_internet": True,
-    "dataset_sources": [
-        "luckfu/kronos-beta-v3-symbol-holdout-90-10",
-        "luckfu/kronos-a-share-full-market-v1-beta-120d",
-    ],
+    "dataset_sources": ["luckfu/kronos-a-share-full-market-v1-beta-120d"],
     "competition_sources": [],
     "kernel_sources": [],
 }
@@ -38,6 +36,16 @@ def build_archive():
         for path in sorted(SOURCE.rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
                 archive.add(path, arcname=Path("Kronos") / path.relative_to(SOURCE))
+        contract_files = {
+            V3_DATA / "data_manifest.json": "data_manifest.json",
+            V3_DATA / "symbol_split.csv": "symbol_split.csv",
+            V3_DATA / "natural_validation_2025h2_2026h1_symbol_holdout_full_v1/natural_validation_manifest.json": "natural_validation_manifest.json",
+            V3_DATA / "natural_validation_2025h2_2026h1_symbol_holdout_full_v1/natural_validation_samples.jsonl": "natural_validation_samples.jsonl",
+        }
+        for path, name in contract_files.items():
+            if not path.is_file():
+                raise FileNotFoundError(path)
+            archive.add(path, arcname=Path("Kronos/finetune/v3_data_contract") / name)
     return buffer.getvalue()
 
 

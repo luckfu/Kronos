@@ -27,4 +27,6 @@ def test_v3_kernel_uses_dedicated_data_and_no_v2_parent_kernel():
 
     assert metadata["id"] == "luckfu/kronos-beta-v3-base-dynamic-size-bootstrap"
     assert metadata["kernel_sources"] == []
-    assert "luckfu/kronos-beta-v3-symbol-holdout-90-10" in metadata["dataset_sources"]
+    assert metadata["dataset_sources"] == [
+        "luckfu/kronos-a-share-full-market-v1-beta-120d"
+    ]
