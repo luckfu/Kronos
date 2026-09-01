@@ -1397,6 +1397,7 @@
                     </div>
                     <div class="toolbar-actions">
                         <span id="snapshot-badge" class="view-badge">历史快照</span>
+                        <button id="rerun-history-group" class="toolbar-button" style="display: none;" aria-label="使用最新行情重新预测这个历史截面">↻ 再测一次</button>
                         <button id="back-to-history" class="toolbar-button" style="display: none;" aria-label="返回预测历史列表">← 返回历史列表</button>
                         <button id="back-to-ranking" class="toolbar-button" style="display: none;" aria-label="返回股票池排名">← 返回排名</button>
                         <span id="source-badge" class="source-badge" style="display: none;">BaoStock 最新日线</span>
@@ -1531,6 +1532,7 @@
         const predictButton = document.getElementById('predict-button');
         const backToRankingButton = document.getElementById('back-to-ranking');
         const backToHistoryButton = document.getElementById('back-to-history');
+        const rerunHistoryButton = document.getElementById('rerun-history-group');
         const currentViewTab = document.getElementById('current-view-tab');
         const historyViewTab = document.getElementById('history-view-tab');
         const historyDateFrom = document.getElementById('history-date-from');
@@ -1554,6 +1556,7 @@
             predictButton.addEventListener('click', runUnifiedPrediction);
             backToRankingButton.addEventListener('click', showBatchRanking);
             backToHistoryButton.addEventListener('click', loadHistory);
+            rerunHistoryButton.addEventListener('click', rerunHistoryGroup);
             currentViewTab.addEventListener('click', showCurrentView);
             historyViewTab.addEventListener('click', loadHistory);
             historyFilterSubmit.addEventListener('click', loadHistory);
@@ -1623,7 +1626,6 @@
 
         async function runPrediction(symbol) {
             state.symbol = symbol;
-            state.historyGroupMode = false;
 
             setPredicting(true);
             document.getElementById('result-heading').textContent = `${symbol} 正在预测`;
@@ -1637,6 +1639,8 @@
                 state.currentResult = response.data;
                 state.currentMode = 'single';
                 state.historyRecordId = null;
+                state.historyGroupMode = false;
+                state.historyBatchResult = null;
                 renderPrediction(response.data, false);
                 showToast(response.data.message);
             } catch (error) {
@@ -1649,7 +1653,6 @@
         }
 
         async function runBatchPrediction(symbols) {
-            state.historyGroupMode = false;
             setPredicting(true);
             document.getElementById('result-heading').textContent = '股票池正在批量预测';
             const backendLabel = state.inferenceBackend === 'remote' ? 'Modal' : '本地';
@@ -1781,6 +1784,7 @@
             document.getElementById('batch-action-heading').style.display = fromHistory ? 'table-cell' : 'none';
             document.getElementById('back-to-ranking').style.display = 'none';
             document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
+            rerunHistoryButton.style.display = fromHistory ? 'inline-flex' : 'none';
             document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
             document.getElementById('snapshot-badge').textContent = fromHistory ? '历史快照' : '';
             document.getElementById('source-badge').style.display = 'none';
@@ -1818,6 +1822,7 @@
             document.getElementById('result-subtitle').textContent = '等待选择股票';
             document.getElementById('back-to-ranking').style.display = 'none';
             document.getElementById('back-to-history').style.display = 'none';
+            rerunHistoryButton.style.display = 'none';
             document.getElementById('snapshot-badge').style.display = 'none';
             document.getElementById('source-badge').style.display = 'none';
         }
@@ -1898,6 +1903,7 @@
                     (query ? '筛选结果 ' : '共 ') + `${rows.length} 个截面 · ${total} 只股票` + truncated;
                 document.getElementById('back-to-ranking').style.display = 'none';
                 document.getElementById('back-to-history').style.display = 'none';
+                rerunHistoryButton.style.display = 'none';
                 document.getElementById('snapshot-badge').style.display = 'none';
                 document.getElementById('source-badge').style.display = 'none';
             } catch (error) {
@@ -1930,6 +1936,34 @@
             historyDirectionFilter.value = '';
             historyBackendFilter.value = '';
             loadHistory();
+        }
+
+        async function rerunHistoryGroup() {
+            const group = state.historyBatchResult;
+            const symbols = [...new Set(
+                (group?.rankings || []).map(item => item.symbol).filter(Boolean)
+            )];
+            if (!state.modelReady || !symbols.length || symbols.length > 12) {
+                showToast('这个历史截面无法重新预测', true);
+                return;
+            }
+
+            const previousLabel = rerunHistoryButton.textContent;
+            rerunHistoryButton.disabled = true;
+            rerunHistoryButton.textContent = '正在重测…';
+            stockInput.value = symbols.join(', ');
+            syncPredictButton();
+            showToast(`正在刷新 ${symbols.length} 只股票的最新行情`);
+            try {
+                if (symbols.length === 1) {
+                    await runPrediction(symbols[0]);
+                } else {
+                    await runBatchPrediction(symbols);
+                }
+            } finally {
+                rerunHistoryButton.disabled = false;
+                rerunHistoryButton.textContent = previousLabel;
+            }
         }
 
         async function deleteHistoryGroup(signalDate, records) {
@@ -1993,6 +2027,7 @@
             document.getElementById('empty-state').style.display = 'none';
             document.getElementById('back-to-ranking').style.display = fromBatch ? 'inline-flex' : 'none';
             document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
+            rerunHistoryButton.style.display = fromHistory ? 'inline-flex' : 'none';
             document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
             document.getElementById('snapshot-badge').textContent = fromHistory
                 ? '历史快照 · ' + formatDateTime(result.created_at)
@@ -2066,6 +2101,7 @@
         function setPredicting(isPredicting) {
             predictButton.disabled = isPredicting;
             predictButton.classList.toggle('loading', isPredicting);
+            rerunHistoryButton.disabled = isPredicting;
             if (!isPredicting) syncPredictButton();
         }
 

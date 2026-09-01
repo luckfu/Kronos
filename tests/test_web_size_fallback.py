@@ -223,6 +223,19 @@ def test_history_ranking_exposes_per_stock_delete_action():
     assert "style.display = fromHistory ? 'table-cell' : 'none'" in page
 
 
+def test_history_group_can_be_rerun_with_latest_market_data():
+    response = web_app.app.test_client().get('/')
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert 'id="rerun-history-group"' in page
+    assert '↻ 再测一次' in page
+    assert 'function rerunHistoryGroup()' in page
+    assert '(group?.rankings || []).map(item => item.symbol)' in page
+    assert 'await runPrediction(symbols[0])' in page
+    assert 'await runBatchPrediction(symbols)' in page
+
+
 def test_ranking_table_headers_support_sorting():
     response = web_app.app.test_client().get('/')
 
