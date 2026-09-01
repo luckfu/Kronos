@@ -4,7 +4,9 @@ import hashlib
 import json
 import os
 import pickle
+import re
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 
@@ -18,6 +20,22 @@ SOURCE_DATA_MANIFEST_ID = "214c375f47e9843b7d836e414199f444ac8cd139e2ef1bb51adf5
 SOURCE_PANEL_SHA = "7d026170517db9efe6ac21f2dccd1b9b549a03f14ff4f6b77931b696b2f86a35"
 V3_TRAIN_SHA = "b2f2a861f651321efd38761c65ffcff4d14290cd580325298c4b9a7bc915f832"
 V3_VAL_SHA = "748a9205714ee9714525872e65432063edd26d6afbef05391919e8d9d8811115"
+SWANLAB_RUN_ID = "kronos-beta-v3-base-dynamic-size-bootstrap"
+SWANLAB_STEPS_PER_SEGMENT = 1000
+TRAIN_WINDOWS = 9_457_646
+WINDOWS_PER_SEGMENT = 20_000
+
+TRAIN_LOG_RE = re.compile(
+    r"Segment (\d+)/(\d+), Step (\d+)/(\d+).*?"
+    r"Adaptation LR ([0-9.eE+-]+), Condition LR ([0-9.eE+-]+), "
+    r"Loss: ([0-9.eE+-]+), Forecast: ([0-9.eE+-]+), "
+    r"History: ([0-9.eE+-]+)"
+)
+VALIDATION_LOG_RE = re.compile(
+    r"Validation Forecast/History/Full: "
+    r"([0-9.eE+-]+) / ([0-9.eE+-]+) / ([0-9.eE+-]+)"
+)
+CONDITION_MONITOR_PREFIX = "Condition Monitor JSON: "
 
 
 class NumpyCompatibleUnpickler(pickle.Unpickler):
@@ -35,6 +53,198 @@ def sha256(path):
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def ensure_compatible_torch():
+    """Install the proven P100-compatible wheel only when the current wheel lacks sm_60."""
+    gpu_name = subprocess.run(
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if not gpu_name:
+        raise SystemExit("Kaggle GPU is not available")
+    needs_compatible_wheel = False
+    if "P100" in gpu_name:
+        arch_check = subprocess.run([
+            "python", "-c",
+            "import torch; raise SystemExit(0 if "
+            "'sm_60' in torch.cuda.get_arch_list() else 1)",
+        ], check=False)
+        needs_compatible_wheel = arch_check.returncode != 0
+    if needs_compatible_wheel:
+        print(
+            "P100 detected but the preinstalled PyTorch lacks sm_60; "
+            "installing the compatible CUDA 12.1 wheel.",
+            flush=True,
+        )
+        subprocess.run([
+            "python", "-m", "pip", "install", "-q", "--index-url",
+            "https://download.pytorch.org/whl/cu121", "torch==2.5.1",
+        ], check=True)
+    print(f"GPU runtime ready: {gpu_name}", flush=True)
+    return gpu_name
+
+
+def swanlab_global_step(segment, step, total_steps):
+    total_steps = max(1, int(total_steps))
+    normalized = round(int(step) * SWANLAB_STEPS_PER_SEGMENT / total_steps)
+    normalized = min(SWANLAB_STEPS_PER_SEGMENT, max(0, normalized))
+    return max(0, (int(segment) - 1) * SWANLAB_STEPS_PER_SEGMENT + normalized)
+
+
+def parse_train_line(line):
+    match = TRAIN_LOG_RE.search(line)
+    if match is None:
+        return None
+    values = match.groups()
+    return {
+        "segment": int(values[0]),
+        "total_segments": int(values[1]),
+        "step": int(values[2]),
+        "total_steps": int(values[3]),
+        "adaptation_learning_rate": float(values[4]),
+        "condition_learning_rate": float(values[5]),
+        "objective_loss": float(values[6]),
+        "forecast_loss": float(values[7]),
+        "history_loss": float(values[8]),
+    }
+
+
+def parse_validation_line(line):
+    match = VALIDATION_LOG_RE.search(line)
+    if match is None:
+        return None
+    forecast, history, full = map(float, match.groups())
+    return {
+        "objective_loss": forecast + 0.02 * history,
+        "forecast_loss": forecast,
+        "history_loss": history,
+        "full_loss": full,
+    }
+
+
+def parse_condition_monitor_line(line):
+    marker = line.find(CONDITION_MONITOR_PREFIX)
+    if marker < 0:
+        return None
+    payload = json.loads(line[marker + len(CONDITION_MONITOR_PREFIX):])
+    if not isinstance(payload, dict) or not all(
+        isinstance(value, (int, float)) for value in payload.values()
+    ):
+        raise ValueError("Condition monitor payload must contain numeric values")
+    return payload
+
+
+def initialize_swanlab(manifest):
+    subprocess.run(["python", "-m", "pip", "install", "-q", "swanlab"], check=True)
+    import swanlab
+
+    api_key = os.getenv("SWANLAB_API_KEY", "").strip()
+    if not api_key:
+        try:
+            from kaggle_secrets import UserSecretsClient
+
+            api_key = UserSecretsClient().get_secret("SWANLAB_API_KEY").strip()
+        except Exception as exc:
+            raise RuntimeError(
+                "SWANLAB_API_KEY is required as a Kaggle Secret or environment variable"
+            ) from exc
+    swanlab.login(api_key=api_key)
+    run = swanlab.init(
+        project=os.getenv("SWANLAB_PROJECT", "finance"),
+        workspace=os.getenv("SWANLAB_WORKSPACE", "roc_fu"),
+        experiment_name=os.getenv(
+            "SWANLAB_EXPERIMENT_NAME", "Kronos Beta v3 dynamic size bootstrap"
+        ),
+        id=os.getenv("SWANLAB_RUN_ID", SWANLAB_RUN_ID),
+        resume="allow",
+        tags=["kronos", "beta-v3", "dynamic-size-path", "base-bootstrap"],
+        config=manifest,
+    )
+    print(f"SwanLab dashboard initialized: run_id={SWANLAB_RUN_ID}", flush=True)
+    return run
+
+
+def swanlab_log(run, payload, step):
+    try:
+        run.log(payload, step=int(step))
+        return True
+    except Exception as exc:
+        print(
+            f"SwanLab logging disabled after error: {type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        return False
+
+
+def stream_training(command, env, run):
+    child = None
+
+    def forward_signal(signum, _frame):
+        if child is not None and child.poll() is None:
+            child.send_signal(signum)
+
+    signal.signal(signal.SIGINT, forward_signal)
+    signal.signal(signal.SIGTERM, forward_signal)
+    child = subprocess.Popen(
+        command,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    latest_segment = latest_step = 0
+    latest_total_steps = 1
+    dashboard_active = True
+    assert child.stdout is not None
+    for line in child.stdout:
+        print(line, end="", flush=True)
+        train = parse_train_line(line)
+        if train is not None:
+            latest_segment = train["segment"]
+            latest_step = train["step"]
+            latest_total_steps = train["total_steps"]
+            completed = min(
+                TRAIN_WINDOWS,
+                (latest_segment - 1) * WINDOWS_PER_SEGMENT
+                + round(WINDOWS_PER_SEGMENT * latest_step / latest_total_steps),
+            )
+            step = swanlab_global_step(
+                latest_segment, latest_step, latest_total_steps
+            )
+            if dashboard_active:
+                dashboard_active = swanlab_log(run, {
+                    "train/objective_loss": train["objective_loss"],
+                    "train/forecast_loss": train["forecast_loss"],
+                    "train/history_loss": train["history_loss"],
+                    "learning_rate/trunk": train["adaptation_learning_rate"],
+                    "learning_rate/condition": train["condition_learning_rate"],
+                    "progress/segment": latest_segment,
+                    "progress/total_segments": train["total_segments"],
+                    "progress/segment_fraction": latest_step / latest_total_steps,
+                    "progress/windows_covered": completed,
+                    "progress/coverage_fraction": completed / TRAIN_WINDOWS,
+                }, step)
+        monitor = parse_condition_monitor_line(line)
+        if monitor is not None and latest_segment and dashboard_active:
+            dashboard_active = swanlab_log(run, {
+                f"monitor/{key}": value
+                for key, value in monitor.items()
+                if not key.endswith("parameter_count")
+            }, swanlab_global_step(latest_segment, latest_step, latest_total_steps))
+        validation = parse_validation_line(line)
+        if validation is not None and latest_segment and dashboard_active:
+            dashboard_active = swanlab_log(run, {
+                f"validation/{key}": value for key, value in validation.items()
+            } | {"progress/validated_segment": latest_segment}, swanlab_global_step(
+                latest_segment, latest_total_steps, latest_total_steps
+            ))
+    return_code = child.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 def find_data_root(input_root):
@@ -215,6 +425,7 @@ def find_continuation(input_root):
 
 def run(source_root):
     source_root = Path(source_root).resolve()
+    gpu_name = ensure_compatible_torch()
     input_root = Path(os.getenv("KRONOS_KAGGLE_INPUT_ROOT", "/kaggle/input"))
     runtime = Path(os.getenv("KRONOS_KAGGLE_ROOT", "/kaggle/working/kronos_beta_v3_bootstrap"))
     output_name = "beta_v3_base_dynamic_size_path_bootstrap"
@@ -322,15 +533,27 @@ def run(source_root):
         "validation": {"fixed_windows_per_segment": 2000, "full_final_windows": 123982},
         "segments_per_invocation": 10,
         "continuation": continuation is not None,
+        "gpu": gpu_name,
+        "dashboard": {
+            "provider": "SwanLab",
+            "run_id": SWANLAB_RUN_ID,
+            "resume": "allow",
+        },
     }
     (output_root / "experiment_manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
     )
-    subprocess.run(
-        ["python", "-u", str(source_root / "finetune/train_predictor.py")],
-        env=env,
-        check=True,
-    )
+    swanlab_run = initialize_swanlab(manifest)
+    try:
+        stream_training(
+            ["python", "-u", str(source_root / "finetune/train_predictor.py")],
+            env,
+            swanlab_run,
+        )
+    finally:
+        finish = getattr(swanlab_run, "finish", None)
+        if callable(finish):
+            finish()
 
 
 if __name__ == "__main__":

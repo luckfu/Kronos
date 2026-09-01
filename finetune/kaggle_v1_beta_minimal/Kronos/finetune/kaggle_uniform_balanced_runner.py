@@ -366,8 +366,10 @@ def initialize_swanlab(output_name, config, lineage, continuation):
             from kaggle_secrets import UserSecretsClient
 
             api_key = UserSecretsClient().get_secret("SWANLAB_API_KEY")
-        except Exception:
-            api_key = "fmEPDGk4IItxgqSZKGLi8"
+        except Exception as exc:
+            raise RuntimeError(
+                "SWANLAB_API_KEY is required as a Kaggle Secret or environment variable"
+            ) from exc
     swanlab.login(api_key=api_key)
     kwargs = {
         "project": os.getenv("SWANLAB_PROJECT", "finance"),
