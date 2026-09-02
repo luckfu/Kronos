@@ -392,6 +392,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
             swanlab.login(api_key=api_key)
         run = swanlab.init(
             id=run_id,
+            resume="allow",
             project=project,
             workspace=workspace,
             experiment_name=experiment_name,

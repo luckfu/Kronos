@@ -36,7 +36,8 @@ os.environ.update({
     "KRONOS_MAX_SEGMENTS_PER_RUN": "240",
     "SWANLAB_PROJECT": "finance",
     "SWANLAB_EXPERIMENT_NAME": "small_0.1_bootstrap",
-    "SWANLAB_RUN_ID": "small_0_1_bootstrap",
+    # Timing Kernel's published SwanLab run id; continuation resumes this run.
+    "SWANLAB_RUN_ID": "n3sjweb7",
 })
 subprocess.run(
     ["python", "-u", "finetune/kaggle_kronos_small_v21.py"],
