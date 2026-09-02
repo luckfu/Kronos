@@ -135,7 +135,15 @@ Last、optimizer 或 scheduler State。
 
 - [ ] 当前账号和权限正确；同目标没有 active Kernel。
 - [ ] slug/title/代码版本一致；实验清单和耗时估算完成。
+- [ ] 已实际打开并逐条执行本手册，而不是依赖记忆；P100 任务已固定
+  `torch==2.5.1+cu121`，启动日志已验证 `torch.cuda.get_arch_list()` 包含 `sm_60`。
 - [ ] 最终生效参数已打印，无隐藏硬编码覆盖。
+- [ ] 数据集对象最终长度与实验口径一致；“全量验证”必须在日志中打印验证候选总数、
+  最终 Dataset 长度和每段实际验证样本数，三者相等才算通过。
+- [ ] 所有配置约束已在本地构造 `Config()` 做过 smoke test，例如 quick/large 样本数关系；
+  不能把 Kaggle GPU 任务当配置语法检查器。
+- [ ] SwanLab 已在与 Kaggle 相同的环境变量集合下完成初始化 smoke test；需要规避 SDK
+  环境变量解析时，必须同时处理当前进程 `os.environ` 和传给训练子进程的 `env`。
 - [ ] GPU/PyTorch 兼容，输入唯一，模型哈希正确。
 - [ ] 首训/续训模式和 optimizer/scheduler 处理正确。
 - [ ] State/Best/Last 或评估结果契约已实现。
@@ -255,3 +263,66 @@ Last、optimizer 或 scheduler State。
 - 正式分支每个 chunk 通过 `kernel_sources` 直接挂载上一轮完整 Output，并复用
   `kronos-v1-beta-best109-official-120d-to-10d`。朋友账号首批按 250 segments 上限运行，
   以实测约 158 秒/segment 预留环境安装、验证、Last 导出和 Kaggle 发布时间。
+
+## 12. small_0.1 Kaggle 首训事故复盘（2026-09-03）
+
+本次从提交到真正进入训练耗时约一至两小时，先后产生多个失败版本。问题并不复杂，
+主要原因是提交前没有完整执行本手册的 preflight，而是在 Kaggle 上串行暴露本可本地发现的错误。
+以后出现失败必须先读取完整 traceback、一次只修一个已确认根因，并重新执行整套 preflight；
+不得看到 `RUNNING` 就判断成功，也不得连续猜参数后 push。
+
+### 12.1 失败链路与根因
+
+1. **Kernel 找不到 runner**：入口假定目标脚本已经存在于 Kaggle 工作目录，但实际只上传了
+   外层 Kernel 文件。以后提交前必须在一个空临时目录模拟 Kaggle 文件布局，验证入口能够取得
+   runner；代码来自 GitHub 时必须打印实际 commit。
+2. **数据路径硬编码错误**：错误假定 Dataset 直接挂载在短路径，实际路径带
+   `/kaggle/input/datasets/<owner>/<slug>/...`。runner 必须按必需文件和 manifest 自动发现唯一
+   数据根，发现零个或多个候选时立即失败，禁止再写固定挂载路径。
+3. **SwanLab 环境变量解析失败**：只从传给训练子进程的 `env` 删除了
+   `SWANLAB_PROJECT/WORKSPACE/EXPERIMENT_NAME`，但 `swanlab.init()` 在当前进程读取的是
+   `os.environ`，因此错误仍然存在。正确处理是先保存显式参数，再同时清理两套环境，最后通过
+   `swanlab.init(project=..., workspace=..., experiment_name=...)` 传值。必须在下载模型和启动
+   GPU 训练前完成登录与初始化 preflight。
+4. **验证配置内部矛盾**：bootstrap 设置 quick validation 为 2,000，同时把 large samples
+   设为 0，触发 `large_samples >= quick_samples` 的配置约束。这个错误通过本地构造 `Config()`
+   即可发现，不应提交到 Kaggle。更重要的是，临时把 large 改成 2,000 虽能启动，却违背了
+   “每个 segment 全量验证”的实验要求，不能把通过配置校验等同于满足实验语义。
+5. **误判全量验证开关**：只设置 `KRONOS_VALIDATION_FULL_ONLY=1` 并不会自动取消 Dataset 的
+   `KRONOS_VALIDATION_SAMPLES=2000` 上限。日志虽然显示有 123,836 个候选窗口，最终 Dataset
+   仍只有 2,000。正确配置还必须设置 `KRONOS_VALIDATION_SAMPLES=0`，并以日志中的
+   `Found 123836`、`Using 123836`、`Full-only validation size: 123836` 三项一致为准。
+6. **未按文档固定 P100 PyTorch**：Kaggle 最新镜像的 PyTorch 只包含 `sm_70+`，P100 是
+   `sm_60`，因此首个 CUDA batch 报 `no kernel image is available for execution on the device`。
+   本手册此前已经记录已验证组合 `torch==2.5.1+cu121`，但提交前没有执行。P100 Kernel 必须
+   强制安装该版本并在训练前打印、断言 `sm_60`；只看到 `torch.cuda.is_available()` 为真不够。
+7. **GitHub clone 瞬时失败**：一次运行在第 2 秒出现 GitHub 认证/连接错误，而同一公开地址前后
+   均可访问。入口应使用浅克隆、禁用交互式凭据提示、清理残缺目录并做有限退避重试；同时记录
+   commit，避免重试期间分支漂移。网络失败不能与训练代码错误混为一谈。
+
+### 12.2 small_0.1 已验证的正确启动证据
+
+第 9 版最终通过以下证据后才进入训练：
+
+```text
+torch: 2.5.1+cu121
+cuda_arches: [..., sm_60, ...]
+Trainable predictor parameters: 24,819,392
+[TRAIN] Found 10661560 possible samples. Using 20000 unique samples per segment.
+[VAL] Found 123836 possible samples. Using 123836 unique samples per segment.
+Full-only validation size: 123836
+Running fixed large validation at Segment 1: 123,836 samples.
+```
+
+以后同类任务至少必须看到：代码 commit、数据根、模型 SHA、GPU 型号、PyTorch 完整版本、
+CUDA arch、最终训练/验证 Dataset 长度、实际双学习率、SwanLab run URL、首个训练 step、首个
+全量验证启动。缺少任一项只能称为“已提交”或“正在启动”，不能称为“训练成功”。
+
+### 12.3 固定执行顺序
+
+1. 本地运行语法检查、单元测试、`Config()` 构造和最小 Dataset 配置检查。
+2. 在无 GPU 的 preflight 中验证代码取得方式、数据根唯一性、模型/数据 SHA 和 SwanLab 初始化。
+3. P100 环境先固定 `torch==2.5.1+cu121`，打印并断言 `sm_60`，再下载模型、构造 Dataset。
+4. 对全量验证核对“候选数 = Dataset 长度 = 实际验证数”，不能只检查布尔开关。
+5. 只允许一个 active Kernel；失败后先保存完整日志和根因，再提交一个针对性修复版本。
+6. 进入首个训练 step 后继续监控到首个全量验证完成并成功保存 State/Best/Last，才确认首训链路闭环。
