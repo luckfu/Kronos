@@ -15,6 +15,60 @@ except ImportError:
     from asset_metadata import AssetMetadata
 
 
+def build_beta_v21_labels(raw_window, lookback_window, asof_date):
+    """Build causal next-open return and path-event labels from one raw window."""
+    raw_window = np.asarray(raw_window, dtype=np.float64)
+    lookback_window = int(lookback_window)
+    horizons = np.asarray([1, 3, 5, 10], dtype=np.int64)
+    future = raw_window[lookback_window:lookback_window + 10]
+    if future.shape[0] != 10:
+        raise ValueError("Beta v2.1 labels require ten future trading days")
+
+    entry_price = max(float(future[0, 0]), 1e-8)
+    horizon_closes = np.maximum(future[horizons - 1, 3], 1e-8)
+    raw_returns = np.log(horizon_closes / entry_price)
+    past_closes = np.maximum(raw_window[:lookback_window, 3], 1e-8)
+    daily_returns = np.diff(np.log(past_closes))
+    sigma20 = max(float(np.std(daily_returns[-20:])), 0.005)
+    return_scales = sigma20 * np.sqrt(horizons.astype(np.float64))
+    return_targets = np.clip(raw_returns / return_scales, -3.0, 3.0)
+
+    barrier_target = 2
+    barrier_valid = True
+    for high, low in zip(future[:, 1], future[:, 2]):
+        hit_take_profit = float(high) / entry_price - 1.0 >= 0.05
+        hit_stop_loss = float(low) / entry_price - 1.0 <= -0.03
+        if hit_take_profit and hit_stop_loss:
+            barrier_target = 1
+            barrier_valid = False
+            break
+        if hit_take_profit:
+            barrier_target = 0
+            break
+        if hit_stop_loss:
+            barrier_target = 1
+            break
+
+    if barrier_target == 0:
+        utility = 0.046
+    elif barrier_target == 1:
+        utility = -0.034
+    else:
+        utility = float(horizon_closes[-1] / entry_price - 1.0 - 0.004)
+
+    return {
+        'return_targets': torch.tensor(return_targets, dtype=torch.float32),
+        'raw_returns': torch.tensor(raw_returns, dtype=torch.float32),
+        'return_scales': torch.tensor(return_scales, dtype=torch.float32),
+        'barrier_target': torch.tensor(barrier_target, dtype=torch.long),
+        'barrier_valid': torch.tensor(barrier_valid, dtype=torch.bool),
+        'utility': torch.tensor(utility, dtype=torch.float32),
+        'date_id': torch.tensor(
+            int(np.datetime64(asof_date, 'D').astype(np.int64)), dtype=torch.long
+        ),
+    }
+
+
 def build_balanced_coverage_order(bucket_ids, segment_size, seed):
     """Interleave shuffled buckets per segment while using every index once."""
     bucket_ids = np.asarray(bucket_ids, dtype=np.uint8)
@@ -329,6 +383,9 @@ class QlibDataset(Dataset):
         self.use_sector_features = bool(getattr(self.config, 'use_sector_features', True))
         self.use_size_features = bool(getattr(self.config, 'use_size_features', True))
         self.use_size_percentile = bool(getattr(self.config, 'use_size_percentile', False))
+        self.use_beta_v21_auxiliary = bool(
+            getattr(self.config, 'use_beta_v21_auxiliary', False)
+        )
         self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
         self.has_inline_percentile = self.use_size_percentile and any(
             'size_percentile' in frame.columns for frame in self.data.values()
@@ -352,6 +409,8 @@ class QlibDataset(Dataset):
         replay_starts = []
         replay_buckets = []
         replay_strata = []
+        replay_dates = []
+        signal_date_ids = []
         excluded_fixed_validation_samples = 0
         signal_dates_seen = set()
         replay_ratio = (
@@ -425,6 +484,7 @@ class QlibDataset(Dataset):
                 for position in eligible_positions:
                     self.indices.append((symbol, int(starts[position])))
                     bucket_ids.append(int(buckets[position]))
+                    signal_date_ids.append(int(dates[position].astype(np.int64)))
                 signal_dates_seen.update(dates[eligible].tolist())
 
                 if replay_ratio:
@@ -438,6 +498,7 @@ class QlibDataset(Dataset):
                         ))
                         replay_starts.append(starts[replay_positions])
                         replay_buckets.append(buckets[replay_positions])
+                        replay_dates.append(dates[replay_positions])
                         years = pd.DatetimeIndex(
                             dates[replay_positions]
                         ).year.to_numpy(dtype=np.int32)
@@ -461,6 +522,7 @@ class QlibDataset(Dataset):
             candidate_starts = np.concatenate(replay_starts)
             candidate_buckets = np.concatenate(replay_buckets)
             candidate_strata = np.concatenate(replay_strata)
+            candidate_dates = np.concatenate(replay_dates)
             replay_target = round(recent_samples * replay_ratio / (1.0 - replay_ratio))
             selected = select_stratified_replay(
                 candidate_strata, replay_target, self.config.seed + 2026
@@ -469,9 +531,15 @@ class QlibDataset(Dataset):
                 symbol = self.symbols[int(candidate_symbols[candidate])]
                 self.indices.append((symbol, int(candidate_starts[candidate])))
                 bucket_ids.append(int(candidate_buckets[candidate]))
+                signal_date_ids.append(
+                    int(candidate_dates[candidate].astype(np.int64))
+                )
             replay_samples = len(selected)
 
         self.total_samples = len(self.indices)
+        self.signal_date_ids = np.asarray(signal_date_ids, dtype=np.int64)
+        if len(self.signal_date_ids) != self.total_samples:
+            raise ValueError('Signal-date index is not aligned with dataset indices')
         requested = int(self.configured_samples)
         self.n_samples = self.total_samples if requested <= 0 else min(requested, self.total_samples)
         permutation_seed = self.config.seed + (0 if data_type == 'train' else 1)
@@ -569,6 +637,11 @@ class QlibDataset(Dataset):
         end = min(start + self.n_samples, self.total_samples)
         self.coverage_start = start
         self.active_positions = self.coverage_order[start:end]
+        if self.use_beta_v21_auxiliary:
+            date_order = np.argsort(
+                self.signal_date_ids[self.active_positions], kind='stable'
+            )
+            self.active_positions = self.active_positions[date_order]
 
     def coverage_state(self, segment_index: int = 0) -> dict:
         consumed = min((int(segment_index) + 1) * self.n_samples, self.total_samples)
@@ -596,6 +669,7 @@ class QlibDataset(Dataset):
         # Separate main features and time features.
         x = win_df[self.feature_list].values.astype(np.float32)
         x_stamp = win_df[self.time_feature_list].values.astype(np.float32)
+        raw_x = x.copy()
 
         # Normalize the window. Mean and std are calculated strictly on the
         # lookback window (past data) to prevent future data leakage.
@@ -609,12 +683,24 @@ class QlibDataset(Dataset):
         x = (x - x_mean) / (x_std + 1e-5)
         x = np.clip(x, -self.config.clip, self.config.clip)
 
+        asof = self.timestamps_by_symbol[str(symbol)].iloc[
+            start_idx + self.config.lookback_window - 1
+        ]
+        auxiliary_labels = None
+        if self.use_beta_v21_auxiliary:
+            auxiliary_labels = build_beta_v21_labels(raw_x, past_len, asof)
+            auxiliary_labels['feature_means'] = torch.from_numpy(
+                x_mean.astype(np.float32)
+            )
+            auxiliary_labels['feature_stds'] = torch.from_numpy(
+                x_std.astype(np.float32)
+            )
+
         # Convert to PyTorch tensors.
         x_tensor = torch.from_numpy(x)
         x_stamp_tensor = torch.from_numpy(x_stamp)
 
         if self.use_context_features:
-            asof = self.timestamps_by_symbol[str(symbol)].iloc[start_idx + self.config.lookback_window - 1]
             sector_value, size_value, size_percentile_value = self.asset_metadata.get_conditions(
                 symbol, asof=asof
             )
@@ -640,10 +726,18 @@ class QlibDataset(Dataset):
                     period_code = torch.tensor(
                         int(self.validation_period_codes[idx]), dtype=torch.int16
                     )
-                    return (*result, period_code)
+                    result = (*result, period_code)
+                if auxiliary_labels is not None:
+                    result = (*result, auxiliary_labels)
                 return result
-            return x_tensor, x_stamp_tensor, sector_id, size_bucket
-        return x_tensor, x_stamp_tensor
+            result = (x_tensor, x_stamp_tensor, sector_id, size_bucket)
+            if auxiliary_labels is not None:
+                result = (*result, auxiliary_labels)
+            return result
+        result = (x_tensor, x_stamp_tensor)
+        if auxiliary_labels is not None:
+            result = (*result, auxiliary_labels)
+        return result
 
 
 if __name__ == '__main__':

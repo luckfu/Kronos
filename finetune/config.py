@@ -200,11 +200,11 @@ class Config:
         ).strip().lower()
         if self.best_selection_metric not in {
             "objective", "full_sequence", "forecast", "history",
-            "validation_large_objective"
+            "validation_large_objective", "beta_v21_score"
         }:
             raise ValueError(
                 "KRONOS_BEST_SELECTION_METRIC must be objective, full_sequence, "
-                "forecast, history, or validation_large_objective"
+                "forecast, history, validation_large_objective, or beta_v21_score"
             )
         forecast_weights = os.getenv("KRONOS_FORECAST_HORIZON_WEIGHTS", "").strip()
         if forecast_weights:
@@ -220,6 +220,62 @@ class Config:
                 raise ValueError("Forecast horizon weights must be positive")
         else:
             self.forecast_horizon_weights = tuple(1.0 for _ in range(self.predict_window))
+
+        self.use_beta_v21_auxiliary = os.getenv(
+            "KRONOS_USE_BETA_V21_AUXILIARY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if self.use_beta_v21_auxiliary and (
+            self.lookback_window != 120 or self.predict_window != 10
+        ):
+            raise ValueError(
+                "Beta v2.1 auxiliary training requires 120 lookback and 10 forecast days"
+            )
+        self.beta_v21_auxiliary_warmup_steps = int(
+            os.getenv("KRONOS_BETA_V21_AUXILIARY_WARMUP_STEPS", "1000")
+        )
+        self.beta_v21_ema_decay = float(
+            os.getenv("KRONOS_BETA_V21_EMA_DECAY", "0.99")
+        )
+        self.beta_v21_consistency_samples = int(
+            os.getenv("KRONOS_BETA_V21_CONSISTENCY_SAMPLES", "2048")
+        )
+        self.beta_v21_consistency_sample_count = int(
+            os.getenv("KRONOS_BETA_V21_CONSISTENCY_SAMPLE_COUNT", "1")
+        )
+        self.beta_v21_validation_denominators = os.getenv(
+            "KRONOS_BETA_V21_VALIDATION_DENOMINATORS", ""
+        ).strip()
+        self.beta_v21_auto_calibrate = os.getenv(
+            "KRONOS_BETA_V21_AUTO_CALIBRATE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if self.beta_v21_validation_denominators:
+            denominator_values = tuple(
+                float(value.strip())
+                for value in self.beta_v21_validation_denominators.split(",")
+            )
+            if len(denominator_values) != 5 or any(
+                value <= 0 for value in denominator_values
+            ):
+                raise ValueError(
+                    "KRONOS_BETA_V21_VALIDATION_DENOMINATORS must contain five "
+                    "positive values: path,history,return,barrier,ranking"
+                )
+        if (
+            self.best_selection_metric == "beta_v21_score"
+            and not self.beta_v21_validation_denominators
+            and not self.beta_v21_auto_calibrate
+        ):
+            raise ValueError(
+                "Beta v2.1 checkpoint selection requires fixed validation denominators"
+            )
+        if self.beta_v21_auxiliary_warmup_steps < 1:
+            raise ValueError("Beta v2.1 auxiliary warmup steps must be positive")
+        if not 0.0 <= self.beta_v21_ema_decay < 1.0:
+            raise ValueError("Beta v2.1 EMA decay must be in [0, 1)")
+        if self.beta_v21_consistency_samples < 0:
+            raise ValueError("Beta v2.1 consistency samples must be non-negative")
+        if self.beta_v21_consistency_sample_count < 1:
+            raise ValueError("Beta v2.1 consistency sample count must be positive")
 
         # Learning rates for different model components.
         self.tokenizer_learning_rate = 2e-4

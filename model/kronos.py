@@ -198,7 +198,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         use_size_percentile (bool): Whether to add a continuous size-percentile MLP.
     """
 
-    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te, num_sectors=0, num_size_buckets=0, context_layer=0, use_size_percentile=False, size_mlp_hidden_dim=64):
+    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te, num_sectors=0, num_size_buckets=0, context_layer=0, use_size_percentile=False, size_mlp_hidden_dim=64, use_beta_v21_auxiliary=False):
         super().__init__()
         self.s1_bits = s1_bits
         self.s2_bits = s2_bits
@@ -216,6 +216,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         self.context_layer = int(context_layer)
         self.use_size_percentile = bool(use_size_percentile)
         self.size_mlp_hidden_dim = int(size_mlp_hidden_dim)
+        self.use_beta_v21_auxiliary = bool(use_beta_v21_auxiliary)
         if not 0 <= self.context_layer <= self.n_layers:
             raise ValueError(f"context_layer must be in [0, {self.n_layers}], got {self.context_layer}")
 
@@ -240,6 +241,8 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         self.norm = RMSNorm(self.d_model)
         self.dep_layer = DependencyAwareLayer(self.d_model)
         self.head = DualHead(self.s1_bits, self.s2_bits, self.d_model)
+        self.return_head = nn.Linear(self.d_model, 4) if self.use_beta_v21_auxiliary else None
+        self.barrier_head = nn.Linear(self.d_model, 3) if self.use_beta_v21_auxiliary else None
         self.apply(self._init_weights)
         # Start conditioning as a no-op so a pretrained checkpoint retains its
         # original behavior while the new embeddings learn during fine-tuning.
@@ -316,7 +319,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             }
         return x
 
-    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None, size_percentile=None):
+    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None, size_percentile=None, return_auxiliary=False, asof_index=None):
         """
         Args:
             s1_ids (torch.Tensor): Input tensor of s1 token IDs. Shape: [batch_size, seq_len]
@@ -368,7 +371,23 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
 
         x2 = self.dep_layer(x, sibling_embed, key_padding_mask=padding_mask) # Dependency Aware Layer: Condition on s1 embeddings
         s2_logits = self.head.cond_forward(x2)
-        return s1_logits, s2_logits
+        logits = (s1_logits, s2_logits)
+        if not return_auxiliary:
+            return logits
+        if self.return_head is None or self.barrier_head is None:
+            raise ValueError("return_auxiliary requires use_beta_v21_auxiliary=True")
+        if asof_index is None:
+            raise ValueError("asof_index is required for auxiliary predictions")
+        asof_index = int(asof_index)
+        if not 0 <= asof_index < x.shape[1]:
+            raise ValueError(
+                f"asof_index must be in [0, {x.shape[1] - 1}], got {asof_index}"
+            )
+        h_asof = x[:, asof_index, :]
+        return logits, {
+            "return": self.return_head(h_asof),
+            "barrier": self.barrier_head(h_asof),
+        }
 
     def decode_s1(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None, size_percentile=None):
         """
@@ -496,7 +515,7 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
     return x
 
 
-def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False):
+def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False, sample_logits=True):
     with torch.no_grad():
         x = torch.clip(x, -clip, clip)
 
@@ -566,11 +585,17 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
                 size_percentile=size_percentile,
             )
             s1_logits = s1_logits[:, -1, :]
-            sample_pre = sample_from_logits(s1_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True)
+            sample_pre = sample_from_logits(
+                s1_logits, temperature=T, top_k=top_k, top_p=top_p,
+                sample_logits=sample_logits,
+            )
 
             s2_logits = model.decode_s2(context, sample_pre)
             s2_logits = s2_logits[:, -1, :]
-            sample_post = sample_from_logits(s2_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True)
+            sample_post = sample_from_logits(
+                s2_logits, temperature=T, top_k=top_k, top_p=top_p,
+                sample_logits=sample_logits,
+            )
 
             generated_pre[:, i] = sample_pre.squeeze(-1)
             generated_post[:, i] = sample_post.squeeze(-1)

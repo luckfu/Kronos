@@ -23,7 +23,14 @@ except ImportError:
 sys.path.append('../')
 from config import Config
 from dataset import QlibDataset
-from model.kronos import KronosTokenizer, Kronos
+from model.kronos import KronosTokenizer, Kronos, auto_regressive_inference
+from beta_v21 import (
+    DetachedEMANormalizer,
+    compose_beta_v21_objective,
+    compute_auxiliary_losses,
+    consistency_statistics,
+    generated_return_targets,
+)
 # Import shared utilities
 from utils.training_utils import (
     setup_ddp,
@@ -154,6 +161,9 @@ def model_export_config(core_model, config):
         'context_layer': int(config.get('context_layer', 0)),
         'use_size_percentile': bool(config.get('use_size_percentile', False)),
         'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
+        'use_beta_v21_auxiliary': bool(
+            config.get('use_beta_v21_auxiliary', False)
+        ),
     })
     return model_config
 
@@ -182,6 +192,10 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
         'fixed_validation_manifest_sha256', 'validation_quick_samples',
         'validation_large_samples', 'validation_large_interval_segments',
         'validation_full_only',
+        'use_beta_v21_auxiliary', 'beta_v21_auxiliary_warmup_steps',
+        'beta_v21_ema_decay', 'beta_v21_validation_denominators',
+        'beta_v21_auto_calibrate',
+        'beta_v21_consistency_samples', 'beta_v21_consistency_sample_count',
         'exclude_fixed_validation_from_training',
     )
     guard = {}
@@ -292,6 +306,7 @@ def configure_trainable_parameters(model, config):
     for module in [
         model.sector_emb, model.size_emb, model.size_mlp,
         model.norm, model.dep_layer, model.head,
+        getattr(model, 'return_head', None), getattr(model, 'barrier_head', None),
     ]:
         if module is not None:
             for parameter in module.parameters():
@@ -639,6 +654,7 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
         'validation_large_objective': (
             large_metrics['objective_loss'] if large_metrics is not None else None
         ),
+        'beta_v21_score': (large_metrics or quick_metrics).get('beta_v21_score'),
     }
     if metric not in values:
         raise ValueError(f'Unsupported best selection metric: {metric}')
@@ -659,6 +675,30 @@ def resolve_amp_dtype(config, device):
     raise ValueError(f'Unsupported AMP dtype: {dtype_name}')
 
 
+def move_auxiliary_labels(labels, device):
+    if labels is None:
+        return None
+    return {
+        key: value.to(device, non_blocking=True)
+        for key, value in labels.items()
+    }
+
+
+def beta_v21_validation_score(metrics, config):
+    raw = str(config.get('beta_v21_validation_denominators', '')).strip()
+    if not raw:
+        return None
+    path, _history, returns, barrier, ranking = (
+        float(value.strip()) for value in raw.split(',')
+    )
+    return (
+        0.50 * metrics['weighted_forecast_loss'] / path
+        + 0.20 * metrics['return_loss'] / returns
+        + 0.20 * metrics['barrier_loss'] / barrier
+        + 0.10 * metrics['ranking_loss'] / ranking
+    )
+
+
 def evaluate_validation(
     model, tokenizer, loader, device, config, amp_dtype, run_condition_ablation=False,
     period_names=None,
@@ -674,6 +714,28 @@ def evaluate_validation(
         'condition_none_forecast_loss': 0.0,
         'condition_shuffled_forecast_loss': 0.0,
     }
+    use_beta_v21 = bool(config.get('use_beta_v21_auxiliary', False))
+    if use_beta_v21:
+        sums.update({
+            'weighted_forecast_loss': 0.0,
+            'return_loss': 0.0,
+            'return_huber_loss': 0.0,
+            'return_bias_loss': 0.0,
+            'barrier_loss': 0.0,
+            'ranking_loss': 0.0,
+        })
+    distributed_world_size = (
+        dist.get_world_size()
+        if dist.is_available() and dist.is_initialized() else 1
+    )
+    consistency_limit = math.ceil(
+        int(config.get('beta_v21_consistency_samples', 0))
+        / distributed_world_size
+    )
+    consistency_auxiliary = []
+    consistency_generated = []
+    consistency_actual = []
+    validation_auxiliary = []
     period_names = dict(period_names or {})
     period_sums = {
         int(code): {key: 0.0 for key in sums}
@@ -685,6 +747,7 @@ def evaluate_validation(
     with torch.no_grad():
         for batch in loader:
             batch_x, batch_x_stamp = batch[0], batch[1]
+            auxiliary_labels = batch[-1] if use_beta_v21 else None
             batch_sector = (
                 batch[2]
                 if len(batch) > 2 and config.get('use_sector_features', True)
@@ -713,6 +776,7 @@ def evaluate_validation(
                 batch_size_percentile = batch_size_percentile.to(
                     device, non_blocking=True
                 )
+            auxiliary_labels = move_auxiliary_labels(auxiliary_labels, device)
 
             token_seq_0, token_seq_1 = tokenizer.encode(batch_x, half=True)
             token_in = [token_seq_0[:, :-1], token_seq_1[:, :-1]]
@@ -722,22 +786,123 @@ def evaluate_validation(
                 dtype=amp_dtype or torch.float16,
                 enabled=amp_dtype is not None,
             ):
-                logits = model(
+                model_output = model(
                     token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
                     sector_id=batch_sector, size_bucket=batch_size_bucket,
                     size_percentile=batch_size_percentile,
                     use_teacher_forcing=True, s1_targets=token_out[0],
+                    return_auxiliary=use_beta_v21,
+                    asof_index=int(config['lookback_window']) - 1,
                 )
+                if use_beta_v21:
+                    logits, auxiliary_predictions = model_output
+                else:
+                    logits = model_output
                 losses = compute_predictor_losses(
                     core_model.head, logits, token_out, config
                 )
+                if use_beta_v21:
+                    auxiliary_losses = compute_auxiliary_losses(
+                        auxiliary_predictions['return'],
+                        auxiliary_predictions['barrier'],
+                        auxiliary_labels,
+                    )
+                    validation_auxiliary.append((
+                        auxiliary_predictions['return'].detach().float().cpu(),
+                        auxiliary_predictions['barrier'].detach().float().cpu(),
+                        {
+                            key: auxiliary_labels[key].detach().cpu()
+                            for key in (
+                                'return_targets', 'return_scales',
+                                'barrier_target', 'barrier_valid',
+                                'utility', 'date_id',
+                            )
+                        },
+                    ))
             batch_samples = int(batch_x.shape[0])
             samples += batch_samples
             sums['objective_loss'] += losses['objective'].item() * batch_samples
             sums['full_sequence_loss'] += losses['full_sequence'].item() * batch_samples
             sums['history_loss'] += losses['history'].item() * batch_samples
             sums['forecast_loss'] += losses['forecast'].item() * batch_samples
+            if use_beta_v21:
+                sums['weighted_forecast_loss'] += (
+                    losses['weighted_forecast'].item() * batch_samples
+                )
+                sums['return_loss'] += auxiliary_losses['return'].item() * batch_samples
+                sums['return_huber_loss'] += (
+                    auxiliary_losses['return_huber'].item() * batch_samples
+                )
+                sums['return_bias_loss'] += (
+                    auxiliary_losses['return_bias'].item() * batch_samples
+                )
+                sums['barrier_loss'] += auxiliary_losses['barrier'].item() * batch_samples
+                sums['ranking_loss'] += auxiliary_losses['ranking'].item() * batch_samples
             batches += 1
+
+            consistency_seen = sum(
+                value.shape[0] for value in consistency_auxiliary
+            )
+            if use_beta_v21 and consistency_seen < consistency_limit:
+                consistency_count = min(
+                    batch_samples, consistency_limit - consistency_seen
+                )
+                lookback = int(config['lookback_window'])
+                predict_window = int(config['predict_window'])
+                with torch.autocast(
+                    device_type=device.type,
+                    dtype=amp_dtype or torch.float16,
+                    enabled=amp_dtype is not None,
+                ):
+                    generated = auto_regressive_inference(
+                        tokenizer,
+                        core_model,
+                        batch_x[:consistency_count, :lookback],
+                        batch_x_stamp[:consistency_count, :lookback],
+                        batch_x_stamp[
+                            :consistency_count,
+                            lookback:lookback + predict_window,
+                        ],
+                        int(config.get('max_context', 512)),
+                        predict_window,
+                        clip=float(config.get('clip', 5.0)),
+                        T=1.0,
+                        top_k=0,
+                        top_p=1.0,
+                        sample_count=int(
+                            config.get('beta_v21_consistency_sample_count', 1)
+                        ),
+                        verbose=False,
+                        sample_logits=False,
+                        sector_id=(
+                            batch_sector[:consistency_count]
+                            if batch_sector is not None else None
+                        ),
+                        size_bucket=(
+                            batch_size_bucket[:consistency_count]
+                            if batch_size_bucket is not None else None
+                        ),
+                        size_percentile=(
+                            batch_size_percentile[:consistency_count]
+                            if batch_size_percentile is not None else None
+                        ),
+                    )
+                generated_path = torch.as_tensor(
+                    generated[:, -predict_window:, :], device=device
+                )
+                generated_returns = generated_return_targets(
+                    generated_path,
+                    auxiliary_labels['feature_means'][:consistency_count],
+                    auxiliary_labels['feature_stds'][:consistency_count],
+                    auxiliary_labels['return_scales'][:consistency_count],
+                )
+                consistency_auxiliary.append(
+                    auxiliary_predictions['return'][:consistency_count].detach().cpu()
+                )
+                consistency_generated.append(generated_returns.detach().cpu())
+                consistency_actual.append(
+                    auxiliary_labels['return_targets'][:consistency_count].detach().cpu()
+                )
 
             if run_condition_ablation:
                 shuffled_sector = (
@@ -838,6 +1003,58 @@ def evaluate_validation(
     }
     result['batches'] = int(counts[0].item())
     result['samples'] = int(counts[1].item())
+    if use_beta_v21:
+        local_validation = (
+            torch.cat([item[0] for item in validation_auxiliary]),
+            torch.cat([item[1] for item in validation_auxiliary]),
+            {
+                key: torch.cat([item[2][key] for item in validation_auxiliary])
+                for key in validation_auxiliary[0][2]
+            },
+        )
+        gathered_validation = [local_validation]
+        if dist.is_available() and dist.is_initialized():
+            gathered_validation = [None] * dist.get_world_size()
+            dist.all_gather_object(gathered_validation, local_validation)
+        global_returns = torch.cat([item[0] for item in gathered_validation])
+        global_barriers = torch.cat([item[1] for item in gathered_validation])
+        global_labels = {
+            key: torch.cat([item[2][key] for item in gathered_validation])
+            for key in local_validation[2]
+        }
+        global_auxiliary_losses = compute_auxiliary_losses(
+            global_returns, global_barriers, global_labels
+        )
+        result.update({
+            'return_loss': float(global_auxiliary_losses['return'].item()),
+            'return_huber_loss': float(
+                global_auxiliary_losses['return_huber'].item()
+            ),
+            'return_bias_loss': float(
+                global_auxiliary_losses['return_bias'].item()
+            ),
+            'barrier_loss': float(global_auxiliary_losses['barrier'].item()),
+            'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
+        })
+        result['beta_v21_score'] = beta_v21_validation_score(result, config)
+        local_consistency = (
+            torch.cat(consistency_auxiliary),
+            torch.cat(consistency_generated),
+            torch.cat(consistency_actual),
+        ) if consistency_auxiliary else (
+            torch.empty(0, 4), torch.empty(0, 4), torch.empty(0, 4)
+        )
+        gathered = [local_consistency]
+        if dist.is_available() and dist.is_initialized():
+            gathered = [None] * dist.get_world_size()
+            dist.all_gather_object(gathered, local_consistency)
+        combined = [
+            torch.cat([item[index] for item in gathered], dim=0)[
+                :int(config.get('beta_v21_consistency_samples', 0))
+            ]
+            for index in range(3)
+        ]
+        result['return_path_consistency'] = consistency_statistics(*combined)
     if run_condition_ablation:
         result['condition_full_minus_none_forecast_loss'] = (
             result['forecast_loss'] - result['condition_none_forecast_loss']
@@ -950,6 +1167,67 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         train_dataset, valid_dataset,
     ) = create_dataloaders(config, rank, world_size)
     validation_full_only = bool(config.get('validation_full_only', False))
+    denominator_path = os.path.join(
+        save_dir, 'beta_v21_validation_denominators.json'
+    )
+    if config.get('use_beta_v21_auxiliary', False):
+        if not config.get('beta_v21_validation_denominators') and os.path.exists(
+            denominator_path
+        ):
+            with open(denominator_path) as handle:
+                saved_denominators = json.load(handle)
+            config['beta_v21_validation_denominators'] = saved_denominators['csv']
+        if (
+            not config.get('beta_v21_validation_denominators')
+            and config.get('beta_v21_auto_calibrate', False)
+        ):
+            if rank == 0:
+                print(
+                    'Calibrating fixed Beta v2.1 validation denominators from '
+                    'the untrained auxiliary-head initialization.'
+                )
+            calibration_config = dict(config)
+            calibration_config['beta_v21_consistency_samples'] = 0
+            calibration_metrics = evaluate_validation(
+                model,
+                tokenizer,
+                large_val_loader,
+                device,
+                calibration_config,
+                amp_dtype,
+                run_condition_ablation=False,
+                period_names={},
+            )
+            denominator_values = (
+                calibration_metrics['weighted_forecast_loss'],
+                calibration_metrics['history_loss'],
+                calibration_metrics['return_loss'],
+                calibration_metrics['barrier_loss'],
+                calibration_metrics['ranking_loss'],
+            )
+            denominator_csv = ','.join(
+                f'{value:.17g}' for value in denominator_values
+            )
+            config['beta_v21_validation_denominators'] = denominator_csv
+            if rank == 0:
+                with open(f'{denominator_path}.tmp', 'w') as handle:
+                    json.dump({
+                        'source': 'untrained_beta_v21_heads_on_parent_checkpoint',
+                        'parent_path': config['pretrained_predictor_path'],
+                        'path': denominator_values[0],
+                        'history': denominator_values[1],
+                        'return': denominator_values[2],
+                        'barrier': denominator_values[3],
+                        'ranking': denominator_values[4],
+                        'csv': denominator_csv,
+                    }, handle, indent=2)
+                os.replace(f'{denominator_path}.tmp', denominator_path)
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
+        if not config.get('beta_v21_validation_denominators'):
+            raise ValueError(
+                'Beta v2.1 requires fixed validation denominators or auto calibration'
+            )
 
     segments_per_coverage = max(
         1, math.ceil(train_dataset.total_samples / train_dataset.n_samples)
@@ -980,6 +1258,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
 
     core_model = model.module if isinstance(model, DDP) else model
+    v21_normalizer = DetachedEMANormalizer(
+        decay=float(config.get('beta_v21_ema_decay', 0.99))
+    )
     validate_uniform_learning_rate_config(config)
     optimizer_groups = build_optimizer_groups(core_model, config)
     optimizer = torch.optim.AdamW(
@@ -1159,6 +1440,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 }
                 for group in optimizer.param_groups
             ],
+            beta_v21_loss_ema=v21_normalizer.state_dict(),
         )
 
     if config.get('resume_training', False) and os.path.exists(resume_path):
@@ -1205,6 +1487,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         if int(resume_state.get('scheduler_warmup_steps', -1)) != warmup_steps:
             raise ValueError('Resume scheduler warmup steps do not match current plan')
         core_model.load_state_dict(resume_state['model'])
+        if config.get('use_beta_v21_auxiliary', False):
+            saved_ema = resume_state.get('beta_v21_loss_ema')
+            if saved_ema is None:
+                raise ValueError('Beta v2.1 resume checkpoint has no loss EMA state')
+            v21_normalizer.load_state_dict(saved_ema)
         optimizer.load_state_dict(resume_state['optimizer'])
         optimizer_to(optimizer, device)
         scheduler.load_state_dict(resume_state['scheduler'])
@@ -1415,6 +1702,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
             core_model.collect_condition_stats = monitor_due
             batch_x, batch_x_stamp = batch[0], batch[1]
+            use_beta_v21 = bool(config.get('use_beta_v21_auxiliary', False))
+            auxiliary_labels = batch[-1] if use_beta_v21 else None
             batch_sector = batch[2] if len(batch) > 2 and config.get('use_sector_features', True) else None
             batch_size_bucket = batch[3] if len(batch) > 3 and config.get('use_size_features', True) else None
             batch_size_percentile = batch[4] if len(batch) > 4 and config.get('use_size_percentile', False) else None
@@ -1428,6 +1717,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 batch_size_bucket = batch_size_bucket.to(device, non_blocking=True)
             if batch_size_percentile is not None:
                 batch_size_percentile = batch_size_percentile.to(device, non_blocking=True)
+            auxiliary_labels = move_auxiliary_labels(auxiliary_labels, device)
 
             # Tokenize input data on-the-fly
             with torch.no_grad():
@@ -1443,14 +1733,39 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 dtype=amp_dtype or torch.float16,
                 enabled=use_amp,
             ):
-                logits = model(
+                model_output = model(
                     token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
                     sector_id=batch_sector, size_bucket=batch_size_bucket,
                     size_percentile=batch_size_percentile,
+                    return_auxiliary=use_beta_v21,
+                    asof_index=int(config['lookback_window']) - 1,
                 )
+                if use_beta_v21:
+                    logits, auxiliary_predictions = model_output
+                else:
+                    logits = model_output
                 core_model.collect_condition_stats = False
                 losses = compute_predictor_losses(core_model.head, logits, token_out, config)
-                loss = losses['objective']
+                auxiliary_losses = None
+                normalized_losses = None
+                if use_beta_v21:
+                    auxiliary_losses = compute_auxiliary_losses(
+                        auxiliary_predictions['return'],
+                        auxiliary_predictions['barrier'],
+                        auxiliary_labels,
+                    )
+                    loss, normalized_losses = compose_beta_v21_objective(
+                        losses['weighted_forecast'],
+                        losses['history'],
+                        auxiliary_losses,
+                        v21_normalizer,
+                        batch_idx_global,
+                        warmup_steps=int(
+                            config.get('beta_v21_auxiliary_warmup_steps', 1000)
+                        ),
+                    )
+                else:
+                    loss = losses['objective']
                 s1_loss = losses['objective_s1']
                 s2_loss = losses['objective_s2']
 
@@ -1460,6 +1775,19 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             scaler.unscale_(optimizer)
             applied_family_lrs = learning_rates_by_family(optimizer)
             monitoring_stats = {}
+            if auxiliary_losses is not None:
+                monitoring_stats.update({
+                    'return_loss': float(auxiliary_losses['return'].item()),
+                    'return_huber_loss': float(
+                        auxiliary_losses['return_huber'].item()
+                    ),
+                    'return_bias_loss': float(
+                        auxiliary_losses['return_bias'].item()
+                    ),
+                    'barrier_loss': float(auxiliary_losses['barrier'].item()),
+                    'ranking_loss': float(auxiliary_losses['ranking'].item()),
+                    'auxiliary_ramp': float(normalized_losses['ramp']),
+                })
             if monitor_due:
                 monitoring_stats.update(getattr(core_model, 'last_condition_stats', {}))
                 if core_model.sector_emb is not None:
@@ -1733,6 +2061,21 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f"Validation Forecast/History/Full: {avg_val_forecast_loss:.4f} / "
                 f"{avg_val_history_loss:.4f} / {avg_val_full_loss:.4f}"
             )
+            if config.get('use_beta_v21_auxiliary', False):
+                print(
+                    "Validation v2.1 Score/Return/Bias/Barrier/Rank: "
+                    f"{primary_metrics.get('beta_v21_score')} / "
+                    f"{primary_metrics['return_loss']:.6f} / "
+                    f"{primary_metrics['return_bias_loss']:.6f} / "
+                    f"{primary_metrics['barrier_loss']:.6f} / "
+                    f"{primary_metrics['ranking_loss']:.6f}"
+                )
+                print(
+                    "Validation Return-Path Consistency JSON: "
+                    + json.dumps(
+                        primary_metrics['return_path_consistency'], sort_keys=True
+                    )
+                )
             for period, metrics in primary_metrics.get('periods', {}).items():
                 print(
                     f"Validation {period} Objective/Forecast/History/Full: "
@@ -1896,6 +2239,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         valid_dataset, 'fixed_validation_manifest_sha256', None
                     ),
                     period_metrics=large_metrics.get('periods', {}),
+                    beta_v21_score=large_metrics.get('beta_v21_score'),
+                    return_loss=large_metrics.get('return_loss'),
+                    return_huber_loss=large_metrics.get('return_huber_loss'),
+                    return_bias_loss=large_metrics.get('return_bias_loss'),
+                    barrier_loss=large_metrics.get('barrier_loss'),
+                    ranking_loss=large_metrics.get('ranking_loss'),
+                    return_path_consistency=large_metrics.get(
+                        'return_path_consistency'
+                    ),
                 )
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
@@ -2035,6 +2387,9 @@ def main(config: dict):
         'context_layer': int(config.get('context_layer', 0)),
         'use_size_percentile': bool(config.get('use_size_percentile', False)),
         'size_mlp_hidden_dim': int(config.get('size_mlp_hidden_dim', 64)),
+        'use_beta_v21_auxiliary': bool(
+            config.get('use_beta_v21_auxiliary', False)
+        ),
     })
     model = Kronos.from_pretrained(config['pretrained_predictor_path'], **model_kwargs)
     reset_conditioning(model, config)
