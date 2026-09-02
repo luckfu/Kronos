@@ -143,3 +143,12 @@ def test_validation_consistency_reports_bias_and_distribution_drift():
     assert stats['sign_agreement'] == [0.0] * 4
     assert stats['auxiliary_bias'] == [1.0] * 4
     assert stats['generated_bias'] == [-1.0] * 4
+
+
+def test_bfloat16_generated_values_can_be_exported_to_numpy():
+    generated = torch.ones(2, 10, 6, dtype=torch.bfloat16)
+
+    exported = generated.float().cpu().numpy()
+
+    assert exported.dtype == np.float32
+    assert exported.shape == (2, 10, 6)

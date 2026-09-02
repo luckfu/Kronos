@@ -619,7 +619,7 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         ]
         z = tokenizer.decode(input_tokens, half=True)
         z = z.reshape(-1, sample_count, z.size(1), z.size(2))
-        samples = z.cpu().numpy()
+        samples = z.float().cpu().numpy()
         forecasts = samples if return_samples else np.mean(samples, axis=1)
         if not return_generated_tokens:
             return forecasts
