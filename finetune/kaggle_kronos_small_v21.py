@@ -117,6 +117,33 @@ def metadata_path(data_root: Path) -> Path:
     return path
 
 
+def fixed_validation_manifest(repo_root: Path, data_root: Path) -> tuple[Path, dict]:
+    """Resolve and verify the fixed ~20K validation selection."""
+    explicit = os.getenv("KRONOS_SMALL_V21_FIXED_VALIDATION_MANIFEST", "").strip()
+    path = (
+        Path(explicit).expanduser().resolve()
+        if explicit
+        else repo_root
+        / "finetune/manifests/small_0_1_balanced_validation_20k_v1/"
+        "balanced_validation_20k_manifest.json"
+    )
+    if not path.is_file():
+        raise SystemExit(f"Fixed validation manifest is missing: {path}")
+    manifest = json.loads(path.read_text())
+    source = manifest.get("source", {})
+    expected_data_sha = source.get("data_manifest_sha256")
+    expected_val_sha = source.get("val_data_sha256")
+    actual_data_sha = sha256_file(data_root / "data_manifest.json")
+    actual_val_sha = sha256_file(data_root / "processed_datasets/val_data.pkl")
+    if expected_data_sha != actual_data_sha or expected_val_sha != actual_val_sha:
+        raise SystemExit(
+            "Fixed validation source mismatch: "
+            f"data {actual_data_sha} != {expected_data_sha}; "
+            f"val {actual_val_sha} != {expected_val_sha}"
+        )
+    return path, manifest
+
+
 def ensure_hf_snapshot(repo_id: str, target: Path) -> Path:
     """Download a public model only when a complete local snapshot is absent."""
     if (target / "config.json").is_file() and (target / "model.safetensors").is_file():
@@ -193,6 +220,10 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
     output_root = runtime / "outputs/models" / output_name
     env = os.environ.copy()
     metadata = metadata_path(data_root)
+    fixed_manifest_path, fixed_manifest = fixed_validation_manifest(
+        Path(__file__).resolve().parents[1], data_root
+    )
+    fixed_selection = fixed_manifest["selection"]
     env.update({
         "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
         "KMP_DUPLICATE_LIB_OK": "TRUE",
@@ -200,6 +231,10 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_TRAIN_DATA_PATHS": str(data_root / "processed_datasets/train_data.pkl"),
         "KRONOS_VAL_DATA_PATHS": str(data_root / "processed_datasets/val_data.pkl"),
         "KRONOS_METADATA_PATH": str(metadata),
+        "KRONOS_DATA_MANIFEST_SHA256": fixed_manifest["source"]["data_manifest_sha256"],
+        "KRONOS_FIXED_VALIDATION_MANIFEST_PATH": str(fixed_manifest_path),
+        "KRONOS_FIXED_VALIDATION_MANIFEST_SHA256": sha256_file(fixed_manifest_path),
+        "KRONOS_EXCLUDE_FIXED_VALIDATION_FROM_TRAINING": "1",
         "KRONOS_PREDICTOR_PATH": str(predictor),
         "KRONOS_TOKENIZER_PATH": str(tokenizer),
         "KRONOS_SAVE_PATH": str(runtime / "outputs/models"),
@@ -239,10 +274,8 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_EARLY_STOPPING_PATIENCE": "0",
         "KRONOS_VALIDATION_FULL_ONLY": settings["validation_full_only"],
         "KRONOS_VALIDATION_SAMPLES": "0",
-        "KRONOS_VALIDATION_QUICK_SAMPLES": "2000",
-        # Full-only validation uses the complete val dataset; this value is
-        # unused in that mode and remains zero to avoid fake sample counts.
-        "KRONOS_VALIDATION_LARGE_SAMPLES": "0",
+        "KRONOS_VALIDATION_QUICK_SAMPLES": str(fixed_selection["quick_samples"]),
+        "KRONOS_VALIDATION_LARGE_SAMPLES": str(fixed_selection["large_samples"]),
         "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS": "1000000",
         "KRONOS_BATCH_SIZE": os.getenv("KRONOS_BATCH_SIZE", "32"),
         "KRONOS_NUM_WORKERS": os.getenv("KRONOS_NUM_WORKERS", "2"),

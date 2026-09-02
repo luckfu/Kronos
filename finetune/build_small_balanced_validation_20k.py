@@ -232,8 +232,8 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         default=(
-            "data/a_share_full_market_v1_beta_temporal_symbol_validation_v1/"
-            "balanced_validation_20k_v1"
+            "finetune/manifests/"
+            "small_0_1_balanced_validation_20k_v1"
         ),
     )
     parser.add_argument("--lookback", type=int, default=120)
