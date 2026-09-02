@@ -1,0 +1,13 @@
+{
+  "id": "luckfu/kronos-small-0-1-chunk1",
+  "title": "Kronos small 0.1 Chunk 1",
+  "code_file": "kaggle_small_0_1_chunk1.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "competition_sources": [],
+  "kernel_sources": ["luckfu/kronos-small-0-1-bootstrap"]
+}

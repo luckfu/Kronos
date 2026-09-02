@@ -200,9 +200,20 @@ def resolve_stage_predictor(stage: str, runtime: Path) -> Path:
 def copy_continuation_if_requested(output_root: Path) -> bool:
     """Import a complete prior output tree for same-stage Kaggle continuation."""
     source = os.getenv("KRONOS_SMALL_V21_CONTINUATION_ROOT", "").strip()
-    if not source:
-        return False
-    source_root = Path(source).expanduser().resolve()
+    if source:
+        source_root = Path(source).expanduser().resolve()
+    else:
+        input_root = Path(os.getenv("KRONOS_KAGGLE_INPUT_ROOT", "/kaggle/input"))
+        state_paths = sorted(input_root.glob("**/last_state.pt"))
+        if not state_paths:
+            return False
+        if len(state_paths) != 1:
+            raise SystemExit(
+                "Expected exactly one continuation last_state.pt under Kaggle input; "
+                f"found {len(state_paths)}: {state_paths}"
+            )
+        source_root = state_paths[0].parent.parent
+        print(f"Auto-discovered continuation output: {source_root}", flush=True)
     required = source_root / "checkpoints/last_state.pt"
     if not required.is_file():
         raise SystemExit(f"Continuation has no last_state.pt: {source_root}")
