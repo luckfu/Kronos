@@ -37,7 +37,7 @@ STAGES = {
         "warmup_start_lr": "1e-7",
         "condition_warmup_start_lr": "1e-6",
         "auxiliary": "0",
-        "validation_full_only": "0",
+        "validation_full_only": "1",
         "best_metric": "forecast",
         "max_segments": "10",
     },
@@ -239,9 +239,9 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_EARLY_STOPPING_PATIENCE": "0",
         "KRONOS_VALIDATION_FULL_ONLY": settings["validation_full_only"],
         "KRONOS_VALIDATION_QUICK_SAMPLES": "2000",
-        # Config requires the large sample budget to be at least the quick
-        # budget when full-only validation is disabled.
-        "KRONOS_VALIDATION_LARGE_SAMPLES": "2000",
+        # Full-only validation uses the complete val dataset; this value is
+        # unused in that mode and remains zero to avoid fake sample counts.
+        "KRONOS_VALIDATION_LARGE_SAMPLES": "0",
         "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS": "1000000",
         "KRONOS_BATCH_SIZE": os.getenv("KRONOS_BATCH_SIZE", "32"),
         "KRONOS_NUM_WORKERS": os.getenv("KRONOS_NUM_WORKERS", "2"),
