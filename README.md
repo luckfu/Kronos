@@ -189,6 +189,10 @@ modal deploy deploy/modal/modal_app.py
 
 A 股数据准备和实验口径详见 [`finetune/A_SHARE_PLAN_CN.md`](finetune/A_SHARE_PLAN_CN.md)。典型流程如下：
 
+当前 Beta v2.1 决策头训练的标签、反向传播目标、固定分母 Best 规则、纯观察指标
+与 Sealed Future 终审边界见
+[`finetune/BETA_V2_1_TRAINING_PLAN_CN.md`](finetune/BETA_V2_1_TRAINING_PLAN_CN.md)。
+
 ### 全市场市值分层 V3（训练中）
 
 CSI800 历史成分仍偏向大中盘，不能代表完整的小微盘风格。V3 在 2015–2025 年 CSI800 历史成分并集之外，按 2025 年末市值代理值补入微盘、小盘和中小盘股票各 300 只，并为这三个层级各保留 80 只整股票样本外集合。训练集共 2,389 只股票，整股票样本外集合 240 只，两者没有股票重叠。
