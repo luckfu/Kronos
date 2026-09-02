@@ -238,6 +238,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_REQUIRE_FULL_COVERAGE": "1",
         "KRONOS_EARLY_STOPPING_PATIENCE": "0",
         "KRONOS_VALIDATION_FULL_ONLY": settings["validation_full_only"],
+        "KRONOS_VALIDATION_SAMPLES": "0",
         "KRONOS_VALIDATION_QUICK_SAMPLES": "2000",
         # Full-only validation uses the complete val dataset; this value is
         # unused in that mode and remains zero to avoid fake sample counts.
