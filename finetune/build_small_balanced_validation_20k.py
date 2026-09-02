@@ -3,18 +3,17 @@
 import argparse
 import json
 import pickle
-from collections import Counter
+from collections import Counter, defaultdict
+import numpy as np
 from pathlib import Path
 
 import pandas as pd
 
 from build_balanced_validation_manifest import (
     DIRECTION_NAMES,
-    balanced_select,
     build_candidate_frame,
     distribution,
     identities_sha256,
-    sample_identity,
     sha256_file,
 )
 
@@ -34,6 +33,58 @@ def symbol_distribution(frame: pd.DataFrame) -> dict:
     }
 
 
+def proportional_direction_quotas(frame: pd.DataFrame, target: int) -> dict[int, int]:
+    """Allocate the target with the full candidate direction proportions."""
+    counts = frame["direction"].value_counts().reindex((-1, 0, 1), fill_value=0)
+    exact = counts.astype(float) * (int(target) / len(frame))
+    quotas = exact.astype(int)
+    remainder = int(target) - int(quotas.sum())
+    # Largest-remainder allocation; stable direction order resolves ties.
+    order = sorted(
+        (-1, 0, 1),
+        key=lambda direction: (-(exact[direction] - quotas[direction]), direction),
+    )
+    for direction in order[:remainder]:
+        quotas[direction] += 1
+    return {int(direction): int(quotas[direction]) for direction in (-1, 0, 1)}
+
+
+def proportional_balanced_select(frame: pd.DataFrame, target: int, seed: int) -> pd.DataFrame:
+    quotas = proportional_direction_quotas(frame, target)
+    parts = []
+    for direction in (-1, 0, 1):
+        direction_frame = frame.loc[frame["direction"] == direction].reset_index(drop=True)
+        if len(direction_frame) < quotas[direction]:
+            raise ValueError(f"Insufficient {DIRECTION_NAMES[direction]} candidates")
+        rng = np.random.default_rng(seed + direction + 10)
+        groups = defaultdict(list)
+        for row_index, row in direction_frame.iterrows():
+            groups[(row["month"], int(row["size_decile"]), row["sector"])].append(int(row_index))
+        for values in groups.values():
+            rng.shuffle(values)
+        cursors = {key: 0 for key in groups}
+        active = list(groups)
+        chosen = []
+        while len(chosen) < quotas[direction]:
+            rng.shuffle(active)
+            next_active = []
+            for key in active:
+                cursor = cursors[key]
+                values = groups[key]
+                if cursor < len(values):
+                    chosen.append(values[cursor])
+                    cursors[key] = cursor + 1
+                    if len(chosen) == quotas[direction]:
+                        break
+                if cursors[key] < len(values):
+                    next_active.append(key)
+            active = next_active
+        parts.append(direction_frame.loc[chosen])
+    selected = pd.concat(parts, ignore_index=True)
+    selected = selected.sample(frac=1.0, random_state=seed + 1000).reset_index(drop=True)
+    return selected
+
+
 def build(args) -> None:
     data_root = Path(args.data_root).resolve()
     output_dir = Path(args.output_dir).resolve()
@@ -50,7 +101,7 @@ def build(args) -> None:
         args.signal_start,
         args.signal_end,
     )
-    selected = balanced_select(candidates, args.per_direction, args.seed)
+    selected = proportional_balanced_select(candidates, args.target_samples, args.seed)
     candidate_symbols = set(candidates["symbol"].astype(str))
     selected_symbols = set(selected["symbol"].astype(str))
     missing_symbols = sorted(candidate_symbols - selected_symbols)
@@ -112,6 +163,11 @@ def build(args) -> None:
         "selection": {
             "seed": args.seed,
             "strata": ["direction", "month", "size_decile", "sector"],
+            "direction_sampling": "proportional_to_candidate_pool",
+            "target_samples": int(args.target_samples),
+            "direction_quotas": proportional_direction_quotas(
+                candidates, args.target_samples
+            ),
             "symbol_coverage_required": True,
             "quick_samples": 0,
             "large_samples": int(len(selected)),
@@ -185,7 +241,7 @@ def parse_args():
     parser.add_argument("--signal-start", default="2025-07-01")
     parser.add_argument("--signal-end", default="2026-07-02")
     parser.add_argument("--period-split", default="2026-01-01")
-    parser.add_argument("--per-direction", type=int, default=6666)
+    parser.add_argument("--target-samples", type=int, default=19998)
     parser.add_argument("--seed", type=int, default=20260903)
     return parser.parse_args()
 
