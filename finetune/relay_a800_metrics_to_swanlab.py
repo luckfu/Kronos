@@ -39,19 +39,27 @@ def parse_args():
     parser.add_argument("--experiment-name", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--steps-per-segment", type=int, default=0)
+    parser.add_argument(
+        "--transport", choices=("tssh", "ssh"), default="tssh"
+    )
     parser.add_argument("--once", action="store_true")
     return parser.parse_args()
 
 
-def fetch_remote_bytes(host, path, offset):
+def fetch_remote_bytes(host, path, offset, transport="tssh"):
     command = "python3 -c {} {} {}".format(
         shlex.quote(REMOTE_READ_CODE), shlex.quote(path), int(offset)
     )
-    result = subprocess.run(
-        [
+    if transport == "ssh":
+        transport_command = [
+            "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=30",
+        ]
+    else:
+        transport_command = [
             "tssh", "-o", "ConnectionAttempts=3", "-o", "ConnectTimeout=30",
-            host, command,
-        ],
+        ]
+    result = subprocess.run(
+        [*transport_command, host, command],
         check=True,
         capture_output=True,
         text=True,
@@ -82,6 +90,19 @@ def flatten_numeric(prefix, value, output):
     elif isinstance(value, dict):
         for key, nested in value.items():
             flatten_numeric(f"{prefix}/{key}", nested, output)
+    elif isinstance(value, (list, tuple)):
+        for index, nested in enumerate(value):
+            flatten_numeric(f"{prefix}/{index}", nested, output)
+
+
+def flatten_return_path_consistency(prefix, value, output):
+    horizons = ("D1", "D3", "D5", "D10")
+    for key, nested in value.items():
+        if isinstance(nested, (list, tuple)) and len(nested) == len(horizons):
+            for horizon, item in zip(horizons, nested):
+                flatten_numeric(f"{prefix}/{key}/{horizon}", item, output)
+        else:
+            flatten_numeric(f"{prefix}/{key}", nested, output)
 
 
 def metric_payload(record):
@@ -97,8 +118,25 @@ def metric_payload(record):
     payload = {}
     for key, value in record.items():
         if key not in ignored:
-            flatten_numeric(f"{prefix}/{key}", value, payload)
-    payload["progress/segment"] = int(record.get("segment", 0))
+            metric_prefix = f"{prefix}/{key}"
+            if key == "return_path_consistency" and isinstance(value, dict):
+                flatten_return_path_consistency(metric_prefix, value, payload)
+            else:
+                flatten_numeric(metric_prefix, value, payload)
+    segment = int(record.get("segment", 0))
+    total_segments = int(record.get("total_segments", 0))
+    payload["progress/segment"] = segment
+    if total_segments > 0:
+        if record_type == "train":
+            total_steps = max(1, int(record.get("total_steps", 1)))
+            completed = max(0, segment - 1) + min(
+                1.0, int(record.get("step", 0)) / total_steps
+            )
+        else:
+            completed = segment
+        payload["progress/completed_segments"] = completed
+        payload["progress/total_segments"] = total_segments
+        payload["progress/completion_percent"] = 100.0 * completed / total_segments
     return payload
 
 
@@ -179,13 +217,13 @@ def main():
         experiment_name=args.experiment_name,
         id=args.run_id,
         resume="allow",
-        tags=["kronos", "v1-beta", "natural-validation", "a800-relay"],
+        tags=["kronos", "beta-training", "full-validation", "a800-relay"],
         config={
             "source_host": args.host,
             "source_metrics": args.remote_metrics,
             "poll_seconds": args.poll_seconds,
             "steps_per_segment": args.steps_per_segment,
-            "transport": "local_tssh_relay",
+            "transport": f"local_{args.transport}_relay",
             "validation_periods": ["2025H2", "2026H1"],
         },
     )
@@ -209,14 +247,17 @@ def main():
         while not stop_requested:
             try:
                 if args.remote_baseline and not state.get("baseline_logged", False):
-                    _, raw = fetch_remote_bytes(args.host, args.remote_baseline, 0)
+                    _, raw = fetch_remote_bytes(
+                        args.host, args.remote_baseline, 0, args.transport
+                    )
                     run.log(baseline_payload(json.loads(raw)), step=0)
                     state["baseline_logged"] = True
                     save_state(args.state, state)
                     print("baseline uploaded", flush=True)
 
                 start, data = fetch_remote_bytes(
-                    args.host, args.remote_metrics, int(state["offset"])
+                    args.host, args.remote_metrics, int(state["offset"]),
+                    args.transport,
                 )
                 before = int(state["records_logged"])
                 log_complete_lines(

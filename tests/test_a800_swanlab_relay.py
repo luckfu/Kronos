@@ -66,6 +66,49 @@ def test_metric_payload_flattens_period_metrics():
     assert payload["progress/segment"] == 5
 
 
+def test_metric_payload_exposes_progress_and_named_consistency_horizons():
+    relay = load_module()
+    record = {
+        "type": "validation_large",
+        "segment": 2,
+        "total_segments": 946,
+        "beta_v21_score": 0.9286,
+        "return_path_consistency": {
+            "mae": [0.7, 0.8, 0.6, 0.9],
+            "sign_agreement": [0.51, 0.52, 0.53, 0.54],
+            "samples": 2048,
+        },
+    }
+
+    payload = relay.metric_payload(record)
+
+    assert payload["validation/full/beta_v21_score"] == 0.9286
+    assert payload["validation/full/return_path_consistency/mae/D5"] == 0.6
+    assert (
+        payload["validation/full/return_path_consistency/sign_agreement/D10"]
+        == 0.54
+    )
+    assert payload["progress/completed_segments"] == 2
+    assert payload["progress/total_segments"] == 946
+    assert payload["progress/completion_percent"] == 100 * 2 / 946
+
+
+def test_train_progress_includes_current_segment_fraction():
+    relay = load_module()
+    record = {
+        "type": "train",
+        "segment": 3,
+        "total_segments": 10,
+        "step": 156,
+        "total_steps": 312,
+    }
+
+    payload = relay.metric_payload(record)
+
+    assert payload["progress/completed_segments"] == 2.5
+    assert payload["progress/completion_percent"] == 25.0
+
+
 def test_global_step_is_monotonic_across_segment_boundary():
     relay = load_module()
 
