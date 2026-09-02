@@ -214,9 +214,40 @@ def copy_continuation_if_requested(output_root: Path) -> bool:
             )
         source_root = state_paths[0].parent.parent
         print(f"Auto-discovered continuation output: {source_root}", flush=True)
-    required = source_root / "checkpoints/last_state.pt"
-    if not required.is_file():
-        raise SystemExit(f"Continuation has no last_state.pt: {source_root}")
+    required_files = [
+        "checkpoints/last_state.pt",
+        "checkpoints/best_model/model.safetensors",
+        "checkpoints/best_model/config.json",
+        "checkpoints/best_model/best_metric.json",
+        "checkpoints/last_model/model.safetensors",
+        "checkpoints/last_model/config.json",
+        "metrics.jsonl",
+        "progress.json",
+        "summary.json",
+        "small_v21_manifest.json",
+    ]
+    missing = [name for name in required_files if not (source_root / name).is_file()]
+    if missing:
+        raise SystemExit(
+            f"Continuation output contract is incomplete at {source_root}: {missing}"
+        )
+    progress = json.loads((source_root / "progress.json").read_text())
+    if progress.get("status") not in {"stopped", "completed"}:
+        raise SystemExit(f"Continuation output is not durable: {progress}")
+    state = source_root / "checkpoints/last_state.pt"
+    historical_metrics = sum(
+        1 for line in (source_root / "metrics.jsonl").read_text().splitlines() if line.strip()
+    )
+    print(
+        json.dumps({
+            "continuation_output": str(source_root),
+            "resume_state": str(state),
+            "historical_metrics_lines": historical_metrics,
+            "resume": True,
+            "next_epoch": progress.get("current_segment", "unknown"),
+        }, ensure_ascii=False),
+        flush=True,
+    )
     if output_root.exists():
         if any(output_root.iterdir()):
             raise SystemExit(f"Output already exists and is not empty: {output_root}")
@@ -342,6 +373,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     project = env.get("SWANLAB_PROJECT", "finance")
     workspace = env.get("SWANLAB_WORKSPACE", "roc_fu")
     experiment_name = env.get("SWANLAB_EXPERIMENT_NAME", EXPERIMENT_NAME)
+    run_id = env.get("SWANLAB_RUN_ID", "small_0_1_bootstrap")
     # Recent SwanLab versions parse SWANLAB_PROJECT as a structured SDK setting.
     # Keep our scalar names explicit in init() instead of exposing them to that parser.
     env.pop("SWANLAB_PROJECT", None)
@@ -359,6 +391,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
         if api_key:
             swanlab.login(api_key=api_key)
         run = swanlab.init(
+            id=run_id,
             project=project,
             workspace=workspace,
             experiment_name=experiment_name,
@@ -368,6 +401,33 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 "KRONOS_PREDICTOR_LEARNING_RATE", "KRONOS_CONDITION_LEARNING_RATE",
             )},
         )
+        metrics_path = Path(env["KRONOS_SAVE_PATH"]) / env["KRONOS_PREDICTOR_SAVE_FOLDER"] / "metrics.jsonl"
+        if metrics_path.is_file():
+            for line in metrics_path.read_text().splitlines():
+                try:
+                    record = json.loads(line)
+                    record_type = record.get("type")
+                    if record_type == "train":
+                        step = int(record.get("step", 0))
+                        segment = int(record.get("segment", 1))
+                        total_steps = int(record.get("total_steps", 625))
+                        run.log({
+                            "train/loss": float(record["loss"]),
+                            "train/forecast_loss": float(record["forecast_loss"]),
+                            "train/history_loss": float(record["history_loss"]),
+                            "segment": segment,
+                        }, step=(segment - 1) * total_steps + step)
+                    elif record_type in {"validation", "validation_large"}:
+                        segment = int(record.get("segment", 1))
+                        total_steps = int(record.get("total_steps", 625))
+                        run.log({
+                            "validation/forecast_loss": float(record["forecast_loss"]),
+                            "validation/history_loss": float(record["history_loss"]),
+                            "validation/full_loss": float(record["full_sequence_loss"]),
+                            "segment": segment,
+                        }, step=segment * total_steps)
+                except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    continue
     except Exception as exc:
         raise SystemExit(f"SwanLab initialization failed before training: {type(exc).__name__}: {exc}") from exc
 
