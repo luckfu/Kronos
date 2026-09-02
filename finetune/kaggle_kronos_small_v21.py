@@ -292,6 +292,14 @@ def write_manifest(output_root: Path, stage: str, data_root: Path, predictor: Pa
 
 def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     """Stream trainer metrics to SwanLab while preserving the trainer process."""
+    project = env.get("SWANLAB_PROJECT", "finance")
+    workspace = env.get("SWANLAB_WORKSPACE", "roc_fu")
+    experiment_name = env.get("SWANLAB_EXPERIMENT_NAME", EXPERIMENT_NAME)
+    # Recent SwanLab versions parse SWANLAB_PROJECT as a structured SDK setting.
+    # Keep our scalar names explicit in init() instead of exposing them to that parser.
+    env.pop("SWANLAB_PROJECT", None)
+    env.pop("SWANLAB_WORKSPACE", None)
+    env.pop("SWANLAB_EXPERIMENT_NAME", None)
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab"], check=True)
         import swanlab
@@ -299,9 +307,9 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
         if api_key:
             swanlab.login(api_key=api_key)
         run = swanlab.init(
-            project=os.getenv("SWANLAB_PROJECT", "finance"),
-            workspace=os.getenv("SWANLAB_WORKSPACE", "roc_fu"),
-            experiment_name=os.getenv("SWANLAB_EXPERIMENT_NAME", EXPERIMENT_NAME),
+            project=project,
+            workspace=workspace,
+            experiment_name=experiment_name,
             tags=["kronos-small", "small_0.1", env.get("KRONOS_SMALL_V21_STAGE", "bootstrap")],
             config={key: env[key] for key in (
                 "KRONOS_LOOKBACK_WINDOW", "KRONOS_PREDICT_WINDOW", "KRONOS_CONTEXT_LAYER",
