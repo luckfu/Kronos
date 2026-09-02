@@ -300,6 +300,11 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     env.pop("SWANLAB_PROJECT", None)
     env.pop("SWANLAB_WORKSPACE", None)
     env.pop("SWANLAB_EXPERIMENT_NAME", None)
+    # SwanLab reads the current process environment during init(), so clearing
+    # only the child-process environment is insufficient on Kaggle.
+    os.environ.pop("SWANLAB_PROJECT", None)
+    os.environ.pop("SWANLAB_WORKSPACE", None)
+    os.environ.pop("SWANLAB_EXPERIMENT_NAME", None)
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab"], check=True)
         import swanlab
