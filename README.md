@@ -2,11 +2,12 @@
 
 > 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
 
-最新全市场训练版本为 **Beta V1.3**，同时发布 `Best@343` 与 `Last@528`。稳定本地入口为
-`models/a_share_v1_beta/releases/beta_v1.3/best_model` 和
-`models/a_share_v1_beta/releases/beta_v1.3/last_model`。发布依据和使用边界见
-[`finetune/BETA_V1_3_RELEASE_CN.md`](finetune/BETA_V1_3_RELEASE_CN.md)。该训练版本没有自动
-替换推理部署。
+当前可跨机器获取的最新正式研究权重为 **Beta v2.0 Best@687**。它使用整股票
+90/10 隔离验证选点，已发布到
+[ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-0)；模型 SHA-256 为
+`e603fe3178d61ee7feb8a5b0ad520d13166d533785f12d0a4f51d85db0a91ed3`。Beta v2.1
+决策目标训练仍在 A800 上运行，尚不是发布版本。跨机器开发、部署与训练监控的当前
+交接入口见 [`finetune/CROSS_MACHINE_HANDOFF_CN.md`](finetune/CROSS_MACHINE_HANDOFF_CN.md)。
 
 当前 Web UI 与 Serverless 推理契约仍按 **Beta V1.2** 运行，默认使用 `Best@871`，并保留
 `Last@1056` 作为完整两遍训练终点。稳定本地入口为
