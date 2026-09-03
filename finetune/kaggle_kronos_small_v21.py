@@ -440,7 +440,9 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     segment = 0
     total_steps = 1
     for line in child.stdout:
-        print(line, end="")
+        # Kaggle captures the parent process stdout; flush every forwarded
+        # child line so CLI logs are not delayed by block buffering.
+        print(line, end="", flush=True)
         match = TRAIN_LOG_RE.search(line)
         if match:
             segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
