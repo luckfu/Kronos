@@ -44,10 +44,10 @@ STAGES = {
     "main": {
         "output": "small_0.1_main",
         "parent_env": "KRONOS_SMALL_V21_PARENT_MODEL",
-        "predictor_lr": "5e-6",
-        "condition_lr": "5e-6",
-        "warmup_start_lr": "5e-7",
-        "condition_warmup_start_lr": "5e-7",
+        "predictor_lr": "1e-5",
+        "condition_lr": "1e-5",
+        "warmup_start_lr": "1e-6",
+        "condition_warmup_start_lr": "1e-6",
         "auxiliary": "0",
         "validation_full_only": "1",
         "best_metric": "forecast",
@@ -199,6 +199,11 @@ def resolve_stage_predictor(stage: str, runtime: Path) -> Path:
 
 def copy_continuation_if_requested(output_root: Path) -> bool:
     """Import a complete prior output tree for same-stage Kaggle continuation."""
+    if os.getenv("KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION", "0").strip().lower() in {
+        "1", "true", "yes", "on",
+    }:
+        print("Same-stage continuation disabled for cross-stage initialization.", flush=True)
+        return False
     source = os.getenv("KRONOS_SMALL_V21_CONTINUATION_ROOT", "").strip()
     if source:
         source_root = Path(source).expanduser().resolve()
@@ -262,10 +267,9 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
     output_root = runtime / "outputs/models" / output_name
     env = os.environ.copy()
     metadata = metadata_path(data_root)
-    fixed_manifest_path, fixed_manifest = fixed_validation_manifest(
-        Path(__file__).resolve().parents[1], data_root
-    )
-    fixed_selection = fixed_manifest["selection"]
+    data_manifest_path = data_root / "data_manifest.json"
+    data_manifest = json.loads(data_manifest_path.read_text())
+    window_contract = data_manifest.get("window_contract", {})
     env.update({
         "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
         "KMP_DUPLICATE_LIB_OK": "TRUE",
@@ -273,10 +277,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_TRAIN_DATA_PATHS": str(data_root / "processed_datasets/train_data.pkl"),
         "KRONOS_VAL_DATA_PATHS": str(data_root / "processed_datasets/val_data.pkl"),
         "KRONOS_METADATA_PATH": str(metadata),
-        "KRONOS_DATA_MANIFEST_SHA256": fixed_manifest["source"]["data_manifest_sha256"],
-        "KRONOS_FIXED_VALIDATION_MANIFEST_PATH": str(fixed_manifest_path),
-        "KRONOS_FIXED_VALIDATION_MANIFEST_SHA256": sha256_file(fixed_manifest_path),
-        "KRONOS_EXCLUDE_FIXED_VALIDATION_FROM_TRAINING": "1",
+        "KRONOS_DATA_MANIFEST_SHA256": sha256_file(data_manifest_path),
         "KRONOS_PREDICTOR_PATH": str(predictor),
         "KRONOS_TOKENIZER_PATH": str(tokenizer),
         "KRONOS_SAVE_PATH": str(runtime / "outputs/models"),
@@ -316,8 +317,8 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_EARLY_STOPPING_PATIENCE": "0",
         "KRONOS_VALIDATION_FULL_ONLY": settings["validation_full_only"],
         "KRONOS_VALIDATION_SAMPLES": "0",
-        "KRONOS_VALIDATION_QUICK_SAMPLES": str(fixed_selection["quick_samples"]),
-        "KRONOS_VALIDATION_LARGE_SAMPLES": str(fixed_selection["large_samples"]),
+        "KRONOS_VALIDATION_QUICK_SAMPLES": "0",
+        "KRONOS_VALIDATION_LARGE_SAMPLES": "0",
         "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS": "1000000",
         "KRONOS_BATCH_SIZE": os.getenv("KRONOS_BATCH_SIZE", "32"),
         "KRONOS_NUM_WORKERS": os.getenv("KRONOS_NUM_WORKERS", "2"),
@@ -329,6 +330,28 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_RESUME_TRAINING": "1" if (output_root / "checkpoints/last_state.pt").is_file() else "0",
         "PYTHONUNBUFFERED": "1",
     })
+    signal_start = window_contract.get("validation_signal_start")
+    signal_end = window_contract.get("validation_signal_end")
+    if signal_start:
+        env["KRONOS_VAL_SIGNAL_START"] = str(signal_start)
+    if signal_end:
+        env["KRONOS_VAL_SIGNAL_END"] = str(signal_end)
+    if stage == "bootstrap":
+        fixed_manifest_path, fixed_manifest = fixed_validation_manifest(
+            Path(__file__).resolve().parents[1], data_root
+        )
+        fixed_selection = fixed_manifest["selection"]
+        env.update({
+            "KRONOS_FIXED_VALIDATION_MANIFEST_PATH": str(fixed_manifest_path),
+            "KRONOS_FIXED_VALIDATION_MANIFEST_SHA256": sha256_file(fixed_manifest_path),
+            "KRONOS_EXCLUDE_FIXED_VALIDATION_FROM_TRAINING": "1",
+            "KRONOS_VALIDATION_QUICK_SAMPLES": str(fixed_selection["quick_samples"]),
+            "KRONOS_VALIDATION_LARGE_SAMPLES": str(fixed_selection["large_samples"]),
+        })
+    else:
+        env.pop("KRONOS_FIXED_VALIDATION_MANIFEST_PATH", None)
+        env.pop("KRONOS_FIXED_VALIDATION_MANIFEST_SHA256", None)
+        env["KRONOS_EXCLUDE_FIXED_VALIDATION_FROM_TRAINING"] = "0"
     return env
 
 
@@ -359,6 +382,7 @@ def write_manifest(output_root: Path, stage: str, data_root: Path, predictor: Pa
         "validation": {
             "selection": STAGES[stage]["best_metric"],
             "full_symbol_holdout_required": stage != "bootstrap",
+            "profile": "balanced_20k" if stage == "bootstrap" else "full_natural",
             "quick_validation_is_telemetry_only": True,
         },
     }
