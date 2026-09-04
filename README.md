@@ -2,11 +2,11 @@
 
 > 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
 
-当前可跨机器获取的最新正式研究权重为 **Beta v2.0 Best@687**。它使用整股票
+当前可跨机器获取的最新正式研究权重为 **Beta v2.1 Best@475**。它使用整股票
 90/10 隔离验证选点，已发布到
-[ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-0)；模型 SHA-256 为
-`e603fe3178d61ee7feb8a5b0ad520d13166d533785f12d0a4f51d85db0a91ed3`。Beta v2.1
-决策目标训练仍在 A800 上运行，尚不是发布版本。跨机器开发、部署与训练监控的当前
+[ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)；Beta v2.1 Best@475
+模型 SHA-256 为 `e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97`。
+它是研究发布版本，不包含 Last 或优化器状态。跨机器开发、部署与训练监控的当前
 交接入口见 [`finetune/CROSS_MACHINE_HANDOFF_CN.md`](finetune/CROSS_MACHINE_HANDOFF_CN.md)。
 
 当前 Web UI 与 Serverless 推理契约仍按 **Beta V1.2** 运行，默认使用 `Best@871`，并保留
@@ -41,7 +41,7 @@ Beta 系列的推理输入和全市场市值百分位准备规则见
 - 完整训练终点：`models/a_share_v1_beta/releases/beta_v1.2/last_model`（`Last@1056`）
 - 设备：自动选择 `MPS → CUDA → CPU`
 
-公开权重发布在 [ModelScope: `luckfu/Kronos-A-Share-Beta-V1-2`](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V1-2)。`Best@871` 在固定 24k 验证集上优于 `Last@1056`，因此作为页面和 Serverless 默认模型。它尚未在全新严格未来时间段完成评估，仍是研究候选，不构成生产交易系统。
+公开权重发布在 [ModelScope: `luckfu/Kronos-A-Share-Beta-V2-1`](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)。Beta v2.1 Best@475 在 2026 年 8 月成熟时间外评估中方向准确率为 45.45%、balanced accuracy 为 38.21%、Rank IC 为 0.1102；这些指标不构成盈利承诺。
 
 ## 行业与连续市值条件
 
