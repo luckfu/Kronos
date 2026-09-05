@@ -1,0 +1,12 @@
+{
+  "id": "wynstonliu/kronos-small-0-1-main-chunk-3",
+  "title": "Kronos Small 0 1 Main Chunk 3",
+  "code_file": "kaggle_small_0_1_main_chunk3.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["wynstonliu/kronos-small-0-1-main-chunk-2"]
+}
