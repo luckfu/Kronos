@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 # The training implementation is pinned to the reviewed Stage 2 commit.
-EXPECTED_GIT_COMMIT = "f2470712abcef100ca3abd8c95bdf8101652ad57"
+EXPECTED_GIT_COMMIT = "abb86f3405b03ca38c26b96f77675ffddd1e307b"
 EXPECTED_PARENT_SEGMENT = 141
 MAX_SEGMENTS_PER_RUN = 140
 
