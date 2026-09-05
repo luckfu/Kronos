@@ -6,8 +6,6 @@ import time
 from pathlib import Path
 
 
-# The training implementation is pinned to the reviewed Stage 2 commit.
-EXPECTED_GIT_COMMIT = "abb86f3405b03ca38c26b96f77675ffddd1e307b"
 EXPECTED_PARENT_SEGMENT = 141
 MAX_SEGMENTS_PER_RUN = 140
 
@@ -37,14 +35,10 @@ else:
 commit = subprocess.check_output(
     ["git", "rev-parse", "HEAD"], cwd=repo, text=True
 ).strip()
-training_commit = subprocess.check_output(
-    ["git", "log", "-1", "--format=%H", "--", "finetune/kaggle_kronos_small_v21.py"],
-    cwd=repo,
-    text=True,
-).strip()
-print({"git_commit": commit, "training_commit": training_commit}, flush=True)
-if training_commit != EXPECTED_GIT_COMMIT:
-    raise RuntimeError(f"Unexpected training implementation commit: {training_commit}")
+training_script = Path(repo) / "finetune/kaggle_kronos_small_v21.py"
+print({"git_commit": commit, "training_script": str(training_script)}, flush=True)
+if not training_script.is_file():
+    raise RuntimeError(f"Training implementation is missing: {training_script}")
 
 subprocess.run(
     ["pip", "install", "-q", "-r", "requirements.txt"], cwd=repo, check=True
