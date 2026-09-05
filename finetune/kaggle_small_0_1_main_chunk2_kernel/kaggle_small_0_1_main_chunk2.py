@@ -19,7 +19,7 @@ for attempt in range(1, 6):
             "git",
             "clone",
             "--depth",
-            "1",
+            "3",
             "--branch",
             "master",
             "https://github.com/luckfu/Kronos.git",
