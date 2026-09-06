@@ -518,7 +518,9 @@ def run(stage: str | None = None) -> None:
             "KRONOS_SMALL_V21_TOKENIZER", "NeoQuasar/Kronos-Tokenizer-base", model_root / "Kronos-Tokenizer-base"
         )
 
-    output_name = STAGES[stage]["output"]
+    output_name = os.getenv("KRONOS_SMALL_V21_OUTPUT_NAME", STAGES[stage]["output"]).strip()
+    if not output_name:
+        raise SystemExit("KRONOS_SMALL_V21_OUTPUT_NAME cannot be empty")
     output_root = runtime / "outputs/models" / output_name
     copy_continuation_if_requested(output_root)
     env = build_environment(stage, data_root, predictor, tokenizer, runtime, output_name)
