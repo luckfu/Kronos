@@ -311,6 +311,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_BETA_V21_EMA_DECAY": "0.99",
         "KRONOS_BETA_V21_CONSISTENCY_SAMPLES": "2048",
         "KRONOS_TRAIN_SAMPLES_PER_SEGMENT": "20000",
+        "KRONOS_COVERAGE_SEED": os.getenv("KRONOS_COVERAGE_SEED", "100"),
         "KRONOS_COVERAGE_PASSES": "1",
         "KRONOS_EPOCHS": "1",
         "KRONOS_REQUIRE_FULL_COVERAGE": "1",
@@ -394,6 +395,9 @@ def write_manifest(output_root: Path, stage: str, data_root: Path, predictor: Pa
 
 def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     """Stream trainer metrics to SwanLab while preserving the trainer process."""
+    # The Kaggle wrapper must not buffer either side of the pipe.  Without
+    # this, the child can be healthy while the CLI appears silent for minutes.
+    env["PYTHONUNBUFFERED"] = "1"
     project = env.get("SWANLAB_PROJECT", "finance")
     workspace = env.get("SWANLAB_WORKSPACE", "roc_fu")
     experiment_name = env.get("SWANLAB_EXPERIMENT_NAME", EXPERIMENT_NAME)
@@ -461,26 +465,34 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
         cwd=repo_root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
     )
+    log_path = Path(env["KRONOS_SAVE_PATH"]) / env["KRONOS_PREDICTOR_SAVE_FOLDER"] / "run.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = log_path.open("a", buffering=1)
     segment = 0
     total_steps = 1
-    for line in child.stdout:
-        # Kaggle captures the parent process stdout; flush every forwarded
-        # child line so CLI logs are not delayed by block buffering.
-        print(line, end="", flush=True)
-        match = TRAIN_LOG_RE.search(line)
-        if match:
-            segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
-            segment, step, total_steps = int(segment), int(step), int(total_steps)
-            run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
-                     "train/history_loss": float(history), "train/learning_rate": float(lr),
-                     "train/condition_learning_rate": float(condition_lr), "segment": segment},
-                    step=(segment - 1) * total_steps + step)
-        match = VALIDATION_LOG_RE.search(line)
-        if match and segment:
-            forecast, history, full = map(float, match.groups())
-            run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
-                     "validation/full_loss": full, "segment": segment}, step=segment * total_steps)
-    return_code = child.wait()
+    try:
+        for line in child.stdout:
+            # Persist first, then forward. Both writes are line-buffered and
+            # the explicit flush makes the parent visible to Kaggle capture.
+            log_handle.write(line)
+            log_handle.flush()
+            print(line, end="", flush=True)
+            match = TRAIN_LOG_RE.search(line)
+            if match:
+                segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
+                segment, step, total_steps = int(segment), int(step), int(total_steps)
+                run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
+                         "train/history_loss": float(history), "train/learning_rate": float(lr),
+                         "train/condition_learning_rate": float(condition_lr), "segment": segment},
+                        step=(segment - 1) * total_steps + step)
+            match = VALIDATION_LOG_RE.search(line)
+            if match and segment:
+                forecast, history, full = map(float, match.groups())
+                run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
+                         "validation/full_loss": full, "segment": segment}, step=segment * total_steps)
+    finally:
+        return_code = child.wait()
+        log_handle.close()
     swanlab.finish()
     if return_code:
         raise subprocess.CalledProcessError(return_code, child.args)

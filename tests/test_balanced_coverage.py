@@ -23,6 +23,17 @@ def test_balanced_coverage_uses_every_position_once():
     assert counts.tolist() == [2, 2, 2, 2]
 
 
+def test_balanced_coverage_seed_is_reproducible_and_rotatable():
+    bucket_ids = np.repeat(np.arange(5, dtype=np.uint8), 20)
+    first = build_balanced_coverage_order(bucket_ids, segment_size=20, seed=100)
+    repeated = build_balanced_coverage_order(bucket_ids, segment_size=20, seed=100)
+    rotated = build_balanced_coverage_order(bucket_ids, segment_size=20, seed=20260907)
+
+    assert np.array_equal(first, repeated)
+    assert not np.array_equal(first, rotated)
+    assert sorted(rotated.tolist()) == list(range(len(bucket_ids)))
+
+
 def test_balanced_coverage_finishes_small_buckets_without_duplicates():
     bucket_ids = np.repeat(np.arange(3, dtype=np.uint8), [3, 7, 11])
     order = build_balanced_coverage_order(bucket_ids, segment_size=6, seed=5)

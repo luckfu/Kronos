@@ -542,7 +542,8 @@ class QlibDataset(Dataset):
             raise ValueError('Signal-date index is not aligned with dataset indices')
         requested = int(self.configured_samples)
         self.n_samples = self.total_samples if requested <= 0 else min(requested, self.total_samples)
-        permutation_seed = self.config.seed + (0 if data_type == 'train' else 1)
+        coverage_seed = int(getattr(self.config, 'coverage_seed', self.config.seed))
+        permutation_seed = coverage_seed + (0 if data_type == 'train' else 1)
         self.quick_validation_count = self.n_samples
         self.fixed_validation_manifest_sha256 = None
         self.validation_period_codes = None
@@ -586,6 +587,7 @@ class QlibDataset(Dataset):
         self.active_positions = self.coverage_order[:self.n_samples]
         self.coverage_start = 0
         self.selection_report = {
+            'coverage_seed': coverage_seed,
             'recent_samples': recent_samples,
             'replay_samples': replay_samples,
             'replay_ratio': replay_samples / self.total_samples if self.total_samples else 0.0,

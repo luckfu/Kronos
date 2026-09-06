@@ -74,15 +74,19 @@ P100 固定使用已验证环境 `torch==2.5.1+cu121`。入口读取 `nvidia-smi
 - 启动日志打印 `continuation_output`、`resume_state`、历史 metrics 行数、Best loss、`next_epoch` 和下一 segment。
 - schedule、coverage 顺序、总 segment、数据清单和实验配置必须与来源一致。
 
-## 第九条：日志必须实时且可审计
+## 第九条：所有 Kaggle 代码必须实时输出且可审计
 
-训练子进程设置 `PYTHONUNBUFFERED=1`；外层逐行转发必须使用：
+所有子进程设置 `PYTHONUNBUFFERED=1`；外层逐行转发必须使用：
 
 ```python
 print(line, end="", flush=True)
 ```
 
-`kaggle kernels logs` 为空或延迟时，先区分 stdout 未刷新、任务仍运行和任务失败，再读取完整 traceback/Output。页面日志只用于实时观察，持久化 `run.log` 和 `metrics.jsonl` 才是历史记录。
+页面日志和 `kaggle kernels logs` 必须能实时观察当前阶段；持久化 `run.log` 和 `metrics.jsonl` 是历史事实来源。
+
+本条适用于训练、续训、评估、数据构建、模型下载、依赖安装和任何其他 Kaggle Kernel；不能只在训练循环里加 `print`。每个入口必须在每个可能持续超过 10 秒的阶段前后打印带时间戳的状态行（例如 `phase=install_dependencies`、`phase=download_model`、`phase=load_dataset`、`phase=training`、`phase=validation`、`phase=export`），并将相同内容以行缓冲方式追加到持久化 `run.log`。入口进程必须设置 `PYTHONUNBUFFERED=1`；调用子进程必须使用 `-u` 或等价无缓冲设置、`stdout=PIPE`、`stderr=STDOUT`、`text=True`、`bufsize=1`，父进程逐行 `print(line, end="", flush=True)` 转发，同时写入 `run.log`。禁止使用 `-q` 掩盖关键阶段错误，禁止只依赖 tqdm 的回车刷新，禁止让下载/安装/模型加载阶段无状态输出。
+
+**硬门槛（不可例外）**：入口第一条带时间戳的 `phase=started` 必须在进程启动后立即输出。Kernel 进入 `RUNNING` 后，允许平台采集最多 60 秒的宽限；超过 60 秒 `kaggle kernels logs` 仍为空，或任一长阶段超过 60 秒没有心跳，按“实时日志契约失败”处理，优先检查并修复代码的缓冲、管道转发和阶段埋点，禁止解释为正常的 CLI 延迟。状态判定仍以 `kaggle kernels status` 为准；不得把空日志直接解释为任务失败或完成，也不得在旧 Kernel 仍活动时并发 push。每次监控必须同时记录状态、最后一条日志时间、当前 phase、Output 文件列表和检查时间。
 
 ## 第十条：监控和完成判定
 
@@ -114,7 +118,8 @@ kaggle kernels output <owner>/<slug> -p /tmp/<check> -o
 - [ ] 验证候选数 = Dataset 长度 = 实际验证数
 - [ ] State/Best/Last、日志、指标、progress、summary、manifest 契约已实现
 - [ ] `max_segments_per_run` 和接力来源已提前验证
-- [ ] 子进程 unbuffered、父进程 `flush=True`
+- [ ] 所有入口无缓冲；安装/下载/加载/执行/导出均有时间戳心跳并同步写入 `run.log`
+- [ ] 所有子进程 `stdout/stderr` 合并、逐行转发、父进程 `flush=True`；无静默长阶段
 - [ ] 监控命令、完成判定和失败回滚点已写入任务记录
 
 ## 附录：规则来源

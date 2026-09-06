@@ -405,6 +405,9 @@ class Config:
 
         # Miscellaneous
         self.seed = 100  # Global random seed for reproducibility.
+        # Keep coverage ordering independently reproducible so a new training
+        # pass can use a different permutation without changing model RNG.
+        self.coverage_seed = int(os.getenv("KRONOS_COVERAGE_SEED", str(self.seed)))
 
         # =================================================================
         # Experiment Logging & Saving

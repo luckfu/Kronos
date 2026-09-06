@@ -172,6 +172,7 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
     """Values that must remain identical when an output tree is continued."""
     keys = (
         'lookback_window', 'predict_window', 'batch_size', 'use_amp', 'n_train_iter',
+        'coverage_seed',
         'n_val_iter', 'coverage_passes', 'effective_epochs',
         'segments_per_coverage', 'scheduler_type', 'scheduler_min_learning_rate',
         'predictor_min_learning_rate', 'condition_min_learning_rate',
