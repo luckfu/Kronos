@@ -1,0 +1,12 @@
+{
+  "id": "luckfu/kronos-small-0-1-main-final",
+  "title": "Kronos Small 0 1 Main Final",
+  "code_file": "kaggle_small_0_1_main_final.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["wynstonliu/kronos-small-0-1-main-chunk-4"]
+}
