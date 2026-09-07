@@ -409,6 +409,17 @@ def warmup_cosine_multiplier(step, total_steps, warmup_steps, start_lr, peak_lr,
     return learning_rate / peak_lr
 
 
+def warmup_constant_multiplier(step, warmup_steps, start_lr, peak_lr):
+    """Warm up linearly, then hold the configured peak learning rate."""
+    step = max(0, int(step))
+    if step <= warmup_steps:
+        progress = step / max(1, int(warmup_steps))
+        learning_rate = start_lr + (peak_lr - start_lr) * progress
+    else:
+        learning_rate = peak_lr
+    return learning_rate / peak_lr
+
+
 def two_speed_multiplier(
     step, total_steps, warmup_steps, start_lr, peak_lr, min_lr,
     family, condition_fast_decay_steps, condition_fast_decay_lr,
@@ -1285,7 +1296,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         for segment in range(effective_epochs)
     )
     scheduler_type = config.get('scheduler_type', 'warmup_cosine')
-    if scheduler_type not in {'warmup_cosine', 'two_speed', 'uniform_cosine', 'fixed', 'one_cycle'}:
+    if scheduler_type not in {'warmup_cosine', 'warmup_constant', 'two_speed', 'uniform_cosine', 'fixed', 'one_cycle'}:
         raise ValueError('Unsupported v1-beta scheduler type')
     warmup_steps = max(
         1,
@@ -1312,6 +1323,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         (
             lambda step: 1.0
         ) if scheduler_type == 'fixed' else (
+            lambda step, group=group: warmup_constant_multiplier(
+                step,
+                warmup_steps,
+                float(group['warmup_start_lr']),
+                float(group['peak_lr']),
+            )
+        ) if scheduler_type == 'warmup_constant' else (
             lambda step, group=group: two_speed_multiplier(
                 step,
                 scheduler_steps,

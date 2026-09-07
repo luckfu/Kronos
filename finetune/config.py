@@ -304,11 +304,11 @@ class Config:
             "KRONOS_SCHEDULER", "warmup_cosine"
         ).strip().lower()
         if self.scheduler_type not in {
-            "warmup_cosine", "two_speed", "uniform_cosine", "fixed", "one_cycle"
+            "warmup_cosine", "warmup_constant", "two_speed", "uniform_cosine", "fixed", "one_cycle"
         }:
             raise ValueError(
                 "v1-beta optimized training requires "
-                "KRONOS_SCHEDULER=warmup_cosine, two_speed, uniform_cosine, fixed, or one_cycle"
+                "KRONOS_SCHEDULER=warmup_cosine, warmup_constant, two_speed, uniform_cosine, fixed, or one_cycle"
             )
         self.scheduler_warmup_ratio = float(
             os.getenv("KRONOS_SCHEDULER_WARMUP_RATIO", "0.02")
