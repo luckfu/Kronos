@@ -296,7 +296,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_PREDICTOR_LOSS_MODE": "forecast",
         "KRONOS_HISTORY_LOSS_WEIGHT": "0.02",
         "KRONOS_FORECAST_HORIZON_WEIGHTS": "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
-        "KRONOS_SCHEDULER": "warmup_cosine",
+        "KRONOS_SCHEDULER": os.getenv("KRONOS_SCHEDULER", "warmup_cosine"),
         "KRONOS_SCHEDULER_WARMUP_RATIO": "0.01",
         "KRONOS_PREDICTOR_LEARNING_RATE": settings["predictor_lr"],
         "KRONOS_CONDITION_LEARNING_RATE": settings["condition_lr"],
