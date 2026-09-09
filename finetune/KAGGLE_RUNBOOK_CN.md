@@ -82,17 +82,60 @@ P100 固定使用已验证环境 `torch==2.5.1+cu121`。入口读取 `nvidia-smi
 print(line, end="", flush=True)
 ```
 
-页面日志和 `kaggle kernels logs` 必须能实时观察当前阶段；持久化 `run.log` 和 `metrics.jsonl` 是历史事实来源。
+页面日志和 `kaggle kernels logs --follow` 必须能实时观察当前阶段；持久化 `run.log` 和 `metrics.jsonl` 是历史事实来源。
 
 本条适用于训练、续训、评估、数据构建、模型下载、依赖安装和任何其他 Kaggle Kernel；不能只在训练循环里加 `print`。每个入口必须在每个可能持续超过 10 秒的阶段前后打印带时间戳的状态行（例如 `phase=install_dependencies`、`phase=download_model`、`phase=load_dataset`、`phase=training`、`phase=validation`、`phase=export`），并将相同内容以行缓冲方式追加到持久化 `run.log`。入口进程必须设置 `PYTHONUNBUFFERED=1`；调用子进程必须使用 `-u` 或等价无缓冲设置、`stdout=PIPE`、`stderr=STDOUT`、`text=True`、`bufsize=1`，父进程逐行 `print(line, end="", flush=True)` 转发，同时写入 `run.log`。禁止使用 `-q` 掩盖关键阶段错误，禁止只依赖 tqdm 的回车刷新，禁止让下载/安装/模型加载阶段无状态输出。
 
-**硬门槛（不可例外）**：入口第一条带时间戳的 `phase=started` 必须在进程启动后立即输出。Kernel 进入 `RUNNING` 后，允许平台采集最多 60 秒的宽限；超过 60 秒 `kaggle kernels logs` 仍为空，或任一长阶段超过 60 秒没有心跳，按“实时日志契约失败”处理，优先检查并修复代码的缓冲、管道转发和阶段埋点，禁止解释为正常的 CLI 延迟。状态判定仍以 `kaggle kernels status` 为准；不得把空日志直接解释为任务失败或完成，也不得在旧 Kernel 仍活动时并发 push。每次监控必须同时记录状态、最后一条日志时间、当前 phase、Output 文件列表和检查时间。
+**硬门槛（不可例外）**：入口第一条带时间戳的 `phase=started` 必须在进程启动后立即输出。Kernel 进入 `RUNNING` 后，允许平台采集最多 60 秒的宽限；超过 60 秒 `kaggle kernels logs --follow` 仍无任何事件，且页面也没有日志，或任一长阶段超过 60 秒没有心跳，才按“实时日志契约失败”处理，优先检查并修复代码的缓冲、管道转发和阶段埋点。状态判定仍以 `kaggle kernels status` 为准；不得把任何日志接口的空结果直接解释为任务失败或完成，也不得在旧 Kernel 仍活动时并发 push。每次监控必须同时记录状态、最后一条日志时间、当前 phase、Output 文件列表和检查时间。
+
+### 实时日志命令不可省略 `--follow`
+
+Kaggle CLI 2.2.4 中，下面两个命令调用的不是同一个服务端接口，禁止混用：
+
+```bash
+# 运行中实时日志：正确。连接 SSE 日志流，行为类似 tail -f。
+kaggle kernels logs --follow <owner>/<slug>
+
+# 一次性持久化日志：运行中可能合法返回空字符串，仅适合任务结束后读取。
+kaggle kernels logs <owner>/<slug>
+```
+
+不带 `--follow` 时，CLI 调用 `list_kernel_session_output` 并只打印返回对象中的 `log` 字段。Kernel 仍处于 `RUNNING` 时，Kaggle 可能尚未生成最终持久化日志 Blob，因此命令退出码为 0、stdout 长度为 0；即使浏览器页面正在正常显示日志，也会出现这个结果。这不是训练代码丢失输出，不能据此重启、取消或提交新版本。
+
+带 `--follow` 时，CLI 连接 `/api/v1/kernels/logs/stream/<owner>/<slug>` 的 SSE 实时流。服务端会先重放当前 session 已有日志，再持续等待新事件，直到任务结束或用户按 `Ctrl-C`。只想取短快照时可在外层限制时长，例如：
+
+```bash
+timeout 20 kaggle kernels logs --follow <owner>/<slug>
+```
+
+macOS 默认没有 GNU `timeout`；可直接运行 `--follow` 后按 `Ctrl-C`，或使用下面的 Python 只读回退。回退调用的也是实时 SSE 接口，不会修改 Kernel：
+
+```python
+from kaggle.api.kaggle_api_extended import KaggleApi
+
+api = KaggleApi()
+api.authenticate()
+for event in api.kernels_logs_stream("<owner>/<slug>"):
+    data = event.get("data")
+    if data:
+        print(data, end="" if data.endswith("\n") else "\n", flush=True)
+```
+
+实时日志排查顺序固定如下：
+
+1. `kaggle config view` 确认 CLI 账号与 Kernel owner 一致。
+2. `kaggle kernels status <owner>/<slug>` 确认当前状态。
+3. 运行 `kaggle kernels logs --follow <owner>/<slug>`，不得先用无 `--follow` 的空结果下结论。
+4. 若 `--follow` 能看到 `phase=started`、设备、segment/step 和验证心跳，日志契约正常。
+5. 若 `--follow` 超过 60 秒无事件但页面有日志，归类为 CLI/SSE 传输差异；保持任务运行，使用页面或 Python SSE 回退交叉验证，禁止改训练代码。
+6. 只有 `--follow` 与页面均超过 60 秒无入口/阶段心跳，才检查缓冲和管道转发代码。
 
 ## 第十条：监控和完成判定
 
 ```bash
 kaggle kernels status <owner>/<slug>
-kaggle kernels logs <owner>/<slug>
+kaggle kernels logs --follow <owner>/<slug>  # RUNNING 时实时监控
+kaggle kernels logs <owner>/<slug>           # COMPLETE 后读取持久化完整日志
 kaggle kernels output <owner>/<slug> -p /tmp/<check> -o
 ```
 
@@ -120,6 +163,7 @@ kaggle kernels output <owner>/<slug> -p /tmp/<check> -o
 - [ ] `max_segments_per_run` 和接力来源已提前验证
 - [ ] 所有入口无缓冲；安装/下载/加载/执行/导出均有时间戳心跳并同步写入 `run.log`
 - [ ] 所有子进程 `stdout/stderr` 合并、逐行转发、父进程 `flush=True`；无静默长阶段
+- [ ] 实时监控使用 `kaggle kernels logs --follow`；未把无 `--follow` 的空结果误判为无日志
 - [ ] 监控命令、完成判定和失败回滚点已写入任务记录
 
 ## 附录：规则来源
