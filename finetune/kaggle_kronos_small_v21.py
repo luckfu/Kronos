@@ -470,8 +470,19 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
             flush=True,
         )
 
+    training_command = [sys.executable, "-u", str(repo_root / "finetune/train_predictor.py")]
+    nproc = int(env.get("KRONOS_TORCHRUN_NPROC_PER_NODE", "1"))
+    if nproc > 1:
+        training_command = [
+            sys.executable, "-u", "-m", "torch.distributed.run",
+            "--standalone", f"--nproc_per_node={nproc}",
+            str(repo_root / "finetune/train_predictor.py"),
+        ]
+        print({"phase": "launch_training", "launcher": "torchrun", "nproc_per_node": nproc}, flush=True)
+    else:
+        print({"phase": "launch_training", "launcher": "python", "nproc_per_node": 1}, flush=True)
     child = subprocess.Popen(
-        [sys.executable, "-u", str(repo_root / "finetune/train_predictor.py")],
+        training_command,
         cwd=repo_root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
     )

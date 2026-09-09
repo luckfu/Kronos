@@ -1,0 +1,17 @@
+{
+  "id": "smmt315/kronos-small-0-1-stage2-wc-dual-t4",
+  "title": "Kronos Small 0 1 Stage2 Wc Dual T4",
+  "code_file": "kaggle_small_0_1_stage2_wc_dual_t4.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout"
+  ],
+  "kernel_sources": [
+    "smmt315/kronos-small-0-1-stage2-wc-c5-t4"
+  ]
+}

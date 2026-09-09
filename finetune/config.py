@@ -155,6 +155,13 @@ class Config:
         self.max_segments_per_run = int(
             os.getenv("KRONOS_MAX_SEGMENTS_PER_RUN", "0")
         )
+        # Optional wall-clock budget. The trainer checks this only after a
+        # complete segment and its validation, so a timed stop is resumable.
+        self.max_runtime_seconds = float(
+            os.getenv("KRONOS_MAX_RUNTIME_SECONDS", "0")
+        )
+        if self.max_runtime_seconds < 0:
+            raise ValueError("KRONOS_MAX_RUNTIME_SECONDS must be non-negative")
         self.require_full_coverage = os.getenv(
             "KRONOS_REQUIRE_FULL_COVERAGE", "1"
         ).strip().lower() in {"1", "true", "yes", "on"}

@@ -1254,6 +1254,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     )
     effective_epochs = max(int(config['epochs']), required_segments)
     max_segments_per_run = max(0, int(config.get('max_segments_per_run', 0)))
+    max_runtime_seconds = max(
+        0.0, float(config.get('max_runtime_seconds', 0.0) or 0.0)
+    )
     resume_guard = build_resume_guard(
         config, effective_epochs, segments_per_coverage
     )
@@ -2270,6 +2273,34 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 )
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
+
+        # A wall-clock stop is evaluated only after validation/checkpointing,
+        # preserving a complete segment and a resumable last_state.pt.
+        runtime_limit_reached = bool(
+            max_runtime_seconds > 0
+            and (time.time() - start_time) >= max_runtime_seconds
+        )
+        if dist.is_available() and dist.is_initialized():
+            decision = torch.tensor(
+                [int(runtime_limit_reached)], device=device, dtype=torch.int32
+            )
+            dist.broadcast(decision, src=0)
+            runtime_limit_reached = bool(decision.item())
+        if runtime_limit_reached:
+            if rank == 0:
+                print(
+                    f"Runtime limit reached after segment {next_segment}; "
+                    "stopping at a durable segment boundary."
+                )
+            dt_result.update({
+                'best_val_loss': best_val_loss,
+                'status': 'stopped',
+                'stop_reason': 'runtime_limit',
+                'completed_segments': next_segment,
+                'resume_segment': next_segment + 1,
+                'total_segments': effective_epochs,
+            })
+            break
 
         if (
             next_segment < effective_epochs
