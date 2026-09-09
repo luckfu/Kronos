@@ -1,4 +1,4 @@
-"""Run one repaired continuation segment on a Kaggle T4 for a speed probe."""
+"""Complete the C4 continuation on a Kaggle T4."""
 
 import json
 import os
@@ -9,8 +9,8 @@ import time
 from pathlib import Path
 
 
-MAX_SEGMENTS_PER_RUN = 1
-STAGE2_EXTENSION_OUTPUT = "small_0.1_stage2_wc_last_c5_t4_probe"
+MAX_SEGMENTS_PER_RUN = 36  # Segments 499 through 534, inclusive.
+STAGE2_EXTENSION_OUTPUT = "small_0.1_stage2_wc_last"
 COVERAGE_SEED = "20260908"
 EXPECTED_NEXT_EPOCH = 498
 EXPECTED_RESUME_SEGMENT = EXPECTED_NEXT_EPOCH + 1
