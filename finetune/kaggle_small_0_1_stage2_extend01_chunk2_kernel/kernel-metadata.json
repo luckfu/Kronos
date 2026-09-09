@@ -1,0 +1,12 @@
+{
+  "id": "luckfu/kronos-small-0-1-stage2-extend-01-c2",
+  "title": "Kronos Small 0 1 Stage2 Extend 01 C2",
+  "code_file": "kaggle_small_0_1_stage2_extend01_chunk2.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["luckfu/kronos-small-0-1-stage2-extend-01"]
+}

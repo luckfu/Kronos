@@ -1,0 +1,12 @@
+{
+  "id": "user281434/kronos-small-0-1-stage2-warmup-constant-last-c4",
+  "title": "Kronos Small 0 1 Stage2 Warmup Constant Last C4",
+  "code_file": "kaggle_small_0_1_stage2_wc_last_chunk4.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["user281434/kronos-small-0-1-stage2-warmup-constant-last-c3"]
+}

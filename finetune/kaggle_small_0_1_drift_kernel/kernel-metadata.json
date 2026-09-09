@@ -1,0 +1,14 @@
+{
+  "id": "wynstonliu/kronos-small-0-1-drift-diagnostic-v2",
+  "title": "Kronos Small 0 1 Drift Diagnostic V2",
+  "code_file": "diagnose.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "kernel_sources": [
+    "wynstonliu/kronos-small-0-1-bootstrap-final",
+    "wynstonliu/kronos-small-0-1-main-chunk-4"
+  ]
+}

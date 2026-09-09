@@ -1,0 +1,12 @@
+{
+  "id": "luckfu/kronos-small-0-1-stage-2-time-oos-evaluation",
+  "title": "Kronos Small 0 1 Stage 2 Time OOS Evaluation",
+  "code_file": "kaggle_small_0_1_oos_eval.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["luckfu/kronos-small-0-1-main-final"]
+}
