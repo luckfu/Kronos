@@ -412,6 +412,8 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     os.environ.pop("SWANLAB_PROJECT", None)
     os.environ.pop("SWANLAB_WORKSPACE", None)
     os.environ.pop("SWANLAB_EXPERIMENT_NAME", None)
+    swanlab = None
+    run = None
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab"], check=True)
         import swanlab
@@ -440,25 +442,33 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                         step = int(record.get("step", 0))
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
+                    if run is not None:
                         run.log({
-                            "train/loss": float(record["loss"]),
-                            "train/forecast_loss": float(record["forecast_loss"]),
-                            "train/history_loss": float(record["history_loss"]),
-                            "segment": segment,
-                        }, step=(segment - 1) * total_steps + step)
+                                "train/loss": float(record["loss"]),
+                                "train/forecast_loss": float(record["forecast_loss"]),
+                                "train/history_loss": float(record["history_loss"]),
+                                "segment": segment,
+                            }, step=(segment - 1) * total_steps + step)
                     elif record_type in {"validation", "validation_large"}:
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
-                        run.log({
-                            "validation/forecast_loss": float(record["forecast_loss"]),
-                            "validation/history_loss": float(record["history_loss"]),
-                            "validation/full_loss": float(record["full_sequence_loss"]),
-                            "segment": segment,
-                        }, step=segment * total_steps)
+                        if run is not None:
+                            run.log({
+                                "validation/forecast_loss": float(record["forecast_loss"]),
+                                "validation/history_loss": float(record["history_loss"]),
+                                "validation/full_loss": float(record["full_sequence_loss"]),
+                                "segment": segment,
+                            }, step=segment * total_steps)
                 except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                     continue
     except Exception as exc:
-        raise SystemExit(f"SwanLab initialization failed before training: {type(exc).__name__}: {exc}") from exc
+        # Kaggle background jobs have no TTY and may not have a SwanLab token.
+        # Training and local checkpointing must continue without remote tracking.
+        print(
+            f"SwanLab unavailable; continuing with local logs only: "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
 
     child = subprocess.Popen(
         [sys.executable, "-u", str(repo_root / "finetune/train_predictor.py")],
@@ -481,19 +491,22 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
             if match:
                 segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
                 segment, step, total_steps = int(segment), int(step), int(total_steps)
-                run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
-                         "train/history_loss": float(history), "train/learning_rate": float(lr),
-                         "train/condition_learning_rate": float(condition_lr), "segment": segment},
-                        step=(segment - 1) * total_steps + step)
+                if run is not None:
+                    run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
+                             "train/history_loss": float(history), "train/learning_rate": float(lr),
+                             "train/condition_learning_rate": float(condition_lr), "segment": segment},
+                            step=(segment - 1) * total_steps + step)
             match = VALIDATION_LOG_RE.search(line)
             if match and segment:
                 forecast, history, full = map(float, match.groups())
-                run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
-                         "validation/full_loss": full, "segment": segment}, step=segment * total_steps)
+                if run is not None:
+                    run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
+                             "validation/full_loss": full, "segment": segment}, step=segment * total_steps)
     finally:
         return_code = child.wait()
         log_handle.close()
-    swanlab.finish()
+    if swanlab is not None:
+        swanlab.finish()
     if return_code:
         raise subprocess.CalledProcessError(return_code, child.args)
 
