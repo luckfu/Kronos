@@ -17,6 +17,20 @@ def setup_ddp():
     Returns:
         tuple: A tuple containing (rank, world_size, local_rank).
     """
+    if os.getenv("KRONOS_DEVICE", "").lower() in {"xla", "tpu"}:
+        try:
+            import torch_xla.core.xla_model as xm
+            rank = int(os.environ.get("ORDINAL", xm.get_ordinal()))
+            world_size = int(os.environ.get("WORLD_SIZE", xm.xrt_world_size()))
+            local_rank = int(os.environ.get("LOCAL_ORDINAL", os.environ.get("LOCAL_RANK", rank)))
+        except ImportError as exc:
+            raise RuntimeError("TPU requested but torch_xla is not installed") from exc
+        print(
+            f"[XLA Setup] Global Rank: {rank}/{world_size}, "
+            f"Local Rank: {local_rank}"
+        )
+        return rank, world_size, local_rank
+
     if "WORLD_SIZE" not in os.environ:
         # Apple MPS and CPU training use a normal single-process loop.
         print("[DDP Setup] WORLD_SIZE is not set; using single-process training.")

@@ -15,6 +15,13 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 try:
+    import torch_xla.core.xla_model as xm
+    from torch_xla.distributed.parallel_loader import MpDeviceLoader
+except ImportError:
+    xm = None
+    MpDeviceLoader = None
+
+try:
     import comet_ml
 except ImportError:
     comet_ml = None
@@ -1178,6 +1185,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         train_loader, val_loader, large_val_loader,
         train_dataset, valid_dataset,
     ) = create_dataloaders(config, rank, world_size)
+    if device.type == 'xla':
+        if MpDeviceLoader is None:
+            raise RuntimeError('TPU requested but torch_xla is not installed')
+        train_loader = MpDeviceLoader(train_loader, device)
+        val_loader = MpDeviceLoader(val_loader, device)
+        large_val_loader = MpDeviceLoader(large_val_loader, device)
     validation_full_only = bool(config.get('validation_full_only', False))
     denominator_path = os.path.join(
         save_dir, 'beta_v21_validation_denominators.json'
@@ -1832,8 +1845,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), max_norm=float(config.get('gradient_clip_norm', 3.0))
             )
-            scaler.step(optimizer)
-            scaler.update()
+            if device.type == 'xla':
+                xm.optimizer_step(optimizer, barrier=True)
+            else:
+                scaler.step(optimizer)
+                scaler.update()
             scheduler.step()
             epoch_loss_sum += float(loss.item())
             epoch_full_loss_sum += float(losses['full_sequence'].item())
@@ -2385,7 +2401,11 @@ def main(config: dict):
     signal.signal(signal.SIGINT, request_safe_stop)
     signal.signal(signal.SIGTERM, request_safe_stop)
     rank, world_size, local_rank = setup_ddp()
-    if torch.cuda.is_available():
+    if os.getenv('KRONOS_DEVICE', '').lower() in {'xla', 'tpu'}:
+        if xm is None:
+            raise RuntimeError('KRONOS_DEVICE=xla requires torch_xla')
+        device = xm.xla_device()
+    elif torch.cuda.is_available():
         device = torch.device(f"cuda:{local_rank}")
     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         device = torch.device("mps")

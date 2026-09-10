@@ -1,0 +1,41 @@
+{
+  "stage_id": "beta_v3_base_dynamic_size_path_a800_full24k_v1",
+  "parent": {
+    "model": "NeoQuasar/Kronos-base",
+    "model_sha256": "__PARENT_SHA__",
+    "initialization": "weights_only"
+  },
+  "data": {
+    "manifest_id": "__DATA_MANIFEST_ID__",
+    "train_symbols": 4678,
+    "validation_symbols": 520,
+    "symbol_overlap": 0,
+    "train_windows": 9457646
+  },
+  "conditions": {
+    "sector_embedding": "exact_zero_at_fresh_start",
+    "dynamic_size_path": "120_observed_plus_10_causal_carry",
+    "dynamic_size_path_output": "exact_zero_at_fresh_start",
+    "static_size_percentile": false
+  },
+  "training": {
+    "segments": 473,
+    "samples_per_segment": 20000,
+    "batch_size": 32,
+    "seed": 100,
+    "amp_dtype": "float16",
+    "trainable_predictor": "all",
+    "predictor_learning_rate": 0.000001,
+    "condition_learning_rate": 0.00001,
+    "scheduler": "warmup_cosine",
+    "loss": "forecast_plus_0.02_history"
+  },
+  "validation": {
+    "mode": "full_only",
+    "manifest_sha256": "__VALIDATION_SHA__",
+    "samples": 24000,
+    "interval_segments": 1,
+    "quick_validation": "disabled",
+    "best_selection_metric": "validation_large_objective"
+  }
+}
