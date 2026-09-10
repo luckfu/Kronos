@@ -173,6 +173,13 @@ class Config:
         )
         if self.bootstrap_completed_segments < 0:
             raise ValueError("KRONOS_BOOTSTRAP_COMPLETED_SEGMENTS must be non-negative")
+        # When bootstrapping a fresh optimizer from a prior global segment,
+        # this keeps the new coverage permutation independent of the historical
+        # segment number. For example, -130 makes global Segment 131 consume
+        # position 0 of a newly seeded permutation.
+        self.coverage_epoch_offset = int(
+            os.getenv("KRONOS_COVERAGE_EPOCH_OFFSET", "0")
+        )
         bootstrap_best_val_loss = os.getenv(
             "KRONOS_BOOTSTRAP_BEST_VAL_LOSS", ""
         ).strip()
