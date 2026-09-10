@@ -190,7 +190,6 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
         'num_sectors', 'num_size_buckets', 'context_layer',
         'train_signal_start', 'train_signal_end', 'val_signal_start', 'val_signal_end',
         'dataset_manifest_sha256', 'bootstrap_completed_segments',
-        'coverage_epoch_offset',
         'fixed_validation_manifest_sha256', 'validation_quick_samples',
         'validation_large_samples', 'validation_large_interval_segments',
         'validation_full_only',
