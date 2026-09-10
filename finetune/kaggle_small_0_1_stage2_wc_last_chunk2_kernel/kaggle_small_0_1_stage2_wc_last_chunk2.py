@@ -9,6 +9,7 @@ from pathlib import Path
 MAX_SEGMENTS_PER_RUN = 130
 STAGE2_EXTENSION_OUTPUT = "small_0.1_stage2_wc_last"
 COVERAGE_SEED = "20260908"
+SWANLAB_RUN_ID = "small_0.1_stage2_wc_last"
 
 repo = "/kaggle/working/Kronos"
 print({"phase": "started", "coverage_seed": COVERAGE_SEED, "max_segments": MAX_SEGMENTS_PER_RUN}, flush=True)
@@ -101,6 +102,10 @@ os.environ.update(
         "KRONOS_SMALL_V21_STAGE": "main",
         "KRONOS_SMALL_V21_PARENT_MODEL": str(parent_model),
         "KRONOS_SMALL_V21_CONTINUATION_ROOT": str(continuation_root),
+        # This is an exact same-stage continuation of C1. Never silently
+        # downgrade it to parent-model/bootstrap initialization: that would
+        # reset Segment numbering, optimizer state, and SwanLab step history.
+        "KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION": "0",
         "KRONOS_SMALL_V21_OUTPUT_NAME": STAGE2_EXTENSION_OUTPUT,
         "KRONOS_MAX_SEGMENTS_PER_RUN": str(MAX_SEGMENTS_PER_RUN),
         "KRONOS_BATCH_SIZE": "64",
@@ -108,7 +113,7 @@ os.environ.update(
         "KRONOS_SCHEDULER": "warmup_constant",
         "SWANLAB_PROJECT": "finance",
         "SWANLAB_EXPERIMENT_NAME": STAGE2_EXTENSION_OUTPUT,
-        "SWANLAB_RUN_ID": STAGE2_EXTENSION_OUTPUT,
+        "SWANLAB_RUN_ID": SWANLAB_RUN_ID,
     }
 )
 subprocess.run(

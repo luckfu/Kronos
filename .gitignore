@@ -62,6 +62,7 @@ Desktop.ini
 *.bin
 *.safetensors
 /models/
+/small_model/
 /outputs/models/a_share_size_kronos_base/
 /outputs/
 /artifacts/

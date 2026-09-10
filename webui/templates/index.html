@@ -7,6 +7,9 @@
     <title>Kronos A股预测台</title>
     <script src="https://cdn.plot.ly/plotly-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg: #f3f5f2;
@@ -819,67 +822,97 @@
             }
         }
 
-        /* Professional market-terminal skin */
+        /* ═══════════════════════════════════════════════
+           Dark Terminal Pro — Kronos A股预测台
+           ═══════════════════════════════════════════════ */
         :root {
-            --bg: #eef1ef;
-            --surface: #ffffff;
-            --surface-soft: #f5f7f6;
-            --border: #d5dad7;
-            --text: #171c19;
-            --muted: #66706a;
-            --accent: #b62f35;
-            --accent-dark: #92242a;
-            --accent-soft: #f8e9ea;
-            --danger: #b62f35;
-            --warning: #8b6418;
-            --shadow: 0 1px 2px rgba(20, 27, 23, 0.05);
-            --radius: 6px;
+            --bg: #0a0e14;
+            --surface: rgba(22, 28, 38, 0.85);
+            --surface-soft: rgba(30, 38, 50, 0.7);
+            --border: rgba(255, 255, 255, 0.06);
+            --text: #e8ecf1;
+            --muted: #6b7a8d;
+            --accent: #3b82f6;
+            --accent-dark: #2563eb;
+            --accent-soft: rgba(59, 130, 246, 0.12);
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+            --radius: 10px;
+            --glass: blur(20px) saturate(180%);
         }
 
         body {
             background:
-                linear-gradient(#e7ebe8 1px, transparent 1px),
-                linear-gradient(90deg, #e7ebe8 1px, transparent 1px),
+                radial-gradient(ellipse at 20% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(99, 102, 241, 0.04) 0%, transparent 50%),
+                linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
                 var(--bg);
-            background-size: 24px 24px;
-            font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-size: 100%, 100%, 32px 32px, 32px 32px;
+            font-family: 'Noto Sans SC', 'SF Pro Text', 'PingFang SC', sans-serif;
         }
 
         .topbar {
-            height: 58px;
-            background: #171c19;
-            border-bottom: 3px solid #b62f35;
+            height: 56px;
+            background: linear-gradient(180deg, rgba(20, 26, 36, 0.98) 0%, rgba(15, 19, 24, 0.98) 100%);
+            border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         .brand-mark {
             width: 32px;
             height: 32px;
-            border: 1px solid #d45156;
-            border-radius: 3px;
-            background: #b62f35;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+            font-family: 'JetBrains Mono', monospace;
             letter-spacing: 0;
+            box-shadow: 0 0 16px rgba(59, 130, 246, 0.35);
         }
 
         .brand-copy strong {
             font-size: 15px;
-            letter-spacing: 0;
+            letter-spacing: 0.02em;
+            font-family: 'Noto Sans SC', sans-serif;
         }
 
         .brand-copy span {
-            color: #919b95;
+            color: #4a5568;
             font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .runtime-status {
             min-height: 28px;
-            padding: 0 10px;
-            border: 1px solid #3b4540;
-            border-radius: 3px;
-            background: #212824;
-            color: #cbd1cd;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            padding: 0 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #8899aa;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
+        }
+
+        .status-dot {
+            box-shadow: 0 0 0 4px rgba(216, 154, 59, 0.2), 0 0 8px rgba(216, 154, 59, 0.3);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        .runtime-status.ready .status-dot {
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.15), 0 0 8px rgba(34, 197, 94, 0.25);
+            animation: none;
+        }
+
+        .runtime-status.error .status-dot {
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15), 0 0 8px rgba(239, 68, 68, 0.25);
+            animation: pulse-dot 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .page {
@@ -889,15 +922,19 @@
 
         .page-heading {
             align-items: center;
-            margin-bottom: 12px;
-            padding: 0 2px 11px;
-            border-bottom: 1px solid #cbd1cd;
+            margin-bottom: 14px;
+            padding: 0 2px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
 
         .page-heading h1 {
-            font-size: 21px;
-            font-weight: 750;
+            font-size: 22px;
+            font-weight: 700;
             letter-spacing: 0;
+            background: linear-gradient(135deg, #e8ecf1 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .page-heading p {
@@ -906,60 +943,68 @@
         }
 
         .model-caption {
-            padding: 5px 8px;
-            border: 1px solid #cbd1cd;
-            border-radius: 3px;
-            background: rgba(255, 255, 255, 0.7);
-            color: #4e5953;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            padding: 5px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #6b7a8d;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 10px;
         }
 
         .workspace {
-            grid-template-columns: 310px minmax(0, 1fr);
-            gap: 12px;
+            grid-template-columns: 320px minmax(0, 1fr);
+            gap: 14px;
         }
 
         .sidebar {
             position: sticky;
             top: 16px;
-            gap: 10px;
+            gap: 12px;
         }
 
         .card {
-            border-color: #cbd1cd;
-            border-radius: 6px;
-            box-shadow: var(--shadow);
+            border-color: rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            background: var(--surface);
+            backdrop-filter: var(--glass);
+            -webkit-backdrop-filter: var(--glass);
+            box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         .control-card {
-            padding: 16px;
+            padding: 18px;
         }
 
         .section-label {
             margin-bottom: 10px;
-            color: #424c46;
+            color: #5a6b7a;
             font-size: 10px;
-            letter-spacing: 0.12em;
+            letter-spacing: 0.14em;
         }
 
         .stock-input {
             height: 42px;
-            border-color: #aeb7b1;
-            border-radius: 4px;
-            background: #fbfcfb;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #e8ecf1;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 18px;
             font-variant-numeric: tabular-nums;
             letter-spacing: 0;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+
+        .stock-input::placeholder {
+            color: #3e4f5f;
         }
 
         .stock-input:focus {
-            border-color: #b62f35;
-            box-shadow: 0 0 0 2px rgba(182, 47, 53, 0.12);
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12), 0 0 24px rgba(59, 130, 246, 0.08);
         }
 
-        /* The service status is a display field, not a multiline code input. */
         #inference-service {
             display: flex;
             align-items: center;
@@ -968,12 +1013,13 @@
             padding: 0 11px;
             overflow: hidden;
             border-style: dashed;
-            background: #eef1ef;
-            color: #424c46;
+            border-color: rgba(255, 255, 255, 0.06);
+            background: rgba(0, 0, 0, 0.2);
+            color: #5a6b7a;
             cursor: default;
-            font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-family: 'Noto Sans SC', sans-serif;
             font-size: 14px;
-            font-weight: 650;
+            font-weight: 600;
             line-height: 1.25;
             letter-spacing: 0;
             white-space: nowrap;
@@ -996,36 +1042,44 @@
         .summary-item strong,
         .metric strong,
         td {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-family: 'JetBrains Mono', monospace;
             font-variant-numeric: tabular-nums;
         }
 
         .summary-title strong {
-            color: #202723;
+            color: #e8ecf1;
             font-size: 16px;
         }
 
         .stock-name {
-            color: #333c37;
+            color: #8899aa;
         }
 
         .bucket-pill,
         .source-badge {
-            border: 1px solid #d7b7b9;
-            border-radius: 3px;
-            background: #fbefef;
-            color: #8e292e;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 6px;
+            background: rgba(59, 130, 246, 0.08);
+            color: #60a5fa;
+        }
+
+        .source-badge.fallback {
+            border-color: rgba(245, 158, 11, 0.25);
+            background: rgba(245, 158, 11, 0.08);
+            color: #fbbf24;
         }
 
         .summary-grid {
             gap: 0;
-            border: 1px solid var(--border);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            overflow: hidden;
         }
 
         .summary-item {
             padding: 9px 10px;
-            border-right: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
+            border-right: 1px solid rgba(255, 255, 255, 0.04);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         }
 
         .summary-item:nth-child(2n) {
@@ -1037,42 +1091,108 @@
         }
 
         .plan-list {
-            border-radius: 4px;
+            border-radius: 8px;
+            border-color: rgba(255, 255, 255, 0.06);
         }
 
         .plan-list li {
-            padding: 9px 10px;
-            background: #f7f8f7;
+            padding: 9px 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom-color: rgba(255, 255, 255, 0.03);
+        }
+
+        .plan-list span {
+            color: #5a6b7a;
         }
 
         .plan-list strong {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-family: 'JetBrains Mono', monospace;
             font-variant-numeric: tabular-nums;
+            color: #c8d2dc;
         }
 
         .predict-button {
-            min-height: 43px;
-            border: 1px solid #8d2227;
-            border-radius: 4px;
-            background: #b62f35;
-            box-shadow: inset 0 1px rgba(255, 255, 255, 0.18);
-            font-size: 13px;
+            min-height: 44px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            box-shadow: 0 0 24px rgba(59, 130, 246, 0.2), inset 0 1px rgba(255, 255, 255, 0.15);
+            font-size: 14px;
+            font-weight: 700;
+            transition: all 0.3s ease;
         }
 
         .predict-button:hover:not(:disabled) {
-            background: #98272c;
-            transform: none;
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            box-shadow: 0 0 36px rgba(59, 130, 246, 0.35), inset 0 1px rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .predict-button:disabled {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.04);
+            color: #3e4f5f;
+            box-shadow: none;
+        }
+
+        .predict-note {
+            color: #4a5568;
         }
 
         .result-card {
             min-height: 740px;
         }
 
+        .result-tabs {
+            background: rgba(0, 0, 0, 0.25);
+            border-bottom-color: rgba(255, 255, 255, 0.06);
+        }
+
+        .result-tab {
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        .result-tab.active {
+            border-bottom-color: #3b82f6;
+            color: #60a5fa;
+        }
+
         .result-toolbar {
             min-height: 62px;
             padding: 12px 16px;
-            background: #f7f8f7;
-            border-bottom-color: #cbd1cd;
+            background: rgba(0, 0, 0, 0.15);
+            border-bottom-color: rgba(255, 255, 255, 0.04);
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .breadcrumb-item {
+            color: #6b7a8d;
+            transition: color 0.2s;
+        }
+
+        .breadcrumb-item[role="button"] {
+            cursor: pointer;
+        }
+
+        .breadcrumb-item[role="button"]:hover {
+            color: #60a5fa;
+        }
+
+        .breadcrumb-item.active {
+            color: #e8ecf1;
+        }
+
+        .breadcrumb-separator {
+            color: #3e4f5f;
+            font-size: 12px;
+            margin: 0 4px;
         }
 
         .toolbar-actions {
@@ -1087,21 +1207,22 @@
             justify-content: center;
             min-width: 0;
             min-height: 28px;
-            padding: 0 9px;
-            border: 1px solid #cbd1cd;
-            border-radius: 3px;
-            background: transparent;
-            color: #424c46;
+            padding: 0 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #8899aa;
             font-size: 11px;
             font-weight: 600;
             line-height: 1;
             white-space: nowrap;
+            transition: all 0.2s ease;
         }
 
         .toolbar-button:hover {
-            border-color: #9ea8a2;
-            background: #eef1ef;
-            color: #171c19;
+            border-color: rgba(59, 130, 246, 0.3);
+            background: rgba(59, 130, 246, 0.08);
+            color: #60a5fa;
         }
 
         .toolbar-actions .source-badge {
@@ -1111,10 +1232,10 @@
             min-height: 28px;
             padding: 0 8px 0 20px;
             border: 0;
-            border-left: 1px solid #d5dad7;
+            border-left: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 0;
             background: transparent;
-            color: #66706a;
+            color: #6b7a8d;
             font-size: 10px;
             font-weight: 600;
             line-height: 1;
@@ -1128,26 +1249,34 @@
             width: 6px;
             height: 6px;
             border-radius: 50%;
-            background: #26845e;
+            background: #22c55e;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
         }
 
-        .result-title h2 {
-            font-size: 16px;
+        .view-badge {
+            border-color: rgba(59, 130, 246, 0.2);
+            background: rgba(59, 130, 246, 0.08);
+            color: #60a5fa;
         }
 
         .metric-strip {
             gap: 0;
             padding: 0;
-            border-bottom: 1px solid #cbd1cd;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         }
 
         .metric {
             min-height: 78px;
             padding: 13px 16px;
             border: 0;
-            border-right: 1px solid #d6dcd8;
+            border-right: 1px solid rgba(255, 255, 255, 0.04);
             border-radius: 0;
-            background: #fff;
+            background: rgba(0, 0, 0, 0.1);
+            transition: background 0.2s;
+        }
+
+        .metric:hover {
+            background: rgba(59, 130, 246, 0.04);
         }
 
         .metric:last-child {
@@ -1157,7 +1286,7 @@
         .metric span {
             margin-bottom: 8px;
             font-size: 10px;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.06em;
         }
 
         .metric strong {
@@ -1166,24 +1295,43 @@
 
         .metric strong.positive,
         td.positive {
-            color: #c12f36;
+            color: #ef4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
         }
 
         .metric strong.negative,
         td.negative {
-            color: #15825b;
+            color: #22c55e;
+            text-shadow: 0 0 10px rgba(34, 197, 94, 0.25);
         }
 
         .timing-signal {
             min-height: 26px;
-            border-radius: 3px;
+            border-radius: 6px;
             font-family: inherit;
             font-size: 12px;
         }
 
+        .timing-signal.bullish {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.1);
+        }
+
+        .timing-signal.neutral {
+            background: rgba(245, 158, 11, 0.1);
+            color: #fbbf24;
+        }
+
+        .timing-signal.bearish {
+            background: rgba(34, 197, 94, 0.1);
+            color: #4ade80;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.1);
+        }
+
         #chart {
             height: 610px;
-            border-bottom: 1px solid #d6dcd8;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         }
 
         .table-section {
@@ -1197,19 +1345,21 @@
         }
 
         .table-wrap {
-            border-radius: 4px;
+            border-radius: 8px;
+            border-color: rgba(255, 255, 255, 0.06);
         }
 
         th,
         td {
             padding: 9px 11px;
+            border-bottom-color: rgba(255, 255, 255, 0.04);
         }
 
         th {
-            background: #eef1ef;
-            color: #424c46;
+            background: rgba(0, 0, 0, 0.3);
+            color: #5a6b7a;
             font-size: 10px;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.04em;
         }
 
         .batch-sort-button {
@@ -1227,15 +1377,16 @@
             letter-spacing: 0;
             white-space: nowrap;
             cursor: pointer;
+            transition: color 0.15s;
         }
 
         .batch-sort-button:hover,
         .batch-sort-button:focus-visible {
-            color: #a62b31;
+            color: #60a5fa;
         }
 
         .batch-sort-button:focus-visible {
-            outline: 2px solid rgba(182, 47, 53, 0.35);
+            outline: 2px solid rgba(59, 130, 246, 0.4);
             outline-offset: 2px;
         }
 
@@ -1245,42 +1396,140 @@
             justify-content: center;
             width: 12px;
             height: 14px;
-            color: #79827d;
+            color: #3e4f5f;
             font-size: 11px;
             line-height: 1;
         }
 
         th[aria-sort] .batch-sort-indicator {
-            color: #a62b31;
+            color: #60a5fa;
+        }
+
+        tbody tr {
+            transition: background 0.15s;
         }
 
         tbody tr:hover {
-            background: #f7f8f7;
+            background: rgba(59, 130, 246, 0.06);
+        }
+
+        #batch-body tr:focus,
+        #history-body tr:focus {
+            outline: 2px solid rgba(59, 130, 246, 0.4);
+            outline-offset: -2px;
         }
 
         .empty-state {
             min-height: 670px;
             background: repeating-linear-gradient(
                 0deg,
-                #fff,
-                #fff 31px,
-                #f0f2f1 32px
+                transparent,
+                transparent 31px,
+                rgba(255, 255, 255, 0.015) 32px
             );
         }
 
         .empty-visual {
             width: 68px;
             height: 68px;
-            border-color: #d4afb1;
-            border-radius: 4px;
-            background: #fbefef;
-            color: #b62f35;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            border-color: rgba(59, 130, 246, 0.25);
+            border-radius: 10px;
+            background: rgba(59, 130, 246, 0.08);
+            color: #60a5fa;
+            font-family: 'JetBrains Mono', monospace;
+            box-shadow: 0 0 24px rgba(59, 130, 246, 0.12);
+        }
+
+        .empty-panel h3 {
+            background: linear-gradient(135deg, #e8ecf1 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .history-filters {
+            border-color: rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .history-filter-field input,
+        .history-filter-field select {
+            border-color: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+            color: #e8ecf1;
+        }
+
+        .history-filter-field input::placeholder {
+            color: #3e4f5f;
+        }
+
+        .history-filter-field input:focus,
+        .history-filter-field select:focus {
+            outline: 0;
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+        }
+
+        .history-delete-button {
+            border-color: rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.04);
+            color: #f87171;
+            transition: background 0.2s;
+        }
+
+        .history-delete-button:hover {
+            background: rgba(239, 68, 68, 0.12);
+        }
+
+        .history-group-button {
+            border-color: rgba(59, 130, 246, 0.2);
+            background: rgba(59, 130, 246, 0.04);
+            color: #60a5fa;
+            transition: background 0.2s;
+        }
+
+        .history-group-button:hover {
+            background: rgba(59, 130, 246, 0.12);
         }
 
         .toast {
-            border-radius: 4px;
-            background: #222a25;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 8px;
+            background: rgba(15, 20, 28, 0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .toast.error {
+            border-color: rgba(239, 68, 68, 0.3);
+            background: rgba(40, 10, 10, 0.92);
+        }
+
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        /* Select element dark styling */
+        select option {
+            background: #141a24;
+            color: #e8ecf1;
         }
 
         @media (max-width: 980px) {
@@ -1297,7 +1546,7 @@
 
         @media (max-width: 680px) {
             .topbar {
-                height: 56px;
+                height: 52px;
             }
 
             .page {
@@ -1313,8 +1562,8 @@
             }
 
             .metric {
-                border-right: 1px solid #d6dcd8;
-                border-bottom: 1px solid #d6dcd8;
+                border-right: 1px solid rgba(255, 255, 255, 0.04);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             }
 
             .metric:nth-child(2n) {
@@ -1391,16 +1640,12 @@
                     <button id="history-view-tab" class="result-tab" aria-selected="false">预测历史</button>
                 </nav>
                 <div class="result-toolbar">
-                    <div class="result-title">
-                        <h2 id="result-heading">预测结果</h2>
-                        <p id="result-subtitle">等待选择股票</p>
-                    </div>
+                    <nav class="breadcrumb" id="breadcrumb" aria-label="导航路径">
+                        <span class="breadcrumb-item active">工作台</span>
+                    </nav>
                     <div class="toolbar-actions">
-                        <span id="snapshot-badge" class="view-badge">历史快照</span>
-                        <button id="rerun-history-group" class="toolbar-button" style="display: none;" aria-label="使用最新行情重新预测这个历史截面">↻ 再测一次</button>
-                        <button id="back-to-history" class="toolbar-button" style="display: none;" aria-label="返回预测历史列表">← 返回历史列表</button>
-                        <button id="back-to-ranking" class="toolbar-button" style="display: none;" aria-label="返回股票池排名">← 返回排名</button>
-                        <span id="source-badge" class="source-badge" style="display: none;">BaoStock 最新日线</span>
+                        <button id="rerun-button" class="toolbar-button" style="display: none;" aria-label="使用最新行情重新预测">↻ 再测一次</button>
+                        <span id="source-badge" class="source-badge" style="display: none;"></span>
                     </div>
                 </div>
 
@@ -1492,7 +1737,13 @@
                     <p id="history-filter-summary" class="field-help history-filter-summary"></p>
                     <div class="table-section">
                         <div class="table-wrap"><table><thead><tr>
-                            <th>信号日</th><th>股票截面</th><th>预测收益范围</th><th>最高预测</th><th>来源</th><th>操作</th>
+                            <th aria-sort="none" data-key="signal_date"><button type="button" class="batch-sort-button">信号日<span class="batch-sort-indicator">↕</span></button></th>
+                            <th aria-sort="none" data-key="symbol"><button type="button" class="batch-sort-button">股票代码<span class="batch-sort-indicator">↕</span></button></th>
+                            <th aria-sort="none" data-key="sector_id"><button type="button" class="batch-sort-button">行业<span class="batch-sort-indicator">↕</span></button></th>
+                            <th aria-sort="descending" data-key="predicted_return_p50"><button type="button" class="batch-sort-button">预测收益 (P50)<span class="batch-sort-indicator">↓</span></button></th>
+                            <th aria-sort="none" data-key="predicted_return_p50"><button type="button" class="batch-sort-button">方向判断<span class="batch-sort-indicator">↕</span></button></th>
+                            <th aria-sort="none" data-key="backend"><button type="button" class="batch-sort-button">来源<span class="batch-sort-indicator">↕</span></button></th>
+                            <th id="history-action-heading">操作</th>
                         </tr></thead><tbody id="history-body"></tbody></table></div>
                     </div>
                 </div>
@@ -1519,20 +1770,19 @@
             sectorMappingCount: 0,
             batchResult: null,
             view: 'current-empty',
+            lastCurrentView: 'current-empty',
             currentMode: 'empty',
             currentResult: null,
             historyRecordId: null,
-            historyGroups: {},
-            historyGroupMode: false,
-            historyBatchResult: null,
+            flatHistoryRecords: [],
+            historySort: {key: 'predicted_return_p50', direction: 'desc'},
             batchSort: {key: 'predicted_return_p50', direction: 'desc'},
         };
 
         const stockInput = document.getElementById('stock-input');
         const predictButton = document.getElementById('predict-button');
-        const backToRankingButton = document.getElementById('back-to-ranking');
-        const backToHistoryButton = document.getElementById('back-to-history');
-        const rerunHistoryButton = document.getElementById('rerun-history-group');
+        const rerunHistoryButton = document.getElementById('rerun-button');
+        const breadcrumbNav = document.getElementById('breadcrumb');
         const currentViewTab = document.getElementById('current-view-tab');
         const historyViewTab = document.getElementById('history-view-tab');
         const historyDateFrom = document.getElementById('history-date-from');
@@ -1554,15 +1804,32 @@
         function setupEvents() {
             stockInput.addEventListener('input', syncPredictButton);
             predictButton.addEventListener('click', runUnifiedPrediction);
-            backToRankingButton.addEventListener('click', showBatchRanking);
-            backToHistoryButton.addEventListener('click', loadHistory);
-            rerunHistoryButton.addEventListener('click', rerunHistoryGroup);
+            rerunHistoryButton.addEventListener('click', rerunFromHistory);
             currentViewTab.addEventListener('click', showCurrentView);
-            historyViewTab.addEventListener('click', loadHistory);
+            historyViewTab.addEventListener('click', () => {
+                if (state.view !== 'history-list' && state.view !== 'history-detail') {
+                    if (state.flatHistoryRecords && state.flatHistoryRecords.length > 0) {
+                        state.view = state.historyRecordId ? 'history-detail' : 'history-list';
+                        currentViewTab.classList.remove('active');
+                        currentViewTab.setAttribute('aria-selected', 'false');
+                        historyViewTab.classList.add('active');
+                        historyViewTab.setAttribute('aria-selected', 'true');
+                        if (state.view === 'history-list') {
+                            showHistoryList();
+                        } else {
+                            showOnlyResultContent('result-content');
+                            updateBreadcrumb([{label: '历史', action: loadHistory}, {label: state.symbol + ' · ' + state.historySignalDate}]);
+                        }
+                    } else {
+                        loadHistory();
+                    }
+                }
+            });
             historyFilterSubmit.addEventListener('click', loadHistory);
             historyFilterReset.addEventListener('click', resetHistoryFilters);
             document.querySelectorAll('.batch-sort-button').forEach(button => {
-                button.addEventListener('click', () => setBatchSort(button.dataset.sortKey));
+                const th = button.parentElement;
+                button.addEventListener('click', () => setBatchSort(th.dataset.key));
             });
             [historyDateFrom, historyDateTo, historySymbolFilter].forEach(input => input.addEventListener('keydown', event => {
                 if (event.key === 'Enter') loadHistory();
@@ -1628,24 +1895,19 @@
             state.symbol = symbol;
 
             setPredicting(true);
-            document.getElementById('result-heading').textContent = `${symbol} 正在预测`;
-            document.getElementById('result-subtitle').textContent = '刷新最新行情并生成未来交易日…';
+            updateBreadcrumb([{label: '工作台'}, {label: `${symbol} 正在预测…`}]);
             try {
                 const response = await axios.post(apiUrl('/api/predict'), {
                     symbol,
                     ...PRODUCTION_SAMPLING,
                 });
-                state.batchResult = null;
                 state.currentResult = response.data;
                 state.currentMode = 'single';
                 state.historyRecordId = null;
-                state.historyGroupMode = false;
-                state.historyBatchResult = null;
-                renderPrediction(response.data, false);
+                renderPrediction(response.data);
                 showToast(response.data.message);
             } catch (error) {
-                document.getElementById('result-heading').textContent = '预测失败';
-                document.getElementById('result-subtitle').textContent = error.response?.data?.error || error.message;
+                updateBreadcrumb([{label: '工作台'}, {label: '预测失败'}]);
                 showToast(error.response?.data?.error || error.message, true);
             } finally {
                 setPredicting(false);
@@ -1654,9 +1916,8 @@
 
         async function runBatchPrediction(symbols) {
             setPredicting(true);
-            document.getElementById('result-heading').textContent = '股票池正在批量预测';
             const backendLabel = state.inferenceBackend === 'remote' ? 'Modal' : '本地';
-            document.getElementById('result-subtitle').textContent = '刷新行情并提交 ' + backendLabel + ' 批量推理…';
+            updateBreadcrumb([{label: '工作台'}, {label: `股票池正在 ${backendLabel} 批量预测…`}]);
             try {
                 const response = await axios.post(apiUrl('/api/a-share/rankings'), {
                     symbols,
@@ -1664,14 +1925,12 @@
                 });
                 state.batchResult = response.data;
                 state.currentMode = 'batch';
-                state.currentResult = null;
                 state.historyRecordId = null;
-                state.historyGroupMode = false;
-                state.historyBatchResult = null;
                 state.batchSort = {key: 'predicted_return_p50', direction: 'desc'};
                 showBatchRanking();
                 showToast(response.data.message);
             } catch (error) {
+                updateBreadcrumb([{label: '工作台'}, {label: '预测失败'}]);
                 showToast(error.response?.data?.error || error.message, true);
             } finally {
                 setPredicting(false);
@@ -1684,7 +1943,29 @@
             });
         }
 
-        function renderBatchRankingTable(rankings, fromHistory) {
+        function setBatchSort(key) {
+            if (state.view === 'history-list') {
+                if (state.historySort.key === key) {
+                    state.historySort.direction = state.historySort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    const textKeys = ['symbol', 'sector_id', 'backend'];
+                    state.historySort = {key, direction: textKeys.includes(key) ? 'asc' : 'desc'};
+                }
+                showHistoryList();
+                return;
+            }
+
+            if (!state.batchResult) return;
+            if (state.batchSort.key === key) {
+                state.batchSort.direction = state.batchSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                const textKeys = ['symbol', 'sector_label', 'timing_signal'];
+                state.batchSort = {key, direction: textKeys.includes(key) ? 'asc' : 'desc'};
+            }
+            showBatchRanking();
+        }
+
+        function renderBatchRankingTable(rankings) {
             const body = document.getElementById('batch-body');
             body.innerHTML = '';
             rankings.forEach((item, index) => {
@@ -1693,17 +1974,8 @@
                 row.innerHTML = `<td>${index + 1}</td><td>${formatStockLabel(item.symbol, item.name)}</td>` +
                     `<td>${formatSectorLabel(item)}</td><td>${formatPercentile(item.size_percentile)}</td>` +
                     `<td>${formatPrice(item.latest_close)}</td><td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${(item.predicted_return_p50 * 100).toFixed(2)}%</td>` +
-                    `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>` +
-                    (fromHistory ? '<td><button class="history-delete-button" type="button" aria-label="从截面删除个股">删除个股</button></td>' : '');
-                if (fromHistory) {
-                    row.querySelector('.history-delete-button').addEventListener('click', event => {
-                        event.stopPropagation();
-                        deleteHistoryStock(item);
-                    });
-                }
-                const showDetail = () => fromHistory
-                    ? openHistoryRecord(item.record_id, true)
-                    : renderPrediction(item, true);
+                    `<td>${(item.positive_path_rate * 100).toFixed(0)}%</td><td>${item.timing_signal.label}</td>`;
+                const showDetail = () => renderPrediction(item);
                 row.addEventListener('click', showDetail);
                 row.addEventListener('keydown', event => {
                     if (event.target.closest('button')) return;
@@ -1743,55 +2015,42 @@
         }
 
         function updateBatchSortHeaders() {
-            document.querySelectorAll('.batch-sort-button').forEach(button => {
-                const active = button.dataset.sortKey === state.batchSort.key;
+            const isHistory = state.view === 'history-list';
+            const currentSort = isHistory ? state.historySort : state.batchSort;
+            document.querySelectorAll(isHistory ? '#history-results .batch-sort-button' : '#batch-results .batch-sort-button').forEach(button => {
                 const heading = button.closest('th');
+                const key = heading.dataset.key;
+                const active = key === currentSort.key;
                 const indicator = button.querySelector('.batch-sort-indicator');
                 if (active) {
-                    const ascending = state.batchSort.direction === 'asc';
+                    const ascending = currentSort.direction === 'asc';
                     heading.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
                     indicator.textContent = ascending ? '↑' : '↓';
-                    button.setAttribute('aria-label', `按${button.dataset.sortLabel}${ascending ? '降序' : '升序'}排列`);
                 } else {
                     heading.removeAttribute('aria-sort');
                     indicator.textContent = '↕';
-                    button.setAttribute('aria-label', `按${button.dataset.sortLabel}排序`);
                 }
             });
         }
 
-        function setBatchSort(key) {
-            if (!state.batchResult && !state.historyBatchResult) return;
-            if (state.batchSort.key === key) {
-                state.batchSort.direction = state.batchSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                const textKeys = ['symbol', 'sector_label', 'timing_signal'];
-                state.batchSort = {key, direction: textKeys.includes(key) ? 'asc' : 'desc'};
-            }
-            showBatchRanking();
-        }
-
-        function showBatchRanking() {
-            const fromHistory = state.historyGroupMode === true;
-            const result = fromHistory ? state.historyBatchResult : state.batchResult;
-            if (!result) return;
-            renderBatchRankingTable(sortedBatchRankings(result.rankings), fromHistory);
-            updateBatchSortHeaders();
-            state.view = 'batch-ranking';
-            setResultTab(fromHistory ? 'history' : 'current');
-            document.getElementById('empty-state').style.display = 'none';
-            showOnlyResultContent('batch-results');
-            document.getElementById('batch-action-heading').style.display = fromHistory ? 'table-cell' : 'none';
-            document.getElementById('back-to-ranking').style.display = 'none';
-            document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
-            rerunHistoryButton.style.display = fromHistory ? 'inline-flex' : 'none';
-            document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
-            document.getElementById('snapshot-badge').textContent = fromHistory ? '历史快照' : '';
-            document.getElementById('source-badge').style.display = 'none';
-            document.getElementById('result-heading').textContent =
-                `${fromHistory ? '历史截面' : '股票池排名'} · ${result.rankings.length} 只`;
-            document.getElementById('result-subtitle').textContent =
-                `共同数据截止 ${formatDate(result.as_of_date)} · ${result.sample_count} 条路径 · ${result.model_device}`;
+        function updateBreadcrumb(segments) {
+            breadcrumbNav.innerHTML = '';
+            segments.forEach((segment, index) => {
+                const item = document.createElement('span');
+                item.className = 'breadcrumb-item' + (index === segments.length - 1 ? ' active' : '');
+                item.textContent = segment.label;
+                if (segment.action && index < segments.length - 1) {
+                    item.setAttribute('role', 'button');
+                    item.addEventListener('click', segment.action);
+                }
+                breadcrumbNav.appendChild(item);
+                if (index < segments.length - 1) {
+                    const sep = document.createElement('span');
+                    sep.className = 'breadcrumb-separator';
+                    sep.textContent = '/';
+                    breadcrumbNav.appendChild(sep);
+                }
+            });
         }
 
         function setResultTab(active) {
@@ -1804,33 +2063,40 @@
 
         function showCurrentView() {
             setResultTab('current');
-            state.historyRecordId = null;
-            state.historyGroupMode = false;
-            state.historyBatchResult = null;
-            if (state.currentMode === 'batch' && state.batchResult) {
+            if (state.lastCurrentView === 'batch-ranking' && state.batchResult) {
                 showBatchRanking();
                 return;
             }
-            if (state.currentMode === 'single' && state.currentResult) {
-                renderPrediction(state.currentResult, false);
+            if (state.lastCurrentView === 'current-detail' && state.currentResult) {
+                renderPrediction(state.currentResult);
                 return;
             }
             state.view = 'current-empty';
-            document.getElementById('empty-state').style.display = 'grid';
+            state.lastCurrentView = 'current-empty';
             showOnlyResultContent(null);
-            document.getElementById('result-heading').textContent = '当前预测';
-            document.getElementById('result-subtitle').textContent = '等待选择股票';
-            document.getElementById('back-to-ranking').style.display = 'none';
-            document.getElementById('back-to-history').style.display = 'none';
+            document.getElementById('empty-state').style.display = 'grid';
+            updateBreadcrumb([{label: '工作台'}]);
             rerunHistoryButton.style.display = 'none';
-            document.getElementById('snapshot-badge').style.display = 'none';
+            document.getElementById('source-badge').style.display = 'none';
+        }
+
+        function showBatchRanking() {
+            const result = state.batchResult;
+            if (!result) return;
+            renderBatchRankingTable(sortedBatchRankings(result), false);
+            updateBatchSortHeaders();
+            state.view = 'batch-ranking';
+            state.lastCurrentView = 'batch-ranking';
+            setResultTab('current');
+            document.getElementById('empty-state').style.display = 'none';
+            showOnlyResultContent('batch-results');
+            updateBreadcrumb([{label: '工作台'}, {label: `股票池排名 (${result.rankings.length}只)`}]);
+            rerunHistoryButton.style.display = 'none';
             document.getElementById('source-badge').style.display = 'none';
         }
 
         async function loadHistory() {
             try {
-                state.historyGroupMode = false;
-                state.historyBatchResult = null;
                 const params = new URLSearchParams();
                 if (historyDateFrom.value) params.set('date_from', historyDateFrom.value);
                 if (historyDateTo.value) params.set('date_to', historyDateTo.value);
@@ -1840,93 +2106,79 @@
                 const query = params.toString();
                 const historyUrl = '/api/prediction-history' + (query ? '?' + query : '');
                 const response = await axios.get(apiUrl(historyUrl));
-                const body = document.getElementById('history-body');
-                body.innerHTML = '';
-                const records = response.data.records;
-                if (!records.length) {
-                    body.innerHTML = '<tr><td colspan="6">暂无预测记录</td></tr>';
-                }
-                const rows = Object.values(records.reduce((groups, record) => {
-                    const key = record.signal_date || 'unknown';
-                    if (!groups[key]) groups[key] = { signalDate: key, records: [] };
-                    groups[key].records.push(record);
-                    return groups;
-                }, {}));
-                state.historyGroups = {};
-                rows.forEach(group => {
-                    group.records.sort((a, b) =>
-                        (b.predicted_return_p50 ?? -Infinity) - (a.predicted_return_p50 ?? -Infinity)
-                    );
-                    state.historyGroups[group.signalDate] = group.records;
-                    const returns = group.records
-                        .map(item => item.predicted_return_p50)
-                        .filter(value => value != null);
-                    const minReturn = returns.length ? Math.min(...returns) : null;
-                    const maxReturn = returns.length ? Math.max(...returns) : null;
-                    const topRecord = group.records[0];
-                    const stockLabels = group.records.map(item => formatStockLabel(item.symbol, item.name));
-                    const stockSummary = stockLabels.length <= 4
-                        ? stockLabels.join('、')
-                        : `${stockLabels.slice(0, 4).join('、')} 等 ${stockLabels.length} 只`;
-                    const sources = [...new Set(group.records.map(item =>
-                        item.backend === 'remote' ? 'Modal' : '本地'
-                    ))].join(' / ');
-                    const rangeText = minReturn == null
-                        ? '—'
-                        : `${minReturn >= 0 ? '+' : ''}${(minReturn * 100).toFixed(2)}% – ${maxReturn >= 0 ? '+' : ''}${(maxReturn * 100).toFixed(2)}%`;
-                    const row = document.createElement('tr');
-                    row.tabIndex = 0;
-                    row.innerHTML = `<td>${formatDate(group.signalDate)}</td><td>${group.records.length} 只 · ${stockSummary}</td>` +
-                        `<td>${rangeText}</td><td>${formatStockLabel(topRecord.symbol, topRecord.name)}</td><td>${sources}</td>` +
-                        '<td><span class="history-action-group"><button class="history-group-button" type="button">查看排名</button><button class="history-delete-button" type="button" aria-label="删除这个历史截面">删除截面</button></span></td>';
-                    row.querySelector('.history-group-button').addEventListener('click', event => { event.stopPropagation(); openHistoryGroup(group.signalDate); });
-                    row.querySelector('.history-delete-button').addEventListener('click', event => { event.stopPropagation(); deleteHistoryGroup(group.signalDate, group.records); });
-                    row.addEventListener('click', () => openHistoryGroup(group.signalDate));
-                    row.addEventListener('keydown', event => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            openHistoryGroup(group.signalDate);
-                        }
-                    });
-                    body.appendChild(row);
-                });
-                document.getElementById('empty-state').style.display = 'none';
-                showOnlyResultContent('history-results');
-                state.view = 'history-list';
+
+                state.flatHistoryRecords = response.data.records;
                 state.historyRecordId = null;
-                setResultTab('history');
-                document.getElementById('result-heading').textContent = '预测历史';
-                document.getElementById('result-subtitle').textContent = `${rows.length} 个信号日截面 · 点击查看当日排名`;
+                showHistoryList();
+
                 const total = response.data.total ?? response.data.records.length;
                 const truncated = total > response.data.records.length ? ' · 仅显示最近 100 条' : '';
                 document.getElementById('history-filter-summary').textContent =
-                    (query ? '筛选结果 ' : '共 ') + `${rows.length} 个截面 · ${total} 只股票` + truncated;
-                document.getElementById('back-to-ranking').style.display = 'none';
-                document.getElementById('back-to-history').style.display = 'none';
-                rerunHistoryButton.style.display = 'none';
-                document.getElementById('snapshot-badge').style.display = 'none';
-                document.getElementById('source-badge').style.display = 'none';
+                    (query ? '筛选结果 ' : '共 ') + `${response.data.records.length} 条记录` + truncated;
             } catch (error) {
                 showToast(error.response?.data?.error || error.message, true);
             }
         }
 
-        function openHistoryGroup(signalDate) {
-            const records = [...(state.historyGroups[signalDate] || [])];
-            if (!records.length) return;
-            records.sort((a, b) => (b.predicted_return_p50 ?? -Infinity) - (a.predicted_return_p50 ?? -Infinity));
-            state.historyBatchResult = {
-                signal_date: signalDate,
-                records,
-                rankings: records,
-                sample_count: records[0]?.interval?.sample_count || 50,
-                as_of_date: records[0]?.latest_data_date,
-                model_device: records[0]?.backend === 'remote' ? 'remote' : 'local',
-            };
-            state.historyRecordId = null;
-            state.historyGroupMode = true;
-            state.batchSort = {key: 'predicted_return_p50', direction: 'desc'};
-            showBatchRanking();
+        function sortedHistoryRecords() {
+            const {key, direction} = state.historySort;
+            const factor = direction === 'asc' ? 1 : -1;
+            return [...state.flatHistoryRecords].sort((left, right) => {
+                const leftValue = batchSortValue(left, key);
+                const rightValue = batchSortValue(right, key);
+                const leftMissing = leftValue == null || (typeof leftValue === 'number' && !Number.isFinite(leftValue));
+                const rightMissing = rightValue == null || (typeof rightValue === 'number' && !Number.isFinite(rightValue));
+                if (leftMissing || rightMissing) {
+                    if (leftMissing && rightMissing) return 0;
+                    return leftMissing ? 1 : -1;
+                }
+                const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+                    ? leftValue - rightValue
+                    : String(leftValue).localeCompare(String(rightValue), 'zh-CN', {numeric: true});
+                return comparison * factor;
+            });
+        }
+
+        function showHistoryList() {
+            const body = document.getElementById('history-body');
+            body.innerHTML = '';
+            const records = sortedHistoryRecords();
+            if (!records.length) {
+                body.innerHTML = '<tr><td colspan="7">暂无预测记录</td></tr>';
+            } else {
+                records.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.tabIndex = 0;
+                    row.innerHTML = `<td>${formatDate(item.signal_date)}</td><td>${formatStockLabel(item.symbol, item.name)}</td>` +
+                        `<td>${formatSectorLabel(item)}</td><td class="${item.predicted_return_p50 >= 0 ? 'positive' : 'negative'}">${(item.predicted_return_p50 * 100).toFixed(2)}%</td>` +
+                        `<td>${item.timing_signal?.label || '未知'}</td><td>${item.backend === 'remote' ? 'Modal' : '本地'}</td>` +
+                        '<td><button class="history-delete-button" type="button" aria-label="删除此记录">删除</button></td>';
+
+                    row.querySelector('.history-delete-button').addEventListener('click', event => {
+                        event.stopPropagation();
+                        deleteHistoryRecord(item);
+                    });
+
+                    row.addEventListener('click', () => openHistoryRecord(item.record_id, item.signal_date, item.symbol));
+                    row.addEventListener('keydown', event => {
+                        if (event.target.closest('button')) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openHistoryRecord(item.record_id, item.signal_date, item.symbol);
+                        }
+                    });
+                    body.appendChild(row);
+                });
+            }
+
+            document.getElementById('empty-state').style.display = 'none';
+            showOnlyResultContent('history-results');
+            state.view = 'history-list';
+            setResultTab('history');
+            updateBatchSortHeaders();
+            updateBreadcrumb([{label: '历史'}]);
+            rerunHistoryButton.style.display = 'none';
+            document.getElementById('source-badge').style.display = 'none';
         }
 
         function resetHistoryFilters() {
@@ -1938,105 +2190,86 @@
             loadHistory();
         }
 
-        async function rerunHistoryGroup() {
-            const group = state.historyBatchResult;
-            const symbols = [...new Set(
-                (group?.rankings || []).map(item => item.symbol).filter(Boolean)
-            )];
-            if (!state.modelReady || !symbols.length || symbols.length > 12) {
-                showToast('这个历史截面无法重新预测', true);
-                return;
+        async function rerunFromHistory() {
+            if (!state.symbol || !state.modelReady) return;
+            const targetSymbol = state.symbol;
+
+            const currentInputValue = stockInput.value.trim();
+            if (currentInputValue && currentInputValue !== targetSymbol) {
+                showToast(`已将输入框内容替换为 ${targetSymbol}`);
             }
 
             const previousLabel = rerunHistoryButton.textContent;
             rerunHistoryButton.disabled = true;
             rerunHistoryButton.textContent = '正在重测…';
-            stockInput.value = symbols.join(', ');
+            stockInput.value = targetSymbol;
             syncPredictButton();
-            showToast(`正在刷新 ${symbols.length} 只股票的最新行情`);
             try {
-                if (symbols.length === 1) {
-                    await runPrediction(symbols[0]);
-                } else {
-                    await runBatchPrediction(symbols);
-                }
+                await runPrediction(targetSymbol);
             } finally {
                 rerunHistoryButton.disabled = false;
                 rerunHistoryButton.textContent = previousLabel;
             }
         }
 
-        async function deleteHistoryGroup(signalDate, records) {
-            const count = records.length;
-            if (!window.confirm(`确定删除 ${formatDate(signalDate)} 截面的 ${count} 条股票预测吗？删除后无法恢复。`)) return;
-            try {
-                await axios.delete(apiUrl(`/api/prediction-history/dates/${encodeURIComponent(signalDate)}`));
-                state.historyGroupMode = false;
-                state.historyBatchResult = null;
-                await loadHistory();
-                showToast(`已删除 ${formatDate(signalDate)} 截面的 ${count} 条预测记录`);
-            } catch (error) {
-                showToast(error.response?.data?.error || error.message, true);
-            }
-        }
-
-        async function deleteHistoryStock(record) {
-            const group = state.historyBatchResult;
-            if (!state.historyGroupMode || !group?.signal_date) return;
-            const signalDate = group.signal_date;
+        async function deleteHistoryRecord(record) {
+            const signalDate = record.signal_date;
             const label = formatStockLabel(record.symbol, record.name);
-            if (!window.confirm(`确定从 ${formatDate(signalDate)} 截面删除 ${label} 吗？该股票在这个信号日的历史预测将全部删除，删除后无法恢复。`)) return;
+            if (!window.confirm(`确定删除 ${formatDate(signalDate)} 的 ${label} 预测记录吗？删除后无法恢复。`)) return;
             try {
                 await axios.delete(apiUrl(`/api/prediction-history/dates/${encodeURIComponent(signalDate)}/symbols/${encodeURIComponent(record.symbol)}`));
-                const symbol = String(record.symbol || '').toLowerCase();
-                const remaining = group.rankings.filter(item => String(item.symbol || '').toLowerCase() !== symbol);
-                state.historyGroups[signalDate] = remaining;
-                if (!remaining.length) {
-                    state.historyGroupMode = false;
-                    state.historyBatchResult = null;
-                    await loadHistory();
-                } else {
-                    state.historyBatchResult = {...group, records: remaining, rankings: remaining};
-                    showBatchRanking();
-                }
-                showToast(`已从 ${formatDate(signalDate)} 截面删除 ${label}`);
+                state.flatHistoryRecords = state.flatHistoryRecords.filter(item => item.record_id !== record.record_id);
+                showHistoryList();
+                showToast(`已删除 ${label} 的历史记录`);
             } catch (error) {
                 showToast(error.response?.data?.error || error.message, true);
             }
         }
 
-        async function openHistoryRecord(recordId, fromGroup = false) {
+        async function openHistoryRecord(recordId, signalDate, symbol) {
             try {
                 const response = await axios.get(apiUrl(`/api/prediction-history/${encodeURIComponent(recordId)}`));
                 state.historyRecordId = recordId;
-                renderPrediction(response.data, fromGroup, true);
+                state.historySignalDate = signalDate;
+                state.symbol = symbol;
+                renderPrediction(response.data);
                 showToast('已打开历史预测记录');
             } catch (error) {
                 showToast(error.response?.data?.error || error.message, true);
             }
         }
 
-        function renderPrediction(result, fromBatch = false, fromHistory = false) {
-            state.view = fromHistory ? 'history-detail' : 'current-detail';
-            setResultTab(fromHistory ? 'history' : 'current');
+        function renderPrediction(result) {
+            const isHistory = state.view === 'history-list' || state.view === 'history-detail';
+            state.view = isHistory ? 'history-detail' : 'current-detail';
+            if (!isHistory) state.lastCurrentView = 'current-detail';
+
+            setResultTab(isHistory ? 'history' : 'current');
             showOnlyResultContent('result-content');
+
             const predictions = result.prediction_results;
             const finalPrediction = predictions[predictions.length - 1];
             const predictedReturnPct = result.predicted_return_p50 * 100;
 
             document.getElementById('empty-state').style.display = 'none';
-            document.getElementById('back-to-ranking').style.display = fromBatch ? 'inline-flex' : 'none';
-            document.getElementById('back-to-history').style.display = fromHistory ? 'inline-flex' : 'none';
-            rerunHistoryButton.style.display = fromHistory ? 'inline-flex' : 'none';
-            document.getElementById('snapshot-badge').style.display = fromHistory ? 'inline-flex' : 'none';
-            document.getElementById('snapshot-badge').textContent = fromHistory
-                ? '历史快照 · ' + formatDateTime(result.created_at)
-                : '当前预测';
+            rerunHistoryButton.style.display = isHistory ? 'inline-flex' : 'none';
+
             const resultName = formatStockLabel(result.symbol, result.name);
-            document.getElementById('result-heading').textContent = `${resultName} 未来 ${result.pred_len} 日预测`;
-            const sectorReference = result.sector_reference_date ? formatDate(result.sector_reference_date) : '未知';
-            const sizeReference = result.size_reference_date ? formatDate(result.size_reference_date) : '未知';
-            document.getElementById('result-subtitle').textContent = `最新数据 ${formatDate(result.latest_data_date)} · 预测 ${formatDate(result.forecast_start)} 至 ${formatDate(result.forecast_end)} · ${formatSectorLabel(result)} · 市值百分位 ${formatPercentile(result.size_percentile)} · 参考 ${sectorReference} / ${sizeReference} · ${result.interval.sample_count} 条路径`;
+            const dateStr = formatDate(result.latest_data_date);
+
+            if (isHistory) {
+                updateBreadcrumb([
+                    {label: '历史', action: loadHistory},
+                    {label: `${resultName} · ${formatDate(result.created_at)} 预测`}
+                ]);
+            } else {
+                let segments = [{label: '工作台'}];
+                if (state.batchResult) {
+                    segments.push({label: `排名 (${state.batchResult.rankings.length}只)`, action: showBatchRanking});
+                }
+                segments.push({label: `${resultName} · ${result.pred_len}日预测`});
+                updateBreadcrumb(segments);
+            }
 
             const sourceBadge = document.getElementById('source-badge');
             sourceBadge.style.display = 'inline-flex';
@@ -2064,11 +2297,15 @@
             const chartData = JSON.parse(result.chart);
             chartData.layout.height = 600;
             chartData.layout.margin = {l: 62, r: 26, t: 52, b: 48};
-            chartData.layout.paper_bgcolor = '#ffffff';
-            chartData.layout.plot_bgcolor = '#ffffff';
-            chartData.layout.font = {family: 'Inter, PingFang SC, sans-serif', color: '#4c5a52', size: 11};
+            chartData.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+            chartData.layout.plot_bgcolor = 'rgba(0,0,0,0)';
+            chartData.layout.font = {family: 'JetBrains Mono, Noto Sans SC, sans-serif', color: '#6b7a8d', size: 11};
             chartData.layout.title = null;
-            chartData.layout.legend = {orientation: 'h', x: 0, y: 1.08};
+            chartData.layout.legend = {orientation: 'h', x: 0, y: 1.08, font: {color: '#8899aa'}};
+            const darkAxis = {gridcolor: 'rgba(255,255,255,0.04)', linecolor: 'rgba(255,255,255,0.06)', tickfont: {color: '#6b7a8d'}, zerolinecolor: 'rgba(255,255,255,0.06)'};
+            if (chartData.layout.xaxis) Object.assign(chartData.layout.xaxis, darkAxis);
+            if (chartData.layout.yaxis) Object.assign(chartData.layout.yaxis, darkAxis);
+            if (chartData.layout.yaxis2) Object.assign(chartData.layout.yaxis2, darkAxis);
             Plotly.react('chart', chartData.data, chartData.layout, {responsive: true, displaylogo: false});
 
             const tableBody = document.getElementById('forecast-body');
