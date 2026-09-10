@@ -10,7 +10,7 @@ from pathlib import Path
 MAX_SEGMENTS_PER_RUN = 250
 MAX_RUNTIME_SECONDS = 40500  # 11h15m, leaving margin under Kaggle's 12h cap.
 OUTPUT_NAME = "small_0.1_stage2_wc_dual_t4_c2"
-COVERAGE_SEED = "20260911"
+COVERAGE_SEED = "20260910"  # Must match C1 for exact state continuation.
 PARENT_KERNEL = "smmt315/kronos-small-0-1-stage2-wc-dual-t4"
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
@@ -80,15 +80,26 @@ print({
 }, flush=True)
 
 parent_model = find_parent_model()
-print({"phase": "parent_ready", "model": str(parent_model)}, flush=True)
+continuation_root = parent_model.parent.parent
+resume_state = continuation_root / "checkpoints/last_state.pt"
+if not resume_state.is_file():
+    raise RuntimeError(f"Dual-T4 continuation state is missing: {resume_state}")
+print({
+    "phase": "parent_ready",
+    "model": str(parent_model),
+    "continuation_root": str(continuation_root),
+    "resume_state": str(resume_state),
+    "initialization": "exact_same_stage_resume",
+}, flush=True)
 
 env = os.environ.copy()
 env.update({
     "PYTHONUNBUFFERED": "1",
     "KRONOS_SMALL_V21_STAGE": "main",
     "KRONOS_SMALL_V21_PARENT_MODEL": str(parent_model),
+    "KRONOS_SMALL_V21_CONTINUATION_ROOT": str(continuation_root),
     "KRONOS_SMALL_V21_OUTPUT_NAME": OUTPUT_NAME,
-    "KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION": "1",
+    "KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION": "0",
     "KRONOS_MAX_SEGMENTS_PER_RUN": str(MAX_SEGMENTS_PER_RUN),
     "KRONOS_MAX_RUNTIME_SECONDS": str(MAX_RUNTIME_SECONDS),
     "KRONOS_TORCHRUN_NPROC_PER_NODE": "2",
