@@ -16,17 +16,22 @@ def same_date_return_bias_loss(
     date_ids: torch.Tensor,
 ) -> torch.Tensor:
     """Penalize systematic horizon bias within each signal-date cross section."""
-    date_losses = []
-    for date_id in torch.unique(date_ids):
-        mask = date_ids == date_id
-        if int(mask.sum().item()) < 2:
-            continue
-        mean_error = predictions[mask].mean(dim=0) - targets[mask].mean(dim=0)
-        date_losses.append(F.smooth_l1_loss(mean_error, torch.zeros_like(mean_error)))
-    if not date_losses:
-        mean_error = predictions.mean(dim=0) - targets.mean(dim=0)
-        return F.smooth_l1_loss(mean_error, torch.zeros_like(mean_error))
-    return torch.stack(date_losses).mean()
+    same_date = date_ids[:, None] == date_ids[None, :]
+    group_sizes = same_date.sum(dim=1)
+    mean_errors = (
+        same_date.to(predictions.dtype) @ (predictions - targets)
+    ) / group_sizes.clamp_min(1).to(predictions.dtype)[:, None]
+    per_sample_group_loss = F.smooth_l1_loss(
+        mean_errors, torch.zeros_like(mean_errors), reduction='none'
+    ).mean(dim=1)
+    group_weights = (group_sizes >= 2).to(predictions.dtype) / group_sizes.clamp_min(1)
+    group_count = group_weights.sum()
+    grouped_loss = (per_sample_group_loss * group_weights).sum() / group_count.clamp_min(1)
+    fallback_error = predictions.mean(dim=0) - targets.mean(dim=0)
+    fallback_loss = F.smooth_l1_loss(
+        fallback_error, torch.zeros_like(fallback_error)
+    )
+    return torch.where(group_count > 0, grouped_loss, fallback_loss)
 
 
 def class_balanced_barrier_loss(
@@ -36,13 +41,24 @@ def class_balanced_barrier_loss(
 ) -> torch.Tensor:
     """Cross entropy with inverse-square-root batch class frequencies."""
     valid_mask = valid_mask.bool()
-    if not torch.any(valid_mask):
-        return logits.sum() * 0.0
-    valid_targets = targets[valid_mask].long()
-    counts = torch.bincount(valid_targets, minlength=logits.shape[-1]).float()
+    targets = targets.long()
+    valid_values = valid_mask.to(logits.dtype)
+    counts = (
+        F.one_hot(targets, num_classes=logits.shape[-1]).to(logits.dtype)
+        * valid_values[:, None]
+    ).sum(dim=0)
     weights = torch.where(counts > 0, counts.rsqrt(), torch.zeros_like(counts))
-    weights = weights / weights[weights > 0].mean()
-    return F.cross_entropy(logits[valid_mask], valid_targets, weight=weights)
+    present_classes = (counts > 0).to(logits.dtype).sum()
+    weights = weights / (
+        weights.sum() / present_classes.clamp_min(1)
+    ).clamp_min(torch.finfo(logits.dtype).eps)
+    sample_weights = weights.gather(0, targets) * valid_values
+    losses = F.cross_entropy(logits, targets, reduction='none')
+    denominator = sample_weights.sum()
+    weighted_loss = (losses * sample_weights).sum() / denominator.clamp_min(
+        torch.finfo(logits.dtype).eps
+    )
+    return torch.where(denominator > 0, weighted_loss, logits.sum() * 0.0)
 
 
 def expected_utility_score(
@@ -68,24 +84,24 @@ def same_date_pairwise_ranking_loss(
     minimum_gap: float = 0.005,
 ) -> torch.Tensor:
     """Compare only economically distinct pairs from the same signal date."""
-    losses = []
-    for date_id in torch.unique(date_ids):
-        mask = date_ids == date_id
-        date_scores = scores[mask]
-        date_utilities = utilities[mask]
-        if date_scores.numel() < 2:
-            continue
-        score_delta = date_scores[:, None] - date_scores[None, :]
-        utility_delta = date_utilities[:, None] - date_utilities[None, :]
-        pair_mask = torch.triu(
-            utility_delta.abs() >= minimum_gap, diagonal=1
-        )
-        if torch.any(pair_mask):
-            directions = utility_delta[pair_mask].sign()
-            losses.append(F.softplus(-score_delta[pair_mask] * directions).mean())
-    if not losses:
-        return scores.sum() * 0.0
-    return torch.stack(losses).mean()
+    same_date = date_ids[:, None] == date_ids[None, :]
+    group_sizes = same_date.sum(dim=1)
+    score_delta = scores[:, None] - scores[None, :]
+    utility_delta = utilities[:, None] - utilities[None, :]
+    pair_mask = same_date & torch.triu(
+        utility_delta.abs() >= minimum_gap, diagonal=1
+    )
+    pair_values = pair_mask.to(scores.dtype)
+    pair_counts_by_row = pair_values.sum(dim=1)
+    group_pair_counts = same_date.to(scores.dtype) @ pair_counts_by_row
+    pair_losses = F.softplus(-score_delta * utility_delta.sign())
+    normalized_pairs = (
+        pair_losses * pair_values / group_pair_counts.clamp_min(1)[:, None]
+    )
+    groups_with_pairs = (group_pair_counts > 0).to(scores.dtype)
+    group_count = (groups_with_pairs / group_sizes.clamp_min(1)).sum()
+    grouped_loss = normalized_pairs.sum() / group_count.clamp_min(1)
+    return torch.where(group_count > 0, grouped_loss, scores.sum() * 0.0)
 
 
 def compute_auxiliary_losses(

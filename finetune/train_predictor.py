@@ -101,7 +101,7 @@ def mps_available():
     )
 
 
-def capture_rng_state():
+def capture_rng_state(include_xla=False):
     state = {
         'python': random.getstate(),
         'numpy': np.random.get_state(),
@@ -111,6 +111,8 @@ def capture_rng_state():
         state['mps'] = torch.mps.get_rng_state()
     if torch.cuda.is_available():
         state['cuda'] = torch.cuda.get_rng_state_all()
+    if include_xla and xm is not None and hasattr(xm, 'get_rng_state'):
+        state['xla'] = xm.get_rng_state()
     return state
 
 
@@ -124,18 +126,28 @@ def restore_rng_state(state):
         torch.mps.set_rng_state(state['mps'])
     if 'cuda' in state and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state['cuda'])
+    if 'xla' in state and xm is not None and hasattr(xm, 'set_rng_state'):
+        xm.set_rng_state(state['xla'])
 
 
 def save_resume_state(path, model, optimizer, scheduler, **metadata):
     cleanup_drive_conflict_files()
     temporary = f'{path}.tmp'
-    torch.save({
+    model_device = next(model.parameters()).device
+    is_xla = model_device.type == 'xla'
+    payload = {
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         'scheduler': scheduler.state_dict(),
-        'rng_state': capture_rng_state(),
+        'rng_state': capture_rng_state(include_xla=is_xla),
         **metadata,
-    }, temporary)
+    }
+    if is_xla:
+        if xm is None:
+            raise RuntimeError('Cannot save XLA checkpoint without torch_xla')
+        xm.save(payload, temporary)
+    else:
+        torch.save(payload, temporary)
     os.replace(temporary, path)
     cleanup_drive_conflict_files()
 
@@ -146,7 +158,11 @@ def save_pretrained_with_retry(model, path, config, attempts=3, retry_delay=2):
     for attempt in range(1, attempts + 1):
         try:
             os.makedirs(path, exist_ok=True)
-            model.save_pretrained(path, config=config)
+            model_device = next(model.parameters()).device
+            if model_device.type == 'xla':
+                _save_xla_pretrained(model, path, config)
+            else:
+                model.save_pretrained(path, config=config)
             cleanup_drive_conflict_files()
             return
         except FileNotFoundError:
@@ -157,6 +173,42 @@ def save_pretrained_with_retry(model, path, config, attempts=3, retry_delay=2):
                 f"retrying ({attempt}/{attempts})..."
             )
             time.sleep(retry_delay)
+
+
+def _save_xla_pretrained(model, path, config):
+    """Export an XLA model through a CPU state dict before safetensors writes.
+
+    ``PyTorchModelHubMixin`` serializes each XLA tensor directly.  That can
+    trigger unsupported ``contiguous``/CPU conversions during a filesystem
+    export, so first synchronize the state with ``xm.save`` and then use the
+    normal hub serializer on the CPU copy.
+    """
+    if xm is None:
+        raise RuntimeError('Cannot export an XLA model without torch_xla')
+    from pathlib import Path
+    from huggingface_hub.hub_mixin import save_model_as_safetensor
+
+    state_path = f'{path}.xla_state.pt'
+    xm.save(model.state_dict(), state_path)
+    try:
+        state_dict = torch.load(state_path, map_location='cpu')
+
+        class _StateDictProxy:
+            def __init__(self, state):
+                self._state = state
+
+            def state_dict(self):
+                return self._state
+
+        save_model_as_safetensor(
+            _StateDictProxy(state_dict),
+            str(Path(path) / 'model.safetensors'),
+        )
+        with open(Path(path) / 'config.json', 'w') as handle:
+            json.dump(config, handle, sort_keys=True, indent=2)
+    finally:
+        if os.path.exists(state_path):
+            os.unlink(state_path)
 
 
 def model_export_config(core_model, config):
@@ -1023,38 +1075,50 @@ def evaluate_validation(
     result['batches'] = int(counts[0].item())
     result['samples'] = int(counts[1].item())
     if use_beta_v21:
-        local_validation = (
-            torch.cat([item[0] for item in validation_auxiliary]),
-            torch.cat([item[1] for item in validation_auxiliary]),
-            {
-                key: torch.cat([item[2][key] for item in validation_auxiliary])
-                for key in validation_auxiliary[0][2]
-            },
-        )
+        local_validation = None
+        if validation_auxiliary:
+            local_validation = (
+                torch.cat([item[0] for item in validation_auxiliary]),
+                torch.cat([item[1] for item in validation_auxiliary]),
+                {
+                    key: torch.cat([item[2][key] for item in validation_auxiliary])
+                    for key in validation_auxiliary[0][2]
+                },
+            )
         gathered_validation = [local_validation]
         if dist.is_available() and dist.is_initialized():
             gathered_validation = [None] * dist.get_world_size()
             dist.all_gather_object(gathered_validation, local_validation)
-        global_returns = torch.cat([item[0] for item in gathered_validation])
-        global_barriers = torch.cat([item[1] for item in gathered_validation])
-        global_labels = {
-            key: torch.cat([item[2][key] for item in gathered_validation])
-            for key in local_validation[2]
-        }
-        global_auxiliary_losses = compute_auxiliary_losses(
-            global_returns, global_barriers, global_labels
-        )
-        result.update({
-            'return_loss': float(global_auxiliary_losses['return'].item()),
-            'return_huber_loss': float(
-                global_auxiliary_losses['return_huber'].item()
-            ),
-            'return_bias_loss': float(
-                global_auxiliary_losses['return_bias'].item()
-            ),
-            'barrier_loss': float(global_auxiliary_losses['barrier'].item()),
-            'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
-        })
+        nonempty_validation = [
+            item for item in gathered_validation if item is not None
+        ]
+        if nonempty_validation:
+            global_returns = torch.cat(
+                [item[0] for item in nonempty_validation]
+            )
+            global_barriers = torch.cat(
+                [item[1] for item in nonempty_validation]
+            )
+            global_labels = {
+                key: torch.cat([
+                    item[2][key] for item in nonempty_validation
+                ])
+                for key in nonempty_validation[0][2]
+            }
+            global_auxiliary_losses = compute_auxiliary_losses(
+                global_returns, global_barriers, global_labels
+            )
+            result.update({
+                'return_loss': float(global_auxiliary_losses['return'].item()),
+                'return_huber_loss': float(
+                    global_auxiliary_losses['return_huber'].item()
+                ),
+                'return_bias_loss': float(
+                    global_auxiliary_losses['return_bias'].item()
+                ),
+                'barrier_loss': float(global_auxiliary_losses['barrier'].item()),
+                'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
+            })
         result['beta_v21_score'] = beta_v21_validation_score(result, config)
         local_consistency = (
             torch.cat(consistency_auxiliary),
@@ -1163,7 +1227,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     use_amp = amp_dtype is not None
     amp_dtype_name = str(amp_dtype).removeprefix('torch.') if use_amp else 'disabled'
     scale_gradients = amp_dtype == torch.float16
-    scaler = torch.amp.GradScaler('cuda', enabled=scale_gradients)
+    # GradScaler is a CUDA-only mechanism.  Keeping it out of XLA/CPU runs
+    # avoids initializing a CUDA backend just to hold a disabled scaler.
+    scaler = torch.amp.GradScaler('cuda') if scale_gradients else None
     if rank == 0:
         effective_bs = config['batch_size'] * world_size
         print(f"Effective BATCHSIZE per GPU: {config['batch_size']}, Total: {effective_bs}")
@@ -1189,7 +1255,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         if MpDeviceLoader is None:
             raise RuntimeError('TPU requested but torch_xla is not installed')
         train_loader = MpDeviceLoader(train_loader, device)
-        val_loader = MpDeviceLoader(val_loader, device)
+        if val_loader is not None:
+            val_loader = MpDeviceLoader(val_loader, device)
         large_val_loader = MpDeviceLoader(large_val_loader, device)
     validation_full_only = bool(config.get('validation_full_only', False))
     denominator_path = os.path.join(
@@ -1425,7 +1492,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             epochs_without_improvement=epochs_without_improvement,
             post_coverage_without_improvement=post_coverage_without_improvement,
             batch_idx_global=batch_idx_global,
-            amp_scaler=scaler.state_dict(),
+            amp_scaler=scaler.state_dict() if scaler is not None else {},
             use_amp=use_amp,
             amp_dtype=amp_dtype_name,
             effective_epochs=effective_epochs,
@@ -1807,8 +1874,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
 
             # Backward pass and optimization
             optimizer.zero_grad()
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
+            if scaler is not None:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+            else:
+                loss.backward()
             applied_family_lrs = learning_rates_by_family(optimizer)
             monitoring_stats = {}
             if auxiliary_losses is not None:
@@ -1847,9 +1917,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
             if device.type == 'xla':
                 xm.optimizer_step(optimizer, barrier=True)
-            else:
+            elif scaler is not None:
                 scaler.step(optimizer)
                 scaler.update()
+            else:
+                optimizer.step()
             scheduler.step()
             epoch_loss_sum += float(loss.item())
             epoch_full_loss_sum += float(losses['full_sequence'].item())

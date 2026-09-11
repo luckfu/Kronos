@@ -20,11 +20,48 @@ def setup_ddp():
     if os.getenv("KRONOS_DEVICE", "").lower() in {"xla", "tpu"}:
         try:
             import torch_xla.core.xla_model as xm
-            rank = int(os.environ.get("ORDINAL", xm.get_ordinal()))
-            world_size = int(os.environ.get("WORLD_SIZE", xm.xrt_world_size()))
-            local_rank = int(os.environ.get("LOCAL_ORDINAL", os.environ.get("LOCAL_RANK", rank)))
+            try:
+                import torch_xla.runtime as xr
+            except ImportError:
+                xr = None
         except ImportError as exc:
             raise RuntimeError("TPU requested but torch_xla is not installed") from exc
+
+        # PJRT moved topology helpers from xla_model to torch_xla.runtime.
+        # Read environment overrides first because xmp.spawn sets the ordinal
+        # after importing this module.
+        def runtime_value(name, legacy_name, default):
+            if xr is not None and hasattr(xr, name):
+                return int(getattr(xr, name)())
+            if hasattr(xm, legacy_name):
+                return int(getattr(xm, legacy_name)())
+            return int(default)
+
+        # The Kaggle smoke entry point deliberately launches one Python process
+        # with ``xmp.spawn(nprocs=1)``.  Some PJRT versions report the physical
+        # TPU device count from ``world_size()`` even in that mode.  Treating
+        # that count as a data-parallel process count would silently shard the
+        # dataset and scheduler by 8 while only one process is running.
+        single_process = os.getenv(
+            "KRONOS_XLA_SINGLE_PROCESS", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if single_process:
+            rank, world_size, local_rank = 0, 1, 0
+        else:
+            rank = int(os.environ["ORDINAL"]) if "ORDINAL" in os.environ else runtime_value(
+                "global_ordinal", "get_ordinal", 0
+            )
+            world_size = (
+                int(os.environ["WORLD_SIZE"])
+                if "WORLD_SIZE" in os.environ
+                else runtime_value("world_size", "xrt_world_size", 1)
+            )
+            if "LOCAL_ORDINAL" in os.environ:
+                local_rank = int(os.environ["LOCAL_ORDINAL"])
+            elif "LOCAL_RANK" in os.environ:
+                local_rank = int(os.environ["LOCAL_RANK"])
+            else:
+                local_rank = runtime_value("local_ordinal", "get_local_ordinal", rank)
         print(
             f"[XLA Setup] Global Rank: {rank}/{world_size}, "
             f"Local Rank: {local_rank}"

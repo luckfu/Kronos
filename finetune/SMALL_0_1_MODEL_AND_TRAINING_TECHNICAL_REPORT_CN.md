@@ -4,7 +4,7 @@
 
 本文记录 Kronos-small `small_0.1` 从 `small_0.1_bootstrap_timing` 初始化、经 `small_0.1_main` 主训练、`small_0.1_stage2_extend_01` 增训，到 `small_0.1_stage2_wc_last` 第一轮 Warmup-Constant 训练的模型设计、数据处理、优化配置和实测结果。报告面向论文撰写，优先记录可由代码和训练日志复核的事实。
 
-`small_0.1_stage2_wc_last` 是从 Extend 01 后继续进行的 Warmup-Constant 训练。本轮已完成 534/534 个 segments；由于尚未出现明确的平台期，报告记录其完整结果，但不将其解释为已经收敛或已经证明优于 cosine。其后的 continuation 训练属于另一轮实验，尚无日志，未纳入本文结果。
+`small_0.1_stage2_wc_last` 是从 Extend 01 后继续进行的 Warmup-Constant 训练。本轮已完成 534/534 个 segments；由于尚未出现明确的平台期，报告记录其完整结果，但不将其解释为已经收敛或已经证明优于 cosine。其后的 `small_0.1_stage2_wc_dual_t4` continuation 已有截至 491/534 segments 的日志，作为进行中结果单独标注，不与上一轮完成结果混合。
 
 ## 2. 版本血缘与研究目标
 
@@ -245,11 +245,11 @@ flowchart LR
 
 图中 `Main` 与 `Extend 01` 的 cosine 训练都使用统一峰值 `1e-5`；WC first round 将 scheduler 改为 warm-up 后恒定 `1e-5`，并使用新的 coverage seed。由于 Extend 01 的日志只完成 190/534 个 segments，WC 的实际输入标注为 Extend 01 C2 的 `last_model`，不能把 Extend 01 的中间日志末点误写成 WC 的初始化 checkpoint。
 
-对应的 segment-level 全量验证损失如下。横轴将三份日志按实际训练顺序连续拼接：Main 为 1--534，Extend 01 为 535--724，WC first round 为 725--1258；虚线为阶段边界，背景色与上图血缘图一致。
+对应的 segment-level 全量验证损失如下。横轴将四份日志按实际训练顺序连续拼接：Main 为 1--534，Extend 01 为 535--724，WC first round 为 725--1258，WC dual T4 当前 491 个 segments 为 1259--1749；虚线为阶段边界，背景色与上图血缘图一致。
 
 ![small_0.1 Stage 2 validation loss trajectory](assets/small_0_1_stage2_loss_trajectory.png)
 
-图中可以直接看到：Main 和 Extend 01 均为 warm-up + cosine、峰值学习率 `1e-5`；WC first round 切换为 warm-up 后恒定 `1e-5` 后，forecast 与 full validation loss 仍继续下降。该图描述的是验证轨迹，不构成控制变量意义上的 scheduler 因果比较，因为 WC 同时使用了新的 coverage seed。
+图中可以直接看到：Main 和 Extend 01 均为 warm-up + cosine、峰值学习率 `1e-5`；WC first round 与 WC dual T4 均为 warm-up 后恒定 `1e-5`。WC dual T4 截至 segment 491 的最佳 forecast 为 `2.306302`（segment 480），末点为 `2.307628`。该图描述的是验证轨迹，不构成控制变量意义上的 scheduler 因果比较，因为 WC 各轮同时使用了新的 coverage seed。
 
 ```mermaid
 flowchart TD
@@ -543,7 +543,7 @@ flowchart LR
 
 ## 11. 未完成实验与后续工作
 
-Warmup-Constant first round 已完成 534/534 个 segments，结果已在第 6.4 节正式记录。当前未完成的是从该轮 checkpoint 继续的下一轮 WC continuation；该轮尚未提供完整日志，因此不在本文中预填训练步数、loss 或结论。后续报告应为 continuation 单独记录起点 checkpoint、coverage seed、完成 segments、best/last 以及是否刷新全量验证 best。
+Warmup-Constant first round 已完成 534/534 个 segments，结果已在第 6.4 节正式记录。当前未完成的是从该轮 checkpoint 继续的 `small_0.1_stage2_wc_dual_t4`：最新日志记录到 491/534 segments，最佳 forecast 为 `2.306302`（segment 480），segment 491 为 `2.307628`。这些数值属于进行中结果，待 534 segments 完成后再固定其正式 best/last 结论。
 
 完成 continuation 后，仍建议在相同起点、相同 seed、相同验证集和相同预算下做 cosine 与 constant 的公平比较；按 forecast horizon 分解验证 loss；比较初始底座与最终 checkpoint 的分层 relative weight drift；扩展 OOS 日期后再评估方向准确率、Rank IC、分组收益及统计显著性。
 
@@ -553,7 +553,7 @@ Warmup-Constant first round 已完成 534/534 个 segments，结果已在第 6.4
 - 数据与窗口：[finetune/dataset.py](/Users/fupengcheng/Documents/Kronos/finetune/dataset.py)
 - 训练与损失：[finetune/train_predictor.py](/Users/fupengcheng/Documents/Kronos/finetune/train_predictor.py)
 - 配置：[finetune/config.py](/Users/fupengcheng/Documents/Kronos/finetune/config.py)
-- 训练日志目录：`small_train_log/`；WC first round 完整日志：[small_0.1_stage2_wc_last-2026-9-9_23_24_00.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_last-2026-9-9_23_24_00.log)
+- 训练日志目录：`small_train_log/`；WC first round 完整日志：[small_0.1_stage2_wc_last-2026-9-9_23_24_00.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_last-2026-9-9_23_24_00.log)；WC dual T4 最新完整日志：[small_0.1_stage2_wc_dual_t4-2026-9-11_09_39_25.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_dual_t4-2026-9-11_09_39_25.log)
 - OOS 汇总：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_stage2_oos_base_kaggle/kronos_small_0_1_stage2_oos/summary.json)
 
 本文以日志和当前代码为准；若历史计划文档与实测配置冲突，应优先引用本报告中的代码/日志事实，并在论文实验设置中注明具体 commit、seed、数据快照和 checkpoint 标识。

@@ -3,8 +3,10 @@ import torch
 
 from finetune.beta_v21 import (
     DetachedEMANormalizer,
+    class_balanced_barrier_loss,
     compose_beta_v21_objective,
     consistency_statistics,
+    same_date_pairwise_ranking_loss,
     same_date_return_bias_loss,
 )
 from finetune.dataset import QlibDataset, build_beta_v21_labels
@@ -40,6 +42,71 @@ def test_return_bias_compares_same_date_cross_section_means():
     loss = same_date_return_bias_loss(predictions, targets, date_ids)
 
     assert torch.isclose(loss, torch.tensor(0.125))
+
+
+def test_fixed_shape_auxiliary_losses_match_grouped_reference():
+    torch.manual_seed(7)
+    predictions = torch.randn(7, 4)
+    targets = torch.randn(7, 4)
+    scores = torch.randn(7)
+    utilities = torch.tensor([0.03, -0.02, 0.01, 0.06, -0.04, 0.02, 0.02])
+    date_ids = torch.tensor([1, 1, 1, 2, 2, 3, 4])
+    barrier_logits = torch.randn(7, 3)
+    barrier_targets = torch.tensor([0, 1, 2, 0, 1, 2, 0])
+    barrier_valid = torch.tensor([True, True, False, True, True, True, False])
+
+    bias_by_date = []
+    ranking_by_date = []
+    for date_id in torch.unique(date_ids):
+        mask = date_ids == date_id
+        if int(mask.sum()) >= 2:
+            mean_error = predictions[mask].mean(0) - targets[mask].mean(0)
+            bias_by_date.append(torch.nn.functional.smooth_l1_loss(
+                mean_error, torch.zeros_like(mean_error)
+            ))
+            score_delta = scores[mask, None] - scores[None, mask]
+            utility_delta = utilities[mask, None] - utilities[None, mask]
+            pair_mask = torch.triu(utility_delta.abs() >= 0.005, diagonal=1)
+            if torch.any(pair_mask):
+                ranking_by_date.append(torch.nn.functional.softplus(
+                    -score_delta[pair_mask] * utility_delta[pair_mask].sign()
+                ).mean())
+
+    counts = torch.bincount(barrier_targets[barrier_valid], minlength=3).float()
+    weights = torch.where(counts > 0, counts.rsqrt(), torch.zeros_like(counts))
+    weights = weights / weights[weights > 0].mean()
+    barrier_reference = torch.nn.functional.cross_entropy(
+        barrier_logits[barrier_valid], barrier_targets[barrier_valid], weight=weights
+    )
+
+    assert torch.allclose(
+        same_date_return_bias_loss(predictions, targets, date_ids),
+        torch.stack(bias_by_date).mean(),
+    )
+    assert torch.allclose(
+        same_date_pairwise_ranking_loss(scores, utilities, date_ids),
+        torch.stack(ranking_by_date).mean(),
+    )
+    assert torch.allclose(
+        class_balanced_barrier_loss(barrier_logits, barrier_targets, barrier_valid),
+        barrier_reference,
+    )
+
+
+def test_fixed_shape_auxiliary_losses_handle_empty_groups():
+    logits = torch.randn(3, 3, requires_grad=True)
+    barrier_loss = class_balanced_barrier_loss(
+        logits, torch.tensor([0, 1, 2]), torch.zeros(3, dtype=torch.bool)
+    )
+    ranking_loss = same_date_pairwise_ranking_loss(
+        torch.tensor([0.1, 0.2, 0.3], requires_grad=True),
+        torch.tensor([0.01, 0.011, 0.012]),
+        torch.tensor([1, 2, 3]),
+    )
+
+    assert barrier_loss.item() == 0.0
+    assert ranking_loss.item() == 0.0
+    (barrier_loss + ranking_loss).backward()
 
 
 def test_ambiguous_same_day_barrier_is_masked_but_backtests_as_stop_loss():

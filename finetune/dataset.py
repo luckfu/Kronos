@@ -639,7 +639,7 @@ class QlibDataset(Dataset):
         end = min(start + self.n_samples, self.total_samples)
         self.coverage_start = start
         self.active_positions = self.coverage_order[start:end]
-        if self.use_beta_v21_auxiliary:
+        if getattr(self, 'use_beta_v21_auxiliary', False):
             date_order = np.argsort(
                 self.signal_date_ids[self.active_positions], kind='stable'
             )
