@@ -62,7 +62,9 @@ def find_parent_output() -> Path:
     if missing:
         raise RuntimeError(f"C4 output contract is incomplete: {missing}")
     progress = json.loads((source_root / "progress.json").read_text())
-    completed = int(progress.get("completed_segments", 0))
+    completed = int(
+        progress.get("completed_segments", progress.get("current_segment", 0))
+    )
     if completed != EXPECTED_PARENT_SEGMENT or progress.get("status") != "completed":
         raise RuntimeError(f"C4 is not a completed 534-segment parent: {progress}")
     best = json.loads(

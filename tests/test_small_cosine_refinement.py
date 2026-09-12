@@ -77,6 +77,7 @@ def test_refinement_kernel_declares_new_stage_contract():
     source = RUNNER.read_text()
     required = (
         'EXPECTED_PARENT_SEGMENT = 534',
+        'progress.get("completed_segments", progress.get("current_segment", 0))',
         'REFINEMENT_SEGMENTS = 267',
         'MAX_RUNTIME_SECONDS = 39600',
         'COVERAGE_SEED = "20260912"',
