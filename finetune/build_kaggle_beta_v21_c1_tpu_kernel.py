@@ -12,7 +12,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "finetune/kaggle_beta_v21_c1_tpu.py"
-STAGING = ROOT / "finetune/kaggle_beta_v21_c1_tpu_smoke_kernel"
+STAGING_DIRS = (
+    ROOT / "finetune/kaggle_beta_v21_c1_tpu_kernel",
+    ROOT / "finetune/kaggle_beta_v21_c1_tpu_smoke_kernel",
+)
 FILES = (
     "finetune/train_predictor.py",
     "finetune/config.py",
@@ -51,8 +54,9 @@ def main() -> None:
     if count != 1:
         raise RuntimeError("TPU runner archive placeholder is missing")
     RUNNER.write_text(updated)
-    STAGING.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(RUNNER, STAGING / RUNNER.name)
+    for staging in STAGING_DIRS:
+        staging.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(RUNNER, staging / RUNNER.name)
 
 
 if __name__ == "__main__":

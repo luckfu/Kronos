@@ -36,12 +36,18 @@ def test_tpu_entry_spawns_single_worker_and_runs_trainer_config():
     fake_distributed = types.ModuleType("torch_xla.distributed")
     fake_distributed.__path__ = []
     fake_xmp = types.ModuleType("torch_xla.distributed.xla_multiprocessing")
+    fake_internal = types.ModuleType("torch_xla._internal")
+    fake_pjrt = types.ModuleType("torch_xla._internal.pjrt")
 
     def spawn(worker, *, nprocs, start_method):
         calls.append(("spawn", nprocs, start_method))
         worker(0)
 
     fake_xmp.spawn = spawn
+    def spawn_threads(worker):
+        calls.append(("spawn_threads",))
+        worker(0)
+    fake_pjrt.spawn_threads = spawn_threads
     fake_config = types.ModuleType("config")
 
     class FakeConfig:
@@ -55,18 +61,44 @@ def test_tpu_entry_spawns_single_worker_and_runs_trainer_config():
         "torch_xla": fake_xla,
         "torch_xla.distributed": fake_distributed,
         "torch_xla.distributed.xla_multiprocessing": fake_xmp,
+        "torch_xla._internal": fake_internal,
+        "torch_xla._internal.pjrt": fake_pjrt,
         "config": fake_config,
         "train_predictor": fake_trainer,
     }
 
-    with patch.dict(sys.modules, modules), patch.dict(os.environ, {}, clear=False):
+    with patch.dict(sys.modules, modules), patch.dict(os.environ, {"KRONOS_TPU_CORES": "1"}, clear=False):
         runpy.run_path(str(TPU_ENTRY), run_name="__main__")
         assert os.environ["KRONOS_DEVICE"] == "xla"
         assert os.environ["PJRT_DEVICE"] == "TPU"
         assert os.environ["XLA_USE_BF16"] == "1"
+        assert os.environ["KRONOS_XLA_SINGLE_PROCESS"] == "1"
 
     assert calls == [
         ("spawn", 1, "fork"),
+        ("main", {"marker": "configured"}),
+    ]
+
+    calls.clear()
+    with patch.dict(sys.modules, modules), patch.dict(os.environ, {"KRONOS_TPU_CORES": "8"}, clear=False):
+        runpy.run_path(str(TPU_ENTRY), run_name="__main__")
+        assert os.environ["KRONOS_XLA_SINGLE_PROCESS"] == "0"
+        assert os.environ["KRONOS_XLA_THREAD_PER_DEVICE"] == "1"
+
+    assert calls == [
+        ("spawn_threads",),
+        ("main", {"marker": "configured"}),
+    ]
+
+    calls.clear()
+    fake_pjrt_no_threads = types.ModuleType("torch_xla._internal.pjrt")
+    modules_no_threads = dict(modules, **{"torch_xla._internal.pjrt": fake_pjrt_no_threads})
+    with patch.dict(sys.modules, modules_no_threads), patch.dict(os.environ, {"KRONOS_TPU_CORES": "8"}, clear=False):
+        runpy.run_path(str(TPU_ENTRY), run_name="__main__")
+        assert os.environ["KRONOS_XLA_SINGLE_PROCESS"] == "0"
+
+    assert calls == [
+        ("spawn", None, "fork"),
         ("main", {"marker": "configured"}),
     ]
 
@@ -92,12 +124,19 @@ def test_c1_runner_uses_hardcoded_swanlab_api_key():
 
 
 def test_c1_kernel_requests_tpu_machine_shape():
-    metadata = json.loads(
+    smoke_metadata = json.loads(
         (ROOT / "finetune/kaggle_beta_v21_c1_tpu_smoke_kernel/kernel-metadata.json").read_text()
     )
+    assert smoke_metadata["machine_shape"] == "TpuV5E8"
+    assert "accelerator" not in smoke_metadata
 
-    assert metadata["machine_shape"] == "TpuV5E8"
-    assert "accelerator" not in metadata
+    formal_metadata = json.loads(
+        (ROOT / "finetune/kaggle_beta_v21_c1_tpu_kernel/kernel-metadata.json").read_text()
+    )
+    assert formal_metadata["id"] == "smmt315/kronos-beta-v2-1-c1-tpu"
+    assert formal_metadata["machine_shape"] == "TpuV5E8"
+    assert formal_metadata["enable_tpu"] is True
+    assert "accelerator" not in formal_metadata
 
 
 def test_xla_launcher_cannot_be_overridden_by_torchrun_env():
@@ -167,14 +206,17 @@ def test_c1_runner_environment_passes_config_validation(tmp_path):
     assert config.beta_v21_auto_calibrate
     assert config.best_selection_metric == "beta_v21_score"
     assert config.validation_full_only
-    assert config.n_train_iter == 512
-    assert config.n_val_iter == 512
+    assert config.n_train_iter == 20480
+    assert config.n_val_iter == 0
+    assert config.coverage_passes == 3
+    assert config.epochs == 3
     assert config.beta_v21_consistency_samples == 128
     assert config.batch_size == 64
     assert env["PJRT_DEVICE"] == "TPU"
     assert env["XLA_USE_BF16"] == "1"
-    assert env["KRONOS_XLA_SINGLE_PROCESS"] == "1"
+    assert env["KRONOS_XLA_SINGLE_PROCESS"] == "0"
     assert env["KRONOS_NUM_WORKERS"] == "0"
+    assert env["KRONOS_MAX_RUNTIME_SECONDS"] == "27000"
 
 
 def test_xla_resume_checkpoint_uses_xla_serializer_and_rng_state():
@@ -277,7 +319,8 @@ def test_manifest_records_parent_model_architecture(tmp_path):
 
     output_root = tmp_path / "output"
     runner.write_manifest(output_root, "c1", data_root, predictor, tokenizer)
-    manifest = json.loads((output_root / "small_v21_manifest.json").read_text())
+    manifest = json.loads((output_root / "beta_v21_manifest.json").read_text())
+    assert (output_root / "small_v21_manifest.json").is_file()
 
     assert manifest["architecture"] == {
         "model": "Kronos-base-compatible",
@@ -287,6 +330,53 @@ def test_manifest_records_parent_model_architecture(tmp_path):
     assert manifest["validation"] == {
         "selection": "beta_v21_score",
         "full_symbol_holdout_required": False,
-        "profile": "tpu_smoke_512",
+        "profile": "tpu_v5e8_b64",
         "quick_validation_is_telemetry_only": True,
     }
+
+
+def test_tpu_trainer_safely_resolves_sampler_from_mp_device_loader():
+    source = TRAINER.read_text()
+    assert "getattr(train_loader, 'sampler', None)" in source
+    assert "getattr(train_loader._loader, 'sampler', None)" in source
+    assert "if isinstance(train_loader.sampler, DistributedSampler):" not in source
+
+
+def test_tpu_trainer_registers_signals_only_in_main_thread():
+    source = TRAINER.read_text()
+    assert "threading.current_thread() is threading.main_thread()" in source
+
+
+def test_beta_v21_validation_score_safe_against_zero_denominators():
+    source = TRAINER.read_text()
+    assert "safe_returns = max(returns, 1e-6)" in source
+    assert "safe_barrier = max(barrier, 1e-6)" in source
+    assert "safe_ranking = max(ranking, 1e-6)" in source
+    assert "max(float(calibration_metrics['return_loss']), 1e-5)" in source
+
+    # Dynamically verify calculation with zero denominators
+    spec = importlib.util.spec_from_file_location("kronos_trainer_sub", TRAINER)
+    module = importlib.util.module_from_spec(spec)
+    # Patch torch and heavy imports to load only helper functions
+    score_fn = None
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "beta_v21_validation_score":
+            code = compile(ast.Module(body=[node], type_ignores=[]), "<string>", "exec")
+            namespace = {}
+            exec(code, namespace)
+            score_fn = namespace["beta_v21_validation_score"]
+            break
+
+    assert score_fn is not None
+    metrics = {
+        "weighted_forecast_loss": 2.0,
+        "return_loss": 0.5,
+        "barrier_loss": 0.8,
+        "ranking_loss": 0.6,
+    }
+    # Even if returns denominator is 0.0, it must not raise ZeroDivisionError
+    config = {"beta_v21_validation_denominators": "2.0, 1.0, 0.0, 0.8, 0.6"}
+    score = score_fn(metrics, config)
+    assert score is not None
+    assert score > 0.0

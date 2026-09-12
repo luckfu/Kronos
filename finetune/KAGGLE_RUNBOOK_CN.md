@@ -74,6 +74,12 @@ P100 固定使用已验证环境 `torch==2.5.1+cu121`。入口读取 `nvidia-smi
 - 启动日志打印 `continuation_output`、`resume_state`、历史 metrics 行数、Best loss、`next_epoch` 和下一 segment。
 - schedule、coverage 顺序、总 segment、数据清单和实验配置必须与来源一致。
 
+### 跨调度器必须作为新阶段启动
+
+从 Constant/Warmup-Constant 切换到 Cosine、WSD Decay 等新调度器时，禁止把它伪装成同阶段普通 resume，也禁止只加载 `last_model` 后静默重置优化器。新阶段必须使用独立 Output 和独立看板 run，并从父阶段 `last_state.pt` 同时恢复模型权重、AdamW 一阶矩/二阶矩和 AMP scaler；只丢弃旧 scheduler state，再从新阶段 step 0 创建目标 scheduler。启动日志必须明确打印父阶段完成 segment、新阶段总 segment、目标 optimizer steps、warmup steps、起始/最低 LR。
+
+父阶段的 `best_model` 与 `last_model` 不得复制覆盖成新阶段 Best。它们应保留在不可变父 Kernel Output 中，新阶段 manifest 记录父 Kernel 和 checkpoint 边界；新阶段 Best 只在本阶段验证结果中产生。跨调度器启动必须使用新 coverage seed；后续同阶段 chunk 则必须保持该 seed、总步数和 scheduler state 完全不变，走普通精确 resume。
+
 ## 第九条：所有 Kaggle 代码必须实时输出且可审计
 
 所有子进程设置 `PYTHONUNBUFFERED=1`；外层逐行转发必须使用：

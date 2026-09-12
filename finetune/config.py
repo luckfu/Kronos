@@ -168,6 +168,14 @@ class Config:
         self.resume_training = os.getenv(
             "KRONOS_RESUME_TRAINING", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        self.scheduler_transition_state = os.getenv(
+            "KRONOS_SCHEDULER_TRANSITION_STATE", ""
+        ).strip()
+        if self.resume_training and self.scheduler_transition_state:
+            raise ValueError(
+                "KRONOS_RESUME_TRAINING and KRONOS_SCHEDULER_TRANSITION_STATE "
+                "are mutually exclusive"
+            )
         self.bootstrap_completed_segments = int(
             os.getenv("KRONOS_BOOTSTRAP_COMPLETED_SEGMENTS", "0")
         )
@@ -327,8 +335,8 @@ class Config:
         self.scheduler_warmup_ratio = float(
             os.getenv("KRONOS_SCHEDULER_WARMUP_RATIO", "0.02")
         )
-        if not 0 < self.scheduler_warmup_ratio < 1:
-            raise ValueError("KRONOS_SCHEDULER_WARMUP_RATIO must be in (0, 1)")
+        if not 0 <= self.scheduler_warmup_ratio < 1:
+            raise ValueError("KRONOS_SCHEDULER_WARMUP_RATIO must be in [0, 1)")
         self.predictor_warmup_start_learning_rate = float(
             os.getenv("KRONOS_PREDICTOR_WARMUP_START_LR", "1e-6")
         )

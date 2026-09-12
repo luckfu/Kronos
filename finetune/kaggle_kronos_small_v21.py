@@ -297,13 +297,23 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_HISTORY_LOSS_WEIGHT": "0.02",
         "KRONOS_FORECAST_HORIZON_WEIGHTS": "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
         "KRONOS_SCHEDULER": os.getenv("KRONOS_SCHEDULER", "warmup_cosine"),
-        "KRONOS_SCHEDULER_WARMUP_RATIO": "0.01",
-        "KRONOS_PREDICTOR_LEARNING_RATE": settings["predictor_lr"],
-        "KRONOS_CONDITION_LEARNING_RATE": settings["condition_lr"],
-        "KRONOS_PREDICTOR_WARMUP_START_LR": settings["warmup_start_lr"],
-        "KRONOS_CONDITION_WARMUP_START_LR": settings["condition_warmup_start_lr"],
-        "KRONOS_PREDICTOR_MIN_LR": "1e-7",
-        "KRONOS_CONDITION_MIN_LR": "1e-7",
+        "KRONOS_SCHEDULER_WARMUP_RATIO": os.getenv(
+            "KRONOS_SCHEDULER_WARMUP_RATIO", "0.01"
+        ),
+        "KRONOS_PREDICTOR_LEARNING_RATE": os.getenv(
+            "KRONOS_PREDICTOR_LEARNING_RATE", settings["predictor_lr"]
+        ),
+        "KRONOS_CONDITION_LEARNING_RATE": os.getenv(
+            "KRONOS_CONDITION_LEARNING_RATE", settings["condition_lr"]
+        ),
+        "KRONOS_PREDICTOR_WARMUP_START_LR": os.getenv(
+            "KRONOS_PREDICTOR_WARMUP_START_LR", settings["warmup_start_lr"]
+        ),
+        "KRONOS_CONDITION_WARMUP_START_LR": os.getenv(
+            "KRONOS_CONDITION_WARMUP_START_LR", settings["condition_warmup_start_lr"]
+        ),
+        "KRONOS_PREDICTOR_MIN_LR": os.getenv("KRONOS_PREDICTOR_MIN_LR", "1e-7"),
+        "KRONOS_CONDITION_MIN_LR": os.getenv("KRONOS_CONDITION_MIN_LR", "1e-7"),
         "KRONOS_BEST_SELECTION_METRIC": settings["best_metric"],
         "KRONOS_USE_BETA_V21_AUXILIARY": settings["auxiliary"],
         "KRONOS_BETA_V21_AUTO_CALIBRATE": "1" if stage == "v21" else "0",
@@ -312,9 +322,11 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_BETA_V21_CONSISTENCY_SAMPLES": "2048",
         "KRONOS_TRAIN_SAMPLES_PER_SEGMENT": "20000",
         "KRONOS_COVERAGE_SEED": os.getenv("KRONOS_COVERAGE_SEED", "100"),
-        "KRONOS_COVERAGE_PASSES": "1",
-        "KRONOS_EPOCHS": "1",
-        "KRONOS_REQUIRE_FULL_COVERAGE": "1",
+        "KRONOS_COVERAGE_PASSES": os.getenv("KRONOS_COVERAGE_PASSES", "1"),
+        "KRONOS_EPOCHS": os.getenv("KRONOS_EPOCHS", "1"),
+        "KRONOS_REQUIRE_FULL_COVERAGE": os.getenv(
+            "KRONOS_REQUIRE_FULL_COVERAGE", "1"
+        ),
         "KRONOS_EARLY_STOPPING_PATIENCE": "0",
         "KRONOS_VALIDATION_FULL_ONLY": settings["validation_full_only"],
         "KRONOS_VALIDATION_SAMPLES": "0",

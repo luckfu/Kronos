@@ -28,8 +28,6 @@ def setup_ddp():
             raise RuntimeError("TPU requested but torch_xla is not installed") from exc
 
         # PJRT moved topology helpers from xla_model to torch_xla.runtime.
-        # Read environment overrides first because xmp.spawn sets the ordinal
-        # after importing this module.
         def runtime_value(name, legacy_name, default):
             if xr is not None and hasattr(xr, name):
                 return int(getattr(xr, name)())
@@ -37,16 +35,25 @@ def setup_ddp():
                 return int(getattr(xm, legacy_name)())
             return int(default)
 
-        # The Kaggle smoke entry point deliberately launches one Python process
-        # with ``xmp.spawn(nprocs=1)``.  Some PJRT versions report the physical
-        # TPU device count from ``world_size()`` even in that mode.  Treating
-        # that count as a data-parallel process count would silently shard the
-        # dataset and scheduler by 8 while only one process is running.
+        # A one-core smoke deliberately forces a logical world size of one.
+        # The eight-core Kaggle launcher instead uses one worker thread per
+        # device.  Environment ordinals are process-wide in that mode, so the
+        # thread-local PJRT runtime API must be authoritative.
         single_process = os.getenv(
             "KRONOS_XLA_SINGLE_PROCESS", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        thread_per_device = os.getenv(
+            "KRONOS_XLA_THREAD_PER_DEVICE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         if single_process:
             rank, world_size, local_rank = 0, 1, 0
+        elif thread_per_device:
+            rank = runtime_value("global_ordinal", "get_ordinal", 0)
+            default_cores = int(os.getenv("KRONOS_TPU_CORES", "8"))
+            world_size = runtime_value("addressable_device_count", "xrt_world_size", default_cores)
+            if world_size <= 1 and default_cores > 1:
+                world_size = default_cores
+            local_rank = runtime_value("local_ordinal", "get_local_ordinal", rank)
         else:
             rank = int(os.environ["ORDINAL"]) if "ORDINAL" in os.environ else runtime_value(
                 "global_ordinal", "get_ordinal", 0

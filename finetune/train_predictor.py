@@ -17,9 +17,38 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 try:
     import torch_xla.core.xla_model as xm
     from torch_xla.distributed.parallel_loader import MpDeviceLoader
+    try:
+        import torch_xla.runtime as xr
+    except ImportError:
+        xr = None
 except ImportError:
     xm = None
+    xr = None
     MpDeviceLoader = None
+
+
+def get_xla_world_size():
+    """Safely get TPU world size across legacy XRT and modern PJRT runtimes."""
+    if xr is not None and hasattr(xr, 'addressable_device_count'):
+        try:
+            count = int(xr.addressable_device_count())
+            if count > 1:
+                return count
+        except Exception:
+            pass
+    if xr is not None and hasattr(xr, 'world_size'):
+        try:
+            count = int(xr.world_size())
+            if count > 1:
+                return count
+        except Exception:
+            pass
+    if xm is not None and hasattr(xm, 'xrt_world_size'):
+        try:
+            return int(xm.xrt_world_size())
+        except Exception:
+            pass
+    return int(os.getenv('KRONOS_TPU_CORES', '1'))
 
 try:
     import comet_ml
@@ -86,6 +115,25 @@ def append_metric(save_dir, **payload):
         handle.write(json.dumps(document) + '\n')
 
 
+def distributed_barrier(device, tag):
+    """Synchronize either a torch.distributed group or PJRT replicas."""
+    if dist.is_available() and dist.is_initialized():
+        dist.barrier()
+    elif device.type == 'xla' and xm is not None:
+        if os.getenv('KRONOS_XLA_SINGLE_PROCESS', '0').strip().lower() in {
+            '1', 'true', 'yes', 'on'
+        }:
+            return
+        try:
+            if get_xla_world_size() > 1:
+                xm.rendezvous(tag)
+        except Exception:
+            # Preserve the original exception at the operation following the
+            # barrier when a legacy one-core runtime lacks topology helpers.
+            if os.getenv('KRONOS_XLA_SINGLE_PROCESS', '0') != '1':
+                raise
+
+
 def optimizer_to(optimizer, device):
     for state in optimizer.state.values():
         for key, value in state.items():
@@ -146,6 +194,17 @@ def save_resume_state(path, model, optimizer, scheduler, **metadata):
         if xm is None:
             raise RuntimeError('Cannot save XLA checkpoint without torch_xla')
         xm.save(payload, temporary)
+        # ``xm.save`` is master-only by default.  Non-master replicas must not
+        # attempt the replace: their temporary file does not exist.
+        is_master = (
+            xm.is_master_ordinal() if hasattr(xm, 'is_master_ordinal')
+            else int(os.getenv('ORDINAL', '0')) == 0
+        )
+        if is_master:
+            os.replace(temporary, path)
+        distributed_barrier(model_device, 'kronos_resume_state_saved')
+        cleanup_drive_conflict_files()
+        return
     else:
         torch.save(payload, temporary)
     os.replace(temporary, path)
@@ -292,6 +351,58 @@ def validate_resume_guard(saved, current):
             )
 
 
+def restore_optimizer_for_scheduler_transition(
+    optimizer, source_state, target_group_plan, device
+):
+    """Restore AdamW moments while retaining the new stage's LR group plan."""
+    source_optimizer = source_state.get('optimizer')
+    if not isinstance(source_optimizer, dict):
+        raise ValueError('Scheduler transition checkpoint has no optimizer state')
+    source_groups = source_optimizer.get('param_groups', [])
+    if len(source_groups) != len(target_group_plan):
+        raise ValueError(
+            'Scheduler transition optimizer group count mismatch: '
+            f'{len(source_groups)} != {len(target_group_plan)}'
+        )
+    source_names = [group.get('name') for group in source_groups]
+    target_names = [group.get('name') for group in target_group_plan]
+    if source_names != target_names:
+        raise ValueError(
+            'Scheduler transition optimizer groups do not match: '
+            f'{source_names} != {target_names}'
+        )
+
+    optimizer.load_state_dict(source_optimizer)
+    optimizer_to(optimizer, device)
+    plan_keys = (
+        'name', 'family', 'lr', 'initial_lr', 'peak_lr', 'warmup_start_lr',
+        'min_lr', 'weight_decay',
+    )
+    for group, target in zip(optimizer.param_groups, target_group_plan):
+        for key in plan_keys:
+            if key in target:
+                group[key] = target[key]
+
+
+def validate_scheduler_transition_state(source_state, config, amp_dtype_name):
+    """Reject a cross-stage transition that changes the training contract."""
+    if int(source_state.get('resume_step', -1)) != 0:
+        raise ValueError('Scheduler transition requires a segment-boundary checkpoint')
+    if source_state.get('predictor_loss_mode') != config.get('predictor_loss_mode'):
+        raise ValueError('Scheduler transition predictor loss mode mismatch')
+    if not math.isclose(
+        float(source_state.get('history_loss_weight', float('nan'))),
+        float(config.get('history_loss_weight', 0.0)),
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError('Scheduler transition history loss weight mismatch')
+    if bool(source_state.get('use_amp', False)) != bool(config.get('use_amp', False)):
+        raise ValueError('Scheduler transition AMP mode mismatch')
+    if source_state.get('amp_dtype') != amp_dtype_name:
+        raise ValueError('Scheduler transition AMP dtype mismatch')
+
+
 def create_dataloaders(config: dict, rank: int, world_size: int):
     """
     Creates and returns distributed dataloaders for training and validation.
@@ -325,7 +436,7 @@ def create_dataloaders(config: dict, rank: int, world_size: int):
             f"Full-only validation size: {len(valid_dataset)}"
         )
 
-    use_ddp = dist.is_available() and dist.is_initialized()
+    use_ddp = (dist.is_available() and dist.is_initialized()) or world_size > 1
     train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=False) if use_ddp else None
     quick_val_sampler = (
         DistributedSampler(
@@ -762,11 +873,15 @@ def beta_v21_validation_score(metrics, config):
     path, _history, returns, barrier, ranking = (
         float(value.strip()) for value in raw.split(',')
     )
+    safe_path = max(path, 1e-6)
+    safe_returns = max(returns, 1e-6)
+    safe_barrier = max(barrier, 1e-6)
+    safe_ranking = max(ranking, 1e-6)
     return (
-        0.50 * metrics['weighted_forecast_loss'] / path
-        + 0.20 * metrics['return_loss'] / returns
-        + 0.20 * metrics['barrier_loss'] / barrier
-        + 0.10 * metrics['ranking_loss'] / ranking
+        0.50 * metrics['weighted_forecast_loss'] / safe_path
+        + 0.20 * metrics['return_loss'] / safe_returns
+        + 0.20 * metrics['barrier_loss'] / safe_barrier
+        + 0.10 * metrics['ranking_loss'] / safe_ranking
     )
 
 
@@ -795,10 +910,19 @@ def evaluate_validation(
             'barrier_loss': 0.0,
             'ranking_loss': 0.0,
         })
-    distributed_world_size = (
-        dist.get_world_size()
-        if dist.is_available() and dist.is_initialized() else 1
+    single_process_xla = (
+        device.type == 'xla'
+        and os.getenv('KRONOS_XLA_SINGLE_PROCESS', '0').strip().lower()
+        in {'1', 'true', 'yes', 'on'}
     )
+    if single_process_xla:
+        distributed_world_size = 1
+    elif dist.is_available() and dist.is_initialized():
+        distributed_world_size = dist.get_world_size()
+    elif device.type == 'xla' and xm is not None:
+        distributed_world_size = get_xla_world_size()
+    else:
+        distributed_world_size = 1
     consistency_limit = math.ceil(
         int(config.get('beta_v21_consistency_samples', 0))
         / distributed_world_size
@@ -1067,6 +1191,9 @@ def evaluate_validation(
     if dist.is_available() and dist.is_initialized():
         dist.all_reduce(totals, op=dist.ReduceOp.SUM)
         dist.all_reduce(counts, op=dist.ReduceOp.SUM)
+    elif device.type == 'xla' and xm is not None and distributed_world_size > 1:
+        totals = xm.all_reduce(xm.REDUCE_SUM, totals)
+        counts = xm.all_reduce(xm.REDUCE_SUM, counts)
     divisor = max(1, int(counts[1].item()))
     result = {
         key: float(value)
@@ -1089,22 +1216,44 @@ def evaluate_validation(
         if dist.is_available() and dist.is_initialized():
             gathered_validation = [None] * dist.get_world_size()
             dist.all_gather_object(gathered_validation, local_validation)
-        nonempty_validation = [
-            item for item in gathered_validation if item is not None
-        ]
-        if nonempty_validation:
-            global_returns = torch.cat(
-                [item[0] for item in nonempty_validation]
-            )
-            global_barriers = torch.cat(
-                [item[1] for item in nonempty_validation]
-            )
+        if (
+            device.type == 'xla' and xm is not None
+            and distributed_world_size > 1
+        ):
+            if local_validation is None:
+                raise RuntimeError('Every XLA validation replica must receive samples')
+            global_returns = xm.all_gather(
+                local_validation[0].to(device), dim=0
+            ).cpu()
+            global_barriers = xm.all_gather(
+                local_validation[1].to(device), dim=0
+            ).cpu()
             global_labels = {
-                key: torch.cat([
-                    item[2][key] for item in nonempty_validation
-                ])
-                for key in nonempty_validation[0][2]
+                key: xm.all_gather(value.to(device), dim=0).cpu()
+                for key, value in local_validation[2].items()
             }
+        else:
+            nonempty_validation = [
+                item for item in gathered_validation if item is not None
+            ]
+            global_returns = (
+                torch.cat([item[0] for item in nonempty_validation])
+                if nonempty_validation else None
+            )
+            global_barriers = (
+                torch.cat([item[1] for item in nonempty_validation])
+                if nonempty_validation else None
+            )
+            global_labels = (
+                {
+                    key: torch.cat([
+                        item[2][key] for item in nonempty_validation
+                    ])
+                    for key in nonempty_validation[0][2]
+                }
+                if nonempty_validation else None
+            )
+        if global_returns is not None:
             global_auxiliary_losses = compute_auxiliary_losses(
                 global_returns, global_barriers, global_labels
             )
@@ -1131,12 +1280,22 @@ def evaluate_validation(
         if dist.is_available() and dist.is_initialized():
             gathered = [None] * dist.get_world_size()
             dist.all_gather_object(gathered, local_consistency)
-        combined = [
-            torch.cat([item[index] for item in gathered], dim=0)[
-                :int(config.get('beta_v21_consistency_samples', 0))
+        consistency_samples = int(config.get('beta_v21_consistency_samples', 0))
+        if (
+            device.type == 'xla' and xm is not None
+            and distributed_world_size > 1
+        ):
+            combined = [
+                xm.all_gather(value.to(device), dim=0).cpu()[:consistency_samples]
+                for value in local_consistency
             ]
-            for index in range(3)
-        ]
+        else:
+            combined = [
+                torch.cat([item[index] for item in gathered], dim=0)[
+                    :consistency_samples
+                ]
+                for index in range(3)
+            ]
         result['return_path_consistency'] = consistency_statistics(*combined)
     if run_condition_ablation:
         result['condition_full_minus_none_forecast_loss'] = (
@@ -1163,6 +1322,9 @@ def evaluate_validation(
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(period_totals, op=dist.ReduceOp.SUM)
             dist.all_reduce(period_count, op=dist.ReduceOp.SUM)
+        elif device.type == 'xla' and xm is not None and distributed_world_size > 1:
+            period_totals = xm.all_reduce(xm.REDUCE_SUM, period_totals)
+            period_count = xm.all_reduce(xm.REDUCE_SUM, period_count)
         period_divisor = max(1, int(period_count.item()))
         metrics = {
             key: float(value)
@@ -1291,11 +1453,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 period_names={},
             )
             denominator_values = (
-                calibration_metrics['weighted_forecast_loss'],
-                calibration_metrics['history_loss'],
-                calibration_metrics['return_loss'],
-                calibration_metrics['barrier_loss'],
-                calibration_metrics['ranking_loss'],
+                max(float(calibration_metrics['weighted_forecast_loss']), 1e-5),
+                max(float(calibration_metrics['history_loss']), 1e-5),
+                max(float(calibration_metrics['return_loss']), 1e-5),
+                max(float(calibration_metrics['barrier_loss']), 1e-5),
+                max(float(calibration_metrics['ranking_loss']), 1e-5),
             )
             denominator_csv = ','.join(
                 f'{value:.17g}' for value in denominator_values
@@ -1314,8 +1476,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         'csv': denominator_csv,
                     }, handle, indent=2)
                 os.replace(f'{denominator_path}.tmp', denominator_path)
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
+            distributed_barrier(device, 'kronos_denominator_saved')
+            if os.path.exists(denominator_path):
+                with open(denominator_path) as handle:
+                    saved_denominators = json.load(handle)
+                config['beta_v21_validation_denominators'] = saved_denominators['csv']
         if not config.get('beta_v21_validation_denominators'):
             raise ValueError(
                 'Beta v2.1 requires fixed validation denominators or auto calibration'
@@ -1382,7 +1547,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     if scheduler_type not in {'warmup_cosine', 'warmup_constant', 'two_speed', 'uniform_cosine', 'fixed', 'one_cycle'}:
         raise ValueError('Unsupported v1-beta scheduler type')
     warmup_steps = max(
-        1,
+        0,
         int(round(scheduler_steps * float(config['scheduler_warmup_ratio']))),
     )
     condition_fast_decay_steps = max(
@@ -1439,6 +1604,14 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         scheduler = torch.optim.lr_scheduler.LambdaLR(
             optimizer, lr_lambda=scheduler_lambdas
         )
+    target_optimizer_group_plan = [
+        {
+            key: value
+            for key, value in group.items()
+            if key != 'params'
+        }
+        for group in optimizer.param_groups
+    ]
     if rank == 0:
         print(
             f"Learning-rate plan: {scheduler_steps:,} global optimizer steps; "
@@ -1471,6 +1644,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     batch_idx_global = 0
     start_epoch = 0
     resume_path = os.path.join(save_dir, 'checkpoints', 'last_state.pt')
+    scheduler_transition_source = ''
+    scheduler_transition_parent_segment = 0
     bootstrap_completed_segments = int(
         config.get('bootstrap_completed_segments', 0)
     )
@@ -1543,9 +1718,67 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 for group in optimizer.param_groups
             ],
             beta_v21_loss_ema=v21_normalizer.state_dict(),
+            scheduler_transition_source=scheduler_transition_source,
+            scheduler_transition_parent_segment=scheduler_transition_parent_segment,
         )
 
-    if config.get('resume_training', False) and os.path.exists(resume_path):
+    transition_path = str(config.get('scheduler_transition_state', '')).strip()
+    if transition_path:
+        if os.path.exists(resume_path):
+            raise ValueError(
+                'Scheduler transition requires a new output tree without last_state.pt'
+            )
+        if scheduler_type == 'one_cycle':
+            raise ValueError('Scheduler transition does not support one_cycle')
+        if not os.path.isfile(transition_path):
+            raise FileNotFoundError(
+                f'Scheduler transition checkpoint not found: {transition_path}'
+            )
+        transition_state = torch.load(
+            transition_path, map_location='cpu', weights_only=False
+        )
+        validate_scheduler_transition_state(
+            transition_state, config, amp_dtype_name
+        )
+        core_model.load_state_dict(transition_state['model'])
+        restore_optimizer_for_scheduler_transition(
+            optimizer, transition_state, target_optimizer_group_plan, device
+        )
+        if config.get('use_beta_v21_auxiliary', False):
+            saved_ema = transition_state.get('beta_v21_loss_ema')
+            if saved_ema is None:
+                raise ValueError(
+                    'Beta v2.1 scheduler transition checkpoint has no loss EMA state'
+                )
+            v21_normalizer.load_state_dict(saved_ema)
+        if scale_gradients:
+            if 'amp_scaler' not in transition_state:
+                raise ValueError(
+                    'Scheduler transition checkpoint has no AMP scaler state'
+                )
+            scaler.load_state_dict(transition_state['amp_scaler'])
+        scheduler.last_epoch = 0
+        scheduler._step_count = 1
+        scheduler._last_lr = [
+            float(group['lr']) for group in optimizer.param_groups
+        ]
+        batch_idx_global = 0
+        start_epoch = 0
+        scheduler_transition_source = os.path.abspath(transition_path)
+        scheduler_transition_parent_segment = int(
+            transition_state.get('next_epoch', 0)
+        )
+        if rank == 0:
+            family_lrs = learning_rates_by_family(optimizer)
+            print(
+                'Started a new scheduler stage while preserving model and AdamW '
+                f'state from parent Segment {scheduler_transition_parent_segment}; '
+                f'new stage Segment 1/{effective_epochs}, scheduler={scheduler_type}, '
+                f'warmup_steps={warmup_steps}, optimizer_steps={scheduler_steps}, '
+                f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
+                f'condition_lr={family_lrs["condition"]:.10e}.'
+            )
+    elif config.get('resume_training', False) and os.path.exists(resume_path):
         resume_state = torch.load(resume_path, map_location='cpu', weights_only=False)
         validate_resume_guard(resume_state.get('resume_guard'), resume_guard)
         saved_effective_epochs = int(resume_state.get('effective_epochs', effective_epochs))
@@ -1627,6 +1860,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             resume_state.get('post_coverage_without_improvement', 0)
         )
         batch_idx_global = int(resume_state.get('batch_idx_global', 0))
+        scheduler_transition_source = str(
+            resume_state.get('scheduler_transition_source', '')
+        )
+        scheduler_transition_parent_segment = int(
+            resume_state.get('scheduler_transition_parent_segment', 0)
+        )
         if int(scheduler.last_epoch) != batch_idx_global:
             raise ValueError(
                 'Resume scheduler step does not match persisted global batch step: '
@@ -1764,10 +2003,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         coverage_epoch = epoch_idx + int(config.get('coverage_epoch_offset', 0))
         train_dataset.set_epoch_seed(coverage_epoch)
         valid_dataset.set_epoch_seed(0)
-        if isinstance(train_loader.sampler, DistributedSampler):
-            train_loader.sampler.num_samples = math.ceil(len(train_dataset) / world_size)
-            train_loader.sampler.total_size = train_loader.sampler.num_samples * world_size
-            train_loader.sampler.set_epoch(epoch_idx)
+        train_sampler = getattr(train_loader, 'sampler', None)
+        if train_sampler is None and hasattr(train_loader, '_loader'):
+            train_sampler = getattr(train_loader._loader, 'sampler', None)
+        if isinstance(train_sampler, DistributedSampler):
+            train_sampler.num_samples = math.ceil(len(train_dataset) / world_size)
+            train_sampler.total_size = train_sampler.num_samples * world_size
+            train_sampler.set_epoch(epoch_idx)
 
         if rank == 0:
             write_progress(
@@ -2058,8 +2300,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
                     device=str(device),
                 )
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
+            distributed_barrier(device, 'kronos_training_interrupted')
             dt_result.update({
                 'best_val_loss': best_val_loss,
                 'status': 'stopped',
@@ -2346,6 +2587,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     forecast_loss=large_metrics['forecast_loss'],
                     samples=len(valid_dataset),
                     batches=large_metrics['batches'],
+                    train_average=epoch_loss_sum / max(epoch_batches, 1),
+                    best_loss=float(best_val_loss),
+                    best_selection_metric=selection_metric,
+                    selection_loss=(
+                        float(selection_val_loss)
+                        if selection_val_loss is not None else None
+                    ),
                     manifest_sha256=getattr(
                         valid_dataset, 'fixed_validation_manifest_sha256', None
                     ),
@@ -2360,8 +2608,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         'return_path_consistency'
                     ),
                 )
-        if dist.is_available() and dist.is_initialized():
-            dist.barrier()
+        distributed_barrier(device, f'kronos_segment_{next_segment}_saved')
 
         # A wall-clock stop is evaluated only after validation/checkpointing,
         # preserving a complete segment and a resumable last_state.pt.
@@ -2374,6 +2621,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 [int(runtime_limit_reached)], device=device, dtype=torch.int32
             )
             dist.broadcast(decision, src=0)
+            runtime_limit_reached = bool(decision.item())
+        elif device.type == 'xla' and xm is not None and world_size > 1:
+            decision = torch.tensor(
+                [int(runtime_limit_reached)], device=device, dtype=torch.int32
+            )
+            decision = xm.all_reduce(xm.REDUCE_MAX, decision)
             runtime_limit_reached = bool(decision.item())
         if runtime_limit_reached:
             if rank == 0:
@@ -2470,8 +2723,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
 
 def main(config: dict):
     """Main function to orchestrate the DDP training process."""
-    signal.signal(signal.SIGINT, request_safe_stop)
-    signal.signal(signal.SIGTERM, request_safe_stop)
+    try:
+        import threading
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, request_safe_stop)
+            signal.signal(signal.SIGTERM, request_safe_stop)
+    except (ValueError, AttributeError):
+        pass
     rank, world_size, local_rank = setup_ddp()
     if os.getenv('KRONOS_DEVICE', '').lower() in {'xla', 'tpu'}:
         if xm is None:
@@ -2508,8 +2766,7 @@ def main(config: dict):
             comet_logger.log_parameters(config)
             print("Comet Logger Initialized.")
 
-    if dist.is_available() and dist.is_initialized():
-        dist.barrier()
+    distributed_barrier(device, 'kronos_model_initialized')
 
     # Model Initialization
     tokenizer_path = config['finetuned_tokenizer_path']

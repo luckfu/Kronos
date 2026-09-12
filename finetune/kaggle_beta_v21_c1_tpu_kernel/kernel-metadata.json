@@ -1,0 +1,17 @@
+{
+  "id": "smmt315/kronos-beta-v2-1-c1-tpu",
+  "title": "Kronos Beta V2 1 C1 TPU",
+  "code_file": "kaggle_beta_v21_c1_tpu.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": true,
+  "machine_shape": "TpuV5E8",
+  "enable_internet": true,
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
