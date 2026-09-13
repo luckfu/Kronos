@@ -11,6 +11,11 @@ RUNNER = (
     / "finetune/kaggle_small_0_1_stage2_cosine_refinement_c1_kernel"
     / "kaggle_small_0_1_stage2_cosine_refinement_c1.py"
 )
+C2_RUNNER = (
+    ROOT
+    / "finetune/kaggle_small_0_1_stage2_cosine_refinement_c2_kernel"
+    / "kaggle_small_0_1_stage2_cosine_refinement_c2.py"
+)
 
 
 def load_helpers():
@@ -97,3 +102,22 @@ def test_config_accepts_literal_zero_warmup():
     source = CONFIG.read_text()
     assert "0 <= self.scheduler_warmup_ratio < 1" in source
     assert "KRONOS_SCHEDULER_TRANSITION_STATE" in source
+
+
+def test_refinement_c2_exactly_resumes_c1_and_finishes_global_plan():
+    source = C2_RUNNER.read_text()
+    required = (
+        'EXPECTED_PARENT_SEGMENT = 130',
+        'EXPECTED_TOTAL_SEGMENTS = 267',
+        'MAX_SEGMENTS_PER_RUN = 137',
+        'COVERAGE_SEED = "20260912"',
+        'state.get("scheduler_type") != "uniform_cosine"',
+        'state.get("scheduler_warmup_steps", -1)) != 0',
+        'state.get("scheduler_total_steps", -1)) != 83571',
+        '"KRONOS_SMALL_V21_CONTINUATION_ROOT": str(source_root)',
+        '"KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION": "0"',
+        '"SWANLAB_RUN_ID": "small_0.1_stage2_cosine_refinement"',
+    )
+    for declaration in required:
+        assert declaration in source
+    assert "KRONOS_SCHEDULER_TRANSITION_STATE" not in source
