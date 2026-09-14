@@ -2,8 +2,13 @@ import json, os, shutil, subprocess, sys
 from pathlib import Path
 
 ROOT = Path('/kaggle/working/Kronos')
-SWANLAB_KEY = os.environ.get('SWANLAB_API_KEY', 'fmEPDGk4IItxgqSZKGL8i')
+# Match Stage2 C2 SwanLab account/project so the run shows on the same dashboard.
+SWANLAB_KEY = os.environ.get('SWANLAB_API_KEY', 'fmEPDGk4IItxgqSZKGLi8')
 os.environ['SWANLAB_API_KEY'] = SWANLAB_KEY
+os.environ.setdefault('SWANLAB_MODE', 'cloud')
+print('install_swanlab_started', flush=True)
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--progress-bar', 'off', 'swanlab'], check=True)
+print('install_swanlab_finished', flush=True)
 subprocess.run(['git', 'clone', '--depth', '1', 'https://github.com/luckfu/Kronos.git', str(ROOT)], check=True)
 sys.path.insert(0, str(ROOT))
 os.environ['PYTHONPATH'] = str(ROOT) + os.pathsep + os.environ.get('PYTHONPATH', '')
@@ -15,10 +20,9 @@ trainer.parent.mkdir(parents=True, exist_ok=True)
 trainer.write_text(r'''import argparse, json, os, time
 from pathlib import Path
 import torch
-try:
- import swanlab
-except Exception:
- swanlab = None
+import subprocess, sys
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--progress-bar', 'off', 'swanlab'], check=True)
+import swanlab
 from torch.utils.data import DataLoader
 from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
@@ -36,13 +40,16 @@ def main(a):
     model=Kronos.from_pretrained(a.model_dir).to(device)
     tok=KronosTokenizer.from_pretrained(a.tokenizer_dir).to(device).eval()
     for p in tok.parameters(): p.requires_grad_(False)
-    run = None
-    if swanlab is not None:
-        run = swanlab.init(project='Kronos', experiment_name='small_0.1_stage3_path_alignment_from_c2_best', config={'lr':a.lr,'batch':a.batch,'segments':a.segments,'top_k':16,'candidates':16,'parent':'c2_best','validation':'full'}, mode='cloud')
-        run_url = getattr(run, 'url', getattr(run, 'web_url', ''))
-        print('SWANLAB_RUN_URL=' + str(run_url), flush=True)
-        if not run_url:
-            raise RuntimeError('SwanLab init returned no run URL; refusing to start training')
+    api_key = os.environ.get('SWANLAB_API_KEY', '').strip()
+    if not api_key:
+        raise RuntimeError('SWANLAB_API_KEY missing; refusing to start training without dashboard')
+    swanlab.login(api_key=api_key)
+    # Same dashboard as Stage2 C2: @roc_fu/finance
+    run = swanlab.init(project='finance', workspace='roc_fu', experiment_name='small_0.1_stage3_path_alignment_from_c2_best', config={'lr':a.lr,'batch':a.batch,'segments':a.segments,'top_k':16,'candidates':16,'parent':'c2_best','validation':'full'}, mode='cloud')
+    run_url = getattr(run, 'url', getattr(run, 'web_url', ''))
+    print('SWANLAB_RUN_URL=' + str(run_url), flush=True)
+    if not run_url:
+        raise RuntimeError('SwanLab init returned no run URL; refusing to start training')
     model.train(); ds=QlibDataset('train'); loader=DataLoader(ds,batch_size=a.batch,shuffle=False,num_workers=0)
     os.environ['KRONOS_VALIDATION_SAMPLES']='0'
     val_ds=QlibDataset('val'); val_loader=DataLoader(val_ds,batch_size=a.batch,shuffle=False,num_workers=0)
