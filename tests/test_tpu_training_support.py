@@ -123,6 +123,14 @@ def test_c1_runner_uses_hardcoded_swanlab_api_key():
     assert 'UserSecretsClient' not in source
 
 
+def test_c1_runner_reuses_stable_swanlab_run_id():
+    source = TPU_RUNNER.read_text()
+
+    assert 'SWANLAB_RUN_ID = "qc963f47"' in source
+    assert '"SWANLAB_RUN_ID": os.getenv("SWANLAB_RUN_ID", SWANLAB_RUN_ID)' in source
+    assert 'run = swanlab.init(id=run_id, resume="allow", **init_kwargs)' in source
+
+
 def test_c1_kernel_requests_tpu_machine_shape():
     smoke_metadata = json.loads(
         (ROOT / "finetune/kaggle_beta_v21_c1_tpu_smoke_kernel/kernel-metadata.json").read_text()
@@ -154,6 +162,15 @@ def test_xla_loader_skips_disabled_quick_validation_loader():
     wrapper = "val_loader = MpDeviceLoader(val_loader, device)"
     assert guard in source
     assert source.index(guard) < source.index(wrapper)
+
+
+def test_xla_full_validation_runs_on_rank_zero_only_when_configured():
+    source = TRAINER.read_text()
+
+    assert "validation_rank0_only" in source
+    assert "if rank0_only_validation and rank != 0:" in source
+    assert "loader = []" in source
+    assert "None if rank0_only_validation else" in source
 
 
 def load_tpu_runner():
@@ -206,6 +223,7 @@ def test_c1_runner_environment_passes_config_validation(tmp_path):
     assert config.beta_v21_auto_calibrate
     assert config.best_selection_metric == "beta_v21_score"
     assert config.validation_full_only
+    assert config.validation_rank0_only
     assert config.n_train_iter == 20480
     assert config.n_val_iter == 0
     assert config.coverage_passes == 3
@@ -216,7 +234,9 @@ def test_c1_runner_environment_passes_config_validation(tmp_path):
     assert env["XLA_USE_BF16"] == "1"
     assert env["KRONOS_XLA_SINGLE_PROCESS"] == "0"
     assert env["KRONOS_NUM_WORKERS"] == "0"
+    assert env["KRONOS_VALIDATION_RANK0_ONLY"] == "1"
     assert env["KRONOS_MAX_RUNTIME_SECONDS"] == "27000"
+    assert env["SWANLAB_RUN_ID"] == runner.SWANLAB_RUN_ID
 
 
 def test_xla_resume_checkpoint_uses_xla_serializer_and_rng_state():
@@ -345,6 +365,48 @@ def test_tpu_trainer_safely_resolves_sampler_from_mp_device_loader():
 def test_tpu_trainer_registers_signals_only_in_main_thread():
     source = TRAINER.read_text()
     assert "threading.current_thread() is threading.main_thread()" in source
+
+
+def test_thread_per_device_reuses_dataset_instances_within_process():
+    source = TRAINER.read_text()
+
+    assert "_DATASET_CACHE = {}" in source
+    assert "_DATASET_CACHE_LOCK = threading.Lock()" in source
+    assert "def _get_shared_dataset(data_type):" in source
+    assert "train_dataset = _get_shared_dataset('train')" in source
+    assert "valid_dataset = _get_shared_dataset('val')" in source
+    assert "train_dataset = QlibDataset('train')" not in source
+    assert "valid_dataset = QlibDataset('val')" not in source
+
+
+def test_validation_progress_receives_rank_at_every_call_site():
+    tree = ast.parse(TRAINER.read_text())
+    evaluate = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "evaluate_validation"
+    )
+    argument_names = [argument.arg for argument in evaluate.args.args]
+    assert "rank" in argument_names
+
+    calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "evaluate_validation"
+    ]
+    assert len(calls) == 3
+    assert all(
+        any(keyword.arg == "rank" for keyword in call.keywords)
+        for call in calls
+    )
+
+
+def test_xla_validation_preserves_global_auxiliary_metric_inputs():
+    source = TRAINER.read_text()
+    assert "collect_validation_auxiliary = use_beta_v21 and device.type != 'xla'" in source
+    assert "if collect_validation_auxiliary:\n                        validation_auxiliary.append" in source
+    assert "if collect_validation_auxiliary and validation_auxiliary:" in source
+    assert "Every XLA validation replica must receive samples" not in source
 
 
 def test_beta_v21_validation_score_safe_against_zero_denominators():

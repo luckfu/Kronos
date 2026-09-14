@@ -4,6 +4,7 @@ import json
 import math
 import random
 import signal
+import threading
 import time
 from time import gmtime, strftime
 import numpy as np
@@ -79,6 +80,27 @@ from drive_cleanup import cleanup_drive_conflict_files
 
 
 STOP_REQUESTED = False
+
+# PJRT's thread-per-device launcher invokes ``main`` concurrently from eight
+# threads in one Python process.  Constructing QlibDataset independently in
+# every thread reloads both full pandas panels eight times (16 copies in
+# total), which can exhaust Kaggle host RAM before the first segment finishes.
+# Dataset access is read-only during a segment; share one instance per data
+# split within the process and keep the cache scoped to this training run.
+_DATASET_CACHE = {}
+_DATASET_CACHE_LOCK = threading.Lock()
+
+
+def _get_shared_dataset(data_type):
+    dataset = _DATASET_CACHE.get(data_type)
+    if dataset is not None:
+        return dataset
+    with _DATASET_CACHE_LOCK:
+        dataset = _DATASET_CACHE.get(data_type)
+        if dataset is None:
+            dataset = QlibDataset(data_type)
+            _DATASET_CACHE[data_type] = dataset
+    return dataset
 
 
 def request_safe_stop(signum, frame):
@@ -416,8 +438,8 @@ def create_dataloaders(config: dict, rank: int, world_size: int):
         tuple: training, quick-validation and large-validation loaders and datasets.
     """
     print(f"[Rank {rank}] Creating distributed dataloaders...")
-    train_dataset = QlibDataset('train')
-    valid_dataset = QlibDataset('val')
+    train_dataset = _get_shared_dataset('train')
+    valid_dataset = _get_shared_dataset('val')
     validation_full_only = bool(config.get('validation_full_only', False))
     quick_dataset = None
     if not validation_full_only:
@@ -444,7 +466,18 @@ def create_dataloaders(config: dict, rank: int, world_size: int):
         )
         if use_ddp and quick_dataset is not None else None
     )
-    large_val_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False) if use_ddp else None
+    rank0_only_validation = bool(
+        config.get('validation_rank0_only', False)
+        and world_size > 1
+        and os.getenv('KRONOS_DEVICE', '').lower() == 'xla'
+    )
+    # Non-zero TPU workers do not iterate validation in rank-0-only mode. Do
+    # not shard rank 0: it must see the complete fixed validation set.
+    large_val_sampler = (
+        None if rank0_only_validation else
+        DistributedSampler(valid_dataset, num_replicas=world_size, rank=rank, shuffle=False)
+        if use_ddp else None
+    )
 
     train_loader = DataLoader(
         train_dataset, batch_size=config['batch_size'], sampler=train_sampler,
@@ -887,7 +920,7 @@ def beta_v21_validation_score(metrics, config):
 
 def evaluate_validation(
     model, tokenizer, loader, device, config, amp_dtype, run_condition_ablation=False,
-    period_names=None,
+    period_names=None, rank=0,
 ):
     """Evaluate a fixed validation set and report its named date periods."""
     model.eval()
@@ -927,9 +960,27 @@ def evaluate_validation(
         int(config.get('beta_v21_consistency_samples', 0))
         / distributed_world_size
     )
+    rank0_only_validation = bool(
+        config.get('validation_rank0_only', False)
+        and device.type == 'xla'
+        and distributed_world_size > 1
+    )
+    if rank0_only_validation and rank != 0:
+        # Keep all workers in the collective reductions below, but avoid
+        # materializing validation batches/model outputs on seven workers.
+        loader = []
+    if rank0_only_validation and rank == 0:
+        consistency_limit = int(config.get('beta_v21_consistency_samples', 0))
     consistency_auxiliary = []
     consistency_generated = []
     consistency_actual = []
+    # A full TPU validation can contain 100k+ samples.  Keeping auxiliary
+    # predictions and labels for every batch and then all-gathering them
+    # creates a second copy on every TPU replica and can exhaust the Kaggle
+    # host before the scalar metrics are reduced.  The scalar auxiliary losses
+    # are already accumulated below, so only non-XLA callers need the legacy
+    # sample-level collection for detailed post-hoc statistics.
+    collect_validation_auxiliary = use_beta_v21 and device.type != 'xla'
     validation_auxiliary = []
     period_names = dict(period_names or {})
     period_sums = {
@@ -1002,18 +1053,19 @@ def evaluate_validation(
                         auxiliary_predictions['barrier'],
                         auxiliary_labels,
                     )
-                    validation_auxiliary.append((
-                        auxiliary_predictions['return'].detach().float().cpu(),
-                        auxiliary_predictions['barrier'].detach().float().cpu(),
-                        {
-                            key: auxiliary_labels[key].detach().cpu()
-                            for key in (
-                                'return_targets', 'return_scales',
-                                'barrier_target', 'barrier_valid',
-                                'utility', 'date_id',
-                            )
-                        },
-                    ))
+                    if collect_validation_auxiliary:
+                        validation_auxiliary.append((
+                            auxiliary_predictions['return'].detach().float().cpu(),
+                            auxiliary_predictions['barrier'].detach().float().cpu(),
+                            {
+                                key: auxiliary_labels[key].detach().cpu()
+                                for key in (
+                                    'return_targets', 'return_scales',
+                                    'barrier_target', 'barrier_valid',
+                                    'utility', 'date_id',
+                                )
+                            },
+                        ))
             batch_samples = int(batch_x.shape[0])
             samples += batch_samples
             sums['objective_loss'] += losses['objective'].item() * batch_samples
@@ -1034,6 +1086,11 @@ def evaluate_validation(
                 sums['barrier_loss'] += auxiliary_losses['barrier'].item() * batch_samples
                 sums['ranking_loss'] += auxiliary_losses['ranking'].item() * batch_samples
             batches += 1
+            if rank == 0 and (batches % 50 == 0 or batches == len(loader)):
+                print(
+                    f"[VAL] Processed {batches}/{len(loader)} batches...",
+                    flush=True,
+                )
 
             consistency_seen = sum(
                 value.shape[0] for value in consistency_auxiliary
@@ -1203,7 +1260,7 @@ def evaluate_validation(
     result['samples'] = int(counts[1].item())
     if use_beta_v21:
         local_validation = None
-        if validation_auxiliary:
+        if collect_validation_auxiliary and validation_auxiliary:
             local_validation = (
                 torch.cat([item[0] for item in validation_auxiliary]),
                 torch.cat([item[1] for item in validation_auxiliary]),
@@ -1212,27 +1269,11 @@ def evaluate_validation(
                     for key in validation_auxiliary[0][2]
                 },
             )
-        gathered_validation = [local_validation]
-        if dist.is_available() and dist.is_initialized():
-            gathered_validation = [None] * dist.get_world_size()
-            dist.all_gather_object(gathered_validation, local_validation)
-        if (
-            device.type == 'xla' and xm is not None
-            and distributed_world_size > 1
-        ):
-            if local_validation is None:
-                raise RuntimeError('Every XLA validation replica must receive samples')
-            global_returns = xm.all_gather(
-                local_validation[0].to(device), dim=0
-            ).cpu()
-            global_barriers = xm.all_gather(
-                local_validation[1].to(device), dim=0
-            ).cpu()
-            global_labels = {
-                key: xm.all_gather(value.to(device), dim=0).cpu()
-                for key, value in local_validation[2].items()
-            }
-        else:
+        if collect_validation_auxiliary:
+            gathered_validation = [local_validation]
+            if dist.is_available() and dist.is_initialized():
+                gathered_validation = [None] * dist.get_world_size()
+                dist.all_gather_object(gathered_validation, local_validation)
             nonempty_validation = [
                 item for item in gathered_validation if item is not None
             ]
@@ -1253,21 +1294,21 @@ def evaluate_validation(
                 }
                 if nonempty_validation else None
             )
-        if global_returns is not None:
-            global_auxiliary_losses = compute_auxiliary_losses(
-                global_returns, global_barriers, global_labels
-            )
-            result.update({
-                'return_loss': float(global_auxiliary_losses['return'].item()),
-                'return_huber_loss': float(
-                    global_auxiliary_losses['return_huber'].item()
-                ),
-                'return_bias_loss': float(
-                    global_auxiliary_losses['return_bias'].item()
-                ),
-                'barrier_loss': float(global_auxiliary_losses['barrier'].item()),
-                'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
-            })
+            if global_returns is not None:
+                global_auxiliary_losses = compute_auxiliary_losses(
+                    global_returns, global_barriers, global_labels
+                )
+                result.update({
+                    'return_loss': float(global_auxiliary_losses['return'].item()),
+                    'return_huber_loss': float(
+                        global_auxiliary_losses['return_huber'].item()
+                    ),
+                    'return_bias_loss': float(
+                        global_auxiliary_losses['return_bias'].item()
+                    ),
+                    'barrier_loss': float(global_auxiliary_losses['barrier'].item()),
+                    'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
+                })
         result['beta_v21_score'] = beta_v21_validation_score(result, config)
         local_consistency = (
             torch.cat(consistency_auxiliary),
@@ -1281,7 +1322,12 @@ def evaluate_validation(
             gathered = [None] * dist.get_world_size()
             dist.all_gather_object(gathered, local_consistency)
         consistency_samples = int(config.get('beta_v21_consistency_samples', 0))
-        if (
+        if rank0_only_validation:
+            # Validation is intentionally rank-0-only on Kaggle TPU. The
+            # scalar losses have already been reduced above; consistency is a
+            # diagnostic and need not be all-gathered from empty workers.
+            combined = list(local_consistency)
+        elif (
             device.type == 'xla' and xm is not None
             and distributed_world_size > 1
         ):
@@ -1451,6 +1497,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 amp_dtype,
                 run_condition_ablation=False,
                 period_names={},
+                rank=rank,
             )
             denominator_values = (
                 max(float(calibration_metrics['weighted_forecast_loss']), 1e-5),
@@ -2360,6 +2407,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 model, tokenizer, val_loader, device, config, amp_dtype,
                 run_condition_ablation=run_condition_ablation,
                 period_names=getattr(valid_dataset, 'validation_period_names', {}),
+                rank=rank,
             )
         if run_large_validation:
             if rank == 0:
@@ -2371,6 +2419,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 model, tokenizer, large_val_loader, device, config, amp_dtype,
                 run_condition_ablation=False,
                 period_names=getattr(valid_dataset, 'validation_period_names', {}),
+                rank=rank,
             )
 
         primary_metrics = large_metrics if validation_full_only else quick_metrics

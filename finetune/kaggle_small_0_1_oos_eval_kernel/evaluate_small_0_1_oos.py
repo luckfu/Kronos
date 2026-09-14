@@ -56,6 +56,7 @@ def main():
     parser.add_argument("--tokenizer", required=True)
     parser.add_argument("--best-model", required=True)
     parser.add_argument("--last-model", required=True)
+    parser.add_argument("--base-model", default="")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--sample-count", type=int, default=1)
@@ -64,14 +65,20 @@ def main():
     args = parser.parse_args()
     root = Path(args.evaluation_root)
     manifest = json.loads((root / "evaluation_manifest.json").read_text())
-    if not manifest["temporal_isolation"].get("strictly_after_parent_latest_training_target"):
+    isolation = manifest["temporal_isolation"]
+    isolated = (
+        isolation.get("strictly_after_parent_latest_training_target")
+        or isolation.get("targets_strictly_after_training_target_end")
+    )
+    if not isolated:
         raise RuntimeError("Evaluation package is not temporally isolated")
     with (root / manifest["artifacts"]["panel_file"]).open("rb") as handle:
         panel = pickle.load(handle)
-    all_records = load_samples(root / manifest["artifacts"]["samples_file"])["future_all"]
-    isolation = manifest["temporal_isolation"]
-    start = isolation["future_signal_start"]
-    end = isolation["future_signal_end"]
+    sample_groups = load_samples(root / manifest["artifacts"]["samples_file"])
+    sample_key = "incremental_future_all" if "incremental_future_all" in sample_groups else "future_all"
+    all_records = sample_groups[sample_key]
+    start = isolation.get("incremental_signal_start", isolation.get("future_signal_start"))
+    end = isolation.get("incremental_signal_end", isolation.get("future_signal_end"))
     records = [r for r in all_records if start <= r["asof_date"] <= end]
     if not records:
         raise RuntimeError("No records in the manifest-defined future signal range")
@@ -91,7 +98,9 @@ def main():
     else:
         device = torch.device("cpu")
     tokenizer = KronosTokenizer.from_pretrained(args.tokenizer).to(device).eval()
-    models = {"best_segment_530": Path(args.best_model), "last_segment_534": Path(args.last_model)}
+    models = {"c2_best_segment_179": Path(args.best_model), "c2_last_segment_267": Path(args.last_model)}
+    if args.base_model:
+        models["base_kronos_small"] = Path(args.base_model)
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
     shard_dir = output / "shards"
@@ -135,6 +144,7 @@ def main():
         "training_performed": False,
         "device": str(device),
         "manifest": manifest["name"],
+        "sample_set": sample_key,
         "temporal_isolation": manifest["temporal_isolation"],
         "models": {label: str(path) for label, path in models.items()},
         "sample_count": len(records),

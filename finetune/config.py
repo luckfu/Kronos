@@ -98,6 +98,13 @@ class Config:
         self.validation_full_only = os.getenv(
             "KRONOS_VALIDATION_FULL_ONLY", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        # On a single Kaggle TPU host, running the 100k+ sample validation
+        # concurrently on all eight PJRT workers multiplies host-side pandas
+        # and XLA staging buffers. Rank 0 can evaluate the fixed set while
+        # the other workers synchronize on the reduced scalar metrics.
+        self.validation_rank0_only = os.getenv(
+            "KRONOS_VALIDATION_RANK0_ONLY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.validation_large_samples = int(
             os.getenv("KRONOS_VALIDATION_LARGE_SAMPLES", "12000")
         )

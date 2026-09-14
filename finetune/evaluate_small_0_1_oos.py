@@ -57,6 +57,8 @@ def main():
     parser.add_argument("--best-model", required=True)
     parser.add_argument("--last-model", required=True)
     parser.add_argument("--base-model", default="")
+    parser.add_argument("--main-best-model", default="")
+    parser.add_argument("--main-last-model", default="")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--sample-count", type=int, default=1)
@@ -93,6 +95,10 @@ def main():
         device = torch.device("cpu")
     tokenizer = KronosTokenizer.from_pretrained(args.tokenizer).to(device).eval()
     models = {"best_segment_530": Path(args.best_model), "last_segment_534": Path(args.last_model)}
+    if args.main_best_model:
+        models["wc_main_best"] = Path(args.main_best_model)
+    if args.main_last_model:
+        models["wc_main_last"] = Path(args.main_last_model)
     if args.base_model:
         models["base_kronos_small"] = Path(args.base_model)
     output = Path(args.output_dir)

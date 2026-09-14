@@ -95,3 +95,6 @@ venv.bak/
 temp/
 tmp/
 .python-version
+
+# Local evaluation/download scratch artifacts
+/scratch/

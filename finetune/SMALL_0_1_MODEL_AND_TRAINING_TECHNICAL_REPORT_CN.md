@@ -2,9 +2,9 @@
 
 ## 1. 摘要与范围
 
-本文记录 Kronos-small `small_0.1` 从 `small_0.1_bootstrap_timing` 初始化、经 `small_0.1_main` 主训练、`small_0.1_stage2_extend_01` 增训，到 `small_0.1_stage2_wc_last` 第一轮 Warmup-Constant 训练的模型设计、数据处理、优化配置和实测结果。报告面向论文撰写，优先记录可由代码和训练日志复核的事实。
+本文记录 Kronos-small `small_0.1` 从 `small_0.1_bootstrap_timing` 初始化、经 `small_0.1_main` 主训练、`small_0.1_stage2_extend_01` 增训、两轮 Warmup-Constant 训练，到 `small_0.1_stage2_cosine_refinement` 退火收口的模型设计、数据处理、优化配置和实测结果。报告面向论文撰写，优先记录可由代码和训练日志复核的事实。
 
-`small_0.1_stage2_wc_last` 是从 Extend 01 后继续进行的 Warmup-Constant 训练。本轮已完成 534/534 个 segments；由于尚未出现明确的平台期，报告记录其完整结果，但不将其解释为已经收敛或已经证明优于 cosine。其后的 `small_0.1_stage2_wc_dual_t4` continuation 也已完成 534/534 segments，作为下一轮完整 coverage 单独记录，不与上一轮结果混合。
+`small_0.1_stage2_wc_last` 是从 Extend 01 后继续进行的 Warmup-Constant 训练，本轮已完成 534/534 个 segments；其后的 `small_0.1_stage2_wc_dual_t4` continuation 也已完成 534/534 segments，随后进行的 `small_0.1_stage2_cosine_refinement` 退火训练完成 267/267 segments。三者均作为独立阶段记录，不混合不同 scheduler 的结果。
 
 ## 2. 版本血缘与研究目标
 
@@ -18,10 +18,11 @@ flowchart LR
     M --> L[Main last_model]
     L --> E[Stage 2 Extend 01<br/>新 seed 20260907<br/>190/534 segments]
     E --> WC[Stage 2 WC Last<br/>Warmup-Constant<br/>534/534 segments]
-    WC -.下一轮 continuation.-> WCN[后续 WC 训练<br/>进行中，待记录]
+    WC --> WCN[Stage 2 WC Dual T4<br/>Warmup-Constant<br/>534/534 segments]
+    WCN --> AN[Cosine refinement 退火<br/>267/267 segments]
 ```
 
-Bootstrap 从预训练底座开始，以双学习率完成条件化初始化；Main 继承 Bootstrap 的 `best_model`，切换为统一学习率并完成一轮主训练；Extend 01 再继承 Main 的 `last_model`，使用不同窗口排列进行续训；WC 继承 Extend 01 C2 的 `last_model`，改用 Warmup-Constant 并完成一轮完整 coverage。四者是串行训练血缘，不是从底座出发的并列实验。
+Bootstrap 从预训练底座开始，以双学习率完成条件化初始化；Main 继承 Bootstrap 的 `best_model`，切换为统一学习率并完成一轮主训练；Extend 01 再继承 Main 的 `last_model`，使用不同窗口排列进行续训；WC first round 继承 Extend 01 C2 的 `last_model`，改用 Warmup-Constant；WC dual T4 再从上一轮 WC checkpoint 连续训练一轮完整 coverage；Cosine refinement 最后从 WC dual T4 的 checkpoint 退火收口。六者是串行训练血缘，不是从底座出发的并列实验。
 
 ## 3. 模型架构
 
@@ -199,7 +200,7 @@ flowchart TD
     Q -- 否 --> KEEP[保留原 best_model]
 ```
 
-## 6. 四个正式训练阶段
+## 6. 五个正式训练阶段
 
 | 阶段 | 初始化 | batch | 学习率 | scheduler | 验证 | 结果 |
 |---|---|---:|---|---|---:|---|
@@ -207,12 +208,14 @@ flowchart TD
 | Main | Bootstrap `best_model` | 64 | backbone 与 condition 统一峰值 `1e-5`，warm-up 起点 `1e-6` | 1% warm-up + cosine | 123,836 | 534/534；forecast 2.638442 -> 2.505295；最佳 segment 528，2.505244 |
 | Extend 01 | Main 的 `last_model` | 64 | 统一峰值 `1e-5`，fresh optimizer | 1% warm-up + cosine | 123,836 | 新 seed；完成 190/534；forecast 2.505623 -> 2.437912 |
 | WC first round | Extend 01 C2 的 `last_model` | 64 | warm-up 后统一保持 `1e-5`，fresh optimizer | 1% warm-up + constant | 123,836 | seed=20260908；完成 534/534；forecast 2.437121 -> 最佳 2.353069，末段 2.354255 |
+| WC dual T4 | WC first round `last_model` | 32/GPU × 2，global 64 | warm-up 后统一保持 `1e-5`，fresh optimizer | 1% warm-up + constant | 123,836 | seed=20260910；完成 534/534；forecast 2.355044 -> 最佳 2.304162，末段 2.306788 |
+| Cosine refinement | WC dual T4 checkpoint | 64 | 统一 LR 从约 `1e-5` 退火至约 `1e-6` | uniform cosine，无 warm-up | 123,836 | seed=20260912；完成 267/267；forecast 2.306393 -> 最佳 2.294402，末段 2.295665 |
 
-Bootstrap 的双学习率只用于启动阶段：条件分支以较快速度适应，而主干以较小步长保持预训练能力。Main 将两类参数统一到同一峰值学习率，作为正式全参数微调。Extend 01 不改变目标函数和验证集，只改变续训起点及 coverage 顺序。WC first round 在此基础上还改变 scheduler，但仍保持相同 batch、loss、数据集合和全量验证定义。
+Bootstrap 的双学习率只用于启动阶段：条件分支以较快速度适应，而主干以较小步长保持预训练能力。Main 将两类参数统一到同一峰值学习率，作为正式全参数微调。Extend 01 不改变目标函数和验证集，只改变续训起点及 coverage 顺序。WC first round 在此基础上还改变 scheduler，但仍保持相同 batch、loss、数据集合和全量验证定义。WC dual T4 保持 Warmup-Constant 训练定义不变，只将执行方式改为双 T4 DDP；每卡 batch 32、global batch 64，因此优化器每步看到的总样本量没有改变。
 
-#### Main、Extend 01 与 WC 的日志串联
+#### Main、Extend 01 与两轮 WC 的日志串联
 
-下图只展示 Stage 2 的三次连续训练。箭头表示实际的 checkpoint 继承关系；色块表示训练阶段，而不是并列的独立实验。三次训练均更新全部 24,819,392 个 predictor 参数，验证集均为全量 123,836 个窗口。
+下图展示 Stage 2 的四次连续训练。箭头表示实际的 checkpoint 继承关系；色块表示训练阶段，而不是并列的独立实验。四次训练均更新全部 24,819,392 个 predictor 参数，验证集均为全量 123,836 个窗口。
 
 ```mermaid
 flowchart LR
@@ -229,27 +232,35 @@ flowchart LR
     WL[WC last_model<br/>534/534 segments<br/>forecast 2.354255]
     WBest[WC best_model<br/>约 segment 527<br/>forecast 2.353069]
 
+    W2[Stage 2 WC dual T4<br/>warm-up + constant<br/>恒定 LR = 1e-5<br/>2×T4，global batch = 64]
+    W2L[WC dual T4 last_model<br/>534/534 segments<br/>forecast 2.306788]
+    W2B[WC dual T4 best_model<br/>segment 512<br/>forecast 2.304162]
+
     MB --> M --> ML
     M --> EB --> E --> EL
     EL --> WB --> W --> WL
     W --> WBest
+    WL --> W2 --> W2L
+    W2 --> W2B
 
     classDef main fill:#dbeafe,stroke:#2563eb,color:#111827,stroke-width:2px;
     classDef extend fill:#dcfce7,stroke:#16a34a,color:#111827,stroke-width:2px;
     classDef wc fill:#fef3c7,stroke:#d97706,color:#111827,stroke-width:2px;
+    classDef wc2 fill:#f3e8ff,stroke:#7c3aed,color:#111827,stroke-width:2px;
     classDef checkpoint fill:#f3f4f6,stroke:#6b7280,color:#111827;
     class M,MB,ML main;
     class E,EB,EL extend;
     class W,WB,WL,WBest wc;
+    class W2,W2L,W2B wc2;
 ```
 
 图中 `Main` 与 `Extend 01` 的 cosine 训练都使用统一峰值 `1e-5`；WC first round 将 scheduler 改为 warm-up 后恒定 `1e-5`，并使用新的 coverage seed。由于 Extend 01 的日志只完成 190/534 个 segments，WC 的实际输入标注为 Extend 01 C2 的 `last_model`，不能把 Extend 01 的中间日志末点误写成 WC 的初始化 checkpoint。
 
-对应的 segment-level 全量验证损失如下。横轴将四份日志按实际训练顺序连续拼接：Main 为 1--534，Extend 01 为 535--724，WC first round 为 725--1258，WC dual T4 为 1259--1792；虚线为阶段边界，背景色与上图血缘图一致。
+对应的 segment-level 全量验证损失如下。横轴将五份日志按实际训练顺序连续拼接：Main 为 1--534，Extend 01 为 535--724，WC first round 为 725--1258，WC dual T4 为 1259--1792，Cosine refinement 为 1793--2059；虚线为阶段边界，背景色与上图血缘图一致。
 
 ![small_0.1 Stage 2 validation loss trajectory](assets/small_0_1_stage2_loss_trajectory.png)
 
-图中可以直接看到：Main 和 Extend 01 均为 warm-up + cosine、峰值学习率 `1e-5`；WC first round 与 WC dual T4 均为 warm-up 后恒定 `1e-5`。WC dual T4 完成 534/534 segments，最佳 forecast 为 `2.304162`（segment 512），末点为 `2.306788`。该图描述的是验证轨迹，不构成控制变量意义上的 scheduler 因果比较，因为 WC 各轮同时使用了新的 coverage seed。
+图中可以直接看到：Main 和 Extend 01 均为 warm-up + cosine、峰值学习率 `1e-5`；两轮 WC 为 warm-up 后恒定 `1e-5`；Cosine refinement 再将统一学习率从约 `1e-5` 退火至约 `1e-6`。退火阶段完成 267/267 segments，forecast 从 `2.306393` 降至最佳 `2.294402`。该图描述的是验证轨迹，不构成控制变量意义上的 scheduler 因果比较，因为各 continuation 阶段同时使用了新的 coverage seed。
 
 ```mermaid
 flowchart TD
@@ -375,6 +386,62 @@ Extend 01 C2 结束后，模型的全量验证 forecast 仍在下降，cosine �
 
 结果表明，warm-up 后恒定 `1e-5` 在完整一轮内没有发散，并且全量验证指标继续改善；截至本轮结束，loss 尚未进入可确认的平台期。因此下一轮 continuation 具有继续观测的价值。但本轮同时使用了新的 coverage seed，不能把结果解释为纯粹的 cosine/constant scheduler A/B，也不能仅凭持续下降断言模型“没有吃饱”。严格结论仍需在相同起点、相同 seed 和相同预算下比较两种 scheduler，并结合 OOS 指标。
 
+### 6.5 第五次训练：Stage 2 WC dual T4
+
+#### 为什么继续第二轮 Warmup-Constant
+
+WC first round 完成时，最佳 forecast 出现在约 segment 527，且末端只比最佳值高约 0.00119，没有形成持续横盘或系统性反弹。因而第二轮的研究问题不是重复证明训练可以运行，而是检验：在统一 `1e-5` 不衰减的条件下，再完整覆盖一次重新排列的训练窗口，验证 loss 是否仍能获得可复核的增益。该阶段沿用相同模型、目标函数、训练集和验证集，计算平台改为双 T4 DDP，以提高单位时间吞吐。
+
+#### 实验设置
+
+- 初始化：继承 WC first round 的 `last_model`；模型权重连续，因此 segment 1 的 forecast `2.355044` 与上一轮 last `2.354255` 正常衔接。
+- coverage seed：正式 coverage 使用 `20260910`。日志中还出现一次 seed `20260911` 的启动尝试，但该尝试未形成纳入连续 coverage 的有效 segment；最终记录的 534 个 segment 按 1--534 连续且无缺号。
+- 硬件与并行：2×NVIDIA T4，PyTorch DDP/NCCL；每卡 batch 32，global batch 64，与上一阶段的有效 batch size 相同。
+- 模型参数：24,819,392/24,819,392（100%）可训练；tokenizer 仍冻结并以 float32 编码。
+- 混合精度：predictor 使用 float16 AMP 和 gradient scaling。
+- loss：`forecast` 模式，history weight `0.02`；best checkpoint 继续按原始 validation forecast NLL 选择。
+- scheduler：`warmup_constant`；global plan 166,854 optimizer steps，1% warm-up（1,669 steps），从 `1e-6` 升至 `1e-5` 后保持恒定。
+- 数据：10,661,560 个训练窗口，每 segment 20,000 个窗口，共 534/534 segments；验证仍为固定的全量 123,836 个窗口、242 个 signal dates。
+- 日志中各 segment 的训练与验证耗时合计约 27.47 小时；该值为跨 Kaggle invocation 的 segment 时间求和，不等于任意单个 Kernel 的连续运行时长。
+
+#### 完整训练结果
+
+| 指标 | Segment 1 | 本轮最佳（Segment 512） | Segment 534 / last |
+|---|---:|---:|---:|
+| Validation forecast | 2.355044 | **2.304162** | 2.306788 |
+| Validation history | 2.578852 | 2.541234 | 2.541959 |
+| Validation full | 2.559856 | 2.521239 | 2.522110 |
+
+从本轮起点到最佳点，forecast loss 下降 `0.050882`，相对下降约 2.16%；到 last 的净下降为 `0.048256`，相对下降约 2.05%。最佳点出现在完整 coverage 的后段，segment 534 比最佳点高 `0.002626`。因此，该轮再次证明恒定 `1e-5` 仍能在新的完整 coverage 中继续降低固定验证集 loss；同时，末段围绕最佳值波动加大，提示继续维持同一学习率的边际收益正在减弱。
+
+#### 阶段结论与退火依据
+
+WC dual T4 的完成将证据从“第一轮 constant 仍下降”推进到“第二轮 constant 仍有收益，但末段开始在低值附近波动”。这仍不能证明模型达到容量上限，也不能单独证明 Constant 优于 Cosine，但已足以支持从探索阶段转入**退火阶段**：降低学习率，在保留当前表征的前提下减小参数更新噪声，检验能否获得低于 `2.304162` 的稳定验证最优值。
+
+退火必须作为新的独立阶段记录，不回写 WC dual T4 的结果。实验开始前同时封存 WC dual T4 的 `best_model` 与 `last_model`；若选择其中一个作为退火起点，论文必须明确记录选择规则。除 scheduler/学习率外，应保持模型结构、loss、global batch 64、训练窗口集合、全量验证集和 best 选择指标不变，以便把后续变化主要归因于学习率收口。
+
+### 6.6 第六次训练：Cosine refinement 退火
+
+#### 实验设置
+
+Cosine refinement 从 WC dual T4 的连续 checkpoint 开始，目标是检验降低学习率后能否在当前低损失区域进一步收口。该轮使用新的 coverage seed `20260912`，保持 global batch 64、全量验证集和 forecast best 选择规则不变。日志记录的 scheduler 为 `uniform_cosine`，无额外 warm-up；统一学习率从约 `1e-5` 逐步退火到约 `1e-6`。global learning-rate plan 为 83,571 steps，warm-up 为 0 steps。
+
+本轮完成 `267/267 segments`，每 segment 20,000 个训练窗口；训练集合仍为 10,661,560 个窗口，验证集合仍为 123,836 个窗口。24,819,392 个 predictor 参数全部参与优化，tokenizer 继续冻结。
+
+#### 训练结果
+
+| 指标 | Segment 1 | 本轮最佳（Segment 179） | Segment 267 / last |
+|---|---:|---:|---:|
+| Validation forecast | 2.306393 | **2.294402** | 2.295665 |
+| Validation history | 2.5416 | 2.5318 | 2.5332 |
+| Validation full | 2.5217 | 2.5118 | 2.5131 |
+
+相对于 WC dual T4 的 best forecast `2.304162`，Cosine refinement 的 best 进一步下降 `0.009760`（约 0.42%）；相对于本轮 Segment 1，下降 `0.011991`（约 0.52%）。last 比 best 高 `0.001263`，说明退火后段仍有小幅波动，但整体保持在更低的损失区间。该结果支持“降低学习率可以继续改善并收口”的经验判断，但由于 refinement 同时使用了新 coverage seed，不能把全部改善归因于 scheduler 本身。
+
+#### 退火阶段结论
+
+Cosine refinement 已完成预注册的 267 个 segments，并刷新了当前全量验证 forecast best。至此，统一 `1e-5` 的探索阶段与低学习率退火阶段均有实测结果；后续若继续训练，应从 refinement 的 best/last 明确分叉，并单独记录新的学习率计划，避免把不同退火周期拼接成一个不可复核的阶段。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存 `last_model`；若 forecast 指标刷新则保存 `best_model`。Kaggle 单次任务受时限约束，因此训练器按 segment 边界安全停止，并从 checkpoint 中恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。接力时必须保持输出目录、实验名和恢复路径一致，并显式记录“下一 coverage segment”，避免重复或跳过窗口。
@@ -409,7 +476,48 @@ flowchart LR
 
 历史动量基线（10 日/20 日）方向准确率分别为 45.45%/38.98%，pooled Rank IC 为 -0.17906/-0.34855。十分位分组中，Stage 2 best/last 的 Top-minus-Bottom 平均约 +3.55%，原始底座约 -1.70%。这些结果只覆盖 6 个 OOS 日期，应作为初步证据，不能外推为长期稳定性或可交易性证明。
 
-本文同时报告两种 Rank IC，定义必须区分：`pooled Rank IC` 将所有股票×signal-date 行拼接后计算一次 Spearman 相关；`daily Rank IC` 则先按 signal date 对当日横截面股票计算 Spearman，再对 6 个日期的 IC 取平均。pooled 统计可能受各日期股票数量影响，因此不能替代 daily 统计；后续扩展 OOS 时还应报告每日期 IC、标准差、ICIR 和正 IC 比例。当前 OOS 的 30,930 个窗口存在大量同日横截面和相邻日期相关性，有效时间观测仍只有 6 个 signal dates。
+本文同时报告两种 Rank IC，定义必须区分：`pooled Rank IC` 将所有股票×signal-date 行拼接后计算一次 Spearman 相关；`daily Rank IC` 则先按 signal date 对当日横截面股票计算 Spearman，再对各日期的 IC 取平均。pooled 统计可能受各日期股票数量影响，因此不能替代 daily 统计；扩展 OOS 后还应报告每日期 IC、标准差、ICIR 和正 IC 比例。旧版 6 日期结果存在大量同日横截面和相邻日期相关性；扩展到 19 日期后，有效时间观测增加但仍不等同于 IID 样本。
+
+### 8.1 Cosine C2 的独立 OOS 评估
+
+Cosine refinement C2 完成后，使用与训练完全隔离的 OOS 包进行重新评估。评估范围为 2026-08-03 至 2026-08-10，共 6 个 signal dates、30,930 个股票窗口；每个模型使用同一 tokenizer、同一窗口集合、同一随机采样设置和同一自回归解码流程。C2 best 的实际 checkpoint 是 Cosine 阶段 Segment 179，C2 last 是 Segment 267；评估器输出中沿用了旧的 `best_segment_530`/`last_segment_534` 标签，不能据此误认为它们属于 Stage 2 Main。
+
+| 模型 | D10 方向准确率 | pooled Rank IC | 日均 Rank IC | 正 IC 日期 | ICIR（按日） | Top-Bottom 10% 平均收益差 |
+|---|---:|---:|---:|---:|---:|---:|
+| 原始 Kronos-small | 48.765% | -0.0225 | -0.0367 | 1/6 | -0.83 | -1.71% |
+| Stage 2 Main best | 50.970% | 0.0865 | 0.0810 | 6/6 | 2.46 | 3.55% |
+| Stage 2 Main last | 50.947% | 0.0863 | 0.0813 | 6/6 | 2.48 | 3.55% |
+| Cosine C2 best（Segment 179） | **54.455%** | **0.1569** | **0.1354** | **6/6** | 2.20 | **5.35%** |
+| Cosine C2 last（Segment 267） | 54.336% | 0.1480 | 0.1244 | 6/6 | **2.30** | 5.04% |
+
+其中，方向准确率表示预测收益与实际收益的涨跌符号相同的比例；Rank IC 表示模型预测排序与实际未来收益排序的 Spearman 相关；Top-Bottom 10% 是按预测分数选出的最高十分位与最低十分位的实际 D10 收益差。ICIR 在本表中定义为 6 个 signal-date 横截面 IC 的均值除以样本标准差，仅作描述性统计。
+
+相对于 Stage 2 Main best，Cosine C2 best 的 D10 方向准确率提高约 3.49 个百分点，pooled Rank IC 从 0.0865 提高到 0.1569，日均 Rank IC 从 0.0810 提高到 0.1354，Top-Bottom 收益差从约 3.55% 提高到约 5.35%。原始模型和 10 日动量基线均为负 Rank IC；因此本次改善不是简单动量规则可以解释的。C2 last 略低于 C2 best，但仍保持相近的 OOS 排序能力，说明退火阶段的改善不是单个 checkpoint 的孤立异常。
+
+这组结果支持以下有限结论：在当前数据快照和短 OOS 窗口下，Cosine refinement 后的模型比原始底座和 Stage 2 Main 表现出更强的横截面排序能力。它尚不能证明模型具有长期稳定 Alpha，也不能直接推出扣除手续费后的可交易收益。旧版 6 个 signal dates 仅能作为初步证据；新增日期虽将覆盖扩展至 19 个，D10 目标仍存在重叠，仍应继续扩展到至少 30、60 或 120 个 signal dates，并加入换手、交易成本、净收益、Sharpe 和最大回撤分析。
+
+### 8.2 扩展 OOS：2026-08-11 至 2026-08-27
+
+在原有 2026-08-03 至 2026-08-10 的 6 个 signal dates 之外，使用数据集 `A-share 120D Temporal Symbol Holdout` 中新增的全量 OOS 包进行扩展评估。新增区间覆盖 13 个 signal dates（2026-08-11、12、13、14、17、18、19、20、21、24、25、26、27），共 66,986 个窗口；三种模型使用完全相同的窗口集合、tokenizer 和自回归解码流程。OOS 仍不参与训练、scheduler 决策或 best checkpoint 选择。
+
+| 模型 | 窗口数 | D10 方向准确率 | pooled Rank IC | 日均 Rank IC | 日 IC 标准差 | 正 IC 日期 |
+|---|---:|---:|---:|---:|---:|---:|
+| 原始 Kronos-small | 66,986 | 47.801% | 0.0256 | 0.0209 | 0.0306 | 8/13 |
+| C2 best（Cosine Segment 179） | 66,986 | 48.697% | **0.1864** | **0.1741** | 0.0694 | **13/13** |
+| C2 last（Cosine Segment 267） | 66,986 | 48.553% | 0.1822 | 0.1700 | 0.0666 | **13/13** |
+
+新增 13 个日期上，C2 best/last 的 Rank IC 均显著高于原始底座，且每日横截面 IC 全部为正；但方向准确率仍接近 50%，说明主要改善体现为横截面排序而非逐股票涨跌命中率。C2 best 的 pooled Rank IC 仅比 C2 last 高约 0.004，二者差异不大，支持保留 best 与 last 两个 checkpoint 进行后续稳健性比较。
+
+本次 Kaggle Kernel 的合并文件确认包含三个模型各 66,986 行、13 个 signal dates，共 200,958 行。Kernel 未生成 `summary.json`，但 `predictions.csv.gz` 完整可读；部分按日期的 C2 shard 出现缺失或零字节，因此汇总指标以合并预测文件为准，该导出问题必须在后续评估 Kernel 中修复并加入文件完整性断言。
+
+将本次 13 个日期与旧的 6 个日期合并后，OOS 总覆盖应为 19 个 signal dates、97,916 个窗口/模型。由于日期之间的 D10 标签存在重叠，19 个日期仍不是 97,916 个 IID 观测；正式结论应同时报告逐日 IC、ICIR、正 IC 比例、Top-minus-Bottom、换手和交易成本，并继续扩展更长时间跨度后再决定是否进入 Stage 3 或追加训练预算。
+
+评估产物与可复核日志如下：
+
+- Kaggle Kernel：[smmt315/kronos-small-0-1-c2-alpha-oos-evaluation](https://www.kaggle.com/code/smmt315/kronos-small-0-1-c2-alpha-oos-evaluation)
+- 本次扩展 OOS 本地汇总：[summary_local.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_c2_alpha_oos_output_smmt315_20260914/kronos_small_0_1_stage2_oos/summary_local.json)
+- 本次扩展 OOS 预测：[predictions.csv.gz](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_c2_alpha_oos_output_smmt315_20260914/kronos_small_0_1_stage2_oos/predictions.csv.gz)
+- 预测分片合并文件：[predictions.csv.gz](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_c2_alpha_oos_output/kronos_small_0_1_stage2_oos/predictions.csv.gz)
 
 验证 signal 结束于 2026-07-02，OOS signal 从 2026-08-03 开始，中间存在 2026-07-03 至 2026-08-02 的日历间隔。但当前 evaluation manifest 没有把这段间隔声明为专门设计的 31 日 embargo；更准确地说，OOS signal 紧接父模型最后训练目标日 2026-07-31 之后开始，成熟未来目标落在 2026-08-17 至 2026-08-24。论文中不应将该 gap 描述为 intentional embargo，除非后续实验固定并记录明确的 embargo 规则。
 
@@ -421,7 +529,7 @@ flowchart LR
     R --> IC[Rank IC<br/>预测排序与真实排序相关性]
     R --> DEC[按预测分成十组]
     DEC --> TB[Top-minus-Bottom<br/>最高组减最低组收益]
-    DA --> L[当前只有6个signal dates<br/>只能作为初步证据]
+    DA --> L[当前覆盖19个signal dates<br/>仍需更长时间验证]
     IC --> L
     TB --> L
 ```
@@ -439,7 +547,7 @@ flowchart TD
 
 ## 9. 训练健康性与解释边界
 
-四段正式训练日志均显示 100% predictor 参数参与优化；因此当前 loss 改善缓慢不能归因于“主干被冻结”。Main 的全量验证 forecast 从 2.6384 降至约 2.5052，Extend 01 在 190 segments 内继续降至约 2.4379，WC first round 完整一轮后达到最佳约 2.3531，说明在这些观测区间内尚未出现明确平台。
+五段正式训练日志均显示 100% predictor 参数参与优化；因此当前 loss 改善缓慢不能归因于“主干被冻结”。Main 的全量验证 forecast 从 2.6384 降至约 2.5052，Extend 01 在 190 segments 内继续降至约 2.4379，WC first round 完整一轮后达到最佳约 2.3531，WC dual T4 再降至最佳约 2.3042。前两轮 WC 均未发散，但 dual T4 末段相对最佳值出现约 0.0026 的波动，为进入退火阶段提供了经验依据。
 
 但“线性下降”不能单独证明模型没有吃饱，也不能证明学习率过小或金融信号已达到信息论上限。Cosine scheduler、窗口顺序、验证噪声和多步预测难度都会影响曲线形状。论文中应将 entropy floor、token 类别不平衡、层级 drift 等作为待检验假设，并使用权重位移、分 horizon loss 和预测分布熵等诊断提供证据。
 
@@ -447,7 +555,7 @@ flowchart TD
 
 Warmup-Constant 运行期间，dashboard 中的 raw `train/forecast_loss`、`train/loss` 和 `train/history_loss` 是 batch-level 指标。当前 batch size 为 64，而不同 batch 在股票、行业、市值、波动率、市场状态和历史窗口上差异很大，因此 train 曲线在约 2.2--2.7 区间高频抖动，不能直接用肉眼判断 `1e-5` 是否过小。
 
-相反，固定的 123,836 个验证窗口提供了更低噪声的长期指标。WC first round 最终从 full/forecast `2.622678/2.437121` 降至 `2.559669/2.354255`，最佳 forecast 为 `2.353069`；完整一轮没有出现发散，但也没有形成可确认的平台。这支持“统一 `1e-5` 仍在有效推动优化”的判断，但不能证明它是单位计算量最优的学习率。
+相反，固定的 123,836 个验证窗口提供了更低噪声的长期指标。WC first round 从 full/forecast `2.622678/2.437121` 降至 `2.559669/2.354255`，最佳 forecast 为 `2.353069`；WC dual T4 又从 `2.559856/2.355044` 降至 last 的 `2.522110/2.306788`，最佳 forecast 为 `2.304162`。这支持“统一 `1e-5` 在两轮完整 coverage 中持续推动优化”的判断，但仍不能证明它是单位计算量最优的学习率，也不能把末段波动直接等同于模型容量耗尽。
 
 ```mermaid
 flowchart LR
@@ -470,7 +578,7 @@ flowchart LR
 
 ## 10. 导师评审意见与论文补强路线
 
-导师评审认为，本方案的主要优点是数据规模、窗口内归一化、训练/验证隔离、完整 coverage 和 Kaggle 可复现接力流程；当前最需要补强的不是继续盲目扩大模型，而是回答“性能提升究竟来自哪里、在哪些市场状态下有效、能否稳定复现”。以下内容是论文补强建议，不是前四阶段已经完成的实验结果。
+导师评审认为，本方案的主要优点是数据规模、窗口内归一化、训练/验证隔离、完整 coverage 和 Kaggle 可复现接力流程；当前最需要补强的不是继续盲目扩大模型，而是回答“性能提升究竟来自哪里、在哪些市场状态下有效、能否稳定复现”。以下内容是论文补强建议，不是前五阶段已经完成的实验结果。
 
 ### 10.1 先明确 split protocol
 
@@ -512,11 +620,11 @@ flowchart TD
 
 ### 10.4 Warmup-Constant 的公平比较
 
-Extend 01 更换 coverage seed 的性质是 optimization continuation，而不是独立泛化实验。Warmup-Constant 应与 cosine 使用相同 checkpoint 起点、数据集合、batch、seed、验证集和 segment 预算，至少比较 100%、200% 和完整 coverage 的验证轨迹，再进行 OOS 比较；不能将 cosine 的 534 segments 与 constant 的 190 segments 直接判定优劣。
+Extend 01 更换 coverage seed 的性质是 optimization continuation，而不是独立泛化实验。Warmup-Constant 的两轮 continuation 已分别完成 534 个 segments；但由于起点和 coverage seed 均不同，仍不能把它们与 cosine 结果当作严格的 scheduler A/B。严格比较应使用相同 checkpoint 起点、数据集合、batch、seed、验证集和 segment 预算，至少比较 100%、200% 和完整 coverage 的验证轨迹，再进行 OOS 比较。
 
-已经完成的 `small_0.1_stage2_wc_last` 是本项目用于回答“Cosine 后期衰减是否过早限制优化”的直接实验。它保持统一峰值学习率 `1e-5`，warm-up 后不再衰减，且不改变 checkpoint 起点、loss、batch、数据集和验证定义；本次按计划使用新的 coverage seed `20260908`，因此它同时包含 scheduler 改变和窗口访问顺序改变两个因素，不能被表述为纯 scheduler A/B。完整 534/534 segments 后 validation forecast 最佳为 `2.353069`，但尚未出现明确平台期。其后的 WC continuation 是独立的新一轮训练，待日志齐全后再单独分析。
+已经完成的 `small_0.1_stage2_wc_last` 是本项目用于回答“Cosine 后期衰减是否过早限制优化”的直接实验。它保持统一峰值学习率 `1e-5`，warm-up 后不再衰减，且不改变 checkpoint 起点、loss、batch、数据集和验证定义；本次按计划使用新的 coverage seed `20260908`，因此它同时包含 scheduler 改变和窗口访问顺序改变两个因素，不能被表述为纯 scheduler A/B。完整 534/534 segments 后 validation forecast 最佳为 `2.353069`。其后的 `small_0.1_stage2_wc_dual_t4` 又完成一轮 534/534 segments，最佳 forecast 为 `2.304162`；这一 continuation 已在第 6.5 节单独报告。
 
-在本轮结束时，validation full loss 从 `2.622678` 降至 `2.559669`，forecast loss 从 `2.437121` 降至 `2.354255`，最佳 forecast 为 `2.353069`；曲线存在正常 batch/segment 抖动，但没有形成明确平台。该现象支持继续执行既定训练预算，但不等于已经证明 Constant 优于 Cosine，也不等于可以无限延长训练。
+在 WC first round 结束时，validation full loss 从 `2.622678` 降至 `2.559669`，forecast loss 从 `2.437121` 降至 `2.354255`，最佳 forecast 为 `2.353069`；WC dual T4 的最佳 forecast 进一步降至 `2.304162`。两轮曲线存在正常 batch/segment 抖动，第二轮末段开始围绕低值波动。该现象支持恒定学习率阶段继续优化过模型，但不等于已经证明 Constant 优于 Cosine，也不等于可以无限延长训练；因此下一阶段转为降低学习率的退火实验。
 
 因此本实验的执行纪律是：训练完成前不改学习率、不切换 scheduler、不修改 loss 权重、不更换 batch 或 seed、不手动挑选中间 checkpoint。训练完成后统一比较：同一训练进度下的 validation trajectory、best/last checkpoint、最终是否仍有下降、以及独立 OOS 的方向准确率和 Rank IC。只有在相同预算或相同 coverage 进度下比较，才能区分“单纯继续训练的收益”和“Constant 学习率本身的收益”。从优化理论角度，本实验还可视为对 **River Valley 损失地形假说** 的探索：在 cosine 后期步长衰减可能把模型限制在浅层局部区域的假设下，warm-up 后保持较大的恒定步长，可能通过持续的随机梯度噪声（SGN）帮助参数离开浅层局部最优，并为最终的物理平台期退火提供依据。River Valley 和 SGN 在本项目中仍是待验证的解释性假说，不是已由当前曲线证明的机制。
 
@@ -543,9 +651,29 @@ flowchart LR
 
 ## 11. 未完成实验与后续工作
 
-Warmup-Constant first round 已完成 534/534 个 segments，结果已在第 6.4 节正式记录。从该轮 checkpoint 继续的 `small_0.1_stage2_wc_dual_t4` 也已完成 534/534 segments：最佳 forecast 为 `2.304162`（segment 512），segment 534 的 last 为 `2.306788`；对应 history/full loss 为 `2.5420/2.5221`。末段未刷新 best，但仍处于接近最佳值的低位区间。
+### 11.1 Cosine refinement 退火已完成
 
-完成 continuation 后，仍建议在相同起点、相同 seed、相同验证集和相同预算下做 cosine 与 constant 的公平比较；按 forecast horizon 分解验证 loss；比较初始底座与最终 checkpoint 的分层 relative weight drift；扩展 OOS 日期后再评估方向准确率、Rank IC、分组收益及统计显著性。
+两轮 Warmup-Constant 均已完成，WC dual T4 的正式结果见第 6.5 节。随后执行的 `small_0.1_stage2_cosine_refinement` 已完成 `267/267 segments`，退火阶段的正式结果见第 6.6 节：forecast 从 `2.306393` 降至 best `2.294402`，last 为 `2.295665`。因此本阶段已完成，不再使用“待执行”或“尚无结果”的表述。
+
+建议在启动前预注册以下设置：
+
+| 项目 | 退火阶段建议 | 控制理由 |
+|---|---|---|
+| 起点 | WC dual T4 checkpoint | 具体 best/last 选择规则需结合日志中的实际恢复路径记录 |
+| 学习率 | 统一约 `1e-5` 退火至约 `1e-6` | 相对 constant `1e-5` 逐步降低更新噪声 |
+| scheduler | `uniform_cosine`，无 warm-up | 日志实测配置；global plan 83,571 steps |
+| optimizer | fresh AdamW | 将退火阶段与上一轮恒定 LR 的动量状态分离并明确记录 |
+| coverage seed | 使用未出现过的新 seed | 改变窗口顺序，同时保留完整 coverage 规则 |
+| batch | global 64 | 与 Main、Extend 和两轮 WC 保持一致 |
+| 数据与 loss | 完全不变 | 使主要实验变量保持为学习率轨迹 |
+| 验证与选模 | 全量 123,836；按 forecast 选 best | 保持跨阶段可比性 |
+| 训练预算 | 267/267 segments，已完成 | 本轮结果可纳入论文，但不与 WC 阶段混为同一 scheduler |
+
+退火阶段达成了预设的 loss 目标：best forecast 低于 WC dual T4 的 `2.304162`，且 267 个 segments 完成后仍保持在 `2.295665`。独立 OOS 已扩展至 19 个 signal dates（其中新增 13 个日期），新增区间上 C2 best 的 pooled Rank IC 为 `0.1864`、日均 Rank IC 为 `0.1741`，方向准确率为 `48.697%`，每日 IC 为正的日期为 13/13。该结果支持横截面排序能力具有一定跨日期稳定性，但仍不能替代更长时间窗口和交易成本口径下的稳定性检验。
+
+### 11.2 其余后续实验
+
+退火完成后，仍建议在相同起点、相同 seed、相同验证集和相同预算下做 cosine 与 constant 的公平比较；按 forecast horizon 分解验证 loss；比较初始底座与最终 checkpoint 的分层 relative weight drift；扩展 OOS 日期后再评估方向准确率、Rank IC、分组收益及统计显著性。
 
 ## 12. 可复核文件
 
@@ -554,6 +682,7 @@ Warmup-Constant first round 已完成 534/534 个 segments，结果已在第 6.4
 - 训练与损失：[finetune/train_predictor.py](/Users/fupengcheng/Documents/Kronos/finetune/train_predictor.py)
 - 配置：[finetune/config.py](/Users/fupengcheng/Documents/Kronos/finetune/config.py)
 - 训练日志目录：`small_train_log/`；WC first round 完整日志：[small_0.1_stage2_wc_last-2026-9-9_23_24_00.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_last-2026-9-9_23_24_00.log)；WC dual T4 完整日志：[small_0.1_stage2_wc_dual_t4-2026-9-12_18_47_04.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_dual_t4-2026-9-12_18_47_04.log)
-- OOS 汇总：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_stage2_oos_base_kaggle/kronos_small_0_1_stage2_oos/summary.json)
+- Stage 2 Main OOS 汇总：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_stage2_oos_base_kaggle/kronos_small_0_1_stage2_oos/summary.json)
+- Cosine C2 OOS 汇总：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_c2_alpha_oos_output/kronos_small_0_1_stage2_oos/summary.json)
 
 本文以日志和当前代码为准；若历史计划文档与实测配置冲突，应优先引用本报告中的代码/日志事实，并在论文实验设置中注明具体 commit、seed、数据快照和 checkpoint 标识。
