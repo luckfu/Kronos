@@ -12,7 +12,7 @@ os.environ['PYTHONPATH'] = str(ROOT) + os.pathsep + os.environ.get('PYTHONPATH',
 # the public repository HEAD predates the local experimental Stage-3 files.
 trainer = ROOT / 'finetune' / 'train_stage3_path_alignment.py'
 trainer.parent.mkdir(parents=True, exist_ok=True)
-trainer.write_text(r'''import argparse, json, time
+trainer.write_text(r'''import argparse, json, os, time
 from pathlib import Path
 import torch
 try:
@@ -44,9 +44,10 @@ def main(a):
         if not run_url:
             raise RuntimeError('SwanLab init returned no run URL; refusing to start training')
     model.train(); ds=QlibDataset('train'); loader=DataLoader(ds,batch_size=a.batch,shuffle=False,num_workers=0)
+    os.environ['KRONOS_VALIDATION_SAMPLES']='0'
     val_ds=QlibDataset('val'); val_loader=DataLoader(val_ds,batch_size=a.batch,shuffle=False,num_workers=0)
-    print('validation_samples=' + str(len(val_ds)), flush=True)
-    if len(val_ds) < 100000:
+    print('validation_samples=' + str(val_ds.total_samples), flush=True)
+    if len(val_ds) != val_ds.total_samples:
         raise RuntimeError(f'Validation set unexpectedly small: {len(val_ds)}; full validation is required')
     opt=torch.optim.AdamW(model.parameters(),lr=a.lr,weight_decay=0.01)
     ema=DetachedLossEMA(0.99); cfg=PathAlignmentConfig(16,16,0.05,0.02,0.99)
@@ -135,7 +136,8 @@ if val.parent != dataset_root:
     raise RuntimeError(f'train/val are not in one C2-compatible dataset root: {train} {val}')
 os.environ.update({'KRONOS_DATASET_PATH': str(dataset_root), 'KRONOS_METADATA_PATH': str(meta),
                    'KRONOS_LOOKBACK_WINDOW': '120', 'KRONOS_PREDICT_WINDOW': '10',
-                   'KRONOS_USE_SIZE_PERCENTILE': '1', 'KRONOS_NUM_SIZE_BUCKETS': '0'})
+                   'KRONOS_USE_SIZE_PERCENTILE': '1', 'KRONOS_NUM_SIZE_BUCKETS': '0',
+                   'KRONOS_VALIDATION_SAMPLES': '0'})
 if os.environ.get('SWANLAB_API_KEY'):
     os.environ['SWANLAB_MODE'] = 'cloud'
 out = Path('/kaggle/working/stage3_path_alignment_from_c2_best_smoke')
