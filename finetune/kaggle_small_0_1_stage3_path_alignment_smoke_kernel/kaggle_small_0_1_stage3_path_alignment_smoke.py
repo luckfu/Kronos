@@ -130,8 +130,10 @@ val = find_one('/kaggle/input', ['val_data.pkl'])
 meta = find_one('/kaggle/input', ['asset_metadata.csv'])
 if train is None or val is None or meta is None:
     raise FileNotFoundError('dataset train_data.pkl, val_data.pkl or asset_metadata.csv not found')
-os.environ.update({'KRONOS_TRAIN_DATA_PATHS': str(train), 'KRONOS_METADATA_PATH': str(meta),
-                   'KRONOS_VAL_DATA_PATHS': str(val),
+dataset_root = train.parent
+if val.parent != dataset_root:
+    raise RuntimeError(f'train/val are not in one C2-compatible dataset root: {train} {val}')
+os.environ.update({'KRONOS_DATASET_PATH': str(dataset_root), 'KRONOS_METADATA_PATH': str(meta),
                    'KRONOS_LOOKBACK_WINDOW': '120', 'KRONOS_PREDICT_WINDOW': '10',
                    'KRONOS_USE_SIZE_PERCENTILE': '1', 'KRONOS_NUM_SIZE_BUCKETS': '0'})
 if os.environ.get('SWANLAB_API_KEY'):
