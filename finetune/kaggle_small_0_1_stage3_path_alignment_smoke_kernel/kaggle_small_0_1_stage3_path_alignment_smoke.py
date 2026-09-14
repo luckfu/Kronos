@@ -126,10 +126,12 @@ if tok is None:
 if tok is None:
     raise FileNotFoundError('C2 source tokenizer directory not found')
 train = find_one('/kaggle/input', ['train_data.pkl'])
+val = find_one('/kaggle/input', ['val_data.pkl'])
 meta = find_one('/kaggle/input', ['asset_metadata.csv'])
-if train is None or meta is None:
-    raise FileNotFoundError('dataset train_data.pkl or asset_metadata.csv not found')
+if train is None or val is None or meta is None:
+    raise FileNotFoundError('dataset train_data.pkl, val_data.pkl or asset_metadata.csv not found')
 os.environ.update({'KRONOS_TRAIN_DATA_PATHS': str(train), 'KRONOS_METADATA_PATH': str(meta),
+                   'KRONOS_VAL_DATA_PATHS': str(val),
                    'KRONOS_LOOKBACK_WINDOW': '120', 'KRONOS_PREDICT_WINDOW': '10',
                    'KRONOS_USE_SIZE_PERCENTILE': '1', 'KRONOS_NUM_SIZE_BUCKETS': '0'})
 if os.environ.get('SWANLAB_API_KEY'):
