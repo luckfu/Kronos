@@ -47,7 +47,7 @@ def main(a):
     os.environ['KRONOS_VALIDATION_SAMPLES']='0'
     val_ds=QlibDataset('val'); val_loader=DataLoader(val_ds,batch_size=a.batch,shuffle=False,num_workers=0)
     print('validation_samples=' + str(val_ds.total_samples), flush=True)
-    if len(val_ds) != val_ds.total_samples:
+    if len(val_ds) != val_ds.total_samples or val_ds.total_samples < 100000:
         raise RuntimeError(f'Validation set unexpectedly small: {len(val_ds)}; full validation is required')
     opt=torch.optim.AdamW(model.parameters(),lr=a.lr,weight_decay=0.01)
     ema=DetachedLossEMA(0.99); cfg=PathAlignmentConfig(16,16,0.05,0.02,0.99)
