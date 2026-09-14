@@ -66,7 +66,18 @@ def main(a):
         if not api_key:
             raise RuntimeError('SWANLAB_API_KEY missing; refusing to start training without dashboard')
         swanlab.login(api_key=api_key)
-        run = swanlab.init(project='finance', workspace='roc_fu', experiment_name='small_0.1_stage3_path_alignment_from_c2_best', config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world, 'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds, 'top_k': 16, 'candidates': 16, 'parent': 'c2_best', 'validation': 'full', 'nproc': world, 'chunk': 'c1'}, mode='cloud')
+        run_id = os.environ.get('SWANLAB_RUN_ID', 'small_0.1_stage3_path_alignment_from_c2_best').strip() or 'small_0.1_stage3_path_alignment_from_c2_best'
+        experiment_name = os.environ.get('SWANLAB_EXPERIMENT_NAME', 'small_0.1_stage3_path_alignment_from_c2_best').strip() or 'small_0.1_stage3_path_alignment_from_c2_best'
+        # Match C2: fixed run id + resume=allow so multi-chunk handoffs stay on one dashboard.
+        run = swanlab.init(
+            id=run_id,
+            resume='allow',
+            project='finance',
+            workspace='roc_fu',
+            experiment_name=experiment_name,
+            config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world, 'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds, 'top_k': 16, 'candidates': 16, 'parent': 'c2_best', 'validation': 'full', 'nproc': world, 'chunk': 'c1'},
+            mode='cloud',
+        )
         run_url = getattr(run, 'url', getattr(run, 'web_url', ''))
         print('SWANLAB_RUN_URL=' + str(run_url), flush=True)
         if not run_url:
