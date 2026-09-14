@@ -44,7 +44,7 @@ def main(a):
         if not run_url:
             raise RuntimeError('SwanLab init returned no run URL; refusing to start training')
     model.train(); ds=QlibDataset('train'); loader=DataLoader(ds,batch_size=a.batch,shuffle=False,num_workers=0)
-    val_ds=QlibDataset('validation'); val_loader=DataLoader(val_ds,batch_size=a.batch,shuffle=False,num_workers=0)
+    val_ds=QlibDataset('val'); val_loader=DataLoader(val_ds,batch_size=a.batch,shuffle=False,num_workers=0)
     print('validation_samples=' + str(len(val_ds)), flush=True)
     if len(val_ds) < 100000:
         raise RuntimeError(f'Validation set unexpectedly small: {len(val_ds)}; full validation is required')
