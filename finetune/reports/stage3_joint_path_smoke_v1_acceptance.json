@@ -1,0 +1,131 @@
+{
+  "gpu_probe.json": {
+    "status": "passed",
+    "devices": [
+      "Tesla T4",
+      "Tesla T4"
+    ],
+    "batch_per_gpu": 32,
+    "global_batch": 64,
+    "amp": false,
+    "gradient_max_diff_vs_global_reference": 7.152557373046875e-7,
+    "parameter_max_diff_between_ranks": 0,
+    "checkpoint_roundtrip": true,
+    "train_step_seconds": 0.6069653034210205,
+    "validation_batch_seconds": 0.15449008345603943,
+    "peak_allocated_gib": 3.060917854309082,
+    "tokenizer_nonnull_grads": 0,
+    "estimated_segment_seconds": 488.9184514582157,
+    "probe_updates_are_discarded": true
+  },
+  "summary.json": {
+    "segments": [
+      {
+        "segment": 1,
+        "step": 313,
+        "samples_per_rank": 10000,
+        "global_samples_approx": 20000,
+        "last_batch_token_loss_rank0": 2.6217269897460938,
+        "validation_objective": 2.3399314880371094,
+        "validation": {
+          "token_loss": 2.3395984172821045,
+          "raw_path_loss": 0.006650186143815517,
+          "total_loss": 2.3399314880371094,
+          "top16_joint_mass": 0.5677839517593384,
+          "s1_entropy": 2.6899640560150146,
+          "s2_conditional_entropy_topk_s1": 1.8441424369812012,
+          "horizon_mae": [
+            0.3817187547683716,
+            0.3563826084136963,
+            0.34429967403411865,
+            0.33861595392227173,
+            0.3358420133590698,
+            0.3345464766025543,
+            0.33385026454925537,
+            0.33305823802948,
+            0.332736074924469,
+            0.33224764466285706
+          ],
+          "samples": 123836,
+          "max_residual": 7.440997123718262
+        },
+        "grad_norm": 0.7757042050361633,
+        "elapsed_sec": 663.2432515621185
+      }
+    ],
+    "chunk": "c1",
+    "max_runtime_seconds": 10800,
+    "final_result": {
+      "completed_segments": 1,
+      "best_validation_objective": 2.3399314880371094,
+      "status": "completed"
+    }
+  },
+  "progress.json": {
+    "completed_segments": 1,
+    "next_epoch": 1,
+    "step": 313,
+    "status": "completed"
+  },
+  "experiment_manifest.json": {
+    "source_commit": "a854641420068dbbc6daf2dcfa329c8ecbaa425a",
+    "parent_kernel": "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "parent_checkpoint": "best_model",
+    "initialization": "model_weights_only",
+    "optimizer": "fresh_AdamW",
+    "scheduler": "fixed",
+    "lr": 0.000002,
+    "amp": false,
+    "seed": 20260915,
+    "segments": 1,
+    "batch_per_gpu": 32,
+    "global_batch": 64,
+    "train_samples": 20000,
+    "validation_samples": 123836,
+    "lookback": 120,
+    "horizon": 10,
+    "loss": "CE+0.05*EMA_normalized_six_feature_Huber",
+    "huber_delta": 0.02,
+    "top_k": 16,
+    "candidates": 16,
+    "ema_decay": 0.99,
+    "dependency_causal": true,
+    "devices": [
+      "Tesla T4",
+      "Tesla T4"
+    ],
+    "torch": "2.6.0+cu124",
+    "run_id": "small_0.1_stage3_joint_path_alignment_from_c2_best_v2",
+    "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_joint_path_alignment_from_c2_best_v2",
+    "sha256": {
+      "best": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+      "tokenizer": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+      "train": "034c5315547e35e38e6f3a3279ecc3ce01b625f1139229e6371d3f6c4e927a90",
+      "val": "4cce31bc3e70eab83d5b7ea05f19fce04aa57a87f3acf00b882ddfbac4219bf7",
+      "metadata": "697cadd672d53b8fa0a990f6c5b7fba2f88cb26aad88c3b91cfcc3865d0a1e3c",
+      "manifest": "32cfcbf606dcee81c9416f9ad399ee7303b6790cf9025bf5888638f552d66598"
+    },
+    "inputs": {
+      "manifest": "/kaggle/input/datasets/luckfu/a-share-120d-temporal-symbol-holdout/a-share-120d-temporal-symbol-holdout/data/a_share_full_market_v1_beta_temporal_symbol_validation_v1/data_manifest.json",
+      "train": "/kaggle/input/datasets/luckfu/a-share-120d-temporal-symbol-holdout/a-share-120d-temporal-symbol-holdout/data/a_share_full_market_v1_beta_temporal_symbol_validation_v1/processed_datasets/train_data.pkl",
+      "val": "/kaggle/input/datasets/luckfu/a-share-120d-temporal-symbol-holdout/a-share-120d-temporal-symbol-holdout/data/a_share_full_market_v1_beta_temporal_symbol_validation_v1/processed_datasets/val_data.pkl",
+      "metadata": "/kaggle/input/datasets/luckfu/a-share-120d-temporal-symbol-holdout/a-share-120d-temporal-symbol-holdout/data/a_share_full_market_v1_beta_temporal_symbol_validation_v1/asset_metadata.csv",
+      "best": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/outputs/models/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors",
+      "tokenizer": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/models/Kronos-Tokenizer-base/model.safetensors"
+    },
+    "oos_used": false
+  },
+  "local_checkpoint_verification": {
+    "schema": "stage3_conditional_joint_causal_v2",
+    "segment": 1,
+    "next_epoch": 1,
+    "step": 313,
+    "resume_step": 0,
+    "optimizer_parameter_states": 132,
+    "rank_rng_states": 2,
+    "model_state_equals_last_model": true,
+    "all_model_tensors_finite": true,
+    "last_state_sha256": "cf4a62e4084e6d380cd39165cee2bd6a5c48535264a01ab1960d01e6d8fe53f8",
+    "best_and_last_model_sha256": "d1ac9e49ff2ac4f139939211f48ce815c753ab4381dc0c1fd7b411a634aa6780"
+  }
+}

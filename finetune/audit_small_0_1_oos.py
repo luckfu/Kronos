@@ -24,6 +24,7 @@ def restore_returns(frame, package):
     """Recover the old denominator exactly, then rebase onto the raw close."""
     manifest = json.loads((package / 'evaluation_manifest.json').read_text())
     panel_path = package / manifest['artifacts']['panel_file']
+    assert sha(panel_path) == manifest['artifacts']['panel_sha256'], 'Panel hash mismatch'
     with panel_path.open('rb') as f:
         panel = pickle.load(f)  # Trusted, locally built project dataset.
     restored = []
