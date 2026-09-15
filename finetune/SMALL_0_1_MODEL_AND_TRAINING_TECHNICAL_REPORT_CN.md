@@ -912,7 +912,7 @@ flowchart LR
 
 [Kronos Small 0 1 Stage3 Joint Path C2](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c2) Version 1 已 `COMPLETE`：`completed_segments=6`，`next_epoch=6`，`step=1878`。同口径因果验证选模量从 Stage 2 C2 best 的 `2.338817`、Seg 1 的 `2.339931` 单调降至 Seg 6 的 **`2.333467`**（亦为 best）。预测方差未收缩。每段 train+全量验证实测 649–656 秒（均值 653 秒，约 10.9 分钟）；C2 墙钟 1.29 小时，其中安装 5.4 分钟、两次基线验证约 18 分钟。
 
-当前账号 GPU 配额剩余 **4.66h**（2026-09-19 刷新）。双 T4 按 2x 计费时墙钟约 2.33 小时，不足以进入 40–60 段受控探针。下一截为 [Kronos Small 0 1 Stage3 Joint Path C3](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c3)：从 C2 Output 精确 resume 至 Segment 15（9 个新段、2,817 steps，目标 global step 4,695），同一 SwanLab run，不再重复两次全量基线。trainer `max_runtime=7200` 秒，入口硬超时 9,000 秒；预估墙钟约 1.7 小时。state SHA-256 在 Kaggle 上计算并写入日志，不在本地拉取权重。
+当前账号 GPU 配额剩余 **4.66h**（2026-09-19 刷新）。双 T4 按 2x 计费时墙钟约 2.33 小时，不足以进入 40–60 段受控探针。下一截为 [Kronos Small 0 1 Stage3 Joint Path C3](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c3)：源码固定为 `4045a7d368b04a56a79d14caf21830c7db677a92`，从 C2 Output 精确 resume 至 Segment 15（9 个新段、2,817 steps，目标 global step 4,695），同一 SwanLab run，不再重复两次全量基线。trainer `max_runtime=7200` 秒，入口硬超时 9,000 秒；预估墙钟约 1.7 小时。state SHA-256 在 Kaggle 上计算并写入日志，不在本地拉取权重。
 
 40–60 段探针、CE-only 对照、Stage 3 OOS 仍未执行，待 9 月 19 日配额刷新后再判断。
 
