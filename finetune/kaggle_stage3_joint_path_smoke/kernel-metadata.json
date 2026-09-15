@@ -1,0 +1,13 @@
+{
+  "id": "smmt315/kronos-small-0-1-stage3-joint-path-smoke",
+  "title": "Kronos Small 0 1 Stage3 Joint Path Smoke",
+  "code_file": "stage3_joint_path_smoke.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["smmt315/kronos-small-0-1-stage2-cosine-refinement-c2"]
+}
