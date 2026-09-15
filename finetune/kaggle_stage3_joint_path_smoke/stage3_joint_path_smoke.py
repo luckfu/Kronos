@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timezone
 
 SOURCE_COMMIT = os.environ.get('STAGE3_SOURCE_COMMIT', 'a854641420068dbbc6daf2dcfa329c8ecbaa425a')
-RUN_ID = 'small_0.1_stage3_joint_path_alignment_from_c2_best_v2'
+RUN_ID = os.environ.get('STAGE3_SWANLAB_RUN_ID', 'small_0.1_stage3_joint_path_alignment_from_c2_best_v2')
 PARENT = 'smmt315/kronos-small-0-1-stage2-cosine-refinement-c2'
 OUTPUT = Path('/kaggle/working/stage3_joint_path_smoke')
 RESUME_KERNEL = os.environ.get('STAGE3_RESUME_KERNEL', '')
@@ -21,6 +21,8 @@ CHUNK = os.environ.get('STAGE3_CHUNK', 'c1')
 HARD_TIMEOUT_SECONDS = int(os.environ.get('STAGE3_HARD_TIMEOUT_SECONDS', '18000'))
 MAX_RUNTIME_SECONDS = int(os.environ.get('STAGE3_MAX_RUNTIME_SECONDS', '10800'))
 BASELINE_BEFORE_RESUME = os.environ.get('STAGE3_BASELINE_BEFORE_RESUME', '0') == '1'
+LAMBDA_PATH = float(os.environ.get('STAGE3_LAMBDA_PATH', '0.05'))
+MILESTONE_SEGMENTS = os.environ.get('STAGE3_MILESTONE_SEGMENTS', '')
 HASHES = {
     'best': '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
     'tokenizer': '59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee',
@@ -82,7 +84,8 @@ def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
-          lr=2e-6, amp=False, hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
+          lr=2e-6, amp=False, lambda_path=LAMBDA_PATH, milestone_segments=MILESTONE_SEGMENTS,
+          hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
           max_runtime_seconds=MAX_RUNTIME_SECONDS, chunk=CHUNK)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     _log = (OUTPUT / 'run.log').open('a', buffering=1)
@@ -196,7 +199,8 @@ def main():
                     'initialization': 'model_weights_only', 'optimizer': 'fresh_AdamW', 'scheduler': 'fixed',
                     'lr': 2e-6, 'amp': False, 'seed': 20260915, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': 32,
                     'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
-                    'lookback': 120, 'horizon': 10, 'loss': 'CE+0.05*EMA_normalized_six_feature_Huber',
+                    'lookback': 120, 'horizon': 10, 'loss': f'CE+{LAMBDA_PATH:g}*EMA_normalized_six_feature_Huber',
+                    'lambda_path': LAMBDA_PATH, 'milestone_segments': MILESTONE_SEGMENTS,
                     'huber_delta': 0.02, 'top_k': 16, 'candidates': 16, 'ema_decay': 0.99,
                     'dependency_causal': True, 'devices': devices, 'torch': torch.__version__,
                     'run_id': RUN_ID, 'swanlab_url': dashboard_url, 'sha256': HASHES,
@@ -228,11 +232,13 @@ def main():
         resume_args = []
         if RESUME_KERNEL:
             resume_args = ['--resume-state', str(OUTPUT / 'checkpoints/last_state.pt'), '--chunk', CHUNK]
-            if BASELINE_BEFORE_RESUME:
-                resume_args.append('--baseline-before-resume')
+        if BASELINE_BEFORE_RESUME:
+            resume_args.append('--baseline-before-resume')
+        if MILESTONE_SEGMENTS:
+            resume_args += ['--milestone-segments', MILESTONE_SEGMENTS]
         run(torchrun + ['finetune.train_stage3_path_alignment'] + common +
             ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32', '--lr', '2e-6',
-             '--seed', '20260915', '--log-interval', '10',
+             '--seed', '20260915', '--log-interval', '10', '--lambda-path', str(LAMBDA_PATH),
              '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)] + resume_args, cwd=repo, env=env)
         phase('verify_output')
         progress = json.loads((OUTPUT / 'progress.json').read_text())

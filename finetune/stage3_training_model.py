@@ -41,6 +41,31 @@ class Stage3TrainingModel(nn.Module):
         token_loss = self.predictor.head.compute_loss(
             logits1, logits2, s1[:, target_slice], s2[:, target_slice],
         )[0]
+        if self.config.weight == 0 and self.training:
+            # CE-only control: the candidate decode is pure overhead at lambda 0.
+            # Validation still decodes so raw path metrics stay comparable with C3.
+            zeros_h = token_loss.new_zeros((self.horizon,))
+            zeros_hf = token_loss.new_zeros((self.horizon, 6))
+            with torch.no_grad():
+                logp1 = logits1.float().log_softmax(-1)
+                s1_entropy = -(logp1.exp() * logp1).sum(-1).mean()
+            metrics = {
+                'token_loss': token_loss.detach(),
+                'raw_path_loss': token_loss.new_zeros(()),
+                'normalized_path_loss': token_loss.new_zeros(()),
+                'weighted_path_loss': token_loss.new_zeros(()),
+                'total_loss': token_loss.detach(),
+                'top16_joint_mass': token_loss.new_zeros(()),
+                's1_entropy': s1_entropy,
+                's2_conditional_entropy_topk_s1': token_loss.new_zeros(()),
+                'horizon_mae': zeros_h,
+                'max_residual': token_loss.new_zeros(()),
+                'prediction_mean_hf': zeros_hf,
+                'prediction_second_moment_hf': zeros_hf.square(),
+                'target_mean_hf': x[:, target_slice].detach().mean(0),
+                'target_second_moment_hf': x[:, target_slice].detach().square().mean(0),
+            }
+            return token_loss, metrics
         path_loss, details = compute_path_alignment_loss(
             self.predictor, self.tokenizer, context, logits1, x[:, target_slice],
             self.config, self.path_ema if self.training else None,

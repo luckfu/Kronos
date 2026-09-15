@@ -673,7 +673,36 @@ Seg 1 的 C3 `summary.json` 未写入预测方差；Seg 2 起该量约 1.83–1.
 
 因此当前不能写成“Path Alignment 正在有效优化，只是验证过拟合”。更准确的表述是：更新方向被 Token CE 主导；训练集 Path 未见稳定下降；验证 Path 仅短暂改善后出现与 CE 的 trade-off。训练时 Path 贡献的是 `λ × normalized path ≈ 0.05`，不是 `0.05 × 0.0066`，故不宜仅因 raw Path 数值小而把 λ 从 0.05 调大。选模量使用 raw Path，CE 下降约 0.06 会完全盖过 Path 回升约 `8e-5`，所以 Seg 15 会成为 best，即使 MAE 已差过起点。
 
-现有 `s1/s2/dependency/backbone_grad_norm` 是联合 loss 一次 backward 后的总梯度，不能从看板计算 `||g_path|| / ||g_token||`。CE-only 对照与生产 evaluator 的 Stage 3 OOS 仍未执行。C3 各段 train+全量验证约 650–678 秒。
+现有 `s1/s2/dependency/backbone_grad_norm` 是联合 loss 一次 backward 后的总梯度，不能从训练看板反推 `||g_path|| / ||g_token||`；该问题已由第 6.7.10 节的离线分梯度诊断补齐。CE-only 对照仍未执行。C3 各段 train+全量验证约 650–678 秒。
+
+#### 6.7.10 分梯度诊断与 C2/C3 生产 OOS
+
+离线梯度诊断 Kernel [Kronos Small 0 1 Stage3 Gradient Diagnostic](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-gradient-diagnostic) 固定 256 个验证样本（8×32）、关闭 dropout，并分别对 C2 best 与 C3 last 计算 CE 和 raw Path 梯度。归一化 Path 使用冻结的 C3 last EMA 分母 `0.00613864`，因此训练实际加权 Path 梯度为 `0.05 / EMA × g_raw_path`。C3 best 与 last 的权重 SHA-256 相同。
+
+| Checkpoint | 全模型 cos(CE, Path) | Backbone cosine | Conditioning cosine | `||g_weighted_path|| / ||g_CE||` |
+| --- | ---: | ---: | ---: | ---: |
+| C2 best Seg 179 | 0.1844 | 0.2344 | 0.0148 | 2.45% |
+| C3 last Seg 15 | 0.1269 | 0.1560 | -0.1440 | 2.51% |
+
+全模型与 backbone 在 8 个 batch 上均未出现负 cosine，故没有证据支持“CE 与 Path 全局强冲突”。更直接的机制证据是：按训练口径加权后，Path 梯度范数仅约为 CE 的 2.5%，更新方向由 CE 主导。C3 conditioning 子组出现局部负 cosine，但该子组绝对梯度很小，不能解释成全模型梯度冲突。
+
+生产 OOS Kernel [Kronos Small 0 1 Stage3 C2 C3 OOS](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-c2-c3-oos) 复用 `Kronos Small 0 1 C2 Alpha OOS Evaluation` 的 C2 原始预测，并仅新增 C3 last 推理。两模型覆盖完全相同的 66,986 个 identity、13 个 2026-08-11 至 2026-08-27 signal dates，无模型×identity 重复。这里是参考 Kernel 的 13 日增量 OOS，不冒充第 8.3 节合并后的完整 19 日审计。
+
+| D10 指标 | C2 best | C3 last | C3-C2 |
+| --- | ---: | ---: | ---: |
+| 方向准确率 | 47.932% | **51.959%** | +4.026pp |
+| 路径收益 MAE | **7.798pp** | 9.380pp | +1.582pp |
+| Pooled Rank IC | **0.1868** | 0.0630 | -0.1238 |
+| Daily Rank IC | **0.1744** | 0.0795 | -0.0949 |
+| Daily ICIR（mean/std） | **2.512** | 1.391 | -1.121 |
+| 正 IC 日期比例 | **100.0%** | 92.3% | -7.7pp |
+| Top-Bottom 10% | **3.489%** | 2.122% | -1.368pp |
+
+C3 的 D10 符号命中率提高，但 H1–H10 的 MAE 全部恶化、pooled Rank IC 全部下降；D10 排序指标与 Top-Bottom spread 也显著弱于 C2。结合训练 Path 横盘、Seg 9 后验证 Path/MAE 回升以及 Path 梯度仅约占 CE 的 2.5%，当前证据不支持继续 C3，也不支持在缺少新机制证据时直接做 λ sweep。完整数字与产物哈希见 [stage3_c2_c3_mechanism_audit_20260915.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_c2_c3_mechanism_audit_20260915.json)。
+
+**正式实验决策：** C3 归档为 negative result；当前 V2 Path Alignment 退出主线，不再延长 C3、不做 λ sweep，也不把 Path-only adaptation 作为 V3 主线。C2 best Segment 179 重新锁定为 Alpha reference 与 production candidate；后续任何 V3 候选都必须从相同 OOS 口径与 C2 best 比较。CE-only 对照仍可用于归因，但不构成继续 Path 训练的前置承诺。
+
+该 negative result 表明，当前条件联合 Top-16 概率加权 OHLCVA Path Alignment 能降低 Token CE 并提高 D10 方向命中率，却不能保留或改善横截面 Alpha；模型的 token 分布变得更集中，但这种确定性没有转化为更好的连续路径、Rank IC 或分组收益。后续候选的验收优先级固定为：`Rank IC → Top-Bottom → ICIR/正 IC 日期比例 → 净收益/Sharpe/回撤 → MAE → Token CE`。若研究新的辅助目标，应以不破坏 C2 表示为约束，直接检验横截面未来收益排序，并严格控制按日期构造、未来收益定义、时间泄漏和交易成本。
 
 ## 7. 训练执行与 Kaggle 接力
 
@@ -931,13 +960,9 @@ flowchart LR
 
 ### 11.1 Stage 3 十五段后续诊断
 
-第 6.7.9 节的 C2/C3 十五段观察已完成，λ 保持 0.05，不因验证 Path 在 Seg 9 后回升而改权重或提前停止。尚未回答、因而也尚未授权改配置的问题是：
+第 6.7.9 节的十五段观察及第 6.7.10 节的分梯度/OOS 诊断均已完成。结果表明 Path 加权梯度约为 CE 的 2.5%，不存在全模型强负 cosine；C3 虽提高 D10 方向准确率，但路径 MAE、Rank IC 与 Top-Bottom 均弱于 C2。当前配置不再续训，也不进入 λ sweep。
 
-1. Path-only 与 Token-only 梯度范数之比（现有看板只有联合梯度）；
-2. 同一生产自回归 evaluator 上的 Stage 3 OOS（方向准确率、Rank IC、逐 horizon 路径误差）；
-3. 同一 C2 best、均匀 CE、无 history、因果验证及预算下的 `lambda_path=0` 对照。
-
-40–60 段受控探针待 2026-09-19 GPU 配额刷新后再判断。在 Path 训练集 rolling mean 仍横盘、且缺少分梯度与 OOS 之前，不应把 λ 调到 0.1/0.2，也不应宣称 Path Alignment 改善了连续预测或 Alpha。
+尚未完成的是同一 C2 best、均匀 CE、无 history、因果验证及相同预算下的 `lambda_path=0` 对照。该对照用于严格区分“Stage 3 的 CE 训练效应”和“Path 辅助项增量”，不是继续投入当前 Path Alignment 方案的前置条件。若未来重新设计 Path 代理或使用 gradient surgery，应作为新预注册实验，不与本轮 C3 接续。
 
 ### 11.2 其余后续实验
 
@@ -961,5 +986,6 @@ flowchart LR
 - Stage 3 已完成单段 Output：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/stage3_joint_path_smoke_v1/stage3_joint_path_smoke/summary.json)、[gpu_probe.json](/Users/fupengcheng/Documents/Kronos/artifacts/stage3_joint_path_smoke_v1/stage3_joint_path_smoke/gpu_probe.json)
 - Stage 3 单段验收归档（随仓库保存）：[stage3_joint_path_smoke_v1_acceptance.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_smoke_v1_acceptance.json)
 - Stage 3 C2/C3 十五段指标归档（无权重）：[stage3_joint_path_c3_metrics.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_c3_metrics.json)
+- Stage 3 分梯度与 C2/C3 OOS 机制审计：[stage3_c2_c3_mechanism_audit_20260915.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_c2_c3_mechanism_audit_20260915.json)
 
 本文以日志和当前代码为准；若历史计划文档与实测配置冲突，应优先引用本报告中的代码/日志事实，并在论文实验设置中注明具体 commit、seed、数据快照和 checkpoint 标识。

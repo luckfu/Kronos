@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
+from finetune.stage3_path_alignment import PathAlignmentConfig
 from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
 
 def setup_dist():
@@ -49,7 +50,7 @@ def record_metrics(out, values):
 def validate_resume(state, experiment, summary, world, lr, seed):
     """Fail closed on a different objective/data/run or a partial segment."""
     prior = state['experiment_manifest']
-    for key in ('sha256', 'run_id', 'loss', 'huber_delta', 'top_k', 'candidates',
+    for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'huber_delta', 'top_k', 'candidates',
                 'ema_decay', 'dependency_causal', 'amp', 'global_batch',
                 'batch_per_gpu', 'lookback', 'horizon', 'validation_samples'):
         if prior.get(key) != experiment.get(key):
@@ -121,10 +122,13 @@ def main(a):
     rank, world, local = setup_dist()
     torch.manual_seed(a.seed + rank)
     device = torch.device(f'cuda:{local}')
+    milestones = {int(item) for item in str(a.milestone_segments).split(',') if item.strip()}
     if is_main(rank):
         print('initialization=stage3_from_c2_best_model_only', flush=True)
         print('parent_model=' + str(a.model_dir), flush=True)
         print('optimizer_state=' + ('resume' if a.resume_state else 'reset'), flush=True)
+        print(f'lambda_path={a.lambda_path}', flush=True)
+        print(f'milestone_segments={sorted(milestones)}', flush=True)
         print(f'world_size={world}', flush=True)
         print('validation_mode=full', flush=True)
         print('target_slice=x[:,120:130]', flush=True)
@@ -132,7 +136,8 @@ def main(a):
         print(f'chunk1_max_runtime_seconds={a.max_runtime_seconds}', flush=True)
     predictor = Kronos.from_pretrained(a.model_dir).to(device)
     tok = KronosTokenizer.from_pretrained(a.tokenizer_dir).to(device).eval()
-    model = Stage3TrainingModel(predictor, tok).to(device)
+    model = Stage3TrainingModel(predictor, tok,
+                                config=PathAlignmentConfig(weight=a.lambda_path)).to(device)
     if world > 1:
         model = DDP(model, device_ids=[local], output_device=local,
                     find_unused_parameters=False, broadcast_buffers=False)
@@ -158,7 +163,9 @@ def main(a):
             config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world,
                     'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds,
                     'top_k': 16, 'candidates': 16, 'parent': str(a.model_dir),
-                    'validation': 'full_causal', 'validation_objective': 'token_ce+0.05*raw_path_huber',
+                    'lambda_path': a.lambda_path, 'milestone_segments': sorted(milestones),
+                    'validation': 'full_causal',
+                    'validation_objective': f'token_ce+{a.lambda_path:g}*raw_path_huber',
                     'optimizer': 'resume' if a.resume_state else 'fresh', 'dependency_causal': True,
                     'ema': 'global_batch_detached', 'coverage_seed': a.seed,
                     'nproc': world, 'chunk': a.chunk},
@@ -274,7 +281,15 @@ def main(a):
                 best_val = val_loss; raw.save_pretrained(out / 'checkpoints/best_model')
                 atomic_json(out / 'checkpoints/best_model/best_metric.json',
                             {'segment': seg, 'step': step, 'validation_objective': val_loss,
-                             'definition': 'causal_token_ce+0.05*raw_path_huber'})
+                             'definition': f'causal_token_ce+{a.lambda_path:g}*raw_path_huber'})
+            if seg in milestones:
+                milestone = out / f'checkpoints/milestone_seg{seg:02d}'
+                raw.save_pretrained(milestone)
+                atomic_json(milestone / 'milestone.json',
+                            {'segment': seg, 'step': step, 'validation_objective': val_loss,
+                             'lambda_path': a.lambda_path})
+                print(json.dumps({'phase': 'milestone_saved', 'segment': seg, 'step': step,
+                                  'path': str(milestone)}), flush=True)
             summary['segments'].append(row)
             record_metrics(out, {'phase': 'segment_complete', **row})
             if run is not None:
@@ -315,6 +330,8 @@ if __name__ == '__main__':
     p.add_argument('--lr', type=float, default=2e-6)
     p.add_argument('--seed', type=int, default=20260915)
     p.add_argument('--log-interval', type=int, default=50)
+    p.add_argument('--lambda-path', type=float, default=0.05)
+    p.add_argument('--milestone-segments', default='')
     p.add_argument('--resume-state', default='')
     p.add_argument('--chunk', default='c1')
     p.add_argument('--baseline-before-resume', action='store_true')
