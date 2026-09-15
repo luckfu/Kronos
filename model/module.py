@@ -368,7 +368,7 @@ class MultiHeadCrossAttentionWithRoPE(nn.Module):
         self.attn_dropout_p = attn_dropout_p
         self.resid_dropout = nn.Dropout(resid_dropout)
 
-    def forward(self, query, key, value, key_padding_mask=None):
+    def forward(self, query, key, value, key_padding_mask=None, is_causal=None):
         batch_size, q_len, _ = query.shape
         _, seq_len, _ = key.shape
 
@@ -384,7 +384,9 @@ class MultiHeadCrossAttentionWithRoPE(nn.Module):
         else:
             attn_mask = None
 
-        is_causal_flag = self.training
+        # None preserves historical Kronos/C2 behavior. Stage3 explicitly
+        # requests causal=True in both train and eval, independently of dropout.
+        is_causal_flag = self.training if is_causal is None else bool(is_causal)
 
         attn_output = F.scaled_dot_product_attention(
             q, k, v,
@@ -449,7 +451,7 @@ class DependencyAwareLayer(nn.Module):
         self.cross_attn = MultiHeadCrossAttentionWithRoPE(d_model, n_heads, attn_dropout_p, resid_dropout)
         self.norm = RMSNorm(d_model)
 
-    def forward(self, hidden_states, sibling_embed, key_padding_mask=None):
+    def forward(self, hidden_states, sibling_embed, key_padding_mask=None, is_causal=None):
         """hidden_states: [batch, seq_len, d_model]
         sibling_embed: Embedding from another subtoken
         """
@@ -457,7 +459,8 @@ class DependencyAwareLayer(nn.Module):
             query=sibling_embed,
             key=hidden_states,
             value=hidden_states,
-            key_padding_mask=key_padding_mask
+            key_padding_mask=key_padding_mask,
+            is_causal=is_causal,
         )
         return self.norm(hidden_states + attn_out)
 

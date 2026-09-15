@@ -319,6 +319,50 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             }
         return x
 
+    def encode_context(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None, size_percentile=None):
+        x = self.embedding([s1_ids, s2_ids])
+        if stamp is not None:
+            x = x + self.time_emb(stamp)
+        if self.context_layer == 0:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket, size_percentile=size_percentile)
+        x = self.token_drop(x)
+        for layer_idx, layer in enumerate(self.transformer):
+            if self.context_layer > 0 and layer_idx == self.context_layer:
+                x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket, size_percentile=size_percentile)
+            x = layer(x, key_padding_mask=padding_mask)
+        if self.context_layer == self.n_layers:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket, size_percentile=size_percentile)
+        return self.norm(x)
+
+    def predict_s1(self, context):
+        return self.head(context)
+
+    def predict_s2(self, context, s1_ids, padding_mask=None, is_causal=None):
+        sibling_embed = self.embedding.emb_s1(s1_ids)
+        x2 = self.dep_layer(context, sibling_embed, key_padding_mask=padding_mask, is_causal=is_causal)
+        return self.head.cond_forward(x2)
+
+    def predict_s2_candidates(self, context, candidate_s1_ids, position_start=None, is_causal=None):
+        """Return s2 logits conditioned on candidate s1 ids per future position.
+
+        context is [B,T,D], candidate_s1_ids is [B,H,K]. The dependency layer
+        is evaluated in one expanded batch, avoiding repeated Transformer passes.
+        Full-length queries preserve RoPE positions, causal masks and the
+        hidden-state residual. Other query IDs do not affect a selected query.
+        """
+        b, t, d = context.shape
+        _, h, k = candidate_s1_ids.shape
+        start = t - h if position_start is None else int(position_start)
+        if candidate_s1_ids.shape[0] != b or not (0 <= start <= t - h):
+            raise ValueError('Candidate positions must lie within context')
+        expanded_context = context[:, None].expand(b, k, t, d).reshape(b * k, t, d)
+        full_ids = candidate_s1_ids.new_zeros((b, k, t))
+        full_ids[:, :, start:start + h] = candidate_s1_ids.transpose(1, 2)
+        sibling = self.embedding.emb_s1(full_ids.reshape(b * k, t))
+        x2 = self.dep_layer(expanded_context, sibling, is_causal=is_causal)
+        logits = self.head.cond_forward(x2[:, start:start + h])
+        return logits.reshape(b, k, h, -1).transpose(1, 2)
+
     def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None, size_percentile=None, return_auxiliary=False, asof_index=None):
         """
         Args:
@@ -334,33 +378,8 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
                 - s1 logits: Logits for s1 token predictions. Shape: [batch_size, seq_len, s1_vocab_size]
                 - s2_logits: Logits for s2 token predictions, conditioned on s1. Shape: [batch_size, seq_len, s2_vocab_size]
         """
-        x = self.embedding([s1_ids, s2_ids])
-        if stamp is not None:
-            time_embedding = self.time_emb(stamp)
-            x = x + time_embedding
-        if self.context_layer == 0:
-            x = self._add_context(
-                x, sector_id=sector_id, size_bucket=size_bucket,
-                size_percentile=size_percentile,
-            )
-        x = self.token_drop(x)
-
-        for layer_idx, layer in enumerate(self.transformer):
-            if self.context_layer > 0 and layer_idx == self.context_layer:
-                x = self._add_context(
-                    x, sector_id=sector_id, size_bucket=size_bucket,
-                    size_percentile=size_percentile,
-                )
-            x = layer(x, key_padding_mask=padding_mask)
-        if self.context_layer == self.n_layers:
-            x = self._add_context(
-                x, sector_id=sector_id, size_bucket=size_bucket,
-                size_percentile=size_percentile,
-            )
-
-        x = self.norm(x)
-
-        s1_logits = self.head(x)
+        x = self.encode_context(s1_ids, s2_ids, stamp, padding_mask, sector_id, size_bucket, size_percentile)
+        s1_logits = self.predict_s1(x)
 
         if use_teacher_forcing:
             sibling_embed = self.embedding.emb_s1(s1_targets)
@@ -369,7 +388,7 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
             sample_s1_ids = torch.multinomial(s1_probs.view(-1, self.s1_vocab_size), 1).view(s1_ids.shape)
             sibling_embed = self.embedding.emb_s1(sample_s1_ids)
 
-        x2 = self.dep_layer(x, sibling_embed, key_padding_mask=padding_mask) # Dependency Aware Layer: Condition on s1 embeddings
+        x2 = self.dep_layer(x, sibling_embed, key_padding_mask=padding_mask)
         s2_logits = self.head.cond_forward(x2)
         logits = (s1_logits, s2_logits)
         if not return_auxiliary:

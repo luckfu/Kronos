@@ -1,15 +1,14 @@
-import argparse, json, os, time, subprocess, sys
+import argparse, json, os, time
+from datetime import datetime, timezone
 from pathlib import Path
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
-subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--progress-bar', 'off', 'swanlab'], check=True)
-import swanlab
 from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
-from finetune.stage3_path_alignment import PathAlignmentConfig, DetachedLossEMA, compute_path_alignment_loss
+from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
 
 def setup_dist():
     if 'RANK' in os.environ:
@@ -23,25 +22,66 @@ def setup_dist():
 def is_main(rank):
     return rank == 0
 
-def evaluate(model, tok, loader, device, cfg, world):
-    model.eval(); total = torch.zeros((), device=device); n = torch.zeros((), device=device)
-    raw = model.module if isinstance(model, DDP) else model
+def atomic_json(path, value):
+    temp = path.with_suffix(path.suffix + '.tmp')
+    temp.write_text(json.dumps(value, indent=2))
+    os.replace(temp, path)
+
+def persist_state(core, opt, out, step, segment, ds, experiment, world, rank):
+    rng = {'cpu': torch.get_rng_state(), 'cuda': torch.cuda.get_rng_state()}
+    rank_rng = [None] * world
+    if world > 1: dist.all_gather_object(rank_rng, rng)
+    else: rank_rng[0] = rng
+    if rank == 0:
+        state = core.checkpoint_state(opt, step, segment)
+        state.update(next_epoch=segment, resume_step=0, rank_rng_states=rank_rng,
+                     scheduler={'type': 'fixed', 'lr': opt.param_groups[0]['lr']},
+                     scaler=None, experiment_manifest=experiment,
+                     coverage=ds.coverage_state(segment-1) if segment else {'consumed_samples': 0})
+        temp = out / 'checkpoints/last_state.pt.tmp'
+        torch.save(state, temp); os.replace(temp, out / 'checkpoints/last_state.pt')
+        core.predictor.save_pretrained(out / 'checkpoints/last_model')
+
+def record_metrics(out, values):
+    with (out / 'metrics.jsonl').open('a', buffering=1) as handle:
+        handle.write(json.dumps({'timestamp': datetime.now(timezone.utc).isoformat(), **values}) + '\n')
+
+def evaluate(model, loader, device, world, rank=0, log_interval=50):
+    was_training = model.training
+    model.eval()
+    core = model.module if isinstance(model, DDP) else model
+    # No per-batch DDP collectives: exact validation shards may differ in size.
+    # core.eval() disables EMA updates/all-reduce and all predictor dropout.
+    n = torch.zeros((), device=device)
+    keys = ('token_loss', 'raw_path_loss', 'total_loss', 'top16_joint_mass',
+            's1_entropy', 's2_conditional_entropy_topk_s1', 'horizon_mae')
+    sums = {k: torch.zeros(core.horizon if k == 'horizon_mae' else (), device=device) for k in keys}
+    max_residual = torch.zeros((), device=device)
     with torch.no_grad():
-        for vb in loader:
+        for batch_index, vb in enumerate(loader, 1):
             vx, vs = vb[0].to(device), vb[1].to(device)
             vsec = vb[2].to(device) if len(vb) > 2 else None
             vpct = vb[4].to(device) if len(vb) > 4 else None
-            vs1, vs2 = tok.encode(vx, half=True)
-            vlogits = raw(vs1[:, :-1], vs2[:, :-1], vs[:, :-1], use_teacher_forcing=True, s1_targets=vs1[:, 1:], sector_id=vsec, size_percentile=vpct)
-            vce = raw.head.compute_loss(vlogits[0][:, -10:], vlogits[1][:, -10:], vs1[:, 1:][:, -10:], vs2[:, 1:][:, -10:])[0]
-            vpa, _ = compute_path_alignment_loss(tok, vlogits[0][:, -10:], vlogits[1][:, -10:], vx[:, 120:130], cfg, None)
-            total += (vce + vpa).detach() * len(vx); n += len(vx)
+            _, metrics = core(vx, vs, sector_id=vsec, size_percentile=vpct)
+            for key in keys:
+                sums[key] += metrics[key] * len(vx)
+            max_residual = torch.maximum(max_residual, metrics['max_residual'])
+            n += len(vx)
+            if rank == 0 and (batch_index == 1 or batch_index % log_interval == 0):
+                print(json.dumps({'phase': 'validation', 'batches_rank0': batch_index,
+                                  'samples_rank0': int(n)}), flush=True)
     if world > 1:
-        dist.all_reduce(total, op=dist.ReduceOp.SUM); dist.all_reduce(n, op=dist.ReduceOp.SUM)
-    model.train()
-    return float(total / n.clamp_min(1))
+        dist.all_reduce(n, op=dist.ReduceOp.SUM)
+        for value in sums.values(): dist.all_reduce(value, op=dist.ReduceOp.SUM)
+        dist.all_reduce(max_residual, op=dist.ReduceOp.MAX)
+    if not n.item(): raise RuntimeError('Empty validation set')
+    result = {key: (value / n).tolist() for key, value in sums.items()}
+    result.update(samples=int(n), max_residual=float(max_residual))
+    model.train(was_training)
+    return result
 
 def main(a):
+    import swanlab
     rank, world, local = setup_dist()
     torch.manual_seed(a.seed + rank)
     device = torch.device(f'cuda:{local}')
@@ -54,20 +94,24 @@ def main(a):
         print('target_slice=x[:,120:130]', flush=True)
         print(f'chunk1_max_segments={a.segments}', flush=True)
         print(f'chunk1_max_runtime_seconds={a.max_runtime_seconds}', flush=True)
-    model = Kronos.from_pretrained(a.model_dir).to(device)
+    predictor = Kronos.from_pretrained(a.model_dir).to(device)
     tok = KronosTokenizer.from_pretrained(a.tokenizer_dir).to(device).eval()
-    for p in tok.parameters(): p.requires_grad_(False)
+    model = Stage3TrainingModel(predictor, tok).to(device)
     if world > 1:
-        model = DDP(model, device_ids=[local], output_device=local, find_unused_parameters=False)
-    raw = model.module if isinstance(model, DDP) else model
+        model = DDP(model, device_ids=[local], output_device=local,
+                    find_unused_parameters=False, broadcast_buffers=False)
+    core = model.module if isinstance(model, DDP) else model
+    raw = core.predictor
     run = None
     if is_main(rank):
         api_key = os.environ.get('SWANLAB_API_KEY', '').strip()
         if not api_key:
             raise RuntimeError('SWANLAB_API_KEY missing; refusing to start training without dashboard')
         swanlab.login(api_key=api_key)
-        run_id = os.environ.get('SWANLAB_RUN_ID', 'small_0.1_stage3_path_alignment_from_c2_best').strip() or 'small_0.1_stage3_path_alignment_from_c2_best'
-        experiment_name = os.environ.get('SWANLAB_EXPERIMENT_NAME', 'small_0.1_stage3_path_alignment_from_c2_best').strip() or 'small_0.1_stage3_path_alignment_from_c2_best'
+        run_id = os.environ.get('SWANLAB_RUN_ID', 'small_0.1_stage3_joint_path_alignment_from_c2_best_v2').strip()
+        experiment_name = os.environ.get('SWANLAB_EXPERIMENT_NAME', run_id).strip()
+        if run_id == 'small_0.1_stage3_path_alignment_from_c2_best' or not run_id:
+            raise RuntimeError('Refusing to reuse aborted Stage3 C1 dashboard')
         # Match C2: fixed run id + resume=allow so multi-chunk handoffs stay on one dashboard.
         run = swanlab.init(
             id=run_id,
@@ -75,7 +119,13 @@ def main(a):
             project='finance',
             workspace='roc_fu',
             experiment_name=experiment_name,
-            config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world, 'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds, 'top_k': 16, 'candidates': 16, 'parent': 'c2_best', 'validation': 'full', 'nproc': world, 'chunk': 'c1'},
+            config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world,
+                    'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds,
+                    'top_k': 16, 'candidates': 16, 'parent': str(a.model_dir),
+                    'validation': 'full_causal', 'validation_objective': 'token_ce+0.05*raw_path_huber',
+                    'optimizer': 'fresh', 'step': 0, 'dependency_causal': True,
+                    'ema': 'global_batch_detached', 'coverage_seed': a.seed,
+                    'nproc': world, 'chunk': 'c1'},
             mode='cloud',
         )
         run_url = getattr(run, 'url', getattr(run, 'web_url', ''))
@@ -83,25 +133,38 @@ def main(a):
         if not run_url:
             raise RuntimeError('SwanLab init returned no run URL; refusing to start training')
     model.train()
+    os.environ['KRONOS_COVERAGE_SEED'] = str(a.seed)
+    os.environ['KRONOS_TRAIN_SAMPLES_PER_SEGMENT'] = '20000'
+    print(json.dumps({'phase': 'load_training_dataset', 'rank': rank}), flush=True)
     ds = QlibDataset('train')
     train_sampler = DistributedSampler(ds, num_replicas=world, rank=rank, shuffle=False) if world > 1 else None
     loader = DataLoader(ds, batch_size=a.batch, shuffle=False, sampler=train_sampler, num_workers=0)
     os.environ['KRONOS_VALIDATION_SAMPLES'] = '0'
+    print(json.dumps({'phase': 'load_full_validation_dataset', 'rank': rank}), flush=True)
     val_ds = QlibDataset('val')
+    if len(val_ds) != val_ds.total_samples or val_ds.total_samples < 100000:
+        raise RuntimeError(f'Validation set unexpectedly small: {len(val_ds)}; full validation is required')
     if is_main(rank):
         print('validation_samples=' + str(val_ds.total_samples), flush=True)
-        if len(val_ds) != val_ds.total_samples or val_ds.total_samples < 100000:
-            raise RuntimeError(f'Validation set unexpectedly small: {len(val_ds)}; full validation is required')
+        print('dependency_causal=True; validation_dropout=False; ddp_complete_objective=True; global_step=0', flush=True)
     if world > 1: dist.barrier()
-    val_sampler = DistributedSampler(val_ds, num_replicas=world, rank=rank, shuffle=False) if world > 1 else None
-    val_loader = DataLoader(val_ds, batch_size=a.batch, shuffle=False, sampler=val_sampler, num_workers=0)
-    opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=0.01)
-    ema = DetachedLossEMA(0.99); cfg = PathAlignmentConfig(16, 16, 0.05, 0.02, 0.99)
+    # Exact coverage, no DistributedSampler padding/duplicate validation rows.
+    val_shard = Subset(val_ds, range(rank, len(val_ds), world))
+    val_loader = DataLoader(val_shard, batch_size=a.batch, shuffle=False, num_workers=0)
+    opt = torch.optim.AdamW(raw.parameters(), lr=a.lr, weight_decay=0.01)
     out = Path(a.output_dir)
-    if is_main(rank): out.mkdir(parents=True, exist_ok=True)
+    if is_main(rank): (out / 'checkpoints').mkdir(parents=True, exist_ok=True)
     if world > 1: dist.barrier()
     step = 0
     summary = {'segments': [], 'chunk': 'c1', 'max_runtime_seconds': a.max_runtime_seconds}
+    experiment = json.loads((out / 'experiment_manifest.json').read_text())
+    if is_main(rank):
+        raw.save_pretrained(out / 'checkpoints/best_model')
+        atomic_json(out / 'checkpoints/best_model/best_metric.json',
+                    {'segment': 0, 'status': 'initial_unvalidated', 'parent': str(a.model_dir)})
+        atomic_json(out / 'progress.json', {'completed_segments': 0, 'next_epoch': 0, 'status': 'running'})
+        atomic_json(out / 'summary.json', summary)
+    persist_state(core, opt, out, 0, 0, ds, experiment, world, rank)
     best_val = float('inf')
     per_rank_target = (20000 + world - 1) // world
     run_started = time.time()
@@ -112,27 +175,51 @@ def main(a):
             x, stamp = batch[0].to(device), batch[1].to(device)
             sec = batch[2].to(device) if len(batch) > 2 else None
             pct = batch[4].to(device) if len(batch) > 4 else None
-            with torch.no_grad(): s1, s2 = tok.encode(x, half=True)
-            logits = model(s1[:, :-1], s2[:, :-1], stamp[:, :-1], use_teacher_forcing=True, s1_targets=s1[:, 1:], sector_id=sec, size_percentile=pct)
-            ce = raw.head.compute_loss(logits[0][:, -10:], logits[1][:, -10:], s1[:, 1:][:, -10:], s2[:, 1:][:, -10:])[0]
-            pa, metrics = compute_path_alignment_loss(tok, logits[0][:, -10:], logits[1][:, -10:], x[:, 120:130], cfg, ema)
-            loss = ce + pa
-            opt.zero_grad(set_to_none=True); loss.backward()
-            grad = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.zero_grad(set_to_none=True)
+            loss, metrics = model(x, stamp, sector_id=sec, size_percentile=pct)
+            if not torch.isfinite(loss): raise FloatingPointError('Nonfinite Stage3 loss')
+            loss.backward()
+            group_grads = gradient_metrics(raw)
+            grad = torch.nn.utils.clip_grad_norm_(raw.parameters(), 1.0, error_if_nonfinite=True)
             opt.step(); step += 1; seen += len(x)
+            if step == 1 or step % a.log_interval == 0:
+                scalar_keys = ('token_loss', 'raw_path_loss', 'normalized_path_loss', 'total_loss',
+                               'top16_joint_mass', 's1_entropy', 's2_conditional_entropy_topk_s1')
+                logged = torch.stack([metrics[key] for key in scalar_keys])
+                if world > 1: dist.all_reduce(logged); logged /= world
+                if is_main(rank):
+                    log = dict(zip(scalar_keys, logged.tolist()))
+                    log.update({key: float(value) for key, value in group_grads.items()})
+                    log.update(phase='train', segment=seg, step=step, grad_norm=float(grad))
+                    print(json.dumps(log), flush=True)
+                    record_metrics(out, log)
+                    if run is not None:
+                        run.log({'train/' + k: v for k, v in log.items() if isinstance(v, (int, float))}, step=step)
             if seen >= per_rank_target: break
-        val_loss = evaluate(model, tok, val_loader, device, cfg, world)
-        row = {'segment': seg, 'step': step, 'samples_per_rank': seen, 'global_samples_approx': seen * world, 'token_forecast_loss': float(ce.detach()), 'validation_objective': val_loss, 'path_align_loss': float(metrics['path_align_loss']), 'horizon_mae': metrics['path_align_horizon_mae'].tolist(), 'max_residual': float(metrics['path_align_max_residual']), 'grad_norm': float(grad), 'elapsed_sec': time.time() - started}
+        validation = evaluate(model, val_loader, device, world, rank)
+        if validation['samples'] != len(val_ds): raise RuntimeError('Full validation count mismatch')
+        val_loss = validation['total_loss']
+        row = {'segment': seg, 'step': step, 'samples_per_rank': seen,
+               'global_samples_approx': seen * world,
+               'last_batch_token_loss_rank0': float(metrics['token_loss']),
+               'validation_objective': val_loss, 'validation': validation,
+               'grad_norm': float(grad), 'elapsed_sec': time.time() - started}
         if is_main(rank):
             if val_loss < best_val:
-                best_val = val_loss; raw.save_pretrained(out / 'best_model')
+                best_val = val_loss; raw.save_pretrained(out / 'checkpoints/best_model')
+                atomic_json(out / 'checkpoints/best_model/best_metric.json',
+                            {'segment': seg, 'step': step, 'validation_objective': val_loss,
+                             'definition': 'causal_token_ce+0.05*raw_path_huber'})
             summary['segments'].append(row)
-            torch.save({'model': raw.state_dict(), 'optimizer': opt.state_dict(), 'step': step, 'segment': seg, 'path_ema': ema.state_dict()}, out / 'last_state.pt')
+            record_metrics(out, {'phase': 'segment_complete', **row})
             if run is not None:
-                run.log({'segment': seg, 'step': step, 'token_forecast_loss': row['token_forecast_loss'], 'validation_objective': val_loss, 'path_align_loss': row['path_align_loss'], 'grad_norm': row['grad_norm'], 'max_residual': row['max_residual']}, step=step)
-            (out / 'progress.json').write_text(json.dumps({'segment': seg, 'step': step, 'samples_per_rank': seen, 'status': 'running'}, indent=2))
-            (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+                log = {'validation/' + key: value for key, value in validation.items() if key != 'horizon_mae'}
+                log.update({f'validation/mae_h{i+1}': value for i, value in enumerate(validation['horizon_mae'])})
+                run.log(log, step=step)
+            atomic_json(out / 'progress.json', {'segment': seg, 'step': step, 'samples_per_rank': seen, 'status': 'running'})
+            atomic_json(out / 'summary.json', summary)
             print(json.dumps(row), flush=True)
+        persist_state(core, opt, out, step, seg, ds, experiment, world, rank)
         stop_for_time = False
         if is_main(rank) and (time.time() - run_started) >= a.max_runtime_seconds:
             stop_for_time = True
@@ -144,10 +231,9 @@ def main(a):
         if int(flag.item()) == 1:
             break
     if is_main(rank):
-        raw.save_pretrained(out / 'last_model')
-        summary['final_result'] = {'completed_segments': len(summary['segments']), 'best_validation_objective': best_val, 'status': 'stopped'}
-        (out / 'progress.json').write_text(json.dumps({'completed_segments': len(summary['segments']), 'status': 'stopped'}, indent=2))
-        (out / 'summary.json').write_text(json.dumps(summary, indent=2))
+        summary['final_result'] = {'completed_segments': len(summary['segments']), 'best_validation_objective': best_val, 'status': 'completed'}
+        atomic_json(out / 'progress.json', {'completed_segments': len(summary['segments']), 'next_epoch': seg, 'step': step, 'status': 'completed'})
+        atomic_json(out / 'summary.json', summary)
         if run is not None: run.finish()
     if world > 1: dist.destroy_process_group()
 
@@ -157,8 +243,9 @@ if __name__ == '__main__':
     p.add_argument('--tokenizer-dir', required=True)
     p.add_argument('--output-dir', required=True)
     p.add_argument('--batch', type=int, default=32)
-    p.add_argument('--segments', type=int, default=40)
+    p.add_argument('--segments', type=int, default=1)
     p.add_argument('--max-runtime-seconds', type=int, default=36000)
     p.add_argument('--lr', type=float, default=2e-6)
-    p.add_argument('--seed', type=int, default=20260914)
+    p.add_argument('--seed', type=int, default=20260915)
+    p.add_argument('--log-interval', type=int, default=50)
     main(p.parse_args())

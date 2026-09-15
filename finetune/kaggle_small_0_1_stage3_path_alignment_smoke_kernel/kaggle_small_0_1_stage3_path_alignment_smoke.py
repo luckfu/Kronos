@@ -24,11 +24,13 @@ if len(gpu_names) != 2 or any('T4' not in name for name in gpu_names):
     raise RuntimeError(f'Expected exactly two Tesla T4 GPUs, found {gpu_names}')
 print(json.dumps({'phase': 'device_ready', 'gpu_count': len(gpu_names), 'devices': gpu_names}), flush=True)
 
+# The trainer and alignment module come from the cloned GitHub HEAD. Keeping
+# one source of truth prevents the Kaggle wrapper from silently running stale
+# embedded Stage-3 code.
 trainer = ROOT / 'finetune' / 'train_stage3_path_alignment.py'
-trainer.parent.mkdir(parents=True, exist_ok=True)
-trainer.write_text(TRAINER_SRC)
 alignment = ROOT / 'finetune' / 'stage3_path_alignment.py'
-alignment.write_text(ALIGNMENT_SRC)
+if not trainer.is_file() or not alignment.is_file():
+    raise FileNotFoundError('Stage3 trainer/module missing from cloned GitHub repository')
 
 def find_one(base, names):
     base = Path(base)
