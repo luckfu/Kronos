@@ -18,6 +18,9 @@ OUTPUT = Path('/kaggle/working/stage3_joint_path_smoke')
 RESUME_KERNEL = os.environ.get('STAGE3_RESUME_KERNEL', '')
 TARGET_SEGMENTS = int(os.environ.get('STAGE3_TARGET_SEGMENTS', '1'))
 CHUNK = os.environ.get('STAGE3_CHUNK', 'c1')
+HARD_TIMEOUT_SECONDS = int(os.environ.get('STAGE3_HARD_TIMEOUT_SECONDS', '18000'))
+MAX_RUNTIME_SECONDS = int(os.environ.get('STAGE3_MAX_RUNTIME_SECONDS', '10800'))
+BASELINE_BEFORE_RESUME = os.environ.get('STAGE3_BASELINE_BEFORE_RESUME', '0') == '1'
 HASHES = {
     'best': '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
     'tokenizer': '59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee',
@@ -79,7 +82,8 @@ def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
-          lr=2e-6, amp=False, hard_timeout_seconds=18000)
+          lr=2e-6, amp=False, hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
+          max_runtime_seconds=MAX_RUNTIME_SECONDS, chunk=CHUNK)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     _log = (OUTPUT / 'run.log').open('a', buffering=1)
     phase('log_ready', output=str(OUTPUT))
@@ -91,7 +95,8 @@ def main():
     threading.Thread(target=heartbeat, daemon=True).start()
     try:
         if len(SOURCE_COMMIT) != 40: raise RuntimeError('Unpinned source commit')
-        phase('clone_source', commit=SOURCE_COMMIT)
+        phase('clone_source', commit=SOURCE_COMMIT, max_runtime_seconds=MAX_RUNTIME_SECONDS,
+              hard_timeout_seconds=HARD_TIMEOUT_SECONDS, baseline_before_resume=BASELINE_BEFORE_RESUME)
         for attempt in range(3):
             repo = Path(tempfile.mkdtemp(prefix='kronos-stage3-source-')) / 'repo'
             try:
@@ -123,18 +128,23 @@ def main():
                     raise RuntimeError(f'Incomplete continuation output: {name}')
             with matches[0].open('rb') as f:
                 state_sha = hashlib.file_digest(f, 'sha256').hexdigest()
-            if state_sha != os.environ['STAGE3_RESUME_STATE_SHA256']:
-                raise RuntimeError('Continuation state hash mismatch')
+            expected_sha = os.environ.get('STAGE3_RESUME_STATE_SHA256', '').strip()
+            if expected_sha and state_sha != expected_sha:
+                raise RuntimeError(f'Continuation state hash mismatch: {state_sha}')
+            expected_progress = json.loads(os.environ['STAGE3_EXPECTED_PROGRESS'])
             progress = json.loads((source / 'progress.json').read_text())
-            if progress != {'completed_segments': 1, 'next_epoch': 1, 'step': 313, 'status': 'completed'}:
+            if progress != expected_progress:
                 raise RuntimeError(f'Unexpected source progress: {progress}')
+            next_segment = int(progress['next_epoch']) + 1
+            global_step = int(progress['step'])
             # Preserve history without replacing the already-open wrapper log.
             shutil.copytree(source, OUTPUT, dirs_exist_ok=True, ignore=shutil.ignore_patterns('run.log'))
             phase('continuation_log_begin')
             with (source / 'run.log').open() as f:
                 for line in f: emit(line)
-            phase('continuation_log_end', source=str(source), next_segment=2, global_step=313,
-                  state_sha256=state_sha, historical_metric_lines=sum(1 for _ in (source / 'metrics.jsonl').open()))
+            phase('continuation_log_end', source=str(source), next_segment=next_segment,
+                  global_step=global_step, state_sha256=state_sha, expected_sha256=expected_sha or None,
+                  historical_metric_lines=sum(1 for _ in (source / 'metrics.jsonl').open()))
         phase('install_t4_torch', version='2.6.0+cu124')
         run([sys.executable, '-u', '-m', 'pip', 'install', '--disable-pip-version-check',
              '--progress-bar', 'off', 'torch==2.6.0', '--index-url', 'https://download.pytorch.org/whl/cu124'], env=env)
@@ -196,7 +206,9 @@ def main():
             (OUTPUT / 'parent_experiment_manifest.json').write_text(json.dumps(previous, indent=2))
             manifest.update(continuation_kernel=RESUME_KERNEL, continuation_state_sha256=state_sha,
                             optimizer='resumed_AdamW', initialization='exact_stage3_resume',
-                            next_segment=2, initial_global_step=313, chunk=CHUNK)
+                            next_segment=next_segment, initial_global_step=global_step, chunk=CHUNK,
+                            baseline_before_resume=BASELINE_BEFORE_RESUME,
+                            max_runtime_seconds=MAX_RUNTIME_SECONDS)
         (OUTPUT / 'experiment_manifest.json').write_text(json.dumps(manifest, indent=2))
         phase('cpu_preflight')
         run([sys.executable, '-u', '-m', 'pytest', 'tests/test_stage3_conditional_joint.py',
@@ -209,16 +221,29 @@ def main():
             run(torchrun + ['finetune.stage3_gpu_probe'] + common + ['--batch', '32', '--output', str(OUTPUT / 'gpu_probe.json')], cwd=repo, env=env)
         probe = json.loads((OUTPUT / 'gpu_probe.json').read_text())
         if probe['status'] != 'passed': raise RuntimeError('GPU gate did not pass')
-        phase('training', segments=TARGET_SEGMENTS, optimizer='resume' if RESUME_KERNEL else 'fresh', global_step=313 if RESUME_KERNEL else 0)
-        resume_args = (['--resume-state', str(OUTPUT / 'checkpoints/last_state.pt'),
-                        '--chunk', CHUNK, '--baseline-before-resume'] if RESUME_KERNEL else [])
+        resume_step = global_step if RESUME_KERNEL else 0
+        phase('training', segments=TARGET_SEGMENTS, optimizer='resume' if RESUME_KERNEL else 'fresh',
+              global_step=resume_step, baseline_before_resume=BASELINE_BEFORE_RESUME,
+              max_runtime_seconds=MAX_RUNTIME_SECONDS)
+        resume_args = []
+        if RESUME_KERNEL:
+            resume_args = ['--resume-state', str(OUTPUT / 'checkpoints/last_state.pt'), '--chunk', CHUNK]
+            if BASELINE_BEFORE_RESUME:
+                resume_args.append('--baseline-before-resume')
         run(torchrun + ['finetune.train_stage3_path_alignment'] + common +
             ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32', '--lr', '2e-6',
-             '--seed', '20260915', '--log-interval', '10', '--max-runtime-seconds', '10800'] + resume_args, cwd=repo, env=env)
+             '--seed', '20260915', '--log-interval', '10',
+             '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)] + resume_args, cwd=repo, env=env)
         phase('verify_output')
         progress = json.loads((OUTPUT / 'progress.json').read_text())
         summary = json.loads((OUTPUT / 'summary.json').read_text())
-        assert progress['completed_segments'] == TARGET_SEGMENTS and progress['status'] == 'completed'
+        completed = int(progress['completed_segments'])
+        assert progress['status'] == 'completed' and progress['next_epoch'] == completed
+        assert completed == len(summary['segments']) and completed <= TARGET_SEGMENTS
+        if RESUME_KERNEL:
+            assert completed > int(expected_progress['completed_segments'])
+        else:
+            assert completed == TARGET_SEGMENTS
         assert all(row['validation']['samples'] == 123836 for row in summary['segments'])
         for name in ['run.log', 'metrics.jsonl', 'experiment_manifest.json', 'checkpoints/last_state.pt',
                      'checkpoints/best_model/model.safetensors', 'checkpoints/best_model/best_metric.json',

@@ -906,13 +906,15 @@ flowchart LR
 
 ## 11. 未完成实验与后续工作
 
-### 11.1 Stage 3 五段稳定性观察与受控探针
+### 11.1 Stage 3 五段稳定性观察与配额内续训
 
-第 6.7 节的单段 GPU 及完整 Output 验收已通过。当前下一步是保持原实验定义，从 Segment 1 的完整 State 接续 Segment 2–6，同时补测同口径 C2 best 与 Segment 1 全量基线，增加预测/目标方差观测。此处不是从 C2 重新训练，也不重置 optimizer、EMA、seed、step 或看板。
+第 6.7 节的单段 GPU 及完整 Output 验收已通过。随后保持原实验定义，从 Segment 1 的完整 State 接续 Segment 2–6，并补测同口径 C2 best 与 Segment 1 全量基线。此处不是从 Stage 2 C2 重新训练，也不重置 optimizer、EMA、seed、step 或看板。
 
-该短程任务已提交为 [Kronos Small 0 1 Stage3 Joint Path C2](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c2)，Version 1，源码固定为 `3595dc2381fd6c920cac9bad7514ebba46e490f0`，继续原 run `small_0.1_stage3_joint_path_alignment_from_c2_best_v2`。计划从 global step 313 接续至 1,878（每段 313 steps），硬超时 18,000 秒；五段实训/验证按首段估算约 55 分钟，另计双基线验证、安装和输出时间。结果尚待验收。
+[Kronos Small 0 1 Stage3 Joint Path C2](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c2) Version 1 已 `COMPLETE`：`completed_segments=6`，`next_epoch=6`，`step=1878`。同口径因果验证选模量从 Stage 2 C2 best 的 `2.338817`、Seg 1 的 `2.339931` 单调降至 Seg 6 的 **`2.333467`**（亦为 best）。预测方差未收缩。每段 train+全量验证实测 649–656 秒（均值 653 秒，约 10.9 分钟）；C2 墙钟 1.29 小时，其中安装 5.4 分钟、两次基线验证约 18 分钟。
 
-短程观察完成后，再判断是否进入 40–60 segments 的受控探针，并补充同设置 CE-only 对照。更长训练预算和 Stage 3 OOS 尚未执行，不因单段成功而自动批准。
+当前账号 GPU 配额剩余 **4.66h**（2026-09-19 刷新）。双 T4 按 2x 计费时墙钟约 2.33 小时，不足以进入 40–60 段受控探针。下一截为 [Kronos Small 0 1 Stage3 Joint Path C3](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c3)：从 C2 Output 精确 resume 至 Segment 15（9 个新段、2,817 steps，目标 global step 4,695），同一 SwanLab run，不再重复两次全量基线。trainer `max_runtime=7200` 秒，入口硬超时 9,000 秒；预估墙钟约 1.7 小时。state SHA-256 在 Kaggle 上计算并写入日志，不在本地拉取权重。
+
+40–60 段探针、CE-only 对照、Stage 3 OOS 仍未执行，待 9 月 19 日配额刷新后再判断。
 
 ### 11.2 其余后续实验
 
@@ -928,7 +930,7 @@ flowchart LR
 - Stage 3 DDP 目标包装与训练：[stage3_training_model.py](/Users/fupengcheng/Documents/Kronos/finetune/stage3_training_model.py)、[train_stage3_path_alignment.py](/Users/fupengcheng/Documents/Kronos/finetune/train_stage3_path_alignment.py)
 - Stage 3 验收报告：[条件联合梯度验收](/Users/fupengcheng/Documents/Kronos/finetune/STAGE3_CONDITIONAL_JOINT_VERIFICATION_CN.md)、[训练框架与因果复核](/Users/fupengcheng/Documents/Kronos/finetune/STAGE3_TRAINING_FRAMEWORK_VERIFICATION_CN.md)；前者的早期数值以后一份显式因果复核为补充
 - Stage 3 自动测试：[test_stage3_conditional_joint.py](/Users/fupengcheng/Documents/Kronos/tests/test_stage3_conditional_joint.py)、[test_stage3_training_framework.py](/Users/fupengcheng/Documents/Kronos/tests/test_stage3_training_framework.py)
-- Stage 3 GPU 预检与提交入口：[stage3_gpu_probe.py](/Users/fupengcheng/Documents/Kronos/finetune/stage3_gpu_probe.py)、[stage3_joint_path_smoke.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_stage3_joint_path_smoke/stage3_joint_path_smoke.py)
+- Stage 3 GPU 预检与提交入口：[stage3_gpu_probe.py](/Users/fupengcheng/Documents/Kronos/finetune/stage3_gpu_probe.py)、[stage3_joint_path_smoke.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_stage3_joint_path_smoke/stage3_joint_path_smoke.py)、[stage3_joint_path_c2.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_stage3_joint_path_c2/stage3_joint_path_c2.py)、[stage3_joint_path_c3.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_stage3_joint_path_c3/stage3_joint_path_c3.py)
 - 训练日志目录：`small_train_log/`；WC first round 完整日志：[small_0.1_stage2_wc_last-2026-9-9_23_24_00.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_last-2026-9-9_23_24_00.log)；WC dual T4 完整日志：[small_0.1_stage2_wc_dual_t4-2026-9-12_18_47_04.log](/Users/fupengcheng/Documents/Kronos/small_train_log/small_0.1_stage2_wc_dual_t4-2026-9-12_18_47_04.log)
 - Stage 2 Main OOS 汇总：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_stage2_oos_base_kaggle/kronos_small_0_1_stage2_oos/summary.json)
 - Cosine C2 OOS 汇总：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/kronos_small_0_1_c2_alpha_oos_output/kronos_small_0_1_stage2_oos/summary.json)
