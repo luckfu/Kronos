@@ -6,7 +6,7 @@
 
 Stage 2 已完成至 Cosine refinement 267/267 segments，最终 best 为 Segment 179。2026-09-15 对已有 OOS 预测统一原始价格和方向口径后，完整 19 个 signal dates、97,916 个窗口/模型上，C2 best 的 D10 方向准确率为 50.694%，pooled Rank IC 为 0.16910，日均 Rank IC 为 0.16163（第 8.3 节）。这仍是短时间区间的预测证据，不是净交易收益证明。
 
-报告同时纳入 Stage 3 多周期路径对齐的实现、正确性验收与单段结果（第 6.7 节）。修正版 Kaggle 单段测试已完成双 T4 预检、20,000 窗口训练与 123,836 窗口全量验证；尚无受控训练改善或 Stage 3 OOS 结论。工程验收通过不等于预测性能改善。
+报告同时纳入 Stage 3 多周期路径对齐的实现、正确性验收与 15 段续训（第 6.7 节）。修正版已完成双 T4 预检及 Segment 1–15 / step 4,695 的全量因果验证；验证 Token CE 从 2.3396 降至 2.2790，训练集 raw Path Loss 的 rolling mean 基本横盘，验证 Path / MAE 在 Segment 9 最低后回升。这证明 Token CE 仍在优化，不证明 Path Alignment 已形成稳定可学习下降，也没有 Stage 3 OOS。
 
 `small_0.1_stage2_wc_last` 是从 Extend 01 后继续进行的 Warmup-Constant 训练，本轮已完成 534/534 个 segments；其后的 `small_0.1_stage2_wc_dual_t4` continuation 也已完成 534/534 segments，随后进行的 `small_0.1_stage2_cosine_refinement` 退火训练完成 267/267 segments。三者均作为独立阶段记录，不混合不同 scheduler 的结果。
 
@@ -25,7 +25,7 @@ flowchart LR
     WC --> WCN[Stage 2 WC Dual T4<br/>Warmup-Constant<br/>534/534 segments]
     WCN --> AN[Cosine refinement 退火<br/>267/267 segments]
     AN --> C2B[Cosine C2 best<br/>Segment 179]
-    C2B -.仅加载权重.-> PA[Stage 3 Path Alignment<br/>fresh optimizer / step 0<br/>单段工程验收通过]
+    C2B -.仅加载权重.-> PA[Stage 3 Path Alignment<br/>fresh optimizer / step 0<br/>C3 完成 15/15 segments]
 ```
 
 Bootstrap 从预训练底座开始，以双学习率完成条件化初始化；Main 继承 Bootstrap 的 `best_model`，切换为统一学习率并完成一轮主训练；Extend 01 再继承 Main 的 `last_model`，使用不同窗口排列进行续训；WC first round 继承 Extend 01 C2 的 `last_model`，改用 Warmup-Constant；WC dual T4 再从上一轮 WC checkpoint 连续训练一轮完整 coverage；Cosine refinement 最后从 WC dual T4 的 checkpoint 退火收口。六者是串行训练血缘，不是从底座出发的并列实验。
@@ -222,7 +222,7 @@ flowchart TD
 | WC first round | Extend 01 C2 的 `last_model` | 64 | warm-up 后统一保持 `1e-5`，fresh optimizer | 1% warm-up + constant | 123,836 | seed=20260908；完成 534/534；forecast 2.437121 -> 最佳 2.353069，末段 2.354255 |
 | WC dual T4 | WC first round `last_model` | 32/GPU × 2，global 64 | warm-up 后统一保持 `1e-5`，fresh optimizer | 1% warm-up + constant | 123,836 | seed=20260910；完成 534/534；forecast 2.355044 -> 最佳 2.304162，末段 2.306788 |
 | Cosine refinement | WC dual T4 checkpoint | 64 | 统一 LR 从约 `1e-5` 退火至约 `1e-6` | uniform cosine，无 warm-up | 123,836 | seed=20260912；完成 267/267；forecast 2.306393 -> 最佳 2.294402，末段 2.295665 |
-| Stage 3 Path Alignment（试验） | Cosine C2 best，Segment 179；仅加载权重 | 32/GPU × 2，global 64 | 统一 `2e-6`，fresh AdamW | fixed，无 warm-up | 123,836，全量、显式因果 | seed=20260915；1 segment/313 steps 完成，CE 2.339598；尚无性能改善结论 |
+| Stage 3 Path Alignment（试验） | Cosine C2 best，Segment 179；仅加载权重 | 32/GPU × 2，global 64 | 统一 `2e-6`，fresh AdamW | fixed，无 warm-up | 123,836，全量、显式因果 | seed=20260915；15/15 segments，step 4,695；验证 CE 2.3396→2.2790，best=last 2.279363；train raw path rolling 基本横盘；尚无 Path 改善或 OOS 结论 |
 
 Bootstrap 的双学习率只用于启动阶段：条件分支以较快速度适应，而主干以较小步长保持预训练能力。Main 将两类参数统一到同一峰值学习率，作为正式全参数微调。Extend 01 不改变目标函数和验证集，只改变续训起点及 coverage 顺序。WC first round 在此基础上还改变 scheduler，但仍保持相同 batch、loss、数据集合和全量验证定义。WC dual T4 保持 Warmup-Constant 训练定义不变，只将执行方式改为双 T4 DDP；每卡 batch 32、global batch 64，因此优化器每步看到的总样本量没有改变。
 
@@ -639,18 +639,41 @@ H1–H10 六特征平均绝对误差依次为 `0.381719, 0.356383, 0.344300, 0.3
 
 本地进一步读取完整 `last_state.pt`，确认 `segment=next_epoch=1`、`resume_step=0`、`step=313`、132 个参数的 optimizer state、两份 rank RNG 和 Path Loss EMA 均存在，coverage 已消费 20,000 个唯一窗口；State 内模型与 `last_model/model.safetensors` 逐 tensor 一致且有限。此时 best 与 last 相同，权重 SHA-256 为 `d1ac9e49ff2ac4f139939211f48ce815c753ab4381dc0c1fd7b411a634aa6780`；State SHA-256 为 `cf4a62e4084e6d380cd39165cee2bd6a5c48535264a01ab1960d01e6d8fe53f8`。
 
-以上证明完整训练/验证链路可运行并可保存状态，不证明一段训练已改善预测。尚缺 C2 best 在同一 causal Stage3 口径下的全量起点结果；不能拿旧 C2 forecast `2.294402` 与本次 CE `2.339598` 直接判定退化。下一步短程观察将在相同口径补测 C2 起点及 Segment 1，并保持原 seed、LR、optimizer/EMA、global step 和看板，从 Segment 2 接续至 Segment 6。验证新增预测/目标逐 horizon 方差监控及 float64 汇总仅用于观测，不改变目标函数。
+以上证明完整训练/验证链路可运行并可保存状态，不证明一段训练已改善预测。C2 best 在同一 causal Stage3 口径下的全量起点、以及 Segment 2–15 的续训结果见第 6.7.9 节；不能拿旧 C2 forecast `2.294402` 与本次 CE `2.339598` 直接判定退化。验证新增预测/目标逐 horizon 方差监控及 float64 汇总仅用于观测，不改变目标函数。
 
 - 测试 Kernel：[Kronos Small 0 1 Stage3 Joint Path Smoke](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-smoke)
 - 新看板：[Stage3 joint path alignment](https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_joint_path_alignment_from_c2_best_v2)
 
 #### 6.7.8 结果判定与后续评价
 
-单段测试首先回答运行正确性、梯度同步、显存/耗时、日志和全量验证能否完成，不足以判断泛化或批准长期增训。后续如开展受控探针，应同时检查 Token CE、raw Path Huber、H1–H10 MAE、预测截面/时间方差、概率熵和 joint mass，防止仅靠输出向均值收缩降低平均误差。不能从单一熵阈值、梯度范数或 MAE 降幅推导模型成功或失败。
+单段测试首先回答运行正确性、梯度同步、显存/耗时、日志和全量验证能否完成，不足以判断泛化。第 6.7.9 节的 15 段续训是同一实验定义下的短程观察，不是 OOS，也不构成对 Path Alignment 有效性的证明。后续探针仍应同时检查 Token CE、raw Path Huber、H1–H10 MAE、预测截面/时间方差、概率熵和 joint mass，防止仅靠输出向均值收缩降低平均误差。不能从单一熵阈值、梯度范数或 MAE 降幅推导模型成功或失败。
 
 最终比较 C2 best 与 Stage3 候选时，两者必须使用同一生产自回归 inference/evaluator、窗口、采样配置与收益定义；按 H1–H10 报告数值路径误差，并独立报告方向准确率、pooled/daily Rank IC、ICIR、正 IC 日期比例及 Top-Bottom spread。换手、毛/净收益、Sharpe 与最大回撤需要另行固定交易规则和成本口径，不能由当前 Path Loss 推算。
 
 MAE 下降不保证 Rank IC 上升；二者背离时应报告路径校准与排序的权衡，不能宣称整体金融预测能力改善。Stage 3 不使用 OOS 调权重、学习率或 K；第 8 节已知的 C2 OOS 结果保持为历史证据，已参与方法讨论的数据也不能重新宣称为完全未见的最终确认集。条件允许时，应再用未参与设计选择的新时间区间确认结论。
+
+#### 6.7.9 C2/C3 十五段续训观察
+
+同一 SwanLab run `small_0.1_stage3_joint_path_alignment_from_c2_best_v2`、同一 seed / LR / λ=0.05 / optimizer-EMA 状态，从单段 smoke 经 [C2](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c2) 接到 [C3](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c3)。C3 源码固定为 `4045a7d368b04a56a79d14caf21830c7db677a92`，Version 1 已 `COMPLETE`：`completed_segments=15`，`next_epoch=15`，`step=4695`。本地只归档 JSON 指标，不拉取权重。逐段数字见 [stage3_joint_path_c3_metrics.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_c3_metrics.json)。
+
+同口径因果验证下，Stage 2 C2 best 的选模量（`CE + 0.05 × raw Path Huber`）为 `2.338817`。Stage 3 选模量从 Seg 1 的 `2.339931` 单调降至 Seg 15 的 **`2.279363`**，best 与 last 相同。验证 Token CE 同步从 `2.339598` 降至 `2.279028`。这不能与 Stage 2 的 forecast-only `2.294402` 直接比较。
+
+| Seg | step | 验证 CE | 验证 raw Path | MAE 均值 | Top-16 joint mass | 条件 s2 熵 | 预测方差均值 | 选模量 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| C2 best 基线 | 0 | 2.338481 | 0.006710 | 0.34532 | 0.5695 | 1.8416 | 1.8180 | 2.338817 |
+| 1 | 313 | 2.339598 | 0.006650 | 0.34233 | 0.5678 | 1.8441 | — | 2.339931 |
+| 6 | 1878 | 2.333136 | 0.006620 | 0.34083 | 0.5685 | 1.8364 | 1.8376 | 2.333467 |
+| 9 | 2817 | 2.326001 | **0.006608** | **0.34021** | 0.5704 | 1.8247 | 1.8418 | 2.326332 |
+| 12 | 3756 | 2.309816 | 0.006640 | 0.34180 | 0.5743 | 1.8065 | 1.8410 | 2.310148 |
+| 15 | 4695 | **2.279028** | 0.006688 | 0.34422 | 0.5831 | 1.7614 | 1.8383 | **2.279363** |
+
+Seg 1 的 C3 `summary.json` 未写入预测方差；Seg 2 起该量约 1.83–1.84，未向零收缩。Seg 9 之后 Token CE 继续下降，raw Path 与 MAE 回升，Seg 15 的 MAE 均值已高于 Seg 1。验证 Top-16 joint mass 从 0.568 升至 0.583，条件 s2 熵从 1.844 降至 1.761，token 分布更集中，连续路径误差没有跟着改善。
+
+训练侧 `metrics.jsonl` 按约 200 step（20 个 log 点、`log_interval=10`）做 rolling mean：raw Path 前/中/后三分之一为 `0.006067 / 0.005985 / 0.006136`，全程均值 `0.006063`，没有 0.0065→0.0050 的下降。normalized Path 全程均值 `1.001`，符合 `L_path / EMA(L_path)` 在 raw Path 无趋势时围着 1 震荡。训练 Token CE rolling 前/后三分之一为 `2.2225 / 2.2190`，单 step 曲线噪声很大，趋势以全量验证为准。
+
+因此当前不能写成“Path Alignment 正在有效优化，只是验证过拟合”。更准确的表述是：更新方向被 Token CE 主导；训练集 Path 未见稳定下降；验证 Path 仅短暂改善后出现与 CE 的 trade-off。训练时 Path 贡献的是 `λ × normalized path ≈ 0.05`，不是 `0.05 × 0.0066`，故不宜仅因 raw Path 数值小而把 λ 从 0.05 调大。选模量使用 raw Path，CE 下降约 0.06 会完全盖过 Path 回升约 `8e-5`，所以 Seg 15 会成为 best，即使 MAE 已差过起点。
+
+现有 `s1/s2/dependency/backbone_grad_norm` 是联合 loss 一次 backward 后的总梯度，不能从看板计算 `||g_path|| / ||g_token||`。CE-only 对照与生产 evaluator 的 Stage 3 OOS 仍未执行。C3 各段 train+全量验证约 650–678 秒。
 
 ## 7. 训练执行与 Kaggle 接力
 
@@ -906,15 +929,15 @@ flowchart LR
 
 ## 11. 未完成实验与后续工作
 
-### 11.1 Stage 3 五段稳定性观察与配额内续训
+### 11.1 Stage 3 十五段后续诊断
 
-第 6.7 节的单段 GPU 及完整 Output 验收已通过。随后保持原实验定义，从 Segment 1 的完整 State 接续 Segment 2–6，并补测同口径 C2 best 与 Segment 1 全量基线。此处不是从 Stage 2 C2 重新训练，也不重置 optimizer、EMA、seed、step 或看板。
+第 6.7.9 节的 C2/C3 十五段观察已完成，λ 保持 0.05，不因验证 Path 在 Seg 9 后回升而改权重或提前停止。尚未回答、因而也尚未授权改配置的问题是：
 
-[Kronos Small 0 1 Stage3 Joint Path C2](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c2) Version 1 已 `COMPLETE`：`completed_segments=6`，`next_epoch=6`，`step=1878`。同口径因果验证选模量从 Stage 2 C2 best 的 `2.338817`、Seg 1 的 `2.339931` 单调降至 Seg 6 的 **`2.333467`**（亦为 best）。预测方差未收缩。每段 train+全量验证实测 649–656 秒（均值 653 秒，约 10.9 分钟）；C2 墙钟 1.29 小时，其中安装 5.4 分钟、两次基线验证约 18 分钟。
+1. Path-only 与 Token-only 梯度范数之比（现有看板只有联合梯度）；
+2. 同一生产自回归 evaluator 上的 Stage 3 OOS（方向准确率、Rank IC、逐 horizon 路径误差）；
+3. 同一 C2 best、均匀 CE、无 history、因果验证及预算下的 `lambda_path=0` 对照。
 
-当前账号 GPU 配额剩余 **4.66h**（2026-09-19 刷新）。双 T4 按 2x 计费时墙钟约 2.33 小时，不足以进入 40–60 段受控探针。下一截为 [Kronos Small 0 1 Stage3 Joint Path C3](https://www.kaggle.com/code/smmt315/kronos-small-0-1-stage3-joint-path-c3)：源码固定为 `4045a7d368b04a56a79d14caf21830c7db677a92`，从 C2 Output 精确 resume 至 Segment 15（9 个新段、2,817 steps，目标 global step 4,695），同一 SwanLab run，不再重复两次全量基线。trainer `max_runtime=7200` 秒，入口硬超时 9,000 秒；预估墙钟约 1.7 小时。state SHA-256 在 Kaggle 上计算并写入日志，不在本地拉取权重。
-
-40–60 段探针、CE-only 对照、Stage 3 OOS 仍未执行，待 9 月 19 日配额刷新后再判断。
+40–60 段受控探针待 2026-09-19 GPU 配额刷新后再判断。在 Path 训练集 rolling mean 仍横盘、且缺少分梯度与 OOS 之前，不应把 λ 调到 0.1/0.2，也不应宣称 Path Alignment 改善了连续预测或 Alpha。
 
 ### 11.2 其余后续实验
 
@@ -937,5 +960,6 @@ flowchart LR
 - Stage 2 最终统一原始价格 OOS 报告：[small_0_1_oos_raw_audit_20260915.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/small_0_1_oos_raw_audit_20260915.json)
 - Stage 3 已完成单段 Output：[summary.json](/Users/fupengcheng/Documents/Kronos/artifacts/stage3_joint_path_smoke_v1/stage3_joint_path_smoke/summary.json)、[gpu_probe.json](/Users/fupengcheng/Documents/Kronos/artifacts/stage3_joint_path_smoke_v1/stage3_joint_path_smoke/gpu_probe.json)
 - Stage 3 单段验收归档（随仓库保存）：[stage3_joint_path_smoke_v1_acceptance.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_smoke_v1_acceptance.json)
+- Stage 3 C2/C3 十五段指标归档（无权重）：[stage3_joint_path_c3_metrics.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_c3_metrics.json)
 
 本文以日志和当前代码为准；若历史计划文档与实测配置冲突，应优先引用本报告中的代码/日志事实，并在论文实验设置中注明具体 commit、seed、数据快照和 checkpoint 标识。
