@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset, Subset
 
 from model import Kronos, KronosTokenizer
 from finetune.stage3_training_model import Stage3TrainingModel
-from finetune.train_stage3_path_alignment import evaluate
+from finetune.train_stage3_path_alignment import evaluate, validate_resume
 
 
 def make_model(dropout=0., synchronize_ema=True):
@@ -99,6 +99,25 @@ def test_checkpoint_roundtrip_and_following_update(tmp_path):
         restored.load_checkpoint_state({'model': core.predictor.state_dict()}, restored_opt)
 
 
+def test_resume_guards_real_segment_contract():
+    manifest = {'seed': 20260915, 'lr': 2e-6, 'sha256': {'train': 'abc'},
+                'run_id': 'same-run', 'global_batch': 64}
+    state = {'experiment_manifest': manifest, 'scheduler': {'type': 'fixed', 'lr': 2e-6},
+             'optimizer': {'param_groups': [{'lr': 2e-6}]}, 'segment': 1, 'next_epoch': 1,
+             'resume_step': 0, 'step': 313, 'rank_rng_states': [{}, {}],
+             'coverage': {'unique_samples_covered': 20000}}
+    summary = {'segments': [{'segment': 1, 'step': 313, 'validation_objective': 2.3}]}
+    assert validate_resume(state, manifest, summary, 2, 2e-6, 20260915) == 2.3
+    for key, value in [('seed', 1), ('run_id', 'new-run'), ('sha256', {'train': 'wrong'}), ('global_batch', 32)]:
+        changed = {**manifest, key: value}
+        with pytest.raises(ValueError):
+            validate_resume(state, changed, summary, 2, 2e-6, 20260915)
+    for key, value in [('next_epoch', 0), ('step', 0), ('resume_step', 1), ('rank_rng_states', [{}]),
+                       ('coverage', {'unique_samples_covered': 0})]:
+        with pytest.raises(ValueError):
+            validate_resume({**state, key: value}, manifest, summary, 2, 2e-6, 20260915)
+
+
 def _ddp_worker(rank, rendezvous, report_path):
     torch.set_num_threads(1)
     dist.init_process_group('gloo', init_method='file://' + rendezvous, rank=rank, world_size=2)
@@ -147,7 +166,8 @@ def _ddp_worker(rank, rendezvous, report_path):
         result = evaluate(ddp, loader, torch.device('cpu'), 2, rank)
         ref_result = evaluate(reference, DataLoader(dataset, batch_size=2), torch.device('cpu'), 1, rank)
         assert result['samples'] == ref_result['samples'] == 5
-        for key in ('token_loss', 'raw_path_loss', 'total_loss', 'horizon_mae'):
+        for key in ('token_loss', 'raw_path_loss', 'total_loss', 'horizon_mae',
+                    'prediction_variance_horizon', 'target_variance_horizon'):
             torch.testing.assert_close(torch.tensor(result[key]), torch.tensor(ref_result[key]), atol=2e-6, rtol=2e-5)
         if rank == 0:
             Path(report_path).write_text(json.dumps({'steps': rows, 'validation_samples': result['samples']}, indent=2))

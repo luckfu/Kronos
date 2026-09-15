@@ -4,16 +4,20 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import threading
 import time
 from datetime import datetime, timezone
 
-SOURCE_COMMIT = 'a854641420068dbbc6daf2dcfa329c8ecbaa425a'
+SOURCE_COMMIT = os.environ.get('STAGE3_SOURCE_COMMIT', 'a854641420068dbbc6daf2dcfa329c8ecbaa425a')
 RUN_ID = 'small_0.1_stage3_joint_path_alignment_from_c2_best_v2'
 PARENT = 'smmt315/kronos-small-0-1-stage2-cosine-refinement-c2'
 OUTPUT = Path('/kaggle/working/stage3_joint_path_smoke')
+RESUME_KERNEL = os.environ.get('STAGE3_RESUME_KERNEL', '')
+TARGET_SEGMENTS = int(os.environ.get('STAGE3_TARGET_SEGMENTS', '1'))
+CHUNK = os.environ.get('STAGE3_CHUNK', 'c1')
 HASHES = {
     'best': '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
     'tokenizer': '59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee',
@@ -74,7 +78,7 @@ def verify_hashes(inputs):
 def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
-    phase('started', run_id=RUN_ID, segments=1, batch_per_gpu=32, global_batch=64,
+    phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
           lr=2e-6, amp=False, hard_timeout_seconds=18000)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     _log = (OUTPUT / 'run.log').open('a', buffering=1)
@@ -102,6 +106,35 @@ def main():
         actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
         if actual != SOURCE_COMMIT: raise RuntimeError('Source commit mismatch')
         env = {**os.environ, 'PYTHONUNBUFFERED': '1', 'PYTHONPATH': str(repo), 'OMP_NUM_THREADS': '2'}
+        if RESUME_KERNEL:
+            phase('verify_continuation', parent_kernel=RESUME_KERNEL)
+            matches = [p for p in Path('/kaggle/input').rglob('last_state.pt')
+                       if (p.parent.parent / 'gpu_probe.json').is_file()
+                       and (p.parent.parent / 'experiment_manifest.json').is_file()]
+            if len(matches) != 1: raise RuntimeError(f'Expected unique Stage3 state: {matches}')
+            source = matches[0].parent.parent
+            required = ['run.log', 'metrics.jsonl', 'progress.json', 'summary.json',
+                        'experiment_manifest.json', 'gpu_probe.json', 'checkpoints/last_state.pt',
+                        'checkpoints/best_model/model.safetensors', 'checkpoints/best_model/config.json',
+                        'checkpoints/best_model/best_metric.json', 'checkpoints/last_model/model.safetensors',
+                        'checkpoints/last_model/config.json']
+            for name in required:
+                if not (source / name).is_file() or not (source / name).stat().st_size:
+                    raise RuntimeError(f'Incomplete continuation output: {name}')
+            with matches[0].open('rb') as f:
+                state_sha = hashlib.file_digest(f, 'sha256').hexdigest()
+            if state_sha != os.environ['STAGE3_RESUME_STATE_SHA256']:
+                raise RuntimeError('Continuation state hash mismatch')
+            progress = json.loads((source / 'progress.json').read_text())
+            if progress != {'completed_segments': 1, 'next_epoch': 1, 'step': 313, 'status': 'completed'}:
+                raise RuntimeError(f'Unexpected source progress: {progress}')
+            # Preserve history without replacing the already-open wrapper log.
+            shutil.copytree(source, OUTPUT, dirs_exist_ok=True, ignore=shutil.ignore_patterns('run.log'))
+            phase('continuation_log_begin')
+            with (source / 'run.log').open() as f:
+                for line in f: emit(line)
+            phase('continuation_log_end', source=str(source), next_segment=2, global_step=313,
+                  state_sha256=state_sha, historical_metric_lines=sum(1 for _ in (source / 'metrics.jsonl').open()))
         phase('install_t4_torch', version='2.6.0+cu124')
         run([sys.executable, '-u', '-m', 'pip', 'install', '--disable-pip-version-check',
              '--progress-bar', 'off', 'torch==2.6.0', '--index-url', 'https://download.pytorch.org/whl/cu124'], env=env)
@@ -137,7 +170,7 @@ def main():
         import swanlab
         swanlab.login(api_key=key)
         dashboard = swanlab.init(id=RUN_ID, resume='allow', project='finance', workspace='roc_fu',
-                                 experiment_name=RUN_ID, config={'source_commit': SOURCE_COMMIT, 'smoke_segments': 1}, mode='cloud')
+                                 experiment_name=RUN_ID, config={'source_commit': SOURCE_COMMIT, 'target_segments': TARGET_SEGMENTS}, mode='cloud')
         if not dashboard.url: raise RuntimeError('SwanLab has no URL')
         dashboard_url = dashboard.url
         phase('dashboard_ready', SWANLAB_RUN_URL=dashboard_url)
@@ -151,38 +184,47 @@ def main():
                    KRONOS_COVERAGE_SEED='20260915', KRONOS_TRAIN_SAMPLES_PER_SEGMENT='20000')
         manifest = {'source_commit': SOURCE_COMMIT, 'parent_kernel': PARENT, 'parent_checkpoint': 'best_model',
                     'initialization': 'model_weights_only', 'optimizer': 'fresh_AdamW', 'scheduler': 'fixed',
-                    'lr': 2e-6, 'amp': False, 'seed': 20260915, 'segments': 1, 'batch_per_gpu': 32,
+                    'lr': 2e-6, 'amp': False, 'seed': 20260915, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': 32,
                     'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
                     'lookback': 120, 'horizon': 10, 'loss': 'CE+0.05*EMA_normalized_six_feature_Huber',
                     'huber_delta': 0.02, 'top_k': 16, 'candidates': 16, 'ema_decay': 0.99,
                     'dependency_causal': True, 'devices': devices, 'torch': torch.__version__,
                     'run_id': RUN_ID, 'swanlab_url': dashboard_url, 'sha256': HASHES,
                     'inputs': {k: str(v) for k, v in inputs.items()}, 'oos_used': False}
+        if RESUME_KERNEL:
+            previous = json.loads((OUTPUT / 'experiment_manifest.json').read_text())
+            (OUTPUT / 'parent_experiment_manifest.json').write_text(json.dumps(previous, indent=2))
+            manifest.update(continuation_kernel=RESUME_KERNEL, continuation_state_sha256=state_sha,
+                            optimizer='resumed_AdamW', initialization='exact_stage3_resume',
+                            next_segment=2, initial_global_step=313, chunk=CHUNK)
         (OUTPUT / 'experiment_manifest.json').write_text(json.dumps(manifest, indent=2))
         phase('cpu_preflight')
         run([sys.executable, '-u', '-m', 'pytest', 'tests/test_stage3_conditional_joint.py',
              'tests/test_stage3_training_framework.py', '-q'], cwd=repo,
             env={**env, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1', 'CUDA_VISIBLE_DEVICES': ''})
-        phase('gpu_probe')
         torchrun = [sys.executable, '-u', '-m', 'torch.distributed.run', '--standalone', '--nproc_per_node=2', '-m']
         common = ['--model-dir', str(inputs['best'].parent), '--tokenizer-dir', str(inputs['tokenizer'].parent)]
-        run(torchrun + ['finetune.stage3_gpu_probe'] + common + ['--batch', '32', '--output', str(OUTPUT / 'gpu_probe.json')], cwd=repo, env=env)
+        if not RESUME_KERNEL:
+            phase('gpu_probe')
+            run(torchrun + ['finetune.stage3_gpu_probe'] + common + ['--batch', '32', '--output', str(OUTPUT / 'gpu_probe.json')], cwd=repo, env=env)
         probe = json.loads((OUTPUT / 'gpu_probe.json').read_text())
         if probe['status'] != 'passed': raise RuntimeError('GPU gate did not pass')
-        phase('training', segments=1, optimizer='fresh', global_step=0)
+        phase('training', segments=TARGET_SEGMENTS, optimizer='resume' if RESUME_KERNEL else 'fresh', global_step=313 if RESUME_KERNEL else 0)
+        resume_args = (['--resume-state', str(OUTPUT / 'checkpoints/last_state.pt'),
+                        '--chunk', CHUNK, '--baseline-before-resume'] if RESUME_KERNEL else [])
         run(torchrun + ['finetune.train_stage3_path_alignment'] + common +
-            ['--output-dir', str(OUTPUT), '--segments', '1', '--batch', '32', '--lr', '2e-6',
-             '--seed', '20260915', '--log-interval', '10', '--max-runtime-seconds', '10800'], cwd=repo, env=env)
+            ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32', '--lr', '2e-6',
+             '--seed', '20260915', '--log-interval', '10', '--max-runtime-seconds', '10800'] + resume_args, cwd=repo, env=env)
         phase('verify_output')
         progress = json.loads((OUTPUT / 'progress.json').read_text())
         summary = json.loads((OUTPUT / 'summary.json').read_text())
-        assert progress['completed_segments'] == 1 and progress['status'] == 'completed'
-        assert summary['segments'][0]['validation']['samples'] == 123836
+        assert progress['completed_segments'] == TARGET_SEGMENTS and progress['status'] == 'completed'
+        assert all(row['validation']['samples'] == 123836 for row in summary['segments'])
         for name in ['run.log', 'metrics.jsonl', 'experiment_manifest.json', 'checkpoints/last_state.pt',
                      'checkpoints/best_model/model.safetensors', 'checkpoints/best_model/best_metric.json',
                      'checkpoints/last_model/model.safetensors']:
             assert (OUTPUT / name).is_file(), name
-        phase('completed', completed_segments=1, validation_samples=123836, output=str(OUTPUT))
+        phase('completed', completed_segments=TARGET_SEGMENTS, validation_samples=123836, output=str(OUTPUT))
     except Exception as exc:
         phase('failed', error_type=type(exc).__name__, message=str(exc))
         raise

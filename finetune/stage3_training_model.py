@@ -66,6 +66,10 @@ class Stage3TrainingModel(nn.Module):
                 's2_conditional_entropy_topk_s1': conditional_entropy.mean(),
                 'horizon_mae': details['path_align_horizon_mae'],
                 'max_residual': details['path_align_max_residual'],
+                'prediction_mean_hf': details['path_align_prediction'].detach().mean(0),
+                'prediction_second_moment_hf': details['path_align_prediction'].detach().square().mean(0),
+                'target_mean_hf': x[:, target_slice].detach().mean(0),
+                'target_second_moment_hf': x[:, target_slice].detach().square().mean(0),
             }
         return total, metrics
 
