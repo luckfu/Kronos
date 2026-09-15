@@ -1,0 +1,18 @@
+{
+  "id": "smmt315/kronos-small-0-1-stage3-c2-c3-interp",
+  "title": "Kronos Small 0 1 Stage3 C2 C3 Interp",
+  "code_file": "stage3_c2_c3_interp.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": [
+    "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "smmt315/kronos-small-0-1-stage3-joint-path-c3",
+    "smmt315/kronos-small-0-1-c2-alpha-oos-evaluation",
+    "smmt315/kronos-small-0-1-stage3-c2-c3-oos"
+  ]
+}
