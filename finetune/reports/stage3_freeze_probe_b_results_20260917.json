@@ -1,0 +1,118 @@
+{
+  "status": "complete",
+  "date": "2026-09-17",
+  "kernel": "luckfu/kronos-small-0-1-stage3-freeze-probe-b",
+  "kernel_url": "https://www.kaggle.com/code/luckfu/kronos-small-0-1-stage3-freeze-probe-b",
+  "kernel_version": 2,
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "freeze_probe_b; train dep_layer only from C2 best; Stage2 weighted CE + 0.02 history; lambda_path=0; lambda_rank=0; Rank IC not computed in causal val",
+  "training_performed": true,
+  "oos_used": false,
+  "source_commit": "2970afa2e0ef726ae039113db9e0d266b38d10c6",
+  "hardware": ["Tesla T4", "Tesla T4"],
+  "torch": "2.6.0+cu124",
+  "run_id": "small_0.1_stage3_freeze_probe_b_dep_layer_from_c2_best_v1",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_freeze_probe_b_dep_layer_from_c2_best_v1",
+  "wall_clock_utc": ["2026-09-16T16:00:15Z", "2026-09-16T16:39:26Z"],
+  "spec_checks": {
+    "lambda_path": 0.0,
+    "ce_rank": true,
+    "lambda_rank": 0.0,
+    "history_weight": 0.02,
+    "trainable_mask": "dependency_layer",
+    "loss_string": "weighted_CE+0.02*history",
+    "best_metric_definition": "weighted_ce+0.02*history+0*rank",
+    "seed": 20260915,
+    "lr": 2e-06,
+    "amp": false,
+    "global_batch": 64,
+    "segments": 5,
+    "final_step": 1565,
+    "completed_segments": 5,
+    "progress_status": "completed",
+    "validation_samples": 123836,
+    "c2_weights_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "tokenizer_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+    "baseline_before_resume": true,
+    "c2_causal_baseline_ran": true,
+    "gpu_probe_passed": true,
+    "gpu_probe_updates_discarded": true,
+    "frozen_assert_passed": true,
+    "s1_entropy_identically_c2_all_segments": true,
+    "best_equals_last_equals_milestone_seg05": true,
+    "verify_output_phase_completed": true,
+    "rank_ic_not_in_causal_val": true,
+    "note_summary_chunk_label": "summary.json chunk field is leftover default 'c1'; manifest run_id and trainable_mask are correct"
+  },
+  "freeze_audit": {
+    "mask": "dependency_layer",
+    "trainable_names": [
+      "dep_layer.cross_attn.q_proj.weight",
+      "dep_layer.cross_attn.q_proj.bias",
+      "dep_layer.cross_attn.k_proj.weight",
+      "dep_layer.cross_attn.k_proj.bias",
+      "dep_layer.cross_attn.v_proj.weight",
+      "dep_layer.cross_attn.v_proj.bias",
+      "dep_layer.cross_attn.out_proj.weight",
+      "dep_layer.cross_attn.out_proj.bias",
+      "dep_layer.norm.weight"
+    ],
+    "trainable_tensors": 9,
+    "frozen_tensors": 123,
+    "trainable_parameters": 1051136,
+    "total_parameters": 24819392,
+    "trainable_fraction": 0.04235140006652863
+  },
+  "c2_causal_baseline": {
+    "token_loss": 2.3970864898432493,
+    "total_loss": 2.3970864898432493,
+    "s1_entropy": 2.6827945627789305,
+    "raw_path_loss": 0.0,
+    "samples": 123836
+  },
+  "milestones": {
+    "seg01": {
+      "segment": 1,
+      "step": 313,
+      "validation_objective": 2.3962612245552544,
+      "weights_sha256": "5b8691becfed585d44aeb5f786ab99ce7d55b85c577fcf2c86b6f42fdc611d8f"
+    },
+    "seg03": {
+      "segment": 3,
+      "step": 939,
+      "validation_objective": 2.3945310189359783,
+      "weights_sha256": "533019abbc2c8a1ff6c8f76bb97f2b5cd6bebc25eaa5d38f78c7e8f31b0a32b5"
+    },
+    "seg05": {
+      "segment": 5,
+      "step": 1565,
+      "validation_objective": 2.3927186743888655,
+      "weights_sha256": "ba70f749a9788913ace83aaa6786f40eb4ddd20914d930ee69b0d3c26bbcc950"
+    }
+  },
+  "b_last": {
+    "segment": 5,
+    "step": 1565,
+    "token_loss": 2.3927186743888655,
+    "total_loss": 2.3927186743888655,
+    "s1_entropy": 2.6827945627789305,
+    "validation_objective_delta_vs_c2": -0.0043678154543838,
+    "weights_sha256": "ba70f749a9788913ace83aaa6786f40eb4ddd20914d930ee69b0d3c26bbcc950"
+  },
+  "causal_validation_trajectory": [
+    {"segment": 1, "step": 313, "validation_objective": 2.3962612245552544, "s1_entropy": 2.6827945627789305, "grad_norm": 0.2685326039791107, "elapsed_sec": 334.922536611557},
+    {"segment": 2, "step": 626, "validation_objective": 2.395409943844991, "s1_entropy": 2.6827945627789305, "grad_norm": 0.2973315715789795, "elapsed_sec": 333.0226984024048},
+    {"segment": 3, "step": 939, "validation_objective": 2.3945310189359783, "s1_entropy": 2.6827945627789305, "grad_norm": 0.2602248787879944, "elapsed_sec": 334.0500385761261},
+    {"segment": 4, "step": 1252, "validation_objective": 2.3936801055146226, "s1_entropy": 2.6827945627789305, "grad_norm": 0.2584325671195984, "elapsed_sec": 337.8689410686493},
+    {"segment": 5, "step": 1565, "validation_objective": 2.3927186743888655, "s1_entropy": 2.6827945627789305, "grad_norm": 0.35685113072395325, "elapsed_sec": 333.8330714702606}
+  ],
+  "vs_p1_same_segments": {
+    "p1_kernel": "luckfu/kronos-small-0-1-stage3-p1-ce-rank",
+    "note": "P1 trained the full model with lambda_rank=0.05; B trained dep_layer only with lambda_rank=0. Causal val is weighted CE+history in both.",
+    "seg1": {"b": 2.3962612245552544, "p1": 2.396518588066101, "b_minus_p1": -0.0002573635108466},
+    "seg3": {"b": 2.3945310189359783, "p1": 2.395336719699645, "b_minus_p1": -0.0008057007636667},
+    "seg5": {"b": 2.3927186743888655, "p1": 2.393094108287915, "b_minus_p1": -0.0003754338990495}
+  },
+  "interpretation": "Mask held: only dep_layer trained (4.24% params); frozen-set assert passed every segment; s1_entropy stayed exactly at the C2 baseline because head and trunk were frozen. Weighted CE dropped 2.3971 -> 2.3927 in 5 segs, slightly past P1 at the same steps. Rank IC is still unknown without 13-day OOS. Next: freeze-probe E (forecast_head only), then compare B vs E; C/D only if that is ambiguous.",
+  "next": "luckfu/kronos-small-0-1-stage3-freeze-probe-e"
+}
