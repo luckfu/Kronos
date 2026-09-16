@@ -1,0 +1,131 @@
+{
+  "status": "complete",
+  "date": "2026-09-15",
+  "kernel": "luckfu/kronos-small-0-1-stage3-c2-c3-interp",
+  "purpose": "exploratory_only; 13-date OOS design-contaminated; production candidate requires sealed fresh-window OOS",
+  "training_performed": false,
+  "source_commit": "bf83ef0bcafe4d8fc6ddebf0a17a92ec929ee5cf",
+  "hardware": "NvidiaTeslaP100",
+  "elapsed_sec": 3118.854207277298,
+  "hard_limit_seconds": 39600,
+  "gpu_quota_used_h": 0.92,
+  "sample_set": "incremental_future_all",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-08-27",
+  "signal_dates": 13,
+  "samples_total": 66986,
+  "alphas": [0.0, 1.0, 0.5, 0.25, 0.75],
+  "provenance": {
+    "c2_weights": {
+      "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/outputs/models/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors",
+      "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+      "dtype": ["torch.float32"]
+    },
+    "c3_weights": {
+      "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage3-joint-path-c3/stage3_joint_path_smoke/checkpoints/last_model/model.safetensors",
+      "sha256": "bfce74d4697b9ae96e1c5f966ff60e9f8d1c6da3b6f7294dd921bc7299136a77",
+      "dtype": ["torch.float32"]
+    },
+    "tokenizer": {
+      "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/models/Kronos-Tokenizer-base/model.safetensors",
+      "sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
+    },
+    "c2_reference_predictions": {
+      "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-c2-alpha-oos-evaluation/kronos_small_0_1_stage2_oos/predictions.csv.gz",
+      "sha256": "14ba2e043b1c1fe558e0c182c3d2dbfa97acd94a790fe737a3603ef7b9ee34ec"
+    },
+    "c3_reference_predictions": {
+      "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage3-c2-c3-oos/kronos_small_0_1_stage3_c2_c3_oos/predictions.csv.gz",
+      "sha256": "8dbff9abb6945bfef5e1e3f83c6fe2cd62dff539b8270ba7920aa3c6dee2f095"
+    },
+    "evaluation_root": "/kaggle/input/datasets/luckfu/a-share-120d-temporal-symbol-holdout"
+  },
+  "machine_checks": {
+    "alpha_000": {"checked": true, "equal_to": "C2", "tensors": 141, "sha256": "4fc28ebcd30d21b554eb916ff5ff584dd397e95f1aa89361067a6645ffea4087"},
+    "alpha_100": {"checked": true, "equal_to": "C3", "tensors": 141, "sha256": "899ebec717ae8d73d768cb3dc2f95176e0e1b3bc77a5f7daa232e690a43ddcb5"},
+    "alpha_050": {"checked": false},
+    "alpha_025": {"checked": false},
+    "alpha_075": {"checked": false},
+    "note": "alpha=0/1 use torch.equal on float32 tensors (141 tensors each); not bit-identical re-inference"
+  },
+  "sanity_identity_merge": {
+    "alpha_000_vs_c2_best_segment_179": {
+      "spearman_range": [0.8241866633113305, 0.8474038373716155],
+      "mean_abs_delta_range": [0.005277265218174594, 0.012620730734724249],
+      "note": "soft compare only; fp16 autocast + date seed + cross-GPU pipeline differences"
+    },
+    "alpha_100_vs_c3_last_segment_15": {
+      "spearman_range": [0.9999999999999998, 1.0],
+      "mean_abs_delta_max": 1.5173910021574067e-25,
+      "note": "essentially bit-identical to C3 reference predictions"
+    }
+  },
+  "metrics_d10_summary": {
+    "interp_alpha_000": {
+      "label": "alpha=0.0 (=C2)",
+      "samples": 66986,
+      "direction_accuracy": 0.4807422446481354,
+      "mae": 0.07802159039035214,
+      "pooled_rank_ic": 0.18440434213929857,
+      "daily_rank_ic_mean": 0.1710164747299683,
+      "daily_icir": 2.496404585682257,
+      "daily_icir_annualized_sqrt252": 39.62919423309893,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.034275421865706424
+    },
+    "interp_alpha_025": {
+      "label": "alpha=0.25",
+      "samples": 66986,
+      "direction_accuracy": 0.4830412324963425,
+      "mae": 0.07863924676607524,
+      "pooled_rank_ic": 0.1537897105463168,
+      "daily_rank_ic_mean": 0.14539538819933615,
+      "daily_icir": 2.3120701424127565,
+      "daily_icir_annualized_sqrt252": 36.70297566337107,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.029311723005354333
+    },
+    "interp_alpha_050": {
+      "label": "alpha=0.5",
+      "samples": 66986,
+      "direction_accuracy": 0.49380467560385755,
+      "mae": 0.08029021877032778,
+      "pooled_rank_ic": 0.11952932842299885,
+      "daily_rank_ic_mean": 0.11901405512933667,
+      "daily_icir": 1.9938583937865588,
+      "daily_icir_annualized_sqrt252": 31.651520756627562,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.026597484333249082
+    },
+    "interp_alpha_075": {
+      "label": "alpha=0.75",
+      "samples": 66986,
+      "direction_accuracy": 0.5079867434986415,
+      "mae": 0.08541152562454571,
+      "pooled_rank_ic": 0.08553037335560555,
+      "daily_rank_ic_mean": 0.09545750831396169,
+      "daily_icir": 1.6795688610133284,
+      "daily_icir_annualized_sqrt252": 26.66232909629565,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.02445937487637016
+    },
+    "interp_alpha_100": {
+      "label": "alpha=1.0 (=C3)",
+      "samples": 66986,
+      "direction_accuracy": 0.5195861821873228,
+      "mae": 0.09379511472680072,
+      "pooled_rank_ic": 0.06297095843563308,
+      "daily_rank_ic_mean": 0.07954340714074606,
+      "daily_icir": 1.390666002731436,
+      "daily_icir_annualized_sqrt252": 22.0761383998779,
+      "positive_ic_ratio": 0.9230769230769231,
+      "mean_top_bottom_10pct": 0.021217270435980283
+    }
+  },
+  "takeaways": [
+    "pooled_rank_ic / daily_icir / top_bottom_10pct 全部随 alpha 单调递减: C2(alpha=0) 最强, C3(alpha=1) 最弱, 中间点无任何 alpha 超过 C2",
+    "direction_accuracy 相反: C3 最高(0.5196), C2 最低(0.4807<0.5)",
+    "结论: 在 13 日设计污染 OOS 窗口上, C2->C3 权重插值对排序能力单调退化, 无插值甜点; 印证 C3 相对 C2 是 rank 能力下降",
+    "exploratory 结论, 不可作为生产选模依据; 生产候选需 sealed fresh-window OOS"
+  ]
+}

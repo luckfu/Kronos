@@ -1,0 +1,15 @@
+{
+  "id": "smmt315/kronos-small-0-1-stage3-gradient-diagnostic",
+  "title": "Kronos Small 0 1 Stage3 Gradient Diagnostic",
+  "code_file": "stage3_gradient_diagnostic.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": [
+    "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "smmt315/kronos-small-0-1-stage3-joint-path-c3"
+  ]
+}

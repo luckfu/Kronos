@@ -1,0 +1,122 @@
+{
+  "status": "complete",
+  "date": "2026-09-15",
+  "training_performed": false,
+  "source_commit": "f617ec0cf18406dc0be287055a6c1b5e8125c023",
+  "kaggle": {
+    "gradient_kernel": "smmt315/kronos-small-0-1-stage3-gradient-diagnostic",
+    "gradient_version": 1,
+    "oos_kernel": "smmt315/kronos-small-0-1-stage3-c2-c3-oos",
+    "oos_version": 2,
+    "reference_kernel": "smmt315/kronos-small-0-1-c2-alpha-oos-evaluation"
+  },
+  "gradient_diagnostic": {
+    "fixed_validation_samples": 256,
+    "batches": 8,
+    "batch_size": 32,
+    "dropout": "disabled",
+    "lambda_path": 0.05,
+    "frozen_c3_path_ema_denominator": 0.006138639058917761,
+    "c3_best_equals_last": true,
+    "models": {
+      "c2_best_segment_179": {
+        "mean_token_ce": 2.3664289116859436,
+        "mean_raw_path_huber": 0.006867490883450955,
+        "all_parameter_cosine": 0.18442607819135437,
+        "all_parameter_weighted_path_to_ce_norm_ratio": 0.02452547591713824,
+        "backbone_cosine": 0.23441044408981832,
+        "dependency_cosine": 0.13685714326200218,
+        "s1_head_cosine": 0.0850985673383968,
+        "s2_head_cosine": 0.10416619509662853,
+        "conditioning_cosine": 0.014804535675238746
+      },
+      "c3_last_segment_15": {
+        "mean_token_ce": 2.3094412088394165,
+        "mean_raw_path_huber": 0.006835948035586625,
+        "all_parameter_cosine": 0.12689349945978468,
+        "all_parameter_weighted_path_to_ce_norm_ratio": 0.025052118733728878,
+        "backbone_cosine": 0.1560233479104751,
+        "dependency_cosine": 0.08185431142904004,
+        "s1_head_cosine": 0.08474646240648355,
+        "s2_head_cosine": 0.05096502288956196,
+        "conditioning_cosine": -0.14402299161565543
+      }
+    },
+    "conclusion": "The full-model CE and Path gradients are weakly aligned, not globally opposed. After lambda and frozen EMA normalization, the Path gradient norm is only about 2.5% of the CE gradient norm. The C3 conditioning subgroup is locally opposed, but its absolute gradient is small."
+  },
+  "oos": {
+    "signal_start": "2026-08-11",
+    "signal_end": "2026-08-27",
+    "signal_dates": 13,
+    "samples_per_model": 66986,
+    "identity_match": true,
+    "duplicate_model_identity_rows": 0,
+    "sample_count": 1,
+    "seed": 20260906,
+    "top_fraction": 0.1,
+    "d10": {
+      "c2_best_segment_179": {
+        "direction_accuracy": 0.479324037858657,
+        "mae": 0.07797867810883125,
+        "pooled_rank_ic": 0.18677616969295532,
+        "daily_rank_ic_mean": 0.1744264328088897,
+        "daily_rank_ic_std": 0.06943671733737686,
+        "daily_icir": 2.512020145788175,
+        "positive_ic_ratio": 1.0,
+        "mean_top_bottom_10pct": 0.0348942834789799
+      },
+      "c3_last_segment_15": {
+        "direction_accuracy": 0.5195861821873228,
+        "mae": 0.09379511472680072,
+        "pooled_rank_ic": 0.06297095843563308,
+        "daily_rank_ic_mean": 0.07954340714074606,
+        "daily_rank_ic_std": 0.05719806695821514,
+        "daily_icir": 1.390666002731436,
+        "positive_ic_ratio": 0.9230769230769231,
+        "mean_top_bottom_10pct": 0.021217270435980283
+      },
+      "c3_minus_c2": {
+        "direction_accuracy": 0.04026214432866576,
+        "mae": 0.01581643661796947,
+        "pooled_rank_ic": -0.12380521125732225,
+        "daily_rank_ic_mean": -0.09488302566814363,
+        "daily_icir": -1.121354143056739,
+        "positive_ic_ratio": -0.07692307692307687,
+        "mean_top_bottom_10pct": -0.01367701304299962
+      }
+    },
+    "by_horizon": [
+      {"h": 1, "c2_direction": 0.5354850267220016, "c3_direction": 0.5265130027169856, "c2_rank_ic": 0.14239396709585386, "c3_rank_ic": 0.10033204880653744, "c2_mae": 0.026804849269180565, "c3_mae": 0.03043084366350104},
+      {"h": 2, "c2_direction": 0.5305436956976085, "c3_direction": 0.5169587675036574, "c2_rank_ic": 0.131859402777573, "c3_rank_ic": 0.06905628876254097, "c2_mae": 0.0363659880334833, "c3_mae": 0.04398815706183172},
+      {"h": 3, "c2_direction": 0.4962678768697937, "c3_direction": 0.5010748514614994, "c2_rank_ic": 0.08103672871376828, "c3_rank_ic": 0.03292102790678557, "c2_mae": 0.043887067155405454, "c3_mae": 0.054046722513995844},
+      {"h": 4, "c2_direction": 0.4945511002298988, "c3_direction": 0.5000298569850417, "c2_rank_ic": 0.08657565566697015, "c3_rank_ic": 0.020289591174540395, "c2_mae": 0.05029409122702658, "c3_mae": 0.06309262668442586},
+      {"h": 5, "c2_direction": 0.497014301495835, "c3_direction": 0.4941480309318365, "c2_rank_ic": 0.09246743206621, "c3_rank_ic": 0.007578443237445445, "c2_mae": 0.05516086940488753, "c3_mae": 0.07072792939684469},
+      {"h": 6, "c2_direction": 0.49756665571910547, "c3_direction": 0.4897739826232347, "c2_rank_ic": 0.10629740090062292, "c3_rank_ic": 0.005943903463289835, "c2_mae": 0.05931104806706483, "c3_mae": 0.07672817857154492},
+      {"h": 7, "c2_direction": 0.498462365270355, "c3_direction": 0.49867136416564656, "c2_rank_ic": 0.1382010838292343, "c3_rank_ic": 0.02629134454731426, "c2_mae": 0.06361242026927927, "c3_mae": 0.08088550807287699},
+      {"h": 8, "c2_direction": 0.49311796494789956, "c3_direction": 0.5050756874570805, "c2_rank_ic": 0.15607661159818748, "c3_rank_ic": 0.034532365675039985, "c2_mae": 0.06841561341404578, "c3_mae": 0.08576451193786985},
+      {"h": 9, "c2_direction": 0.4856537186874869, "c3_direction": 0.5108679425551608, "c2_rank_ic": 0.16894807298597855, "c3_rank_ic": 0.046060046343741896, "c2_mae": 0.07340185671534892, "c3_mae": 0.09010124424456821},
+      {"h": 10, "c2_direction": 0.479324037858657, "c3_direction": 0.5195861821873228, "c2_rank_ic": 0.18677616969295532, "c3_rank_ic": 0.06297095843563308, "c2_mae": 0.07797867810883125, "c3_mae": 0.09379511472680072}
+    ],
+    "conclusion": "C3 improves D10 sign accuracy but materially degrades ranking, top-bottom spread and MAE. It does not outperform C2 as an Alpha model on this reference kernel's 13-date incremental OOS set."
+  },
+  "artifact_sha256": {
+    "kaggle_oos_summary_json": "31a9b71c09cb41d3c8f696c00f5d3d94e32fd03df1e6eb8ae45774520a5b8b74",
+    "kaggle_oos_predictions_csv_gz": "8dbff9abb6945bfef5e1e3f83c6fe2cd62dff539b8270ba7920aa3c6dee2f095",
+    "kaggle_gradient_diagnostic_json": "a93665ca5a21e409280c39cc25fb4a0b8974f14950997a498f4ea9aa0f997ff4"
+  },
+  "decision": "Stop the current Path Alignment configuration. Do not continue C3, do not start a lambda sweep, and do not use Path-only as the V3 mainline. Restore C2 best segment 179 as the Alpha reference and production candidate. A CE-only control remains useful for attribution, but not as authorization for more Path training.",
+  "experiment_disposition": {
+    "stage3_c3": "negative_result",
+    "path_alignment_v2": "retired_from_mainline",
+    "production_reference": "c2_best_segment_179",
+    "future_candidate_anchor": "c2_best_segment_179",
+    "future_acceptance_priority": [
+      "rank_ic",
+      "top_bottom_spread",
+      "daily_icir_and_positive_ic_ratio",
+      "net_return_sharpe_drawdown",
+      "mae",
+      "token_ce"
+    ]
+  }
+}

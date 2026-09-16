@@ -1,0 +1,97 @@
+{
+  "status": "complete",
+  "date": "2026-09-16",
+  "kernel": "luckfu/kronos-small-0-1-stage3-ce-only-control",
+  "kernel_version": 1,
+  "purpose": "causal_ce_only_control; lambda_path=0; 13-date OOS not run; decision tree A/B/C requires OOS rank IC",
+  "training_performed": true,
+  "oos_used": false,
+  "source_commit": "bf83ef0bcafe4d8fc6ddebf0a17a92ec929ee5cf",
+  "hardware": ["Tesla T4", "Tesla T4"],
+  "torch": "2.6.0+cu124",
+  "run_id": "small_0.1_stage3_ce_only_control_from_c2_best_v1",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_ce_only_control_from_c2_best_v1",
+  "quota": {
+    "gpu_used_after_h": 3.52,
+    "gpu_remaining_h": 26.48,
+    "p0b_plus_overhead_before_h": 0.93,
+    "p0a_incremental_h": 2.59
+  },
+  "spec_checks": {
+    "lambda_path": 0.0,
+    "loss_string": "CE+0*EMA_normalized_six_feature_Huber",
+    "best_metric_definition": "causal_token_ce+0*raw_path_huber",
+    "seed": 20260915,
+    "lr": 2e-06,
+    "amp": false,
+    "global_batch": 64,
+    "segments": 15,
+    "final_step": 4695,
+    "validation_samples": 123836,
+    "c2_weights_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "tokenizer_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+    "baseline_before_resume": true,
+    "c2_causal_baseline_ran": true,
+    "milestone_seg05": {"segment": 5, "step": 1565, "lambda_path": 0.0},
+    "milestone_seg10": {"segment": 10, "step": 3130, "lambda_path": 0.0},
+    "best_equals_last": true,
+    "val_total_equals_token_all_15": true,
+    "train_raw_path_loss_identically_zero": true,
+    "train_skip_candidate_decode": true,
+    "val_raw_path_still_computed": true,
+    "swanlab_run_id_not_reused_c3_v2": true,
+    "note_summary_chunk_label": "summary.json chunk field is leftover default 'c1'; manifest run_id and lambda_path are correct"
+  },
+  "c2_causal_baseline": {
+    "token_loss": 2.338481148317605,
+    "total_loss": 2.338481148317605,
+    "raw_path_loss": 0.006709999396432057,
+    "mae_mean": 0.34532314380139606,
+    "mae_h1": 0.3835088701661757,
+    "mae_h10": 0.3355415057320054,
+    "samples": 123836
+  },
+  "p0a_last": {
+    "segment": 15,
+    "step": 4695,
+    "token_loss": 2.278021842257652,
+    "total_loss": 2.278021842257652,
+    "raw_path_loss": 0.006741249223080795,
+    "mae_mean": 0.34688593879293467,
+    "mae_h1": 0.3869562598229371,
+    "mae_h10": 0.3366353028435867
+  },
+  "c3_last_reference": {
+    "kernel": "smmt315/kronos-small-0-1-stage3-joint-path-c3",
+    "lambda_path": 0.05,
+    "token_loss": 2.2790283587302436,
+    "total_loss": 2.279362756189648,
+    "raw_path_loss": 0.0066879327828198425,
+    "mae_mean": 0.3442182884063076
+  },
+  "grad_norm": {
+    "clip": 1.0,
+    "train_logged_n": 470,
+    "train_min": 0.4701816737651825,
+    "train_mean": 0.5286227756358207,
+    "train_max": 0.7565845847129822,
+    "train_p99": 0.5862792730331421,
+    "count_gt_1": 0,
+    "count_gt_0_9": 0,
+    "nonfinite": 0,
+    "segment_end_range": [0.6884002685546875, 0.8341512680053711],
+    "verdict": "not_explosion; logged train norms stay 0.47-0.76; clip never hit in 470 points"
+  },
+  "causal_vs_c3": {
+    "token_loss_trajectories_nearly_identical": true,
+    "p0a_last_token_minus_c3": -0.0010065164725917,
+    "p0a_last_path_minus_c3": 0.000053316440260952,
+    "p0a_last_mae_minus_c3": 0.00266765038662707,
+    "interpretation": "Uniform CE (no history) drives the causal token_loss drop in both runs. Path Alignment does not uniquely explain the CE trajectory. Rank IC attribution still requires 13-date OOS."
+  },
+  "decision_tree": {
+    "status": "not_closed",
+    "reason": "causal validation has no rank IC; A/B/C is defined on IC trajectory plus 13-date OOS",
+    "next": "§5.5 CE-only OOS kernel on best / milestone_seg05 / milestone_seg10 / last vs C2 reference"
+  }
+}
