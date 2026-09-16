@@ -5,14 +5,16 @@ from finetune.stage3_rank_loss import naive_same_date_pairwise_ranking_loss, ran
 
 
 def test_naive_same_date_pairwise_prefers_correct_order():
-    scores = torch.tensor([0.9, 0.1, 0.8, 0.2], dtype=torch.float32, requires_grad=True)
     utilities = torch.tensor([0.05, -0.03, 0.04, -0.02], dtype=torch.float32)
     date_ids = torch.tensor([1, 1, 2, 2], dtype=torch.long)
-    loss = naive_same_date_pairwise_ranking_loss(scores, utilities, date_ids)
-    loss.backward()
-    assert float(loss.item()) >= 0.0
-    assert scores.grad is not None
-    assert float(scores.grad[0]) > float(scores.grad[1])
+    good = torch.tensor([0.9, 0.1, 0.8, 0.2], dtype=torch.float32, requires_grad=True)
+    bad = torch.tensor([0.1, 0.9, 0.2, 0.8], dtype=torch.float32)
+    good_loss = naive_same_date_pairwise_ranking_loss(good, utilities, date_ids)
+    bad_loss = naive_same_date_pairwise_ranking_loss(bad, utilities, date_ids)
+    assert float(good_loss.item()) >= 0.0
+    assert float(bad_loss.item()) > float(good_loss.item())
+    good_loss.backward()
+    assert good.grad is not None
 
 
 def test_rank_batch_diagnostics_counts_pairs():
