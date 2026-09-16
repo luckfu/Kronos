@@ -7,7 +7,20 @@ import torch.nn.functional as F
 
 from finetune.stage3_path_alignment import candidate_mixture_decode
 from finetune.stage3_rank_loss import naive_same_date_pairwise_ranking_loss, rank_batch_diagnostics
-from finetune.train_predictor import objective_token_slices
+
+
+def objective_token_slices(sequence_length, lookback_window, predict_window):
+    """Return next-token positions for history reconstruction and forecasting."""
+    history_stop = int(lookback_window) - 1
+    forecast_stop = history_stop + int(predict_window)
+    if history_stop < 1:
+        raise ValueError('lookback_window must provide at least one history target')
+    if forecast_stop > int(sequence_length):
+        raise ValueError(
+            f'Need {forecast_stop} target positions for the forecast objective, '
+            f'but only {sequence_length} are available'
+        )
+    return slice(0, history_stop), slice(history_stop, forecast_stop)
 
 CLOSE_INDEX = 3
 DEFAULT_FORECAST_HORIZON_WEIGHTS = (

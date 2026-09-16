@@ -232,7 +232,7 @@ def main():
         (OUTPUT / 'experiment_manifest.json').write_text(json.dumps(manifest, indent=2))
         phase('cpu_preflight')
         run([sys.executable, '-u', '-m', 'pytest', 'tests/test_stage3_conditional_joint.py',
-             'tests/test_stage3_training_framework.py', '-q'], cwd=repo,
+             'tests/test_stage3_ce_rank.py', '-q'], cwd=repo,
             env={**env, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1', 'CUDA_VISIBLE_DEVICES': ''})
         torchrun = [sys.executable, '-u', '-m', 'torch.distributed.run', '--standalone', '--nproc_per_node=2', '-m']
         common = ['--model-dir', str(inputs['best'].parent), '--tokenizer-dir', str(inputs['tokenizer'].parent)]
