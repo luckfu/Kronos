@@ -42,7 +42,12 @@ class Stage3TrainingModel(nn.Module):
         ce_objective = ce_terms['objective']
         rank_loss = ce_objective.new_zeros(())
         rank_diag = {}
-        if self.training and date_ids is not None and feature_means is not None:
+        if (
+            self.training
+            and self.ce_rank_config.lambda_rank != 0
+            and date_ids is not None
+            and feature_means is not None
+        ):
             rank_loss, rank_diag = compute_rank_terms(
                 self.predictor, self.tokenizer, context, logits1, x,
                 feature_means, feature_stds, date_ids,

@@ -11,6 +11,10 @@ from finetune.dataset import QlibDataset
 from finetune.stage3_ce_rank import DEFAULT_FORECAST_HORIZON_WEIGHTS, Stage3CERankConfig
 from finetune.stage3_path_alignment import PathAlignmentConfig
 from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
+from finetune.stage3_trainable_mask import (
+    KNOWN_MASKS, apply_trainable_mask, assert_frozen_parameters_unchanged,
+    snapshot_frozen_parameters,
+)
 
 
 def parse_horizon_weights(raw: str) -> tuple[float, ...]:
@@ -59,10 +63,11 @@ def validate_resume(state, experiment, summary, world, lr, seed):
     """Fail closed on a different objective/data/run or a partial segment."""
     prior = state['experiment_manifest']
     for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'lambda_rank', 'history_weight',
-                'forecast_horizon_weights', 'ce_rank', 'huber_delta', 'top_k', 'candidates',
-                'ema_decay', 'dependency_causal', 'amp', 'global_batch',
+                'forecast_horizon_weights', 'ce_rank', 'trainable_mask', 'huber_delta', 'top_k',
+                'candidates', 'ema_decay', 'dependency_causal', 'amp', 'global_batch',
                 'batch_per_gpu', 'lookback', 'horizon', 'validation_samples'):
-        if prior.get(key) != experiment.get(key):
+        default = 'all' if key == 'trainable_mask' else None
+        if prior.get(key, default) != experiment.get(key, default):
             raise ValueError(f'Resume manifest mismatch: {key}')
     if prior['seed'] != seed or experiment['seed'] != seed:
         raise ValueError('Resume coverage seed changed')
@@ -143,6 +148,7 @@ def main(a):
             print(f'history_weight={a.history_weight}', flush=True)
             print(f'forecast_horizon_weights={a.forecast_horizon_weights}', flush=True)
         print(f'milestone_segments={sorted(milestones)}', flush=True)
+        print(f'trainable_mask={a.trainable_mask}', flush=True)
         print(f'world_size={world}', flush=True)
         print('validation_mode=full', flush=True)
         print('target_slice=x[:,120:130]', flush=True)
@@ -163,11 +169,16 @@ def main(a):
         config=PathAlignmentConfig(weight=a.lambda_path),
         ce_rank_config=ce_rank_config,
     ).to(device)
+    freeze_audit = apply_trainable_mask(model.predictor, a.trainable_mask)
+    frozen_snapshot = snapshot_frozen_parameters(model.predictor)
     if world > 1:
         model = DDP(model, device_ids=[local], output_device=local,
                     find_unused_parameters=False, broadcast_buffers=False)
     core = model.module if isinstance(model, DDP) else model
     raw = core.predictor
+    trainable_params = [parameter for parameter in raw.parameters() if parameter.requires_grad]
+    if not trainable_params:
+        raise RuntimeError(f'Trainable mask {a.trainable_mask} selected no parameters')
     run = None
     if is_main(rank):
         api_key = os.environ.get('SWANLAB_API_KEY', '').strip()
@@ -198,6 +209,7 @@ def main(a):
                     'lambda_rank': a.lambda_rank,
                     'history_weight': a.history_weight,
                     'forecast_horizon_weights': a.forecast_horizon_weights,
+                    'trainable_mask': a.trainable_mask,
                     'optimizer': 'resume' if a.resume_state else 'fresh', 'dependency_causal': True,
                     'ema': 'global_batch_detached', 'coverage_seed': a.seed,
                     'nproc': world, 'chunk': a.chunk},
@@ -227,13 +239,21 @@ def main(a):
     # Exact coverage, no DistributedSampler padding/duplicate validation rows.
     val_shard = Subset(val_ds, range(rank, len(val_ds), world))
     val_loader = DataLoader(val_shard, batch_size=a.batch, shuffle=False, num_workers=0)
-    opt = torch.optim.AdamW(raw.parameters(), lr=a.lr, weight_decay=0.01)
+    opt = torch.optim.AdamW(trainable_params, lr=a.lr, weight_decay=0.01)
     out = Path(a.output_dir)
-    if is_main(rank): (out / 'checkpoints').mkdir(parents=True, exist_ok=True)
+    if is_main(rank):
+        (out / 'checkpoints').mkdir(parents=True, exist_ok=True)
+        atomic_json(out / 'freeze_audit.json', freeze_audit)
+        print(json.dumps({
+            'phase': 'trainable_mask',
+            **{key: value for key, value in freeze_audit.items() if key != 'frozen_names'},
+        }), flush=True)
     if world > 1: dist.barrier()
     step = 0
     summary = {'segments': [], 'chunk': a.chunk, 'max_runtime_seconds': a.max_runtime_seconds}
     experiment = json.loads((out / 'experiment_manifest.json').read_text())
+    if experiment.get('trainable_mask', 'all') != a.trainable_mask:
+        raise ValueError('Trainable mask does not match experiment_manifest')
     start_segment = 0
     best_val = float('inf')
     if a.baseline_before_resume:
@@ -361,6 +381,8 @@ def main(a):
             atomic_json(out / 'summary.json', summary)
             print(json.dumps(row), flush=True)
         persist_state(core, opt, out, step, seg, ds, experiment, world, rank)
+        if is_main(rank):
+            assert_frozen_parameters_unchanged(raw, frozen_snapshot)
         stop_for_time = False
         if is_main(rank) and (time.time() - run_started) >= a.max_runtime_seconds:
             stop_for_time = True
@@ -395,6 +417,7 @@ if __name__ == '__main__':
     p.add_argument('--history-weight', type=float, default=0.02)
     p.add_argument('--forecast-horizon-weights', default=','.join(str(v) for v in DEFAULT_FORECAST_HORIZON_WEIGHTS))
     p.add_argument('--milestone-segments', default='')
+    p.add_argument('--trainable-mask', default='all', choices=KNOWN_MASKS)
     p.add_argument('--resume-state', default='')
     p.add_argument('--chunk', default='c1')
     p.add_argument('--baseline-before-resume', action='store_true')

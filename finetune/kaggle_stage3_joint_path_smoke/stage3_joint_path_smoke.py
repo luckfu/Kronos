@@ -30,6 +30,7 @@ FORECAST_HORIZON_WEIGHTS = os.environ.get(
     '1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455',
 )
 MILESTONE_SEGMENTS = os.environ.get('STAGE3_MILESTONE_SEGMENTS', '')
+TRAINABLE_MASK = os.environ.get('STAGE3_TRAINABLE_MASK', 'all')
 HASHES = {
     'best': '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
     'tokenizer': '59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee',
@@ -93,7 +94,7 @@ def main():
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
           lr=2e-6, amp=False, lambda_path=LAMBDA_PATH, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
           history_weight=HISTORY_WEIGHT, forecast_horizon_weights=FORECAST_HORIZON_WEIGHTS,
-          milestone_segments=MILESTONE_SEGMENTS,
+          milestone_segments=MILESTONE_SEGMENTS, trainable_mask=TRAINABLE_MASK,
           hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
           max_runtime_seconds=MAX_RUNTIME_SECONDS, chunk=CHUNK)
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -112,10 +113,13 @@ def main():
         for attempt in range(3):
             repo = Path(tempfile.mkdtemp(prefix='kronos-stage3-source-')) / 'repo'
             try:
-                run(['git', 'clone', '--depth', '5', '--branch', 'master',
-                     'https://github.com/luckfu/Kronos.git', str(repo)],
-                    env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
-                run(['git', 'checkout', '--detach', SOURCE_COMMIT], cwd=repo)
+                run(['git', 'init', str(repo)], env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+                run(['git', 'remote', 'add', 'origin', 'https://github.com/luckfu/Kronos.git'],
+                    cwd=repo, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+                run(['git', 'fetch', '--depth', '1', 'origin', SOURCE_COMMIT],
+                    cwd=repo, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+                run(['git', 'checkout', '--detach', 'FETCH_HEAD'],
+                    cwd=repo, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
                 break
             except subprocess.CalledProcessError:
                 if attempt == 2: raise
@@ -211,11 +215,14 @@ def main():
                     'lookback': 120, 'horizon': 10,
                     'loss': (
                         f'weighted_CE+{HISTORY_WEIGHT:g}*history+{LAMBDA_RANK:g}*pairwise_rank'
+                        if CE_RANK and LAMBDA_RANK
+                        else f'weighted_CE+{HISTORY_WEIGHT:g}*history'
                         if CE_RANK else f'CE+{LAMBDA_PATH:g}*EMA_normalized_six_feature_Huber'
                     ),
                     'lambda_path': LAMBDA_PATH, 'ce_rank': CE_RANK, 'lambda_rank': LAMBDA_RANK,
                     'history_weight': HISTORY_WEIGHT,
                     'forecast_horizon_weights': FORECAST_HORIZON_WEIGHTS,
+                    'trainable_mask': TRAINABLE_MASK,
                     'milestone_segments': MILESTONE_SEGMENTS,
                     'huber_delta': 0.02, 'top_k': 16, 'candidates': 16, 'ema_decay': 0.99,
                     'dependency_causal': True, 'devices': devices, 'torch': torch.__version__,
@@ -232,7 +239,7 @@ def main():
         (OUTPUT / 'experiment_manifest.json').write_text(json.dumps(manifest, indent=2))
         phase('cpu_preflight')
         run([sys.executable, '-u', '-m', 'pytest', 'tests/test_stage3_conditional_joint.py',
-             'tests/test_stage3_ce_rank.py', '-q'], cwd=repo,
+             'tests/test_stage3_ce_rank.py', 'tests/test_stage3_trainable_mask.py', '-q'], cwd=repo,
             env={**env, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1', 'CUDA_VISIBLE_DEVICES': ''})
         torchrun = [sys.executable, '-u', '-m', 'torch.distributed.run', '--standalone', '--nproc_per_node=2', '-m']
         common = ['--model-dir', str(inputs['best'].parent), '--tokenizer-dir', str(inputs['tokenizer'].parent)]
@@ -254,7 +261,7 @@ def main():
             resume_args += ['--milestone-segments', MILESTONE_SEGMENTS]
         train_args = ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32',
                       '--lr', '2e-6', '--seed', '20260915', '--log-interval', '10',
-                      '--lambda-path', str(LAMBDA_PATH),
+                      '--lambda-path', str(LAMBDA_PATH), '--trainable-mask', TRAINABLE_MASK,
                       '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)]
         if CE_RANK:
             train_args += ['--ce-rank', '--lambda-rank', str(LAMBDA_RANK),
@@ -275,8 +282,10 @@ def main():
         assert all(row['validation']['samples'] == 123836 for row in summary['segments'])
         for name in ['run.log', 'metrics.jsonl', 'experiment_manifest.json', 'checkpoints/last_state.pt',
                      'checkpoints/best_model/model.safetensors', 'checkpoints/best_model/best_metric.json',
-                     'checkpoints/last_model/model.safetensors']:
+                     'checkpoints/last_model/model.safetensors', 'freeze_audit.json']:
             assert (OUTPUT / name).is_file(), name
+        audit = json.loads((OUTPUT / 'freeze_audit.json').read_text())
+        assert audit['mask'] == TRAINABLE_MASK
         phase('completed', completed_segments=TARGET_SEGMENTS, validation_samples=123836, output=str(OUTPUT))
     except Exception as exc:
         phase('failed', error_type=type(exc).__name__, message=str(exc))
