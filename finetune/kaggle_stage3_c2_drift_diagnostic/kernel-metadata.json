@@ -1,0 +1,18 @@
+{
+  "id": "luckfu/kronos-small-0-1-stage3-c2-drift-diagnostic",
+  "title": "Kronos Small 0 1 Stage3 C2 Drift Diagnostic",
+  "code_file": "stage3_c2_drift_diagnostic.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "kernel_sources": [
+    "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "luckfu/kronos-small-0-1-stage3-ce-only-control",
+    "luckfu/kronos-small-0-1-stage3-p1-ce-rank",
+    "luckfu/kronos-small-0-1-stage3-ce-only-oos",
+    "luckfu/kronos-small-0-1-stage3-p1-ce-rank-oos"
+  ]
+}
