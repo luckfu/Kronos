@@ -136,8 +136,11 @@ def compute_rank_terms(
     config: Stage3CERankConfig,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     start = lookback - 1
+    forecast_logits1 = logits1[:, start:start + horizon]
+    if forecast_logits1.shape[1] != horizon:
+        raise ValueError('forecast s1 logits must cover exactly the 10-day horizon')
     prediction, _, _ = candidate_mixture_decode(
-        predictor, tokenizer, context, logits1,
+        predictor, tokenizer, context, forecast_logits1,
         top_k=config.rank_top_k, candidates=config.rank_candidates,
         position_start=start, is_causal=True,
     )
