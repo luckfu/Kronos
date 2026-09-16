@@ -1,0 +1,17 @@
+{
+  "id": "luckfu/kronos-small-0-1-stage3-p1-ce-rank-oos",
+  "title": "Kronos Small 0 1 Stage3 P1 Ce Rank Oos",
+  "code_file": "stage3_p1_ce_rank_oos.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": [
+    "luckfu/kronos-small-0-1-stage3-p1-ce-rank",
+    "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "smmt315/kronos-small-0-1-c2-alpha-oos-evaluation"
+  ]
+}
