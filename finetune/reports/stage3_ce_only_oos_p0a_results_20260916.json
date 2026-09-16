@@ -1,0 +1,483 @@
+{
+  "status": "complete",
+  "date": "2026-09-16",
+  "kernel": "luckfu/kronos-small-0-1-stage3-ce-only-oos",
+  "hardware": "NvidiaTeslaP100",
+  "elapsed_sec": 2640.130289077759,
+  "purpose": "exploratory_only; 13-date OOS design-contaminated; production candidate requires sealed fresh-window OOS",
+  "oos_used": true,
+  "training_performed": false,
+  "source_commit": "bf83ef0bcafe4d8fc6ddebf0a17a92ec929ee5cf",
+  "sample_set": "incremental_future_all",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-08-27",
+  "signal_dates": 13,
+  "samples_total": 66986,
+  "spec_checks": {
+    "purpose_starts_with_exploratory_only": true,
+    "oos_used": true,
+    "status_complete": true,
+    "remaining_empty": true,
+    "init_pooled_rank_ic_equals_p0b_alpha0": true,
+    "c2_init_weights_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "tokenizer_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+    "p0a_best_torch_equal_last": true,
+    "p0a_last_weights_sha256": "c2abaf001ca4a1c6652a8358460d2281b0031fcfbe0037e9007a117ab252ebb8",
+    "p0a_best_weights_sha256": "c2abaf001ca4a1c6652a8358460d2281b0031fcfbe0037e9007a117ab252ebb8",
+    "sanity_init_vs_c2_is_soft": true,
+    "sanity_init_spearman_range": [
+      0.8241866633113305,
+      0.8474038373716155
+    ],
+    "sanity_policy": "identity-merge max|delta|/mean|delta|/spearman; soft report only; fp16 autocast + date seed + cross-GPU"
+  },
+  "anchors": {
+    "c2_p0b_alpha0_d10_pooled_rank_ic": 0.18440434213929857,
+    "c3_last_d10_pooled_rank_ic": 0.06297095843563308,
+    "note": "illustrative anchors from P0b interp / C3 OOS; not hard thresholds"
+  },
+  "metrics_d10": {
+    "ce_only_seg00_init": {
+      "direction_accuracy": 0.4807422446481354,
+      "mae": 0.07802159039035214,
+      "pooled_rank_ic": 0.18440434213929857,
+      "daily_rank_ic_mean": 0.1710164747299683,
+      "daily_rank_ic_std": 0.0685051115956151,
+      "daily_icir": 2.496404585682257,
+      "daily_icir_annualized_sqrt252": 39.62919423309893,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.034275421865706424
+    },
+    "ce_only_seg05": {
+      "direction_accuracy": 0.4823545218403846,
+      "mae": 0.078593188136824,
+      "pooled_rank_ic": 0.16041311126632743,
+      "daily_rank_ic_mean": 0.1510054316347851,
+      "daily_rank_ic_std": 0.06406586012784937,
+      "daily_icir": 2.3570343289458653,
+      "daily_icir_annualized_sqrt252": 37.416759996196625,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.02907911544687051
+    },
+    "ce_only_seg10": {
+      "direction_accuracy": 0.49393903203654493,
+      "mae": 0.08030869717209006,
+      "pooled_rank_ic": 0.11628192282948374,
+      "daily_rank_ic_mean": 0.11625528308271847,
+      "daily_rank_ic_std": 0.05837878934656839,
+      "daily_icir": 1.9913959227993507,
+      "daily_icir_annualized_sqrt252": 31.612430241570376,
+      "positive_ic_ratio": 1.0,
+      "mean_top_bottom_10pct": 0.025812467375724804
+    },
+    "ce_only_seg15_last": {
+      "direction_accuracy": 0.5196906816349685,
+      "mae": 0.09417919492431835,
+      "pooled_rank_ic": 0.0642869478967645,
+      "daily_rank_ic_mean": 0.0809296243574015,
+      "daily_rank_ic_std": 0.056800563069288115,
+      "daily_icir": 1.4248032058886384,
+      "daily_icir_annualized_sqrt252": 22.618049699933383,
+      "positive_ic_ratio": 0.9230769230769231,
+      "mean_top_bottom_10pct": 0.02122599539138007
+    }
+  },
+  "pooled_rank_ic_by_horizon": {
+    "ce_only_seg00_init": [
+      0.14290700359521366,
+      0.13195524712165665,
+      0.08562090835566225,
+      0.08685496435876582,
+      0.0921676428825133,
+      0.10584346855692685,
+      0.13705706573707324,
+      0.15664904034771077,
+      0.16747334727845345,
+      0.18440434213929857
+    ],
+    "ce_only_seg05": [
+      0.13847840265647027,
+      0.12285363465715979,
+      0.07680733762146559,
+      0.0737341583461994,
+      0.07715733373711327,
+      0.0864395821905249,
+      0.11392042332112508,
+      0.13179852556775565,
+      0.14317124917831198,
+      0.16041311126632743
+    ],
+    "ce_only_seg10": [
+      0.12382859101945055,
+      0.1009736064482381,
+      0.05486007237646542,
+      0.04742787802706158,
+      0.04319115895741394,
+      0.04492266716385425,
+      0.06903141771301344,
+      0.08431393598964304,
+      0.09674778526578208,
+      0.11628192282948374
+    ],
+    "ce_only_seg15_last": [
+      0.10011451123772219,
+      0.06868964705430963,
+      0.03332430732219246,
+      0.021253625794551298,
+      0.008407497943440912,
+      0.006928481416499323,
+      0.02775029495853309,
+      0.03598145138032731,
+      0.04767929376745006,
+      0.0642869478967645
+    ]
+  },
+  "d10_by_signal_date": {
+    "ce_only_seg00_init": [
+      {
+        "asof_date": "2026-08-11",
+        "samples": 5162,
+        "rank_ic": 0.12845460195801514,
+        "top_bottom_10pct": 0.01549148801678153
+      },
+      {
+        "asof_date": "2026-08-12",
+        "samples": 5161,
+        "rank_ic": 0.2074011480709854,
+        "top_bottom_10pct": 0.024781625206281417
+      },
+      {
+        "asof_date": "2026-08-13",
+        "samples": 5162,
+        "rank_ic": 0.1402978292975414,
+        "top_bottom_10pct": 0.011024283371303702
+      },
+      {
+        "asof_date": "2026-08-14",
+        "samples": 5158,
+        "rank_ic": 0.19840683617012714,
+        "top_bottom_10pct": 0.03355929659780604
+      },
+      {
+        "asof_date": "2026-08-17",
+        "samples": 5154,
+        "rank_ic": 0.24769930254097286,
+        "top_bottom_10pct": 0.049897903273271926
+      },
+      {
+        "asof_date": "2026-08-18",
+        "samples": 5153,
+        "rank_ic": 0.30049664828188516,
+        "top_bottom_10pct": 0.07683670670949208
+      },
+      {
+        "asof_date": "2026-08-19",
+        "samples": 5153,
+        "rank_ic": 0.1458942507732667,
+        "top_bottom_10pct": 0.039029365362122974
+      },
+      {
+        "asof_date": "2026-08-20",
+        "samples": 5152,
+        "rank_ic": 0.10144873190576535,
+        "top_bottom_10pct": 0.01881814615208971
+      },
+      {
+        "asof_date": "2026-08-21",
+        "samples": 5148,
+        "rank_ic": 0.23379536208524893,
+        "top_bottom_10pct": 0.054913504956995374
+      },
+      {
+        "asof_date": "2026-08-24",
+        "samples": 5149,
+        "rank_ic": 0.12043640161426473,
+        "top_bottom_10pct": 0.03168593147425973
+      },
+      {
+        "asof_date": "2026-08-25",
+        "samples": 5147,
+        "rank_ic": 0.10866047054954546,
+        "top_bottom_10pct": 0.02354707208651939
+      },
+      {
+        "asof_date": "2026-08-26",
+        "samples": 5146,
+        "rank_ic": 0.06882220475254276,
+        "top_bottom_10pct": 0.012983472023195422
+      },
+      {
+        "asof_date": "2026-08-27",
+        "samples": 5141,
+        "rank_ic": 0.22140038348942673,
+        "top_bottom_10pct": 0.05301168902406414
+      }
+    ],
+    "ce_only_seg05": [
+      {
+        "asof_date": "2026-08-11",
+        "samples": 5162,
+        "rank_ic": 0.09109897569124285,
+        "top_bottom_10pct": 0.009143670246264458
+      },
+      {
+        "asof_date": "2026-08-12",
+        "samples": 5161,
+        "rank_ic": 0.16525400827669484,
+        "top_bottom_10pct": 0.010776056081229533
+      },
+      {
+        "asof_date": "2026-08-13",
+        "samples": 5162,
+        "rank_ic": 0.11932616975714087,
+        "top_bottom_10pct": 0.0030458266315423264
+      },
+      {
+        "asof_date": "2026-08-14",
+        "samples": 5158,
+        "rank_ic": 0.16511508403676592,
+        "top_bottom_10pct": 0.02630771477093067
+      },
+      {
+        "asof_date": "2026-08-17",
+        "samples": 5154,
+        "rank_ic": 0.2215710382437576,
+        "top_bottom_10pct": 0.04391590557819188
+      },
+      {
+        "asof_date": "2026-08-18",
+        "samples": 5153,
+        "rank_ic": 0.28387738111427274,
+        "top_bottom_10pct": 0.0725467948950538
+      },
+      {
+        "asof_date": "2026-08-19",
+        "samples": 5153,
+        "rank_ic": 0.11887037891729206,
+        "top_bottom_10pct": 0.03693820674752079
+      },
+      {
+        "asof_date": "2026-08-20",
+        "samples": 5152,
+        "rank_ic": 0.07988165156178935,
+        "top_bottom_10pct": 0.012333228953124924
+      },
+      {
+        "asof_date": "2026-08-21",
+        "samples": 5148,
+        "rank_ic": 0.20736158444246078,
+        "top_bottom_10pct": 0.051887457694822114
+      },
+      {
+        "asof_date": "2026-08-24",
+        "samples": 5149,
+        "rank_ic": 0.1110812364172168,
+        "top_bottom_10pct": 0.025217698615731515
+      },
+      {
+        "asof_date": "2026-08-25",
+        "samples": 5147,
+        "rank_ic": 0.10432133395094349,
+        "top_bottom_10pct": 0.0217580830009238
+      },
+      {
+        "asof_date": "2026-08-26",
+        "samples": 5146,
+        "rank_ic": 0.08222945569895648,
+        "top_bottom_10pct": 0.013064604592554764
+      },
+      {
+        "asof_date": "2026-08-27",
+        "samples": 5141,
+        "rank_ic": 0.2130823131436727,
+        "top_bottom_10pct": 0.05109325300142602
+      }
+    ],
+    "ce_only_seg10": [
+      {
+        "asof_date": "2026-08-11",
+        "samples": 5162,
+        "rank_ic": 0.04177931814476119,
+        "top_bottom_10pct": 0.0036948527312140374
+      },
+      {
+        "asof_date": "2026-08-12",
+        "samples": 5161,
+        "rank_ic": 0.09731776578161087,
+        "top_bottom_10pct": 0.011796197300953375
+      },
+      {
+        "asof_date": "2026-08-13",
+        "samples": 5162,
+        "rank_ic": 0.08240944094198689,
+        "top_bottom_10pct": 0.0026040338916520256
+      },
+      {
+        "asof_date": "2026-08-14",
+        "samples": 5158,
+        "rank_ic": 0.09007846804470189,
+        "top_bottom_10pct": 0.02115019301111383
+      },
+      {
+        "asof_date": "2026-08-17",
+        "samples": 5154,
+        "rank_ic": 0.1545581075537793,
+        "top_bottom_10pct": 0.03517450657925863
+      },
+      {
+        "asof_date": "2026-08-18",
+        "samples": 5153,
+        "rank_ic": 0.22610531425352856,
+        "top_bottom_10pct": 0.057290589393571345
+      },
+      {
+        "asof_date": "2026-08-19",
+        "samples": 5153,
+        "rank_ic": 0.08762373304824916,
+        "top_bottom_10pct": 0.023651426614716985
+      },
+      {
+        "asof_date": "2026-08-20",
+        "samples": 5152,
+        "rank_ic": 0.04654936347189554,
+        "top_bottom_10pct": 0.010043961479682322
+      },
+      {
+        "asof_date": "2026-08-21",
+        "samples": 5148,
+        "rank_ic": 0.17977158723052084,
+        "top_bottom_10pct": 0.04778201151820061
+      },
+      {
+        "asof_date": "2026-08-24",
+        "samples": 5149,
+        "rank_ic": 0.07309899951378697,
+        "top_bottom_10pct": 0.021206349886736815
+      },
+      {
+        "asof_date": "2026-08-25",
+        "samples": 5147,
+        "rank_ic": 0.12817522528898764,
+        "top_bottom_10pct": 0.03209896978822725
+      },
+      {
+        "asof_date": "2026-08-26",
+        "samples": 5146,
+        "rank_ic": 0.10013528629611708,
+        "top_bottom_10pct": 0.022342749243801058
+      },
+      {
+        "asof_date": "2026-08-27",
+        "samples": 5141,
+        "rank_ic": 0.2037160705054142,
+        "top_bottom_10pct": 0.04672623444529411
+      }
+    ],
+    "ce_only_seg15_last": [
+      {
+        "asof_date": "2026-08-11",
+        "samples": 5162,
+        "rank_ic": -0.007980060024222723,
+        "top_bottom_10pct": -0.00547991350033758
+      },
+      {
+        "asof_date": "2026-08-12",
+        "samples": 5161,
+        "rank_ic": 0.025183242488930065,
+        "top_bottom_10pct": 0.008530676941345922
+      },
+      {
+        "asof_date": "2026-08-13",
+        "samples": 5162,
+        "rank_ic": 0.04025539139757088,
+        "top_bottom_10pct": 0.004502209634799328
+      },
+      {
+        "asof_date": "2026-08-14",
+        "samples": 5158,
+        "rank_ic": 0.05477787379439388,
+        "top_bottom_10pct": 0.014801693401595416
+      },
+      {
+        "asof_date": "2026-08-17",
+        "samples": 5154,
+        "rank_ic": 0.10120645723116878,
+        "top_bottom_10pct": 0.026112441868745073
+      },
+      {
+        "asof_date": "2026-08-18",
+        "samples": 5153,
+        "rank_ic": 0.13537280090771253,
+        "top_bottom_10pct": 0.04873658427896425
+      },
+      {
+        "asof_date": "2026-08-19",
+        "samples": 5153,
+        "rank_ic": 0.033281490759075126,
+        "top_bottom_10pct": 0.024381948302882577
+      },
+      {
+        "asof_date": "2026-08-20",
+        "samples": 5152,
+        "rank_ic": 0.04976968070451335,
+        "top_bottom_10pct": 0.017748087760089883
+      },
+      {
+        "asof_date": "2026-08-21",
+        "samples": 5148,
+        "rank_ic": 0.14050722356765177,
+        "top_bottom_10pct": 0.042523011767748475
+      },
+      {
+        "asof_date": "2026-08-24",
+        "samples": 5149,
+        "rank_ic": 0.04654636632177467,
+        "top_bottom_10pct": 0.022402867067207406
+      },
+      {
+        "asof_date": "2026-08-25",
+        "samples": 5147,
+        "rank_ic": 0.131375711471703,
+        "top_bottom_10pct": 0.017416389474590992
+      },
+      {
+        "asof_date": "2026-08-26",
+        "samples": 5146,
+        "rank_ic": 0.12189802407763789,
+        "top_bottom_10pct": 0.020114313167275716
+      },
+      {
+        "asof_date": "2026-08-27",
+        "samples": 5141,
+        "rank_ic": 0.17989091394831022,
+        "top_bottom_10pct": 0.034147629923033475
+      }
+    ]
+  },
+  "decision_tree": {
+    "status": "closed",
+    "branch": "A",
+    "primary_metric": "D10 pooled_rank_ic",
+    "ce_only_last": 0.0642869478967645,
+    "ce_only_init": 0.18440434213929857,
+    "c3_last_anchor": 0.06297095843563308,
+    "c2_anchor": 0.18440434213929857,
+    "rationale": "CE-only last D10 pooled_rank_ic = 0.0643 collapses to the 0.06-0.08 band and is within 0.0013 of C3 last 0.0630. Init matches C2 / P0b alpha=0 at 0.1844. Trajectory is monotonic 0.1844 -> 0.1604 -> 0.1163 -> 0.0643. Branch B (CE-only holds 0.17-0.19) and branch C (CE-only ~0.12 with C3 worse) do not fit. Uniform CE (no history) is the poison; Path Alignment does not uniquely explain the rank collapse.",
+    "p1_if_authorized": "restore Stage2 original CE (weighted horizon + 0.02 history) + small-weight naive pairwise logistic rank; same-day cross-section batches; no |dr| weighting / KL / new sampler",
+    "p1_authorized": false,
+    "forbidden": [
+      "do not continue C3",
+      "no lambda sweep",
+      "do not repair mixture decode",
+      "do not treat Path as V3 mainline",
+      "13-date numbers are exploratory_only; production requires a sealed fresh window"
+    ]
+  },
+  "takeaways": [
+    "purpose=exploratory_only; 13-date OOS is design-contaminated",
+    "CE-only last Rank IC 0.0643 ~ C3 last 0.0630; Path is not a unique cause",
+    "CE-only init Rank IC 0.1844 equals P0b alpha=0; sanity spearman 0.824-0.847 is soft-compare only",
+    "direction accuracy rises 0.4807 -> 0.5197 while Rank IC / Top-Bottom collapse, same C2->C3 pattern",
+    "decision tree A: restore Stage2 CE + small rank; P1 training not started"
+  ]
+}

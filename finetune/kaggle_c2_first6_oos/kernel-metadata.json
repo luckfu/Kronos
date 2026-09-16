@@ -1,0 +1,13 @@
+{
+  "id": "luckfu/kronos-small-0-1-c2-first6-oos",
+  "title": "Kronos Small 0 1 C2 First6 Oos",
+  "code_file": "c2_first6_oos.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["smmt315/kronos-small-0-1-stage2-cosine-refinement-c2"]
+}
