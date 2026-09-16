@@ -1,0 +1,115 @@
+{
+  "status": "complete",
+  "date": "2026-09-17",
+  "kernel": "luckfu/kronos-small-0-1-stage3-freeze-probe-e",
+  "kernel_url": "https://www.kaggle.com/code/luckfu/kronos-small-0-1-stage3-freeze-probe-e",
+  "kernel_version": 1,
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "freeze_probe_e; train forecast_head only from C2 best; Stage2 weighted CE + 0.02 history; lambda_path=0; lambda_rank=0; Rank IC not computed in causal val",
+  "training_performed": true,
+  "oos_used": false,
+  "source_commit": "2a788563001bf866bae77aa7803fd1517e9d73d4",
+  "hardware": ["Tesla T4", "Tesla T4"],
+  "torch": "2.6.0+cu124",
+  "run_id": "small_0.1_stage3_freeze_probe_e_forecast_head_from_c2_best_v1",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_freeze_probe_e_forecast_head_from_c2_best_v1",
+  "wall_clock_utc": ["2026-09-16T16:43:32Z", "2026-09-16T17:22:51Z"],
+  "spec_checks": {
+    "lambda_path": 0.0,
+    "ce_rank": true,
+    "lambda_rank": 0.0,
+    "history_weight": 0.02,
+    "trainable_mask": "forecast_head",
+    "loss_string": "weighted_CE+0.02*history",
+    "best_metric_definition": "weighted_ce+0.02*history+0*rank",
+    "seed": 20260915,
+    "lr": 2e-06,
+    "amp": false,
+    "global_batch": 64,
+    "segments": 5,
+    "final_step": 1565,
+    "completed_segments": 5,
+    "progress_status": "completed",
+    "validation_samples": 123836,
+    "c2_weights_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "tokenizer_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+    "baseline_before_resume": true,
+    "c2_causal_baseline_ran": true,
+    "gpu_probe_passed": true,
+    "frozen_assert_passed": true,
+    "s1_entropy_moved_vs_c2": true,
+    "best_equals_last_equals_milestone_seg05": true,
+    "verify_output_phase_completed": true,
+    "rank_ic_not_in_causal_val": true
+  },
+  "freeze_audit": {
+    "mask": "forecast_head",
+    "trainable_names": [
+      "head.proj_s1.weight",
+      "head.proj_s1.bias",
+      "head.proj_s2.weight",
+      "head.proj_s2.bias"
+    ],
+    "trainable_tensors": 4,
+    "frozen_tensors": 128,
+    "trainable_parameters": 1050624,
+    "total_parameters": 24819392,
+    "trainable_fraction": 0.04233077103580942
+  },
+  "c2_causal_baseline": {
+    "token_loss": 2.3970864898432493,
+    "s1_entropy": 2.6827945627789305,
+    "samples": 123836
+  },
+  "milestones": {
+    "seg01": {
+      "segment": 1,
+      "step": 313,
+      "validation_objective": 2.397064788541607,
+      "s1_entropy": 2.6829315173339844,
+      "weights_sha256": "50ca30ba579391dd8b94494130d53b55c585f7a66eaac08aead86f2e4097aa54"
+    },
+    "seg03": {
+      "segment": 3,
+      "step": 939,
+      "validation_objective": 2.396984770937215,
+      "s1_entropy": 2.6837063538513184,
+      "weights_sha256": "c5e09bfe45df3de8b02838a4823ae489157136623673dca0f3d687da8fcc86e8"
+    },
+    "seg05": {
+      "segment": 5,
+      "step": 1565,
+      "validation_objective": 2.3969372525118575,
+      "s1_entropy": 2.6842841363548584,
+      "weights_sha256": "51a7e3b59fd9ef32f86f398b6209a5edc9b1cd82ec55774acfc02de46a8c6d64"
+    }
+  },
+  "e_last": {
+    "segment": 5,
+    "step": 1565,
+    "token_loss": 2.3969372525118575,
+    "s1_entropy": 2.6842841363548584,
+    "validation_objective_delta_vs_c2": -0.0001492373313918,
+    "weights_sha256": "51a7e3b59fd9ef32f86f398b6209a5edc9b1cd82ec55774acfc02de46a8c6d64"
+  },
+  "causal_validation_trajectory": [
+    {"segment": 1, "step": 313, "validation_objective": 2.397064788541607, "s1_entropy": 2.6829315173339844, "grad_norm": 0.4085},
+    {"segment": 2, "step": 626, "validation_objective": 2.397016664255351, "s1_entropy": 2.6833956216430664, "grad_norm": 0.4421},
+    {"segment": 3, "step": 939, "validation_objective": 2.396984770937215, "s1_entropy": 2.6837063538513184, "grad_norm": 0.4226},
+    {"segment": 4, "step": 1252, "validation_objective": 2.396965436043217, "s1_entropy": 2.6839617651367188, "grad_norm": 0.4390},
+    {"segment": 5, "step": 1565, "validation_objective": 2.3969372525118575, "s1_entropy": 2.6842841363548584, "grad_norm": 0.4702}
+  ],
+  "vs_probe_b": {
+    "c2_baseline": 2.3970864898432493,
+    "b_seg05": 2.3927186743888655,
+    "e_seg05": 2.3969372525118575,
+    "p1_seg05": 2.393094108287915,
+    "b_delta_vs_c2": -0.0043678154543838,
+    "e_delta_vs_c2": -0.0001492373313918,
+    "e_delta_over_b_delta": 0.034167,
+    "ambiguous": false,
+    "skip_c_and_d": true,
+    "reason": "B captured essentially the whole 5-seg P1 CE drop while freezing s1_entropy at C2. E moved CE by 3.4% of B and unfroze s1_entropy as expected for a trainable head. Module localization is not ambiguous: dep_layer, not forecast_head."
+  },
+  "next": "luckfu/kronos-small-0-1-stage3-freeze-probe-be-oos"
+}
