@@ -1,0 +1,970 @@
+{
+  "status": "complete",
+  "date": "2026-09-16",
+  "kernel": "luckfu/kronos-small-0-1-stage3-c2-drift-diagnostic",
+  "kernel_url": "https://www.kaggle.com/code/luckfu/kronos-small-0-1-stage3-c2-drift-diagnostic",
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "last_run_time_utc": "2026-09-16T14:34:44.297000Z",
+  "hardware": "CPU (enable_gpu=false; zero_training; zero_inference)",
+  "elapsed_sec": 98.40457534790039,
+  "purpose": "diagnostic_only; zero_training; zero_inference; existing 13-date OOS is design-contaminated and must not be used for production model selection",
+  "oos_used": true,
+  "training_performed": false,
+  "inference_performed": false,
+  "source_commit": "84af85a81e394c1b2f4d36c91fc5b4b3ea169348",
+  "sample_set": "incremental_future_all",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-08-27",
+  "signal_dates": 13,
+  "samples_total": 66986,
+  "baseline": "C2 best segment 179",
+  "c2_frozen_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+  "evaluation_warning": "13-date OOS is design-contaminated; results diagnose mechanism only and cannot select a production model",
+  "spec_checks": {
+    "kaggle_status_complete": true,
+    "training_performed_false": true,
+    "inference_performed_false": true,
+    "purpose_starts_with_diagnostic_only": true,
+    "c2_init_weights_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "p0a_last_weights_sha256": "c2abaf001ca4a1c6652a8358460d2281b0031fcfbe0037e9007a117ab252ebb8",
+    "p1_last_weights_sha256": "5e3621abfae9089ceac768c412d205448090449ba54ae0ae5ebf4398c8d2765a",
+    "p1_seg05_weights_sha256": "ba0069900e79e21e0a3c9a5b2d272321caa0985d7823e9bc8cd95585bc42685c",
+    "p1_seg10_weights_sha256": "a2eb2e9371bb7fcf33e4787954d33f8cb03117d01c11ba5675eb7415e5841ee2",
+    "p0a_seg05_weights_sha256": "fa051d1a3b570bf7d4ea712371594f38d6b27d16edc3e3bbb6621a1526ee37d6",
+    "p0a_seg10_weights_sha256": "4607a1038f0a6df990a08b521665a376b96eaa8f6fbd235ebff01935071ed308",
+    "p1_local_prediction_table_matches_kernel": true,
+    "top_bottom_retention_random_expectation": 0.1,
+    "relative_l2_definition": "||W_t - W_C2||_2 / ||W_C2||_2"
+  },
+  "definitions": {
+    "relative_l2_drift": "||W_t - W_C2||_2 / ||W_C2||_2",
+    "condition_branch": "sector_emb + size_emb(if present) + size_mlp",
+    "blocks_7_8": "1-based transformer blocks 7 and 8 (state keys transformer.6/.7)",
+    "backbone": "all tensors except condition embeddings/MLP and output/auxiliary heads",
+    "top_bottom_retention": "mean same-tail member retention for top and bottom deciles; random expectation is 0.10",
+    "residual_alpha": "within-date OLS residual after projecting checkpoint prediction on C2 prediction; diagnostic only",
+    "validation_objective_warning": "P0a uniform CE and P1 weighted CE + history use different objective definitions; compare each trajectory to its own C2 baseline only"
+  },
+  "bootstrap": {
+    "unit": "signal_date",
+    "samples": 2000,
+    "seed": 20260916,
+    "dates": 13
+  },
+  "anchors": {
+    "c2_d10_pooled_rank_ic": 0.18440434213929857,
+    "p0a_last_d10_pooled_rank_ic": 0.0642869478967645,
+    "p1_last_d10_pooled_rank_ic": 0.07051105590162271,
+    "c3_last_d10_pooled_rank_ic": 0.06297095843563308,
+    "note": "13-date exploratory/diagnostic anchors; not sealed production; not a model-selection window"
+  },
+  "weight_drift_relative_l2": {
+    "p0a": {
+      "seg05": {
+        "all": 0.0013817498330025429,
+        "backbone": 0.001806733905997865,
+        "condition_branch": 0.0013733636416656792,
+        "sector_embedding": 0.0011218526723517884,
+        "size_mlp": 0.0017373390028548536,
+        "blocks_7_8": 0.0009601733320394756,
+        "forecast_head": 0.0005555109305461931,
+        "dependency_layer": 0.018391687098151678,
+        "blocks_1_6": 0.0007342417179322561
+      },
+      "seg10": {
+        "all": 0.0029995904999349328,
+        "backbone": 0.0039760332708814105,
+        "condition_branch": 0.003076379517732456,
+        "sector_embedding": 0.0017914614834052699,
+        "size_mlp": 0.004555049600593715,
+        "blocks_7_8": 0.0020123985005303987,
+        "forecast_head": 0.0009750501436370465,
+        "dependency_layer": 0.04214814390015802,
+        "blocks_1_6": 0.0011348226047048378
+      },
+      "seg15": {
+        "all": 0.00516755979992145,
+        "backbone": 0.006896112670543962,
+        "condition_branch": 0.006336826220851119,
+        "sector_embedding": 0.0024687615758960334,
+        "size_mlp": 0.010079917433942936,
+        "blocks_7_8": 0.004230413677420253,
+        "forecast_head": 0.0014305316912018372,
+        "dependency_layer": 0.07238078221564193,
+        "blocks_1_6": 0.0018198169613863578
+      }
+    },
+    "p1": {
+      "seg05": {
+        "all": 0.001246866652794093,
+        "backbone": 0.0016560024542832989,
+        "condition_branch": 0.0013649818883398484,
+        "sector_embedding": 0.0011275965683594676,
+        "size_mlp": 0.0017119217149227006,
+        "blocks_7_8": 0.0009308566978251833,
+        "forecast_head": 0.00038879033411417656,
+        "dependency_layer": 0.01658845650628441,
+        "blocks_1_6": 0.0007210135449475498
+      },
+      "seg10": {
+        "all": 0.0026780577643599744,
+        "backbone": 0.003574493214433683,
+        "condition_branch": 0.0028732360731789338,
+        "sector_embedding": 0.001783111401143435,
+        "size_mlp": 0.004172912156444979,
+        "blocks_7_8": 0.0018670018484551077,
+        "forecast_head": 0.0007409409209860505,
+        "dependency_layer": 0.03759558511802795,
+        "blocks_1_6": 0.0011007901566569152
+      },
+      "seg15": {
+        "all": 0.004578682800905858,
+        "backbone": 0.006135677884880945,
+        "condition_branch": 0.005686133352860337,
+        "sector_embedding": 0.00241469987358134,
+        "size_mlp": 0.008952301215489523,
+        "blocks_7_8": 0.0038051131196994636,
+        "forecast_head": 0.001112368344418119,
+        "dependency_layer": 0.06416760393076998,
+        "blocks_1_6": 0.0016880088296168047
+      }
+    }
+  },
+  "weight_drift_last_detail": {
+    "p0a_seg15": {
+      "all": {
+        "relative_l2_drift": 0.00516755979992145,
+        "delta_l2": 3.4972207534923427,
+        "cosine_similarity": 0.9999866525191029,
+        "changed_fraction": 0.9885862495100668,
+        "parameter_count": 24819712,
+        "max_abs_delta": 0.013103663921356201
+      },
+      "backbone": {
+        "relative_l2_drift": 0.006896112670543962,
+        "delta_l2": 3.433043583506689,
+        "cosine_similarity": 0.999976224978454,
+        "changed_fraction": 0.9880652509097098,
+        "parameter_count": 23691072,
+        "max_abs_delta": 0.013103663921356201
+      },
+      "condition_branch": {
+        "relative_l2_drift": 0.006336826220851119,
+        "delta_l2": 0.12421549192899604,
+        "cosine_similarity": 0.9999802791253067,
+        "changed_fraction": 0.9934372436423298,
+        "parameter_count": 78016,
+        "max_abs_delta": 0.002833150327205658
+      },
+      "sector_embedding": {
+        "relative_l2_drift": 0.0024687615758960334,
+        "delta_l2": 0.03881660215368137,
+        "cosine_similarity": 0.9999974613146708,
+        "changed_fraction": 0.9885057471264368,
+        "parameter_count": 44544,
+        "max_abs_delta": 0.0010320842266082764
+      },
+      "size_mlp": {
+        "relative_l2_drift": 0.010079917433942936,
+        "delta_l2": 0.11799474493554914,
+        "cosine_similarity": 0.9999493473436676,
+        "changed_fraction": 1.0,
+        "parameter_count": 33472,
+        "max_abs_delta": 0.002833150327205658
+      },
+      "blocks_7_8": {
+        "relative_l2_drift": 0.004230413677420253,
+        "delta_l2": 0.9663682635664427,
+        "cosine_similarity": 0.9999910538381491,
+        "changed_fraction": 0.9999759958301327,
+        "parameter_count": 5249088,
+        "max_abs_delta": 0.005813576281070709
+      },
+      "forecast_head": {
+        "relative_l2_drift": 0.0014305316912018372,
+        "delta_l2": 0.6552367999173547,
+        "cosine_similarity": 0.9999989824312442,
+        "changed_fraction": 0.9999743009868421,
+        "parameter_count": 1050624,
+        "max_abs_delta": 0.007838249206542969
+      },
+      "dependency_layer": {
+        "relative_l2_drift": 0.07238078221564193,
+        "delta_l2": 3.1951595615683503,
+        "cosine_similarity": 0.9974036978898294,
+        "changed_fraction": 0.9999381659056317,
+        "parameter_count": 1051200,
+        "max_abs_delta": 0.013103663921356201
+      },
+      "blocks_1_6": {
+        "relative_l2_drift": 0.0018198169613863578,
+        "delta_l2": 0.7600773327778774,
+        "cosine_similarity": 0.9999983442092318,
+        "changed_fraction": 0.9999723761537243,
+        "parameter_count": 15747264,
+        "max_abs_delta": 0.003989219665527344
+      }
+    },
+    "p1_seg15": {
+      "all": {
+        "relative_l2_drift": 0.004578682800905858,
+        "delta_l2": 3.0986897365425397,
+        "cosine_similarity": 0.9999895206067014,
+        "changed_fraction": 0.9885837112050293,
+        "parameter_count": 24819712,
+        "max_abs_delta": 0.011948689818382263
+      },
+      "backbone": {
+        "relative_l2_drift": 0.006135677884880945,
+        "delta_l2": 3.0544816477734407,
+        "cosine_similarity": 0.9999811789705711,
+        "changed_fraction": 0.9880628871500623,
+        "parameter_count": 23691072,
+        "max_abs_delta": 0.011948689818382263
+      },
+      "condition_branch": {
+        "relative_l2_drift": 0.005686133352860337,
+        "delta_l2": 0.11146050514614747,
+        "cosine_similarity": 0.9999841613084188,
+        "changed_fraction": 0.9934244257588187,
+        "parameter_count": 78016,
+        "max_abs_delta": 0.0024963393807411194
+      },
+      "sector_embedding": {
+        "relative_l2_drift": 0.00241469987358134,
+        "delta_l2": 0.03796658422931434,
+        "cosine_similarity": 0.9999975630079811,
+        "changed_fraction": 0.9885057471264368,
+        "parameter_count": 44544,
+        "max_abs_delta": 0.001019209623336792
+      },
+      "size_mlp": {
+        "relative_l2_drift": 0.008952301215489523,
+        "delta_l2": 0.10479495545775448,
+        "cosine_similarity": 0.99996005462598,
+        "changed_fraction": 0.9999701242829828,
+        "parameter_count": 33472,
+        "max_abs_delta": 0.0024963393807411194
+      },
+      "blocks_7_8": {
+        "relative_l2_drift": 0.0038051131196994636,
+        "delta_l2": 0.8692153625033228,
+        "cosine_similarity": 0.9999927621924191,
+        "changed_fraction": 0.9999765673579868,
+        "parameter_count": 5249088,
+        "max_abs_delta": 0.005308628082275391
+      },
+      "forecast_head": {
+        "relative_l2_drift": 0.001112368344418119,
+        "delta_l2": 0.5095061359413512,
+        "cosine_similarity": 0.9999993845648004,
+        "changed_fraction": 0.9999685900950293,
+        "parameter_count": 1050624,
+        "max_abs_delta": 0.005658149719238281
+      },
+      "dependency_layer": {
+        "relative_l2_drift": 0.06416760393076998,
+        "delta_l2": 2.8325990265137433,
+        "cosine_similarity": 0.997956094896763,
+        "changed_fraction": 0.9999381659056317,
+        "parameter_count": 1051200,
+        "max_abs_delta": 0.011948689818382263
+      },
+      "blocks_1_6": {
+        "relative_l2_drift": 0.0016880088296168047,
+        "delta_l2": 0.7050254372523431,
+        "cosine_similarity": 0.9999985753850038,
+        "changed_fraction": 0.9999692009989799,
+        "parameter_count": 15747264,
+        "max_abs_delta": 0.0034119486808776855
+      }
+    },
+    "dependency_layer_share_of_backbone_delta_l2": {
+      "p0a_last": 0.9307075438595651,
+      "p1_last": 0.9273583387147085
+    },
+    "p1_last_global_cosine": 0.9999895206067014,
+    "p1_last_changed_fraction": 0.9885837112050293,
+    "hottest_tensors_p1_last": [
+      {
+        "tensor_name": "dep_layer.cross_attn.q_proj.weight",
+        "relative_l2_drift": 0.1108358743560488,
+        "delta_l2": 2.1744131393450354,
+        "cosine_similarity": 0.9940742194952487,
+        "max_abs_delta": 0.011948689818382263
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.k_proj.weight",
+        "relative_l2_drift": 0.06014602675342733,
+        "delta_l2": 1.610894012000026,
+        "cosine_similarity": 0.9981974641907293,
+        "max_abs_delta": 0.011706717312335968
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.v_proj.weight",
+        "relative_l2_drift": 0.04694871586522984,
+        "delta_l2": 0.6495155472967793,
+        "cosine_similarity": 0.9989031647192201,
+        "max_abs_delta": 0.008313011145219207
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.out_proj.weight",
+        "relative_l2_drift": 0.033511643703961445,
+        "delta_l2": 0.5071437883160712,
+        "cosine_similarity": 0.9994395821628234,
+        "max_abs_delta": 0.00728580541908741
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.k_proj.bias",
+        "relative_l2_drift": 0.012342021911137353,
+        "delta_l2": 0.11781436828680561,
+        "cosine_similarity": 0.9999346785495988,
+        "max_abs_delta": 0.010799288749694824
+      },
+      {
+        "tensor_name": "size_mlp.2.weight",
+        "relative_l2_drift": 0.010197841398907163,
+        "delta_l2": 0.10351457007775788,
+        "cosine_similarity": 0.9999481465473756,
+        "max_abs_delta": 0.0024963393807411194
+      },
+      {
+        "tensor_name": "size_mlp.2.bias",
+        "relative_l2_drift": 0.009444184834007377,
+        "delta_l2": 0.013242794439157315,
+        "cosine_similarity": 0.9999558652248117,
+        "max_abs_delta": 0.0024864599108695984
+      },
+      {
+        "tensor_name": "transformer.7.self_attn.out_proj.bias",
+        "relative_l2_drift": 0.009414727199508923,
+        "delta_l2": 0.02202284217338003,
+        "cosine_similarity": 0.9999557263523415,
+        "max_abs_delta": 0.0029582232236862183
+      }
+    ],
+    "hottest_tensors_p0a_last": [
+      {
+        "tensor_name": "dep_layer.cross_attn.q_proj.weight",
+        "relative_l2_drift": 0.12552840030013246,
+        "delta_l2": 2.462655747152277,
+        "cosine_similarity": 0.9924481852817193,
+        "max_abs_delta": 0.013103663921356201
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.k_proj.weight",
+        "relative_l2_drift": 0.0676382871564473,
+        "delta_l2": 1.8115595932702304,
+        "cosine_similarity": 0.9977226233397719,
+        "max_abs_delta": 0.012643322348594666
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.v_proj.weight",
+        "relative_l2_drift": 0.051958480010399835,
+        "delta_l2": 0.7188235068567067,
+        "cosine_similarity": 0.998657551141018,
+        "max_abs_delta": 0.008951449766755104
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.out_proj.weight",
+        "relative_l2_drift": 0.037355170016937014,
+        "delta_l2": 0.5653092579681764,
+        "cosine_similarity": 0.9993038419893605,
+        "max_abs_delta": 0.007957791909575462
+      },
+      {
+        "tensor_name": "dep_layer.cross_attn.k_proj.bias",
+        "relative_l2_drift": 0.013666727004463612,
+        "delta_l2": 0.1304597269533391,
+        "cosine_similarity": 0.9999183736089727,
+        "max_abs_delta": 0.011616230010986328
+      }
+    ]
+  },
+  "checkpoint_trajectory": {
+    "p0a": [
+      {
+        "segment": 0,
+        "step": 0,
+        "validation_objective": 2.338481148317605,
+        "oos_d10_rank_ic": 0.18440434213929857,
+        "oos_d10_mae": 0.07802159039035214,
+        "all_relative_l2_drift": 0.0,
+        "backbone_relative_l2_drift": 0.0,
+        "condition_branch_relative_l2_drift": 0.0,
+        "sector_embedding_relative_l2_drift": 0.0,
+        "size_mlp_relative_l2_drift": 0.0,
+        "blocks_7_8_relative_l2_drift": 0.0,
+        "forecast_head_relative_l2_drift": 0.0,
+        "d10_cross_section_spearman_vs_c2": 1.0,
+        "d10_top_bottom_retention": 1.0,
+        "d10_residual_rank_ic": null
+      },
+      {
+        "segment": 5,
+        "step": 1565,
+        "validation_objective": 2.3348253114405457,
+        "oos_d10_rank_ic": 0.16041311126632743,
+        "oos_d10_mae": 0.078593188136824,
+        "all_relative_l2_drift": 0.0013817498330025429,
+        "backbone_relative_l2_drift": 0.001806733905997865,
+        "condition_branch_relative_l2_drift": 0.0013733636416656792,
+        "sector_embedding_relative_l2_drift": 0.0011218526723517884,
+        "size_mlp_relative_l2_drift": 0.0017373390028548536,
+        "blocks_7_8_relative_l2_drift": 0.0009601733320394756,
+        "forecast_head_relative_l2_drift": 0.0005555109305461931,
+        "d10_cross_section_spearman_vs_c2": 0.8795727786982288,
+        "d10_top_bottom_retention": 0.7802297776844166,
+        "d10_residual_rank_ic": 0.09494220733579244
+      },
+      {
+        "segment": 10,
+        "step": 3130,
+        "validation_objective": 2.3221861751178365,
+        "oos_d10_rank_ic": 0.11628192282948374,
+        "oos_d10_mae": 0.08030869717209006,
+        "all_relative_l2_drift": 0.0029995904999349328,
+        "backbone_relative_l2_drift": 0.0039760332708814105,
+        "condition_branch_relative_l2_drift": 0.003076379517732456,
+        "sector_embedding_relative_l2_drift": 0.0017914614834052699,
+        "size_mlp_relative_l2_drift": 0.004555049600593715,
+        "blocks_7_8_relative_l2_drift": 0.0020123985005303987,
+        "forecast_head_relative_l2_drift": 0.0009750501436370465,
+        "d10_cross_section_spearman_vs_c2": 0.6888292240632728,
+        "d10_top_bottom_retention": 0.537447978306224,
+        "d10_residual_rank_ic": 0.0429134197059895
+      },
+      {
+        "segment": 15,
+        "step": 4695,
+        "validation_objective": 2.278021842257652,
+        "oos_d10_rank_ic": 0.0642869478967645,
+        "oos_d10_mae": 0.09417919492431835,
+        "all_relative_l2_drift": 0.00516755979992145,
+        "backbone_relative_l2_drift": 0.006896112670543962,
+        "condition_branch_relative_l2_drift": 0.006336826220851119,
+        "sector_embedding_relative_l2_drift": 0.0024687615758960334,
+        "size_mlp_relative_l2_drift": 0.010079917433942936,
+        "blocks_7_8_relative_l2_drift": 0.004230413677420253,
+        "forecast_head_relative_l2_drift": 0.0014305316912018372,
+        "d10_cross_section_spearman_vs_c2": 0.41933516344711763,
+        "d10_top_bottom_retention": 0.38764112755372016,
+        "d10_residual_rank_ic": 0.012171799790379086
+      }
+    ],
+    "p1": [
+      {
+        "segment": 0,
+        "step": 0,
+        "validation_objective": 2.3970864898432493,
+        "oos_d10_rank_ic": 0.18440434213929857,
+        "oos_d10_mae": 0.07802159039035214,
+        "all_relative_l2_drift": 0.0,
+        "backbone_relative_l2_drift": 0.0,
+        "condition_branch_relative_l2_drift": 0.0,
+        "sector_embedding_relative_l2_drift": 0.0,
+        "size_mlp_relative_l2_drift": 0.0,
+        "blocks_7_8_relative_l2_drift": 0.0,
+        "forecast_head_relative_l2_drift": 0.0,
+        "d10_cross_section_spearman_vs_c2": 1.0,
+        "d10_top_bottom_retention": 1.0,
+        "d10_residual_rank_ic": null
+      },
+      {
+        "segment": 5,
+        "step": 1565,
+        "validation_objective": 2.393094108287915,
+        "oos_d10_rank_ic": 0.16107309255903515,
+        "oos_d10_mae": 0.08007451875081745,
+        "all_relative_l2_drift": 0.001246866652794093,
+        "backbone_relative_l2_drift": 0.0016560024542832989,
+        "condition_branch_relative_l2_drift": 0.0013649818883398484,
+        "sector_embedding_relative_l2_drift": 0.0011275965683594676,
+        "size_mlp_relative_l2_drift": 0.0017119217149227006,
+        "blocks_7_8_relative_l2_drift": 0.0009308566978251833,
+        "forecast_head_relative_l2_drift": 0.00038879033411417656,
+        "d10_cross_section_spearman_vs_c2": 0.8783419506058561,
+        "d10_top_bottom_retention": 0.7886511376736584,
+        "d10_residual_rank_ic": 0.08412904963955281
+      },
+      {
+        "segment": 10,
+        "step": 3130,
+        "validation_objective": 2.3828948501730585,
+        "oos_d10_rank_ic": 0.12812431635747357,
+        "oos_d10_mae": 0.08092281560559271,
+        "all_relative_l2_drift": 0.0026780577643599744,
+        "backbone_relative_l2_drift": 0.003574493214433683,
+        "condition_branch_relative_l2_drift": 0.0028732360731789338,
+        "sector_embedding_relative_l2_drift": 0.001783111401143435,
+        "size_mlp_relative_l2_drift": 0.004172912156444979,
+        "blocks_7_8_relative_l2_drift": 0.0018670018484551077,
+        "forecast_head_relative_l2_drift": 0.0007409409209860505,
+        "d10_cross_section_spearman_vs_c2": 0.7354990032135938,
+        "d10_top_bottom_retention": 0.5921872187035786,
+        "d10_residual_rank_ic": 0.04804514075593813
+      },
+      {
+        "segment": 15,
+        "step": 4695,
+        "validation_objective": 2.346065069504835,
+        "oos_d10_rank_ic": 0.07051105590162271,
+        "oos_d10_mae": 0.09007253250939637,
+        "all_relative_l2_drift": 0.004578682800905858,
+        "backbone_relative_l2_drift": 0.006135677884880945,
+        "condition_branch_relative_l2_drift": 0.005686133352860337,
+        "sector_embedding_relative_l2_drift": 0.00241469987358134,
+        "size_mlp_relative_l2_drift": 0.008952301215489523,
+        "blocks_7_8_relative_l2_drift": 0.0038051131196994636,
+        "forecast_head_relative_l2_drift": 0.001112368344418119,
+        "d10_cross_section_spearman_vs_c2": 0.47290929253252056,
+        "d10_top_bottom_retention": 0.41411282088011386,
+        "d10_residual_rank_ic": 0.012382506875928602
+      }
+    ]
+  },
+  "prediction_d10": {
+    "p0a": {
+      "seg05": {
+        "pooled_prediction_spearman_vs_c2": 0.8816017321923056,
+        "daily_cross_section_spearman_mean": 0.8795727786982288,
+        "daily_cross_section_spearman_ci95": [
+          0.8686760956703686,
+          0.8892746654672804
+        ],
+        "top_bottom_retention_mean": 0.7802297776844166,
+        "top_bottom_jaccard_mean": 0.6406589043371324,
+        "residual_rank_ic_pooled": 0.09494220733579244,
+        "residual_daily_rank_ic_mean": 0.06431792976807754,
+        "projection_beta_mean": 0.9318291937105609,
+        "sign_flip_rate": 0.06313259487056996,
+        "prediction_std_ratio": 1.0658228883607905,
+        "mean_abs_drift": 0.011339642055655434,
+        "current_pooled_rank_ic": 0.16041311126632743,
+        "baseline_pooled_rank_ic": 0.18440434213929857
+      },
+      "seg10": {
+        "pooled_prediction_spearman_vs_c2": 0.692311015633994,
+        "daily_cross_section_spearman_mean": 0.6888292240632728,
+        "daily_cross_section_spearman_ci95": [
+          0.669227112794896,
+          0.7079137668290764
+        ],
+        "top_bottom_retention_mean": 0.537447978306224,
+        "top_bottom_jaccard_mean": 0.3679304672504052,
+        "residual_rank_ic_pooled": 0.0429134197059895,
+        "residual_daily_rank_ic_mean": 0.018303239380759975,
+        "projection_beta_mean": 0.8601724899135724,
+        "sign_flip_rate": 0.17932105216015287,
+        "prediction_std_ratio": 1.249124509039906,
+        "mean_abs_drift": 0.029612190759616543,
+        "current_pooled_rank_ic": 0.11628192282948374,
+        "baseline_pooled_rank_ic": 0.18440434213929857
+      },
+      "seg15": {
+        "pooled_prediction_spearman_vs_c2": 0.4203774264948008,
+        "daily_cross_section_spearman_mean": 0.41933516344711763,
+        "daily_cross_section_spearman_ci95": [
+          0.400410780055014,
+          0.43883395066938935
+        ],
+        "top_bottom_retention_mean": 0.38764112755372016,
+        "top_bottom_jaccard_mean": 0.24053424604648804,
+        "residual_rank_ic_pooled": 0.012171799790379086,
+        "residual_daily_rank_ic_mean": 0.00514495863911761,
+        "projection_beta_mean": 0.78286377328232,
+        "sign_flip_rate": 0.40950347833875733,
+        "prediction_std_ratio": 1.7296465177173774,
+        "mean_abs_drift": 0.07299031679964063,
+        "current_pooled_rank_ic": 0.0642869478967645,
+        "baseline_pooled_rank_ic": 0.18440434213929857
+      }
+    },
+    "p1": {
+      "seg05": {
+        "pooled_prediction_spearman_vs_c2": 0.8806620652158031,
+        "daily_cross_section_spearman_mean": 0.8783419506058561,
+        "daily_cross_section_spearman_ci95": [
+          0.8688192548416355,
+          0.8864108473028348
+        ],
+        "top_bottom_retention_mean": 0.7886511376736584,
+        "top_bottom_jaccard_mean": 0.6517458366063271,
+        "residual_rank_ic_pooled": 0.08412904963955281,
+        "residual_daily_rank_ic_mean": 0.06037894023413393,
+        "projection_beta_mean": 0.9427126643497847,
+        "sign_flip_rate": 0.060729107574717105,
+        "prediction_std_ratio": 1.0750671634640392,
+        "mean_abs_drift": 0.011566359981206222,
+        "current_pooled_rank_ic": 0.16107309255903515,
+        "baseline_pooled_rank_ic": 0.18440434213929857
+      },
+      "seg10": {
+        "pooled_prediction_spearman_vs_c2": 0.7393060645761534,
+        "daily_cross_section_spearman_mean": 0.7354990032135938,
+        "daily_cross_section_spearman_ci95": [
+          0.7183309947453725,
+          0.7521159017413973
+        ],
+        "top_bottom_retention_mean": 0.5921872187035786,
+        "top_bottom_jaccard_mean": 0.4213171027285335,
+        "residual_rank_ic_pooled": 0.04804514075593813,
+        "residual_daily_rank_ic_mean": 0.022052243449185327,
+        "projection_beta_mean": 0.8900101422369976,
+        "sign_flip_rate": 0.1461648702714,
+        "prediction_std_ratio": 1.2105098743036384,
+        "mean_abs_drift": 0.024821177710025524,
+        "current_pooled_rank_ic": 0.12812431635747357,
+        "baseline_pooled_rank_ic": 0.18440434213929857
+      },
+      "seg15": {
+        "pooled_prediction_spearman_vs_c2": 0.4740145437466924,
+        "daily_cross_section_spearman_mean": 0.47290929253252056,
+        "daily_cross_section_spearman_ci95": [
+          0.4518619647992883,
+          0.49564757199666065
+        ],
+        "top_bottom_retention_mean": 0.41411282088011386,
+        "top_bottom_jaccard_mean": 0.26128245461128424,
+        "residual_rank_ic_pooled": 0.012382506875928602,
+        "residual_daily_rank_ic_mean": 0.0009967291037288894,
+        "projection_beta_mean": 0.7973754485331589,
+        "sign_flip_rate": 0.3523422804765175,
+        "prediction_std_ratio": 1.6085541537709644,
+        "mean_abs_drift": 0.06107267928519259,
+        "current_pooled_rank_ic": 0.07051105590162271,
+        "baseline_pooled_rank_ic": 0.18440434213929857
+      }
+    }
+  },
+  "p1_local_prediction_reconciliation": {
+    "local_table": {
+      "c2_init": {
+        "d10_rank_ic": 0.1844,
+        "spearman_vs_c2": 1.0,
+        "top_bottom_retention": 1.0
+      },
+      "p1_seg5": {
+        "d10_rank_ic": 0.1611,
+        "spearman_vs_c2": 0.878,
+        "top_bottom_retention": 0.789
+      },
+      "p1_seg10": {
+        "d10_rank_ic": 0.1281,
+        "spearman_vs_c2": 0.736,
+        "top_bottom_retention": 0.592
+      },
+      "p1_last": {
+        "d10_rank_ic": 0.0705,
+        "spearman_vs_c2": 0.473,
+        "top_bottom_retention": 0.414,
+        "residual_rank_ic": 0.012
+      }
+    },
+    "kernel_matches_local_table": {
+      "c2_init_rank_ic": true,
+      "p1_seg5_rank_ic": true,
+      "p1_seg10_rank_ic": true,
+      "p1_last_rank_ic": true,
+      "p1_seg5_spearman": true,
+      "p1_seg10_spearman": true,
+      "p1_last_spearman": true,
+      "p1_seg5_retention": true,
+      "p1_seg10_retention": true,
+      "p1_last_retention": true,
+      "p1_last_residual": true,
+      "random_retention_expectation": 0.1,
+      "note": "Kernel daily-mean Spearman/retention match the local P1 table. P1 seg10 Spearman 0.7355 displays as 0.736; residual Rank IC 0.0124 rounds to 0.012."
+    }
+  },
+  "rank_ic_vs_step": {
+    "p0a": [
+      {
+        "segment": 0,
+        "step": 0,
+        "oos_d10_rank_ic": 0.18440434213929857
+      },
+      {
+        "segment": 5,
+        "step": 1565,
+        "oos_d10_rank_ic": 0.16041311126632743
+      },
+      {
+        "segment": 10,
+        "step": 3130,
+        "oos_d10_rank_ic": 0.11628192282948374
+      },
+      {
+        "segment": 15,
+        "step": 4695,
+        "oos_d10_rank_ic": 0.0642869478967645
+      }
+    ],
+    "p1": [
+      {
+        "segment": 0,
+        "step": 0,
+        "oos_d10_rank_ic": 0.18440434213929857
+      },
+      {
+        "segment": 5,
+        "step": 1565,
+        "oos_d10_rank_ic": 0.16107309255903515
+      },
+      {
+        "segment": 10,
+        "step": 3130,
+        "oos_d10_rank_ic": 0.12812431635747357
+      },
+      {
+        "segment": 15,
+        "step": 4695,
+        "oos_d10_rank_ic": 0.07051105590162271
+      }
+    ]
+  },
+  "rank_ic_vs_delta_w": {
+    "warning": "descriptive_only; n=3 trained checkpoints per branch; init is the C2 origin",
+    "p0a_points": [
+      {
+        "segment": 5,
+        "step": 1565,
+        "all_relative_l2_drift": 0.0013817498330025429,
+        "oos_d10_rank_ic": 0.16041311126632743,
+        "d10_rank_ic_vs_c2": -0.023991230872971142,
+        "rank_ic_loss_per_relative_l2": -17.362933795937714
+      },
+      {
+        "segment": 10,
+        "step": 3130,
+        "all_relative_l2_drift": 0.0029995904999349328,
+        "oos_d10_rank_ic": 0.11628192282948374,
+        "d10_rank_ic_vs_c2": -0.06812241930981483,
+        "rank_ic_loss_per_relative_l2": -22.710573096991922
+      },
+      {
+        "segment": 15,
+        "step": 4695,
+        "all_relative_l2_drift": 0.00516755979992145,
+        "oos_d10_rank_ic": 0.0642869478967645,
+        "d10_rank_ic_vs_c2": -0.12011739424253406,
+        "rank_ic_loss_per_relative_l2": -23.244509767329625
+      }
+    ],
+    "p1_points": [
+      {
+        "segment": 5,
+        "step": 1565,
+        "all_relative_l2_drift": 0.001246866652794093,
+        "oos_d10_rank_ic": 0.16107309255903515,
+        "d10_rank_ic_vs_c2": -0.02333124958026342,
+        "rank_ic_loss_per_relative_l2": -18.71190437885288
+      },
+      {
+        "segment": 10,
+        "step": 3130,
+        "all_relative_l2_drift": 0.0026780577643599744,
+        "oos_d10_rank_ic": 0.12812431635747357,
+        "d10_rank_ic_vs_c2": -0.056280025781825005,
+        "rank_ic_loss_per_relative_l2": -21.015239675114064
+      },
+      {
+        "segment": 15,
+        "step": 4695,
+        "all_relative_l2_drift": 0.004578682800905858,
+        "oos_d10_rank_ic": 0.07051105590162271,
+        "d10_rank_ic_vs_c2": -0.11389328623767586,
+        "rank_ic_loss_per_relative_l2": -24.87468365686807
+      }
+    ],
+    "correlations": [
+      {
+        "branch": "p0a",
+        "drift_measure": "all_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9993337849339378,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p0a",
+        "drift_measure": "backbone_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9992868397841144,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p0a",
+        "drift_measure": "condition_branch_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9912979361799995,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p0a",
+        "drift_measure": "blocks_7_8_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9878899155922816,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p0a",
+        "drift_measure": "forecast_head_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9997242307429651,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p1",
+        "drift_measure": "all_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9972039989262718,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p1",
+        "drift_measure": "backbone_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9973132445419429,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p1",
+        "drift_measure": "condition_branch_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9998619584987487,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p1",
+        "drift_measure": "blocks_7_8_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9990907448324707,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      },
+      {
+        "branch": "p1",
+        "drift_measure": "forecast_head_relative_l2_drift",
+        "pearson_drift_vs_d10_rank_ic": -0.9901343613789954,
+        "spearman_drift_vs_d10_rank_ic": -1.0,
+        "points": 3
+      }
+    ]
+  },
+  "verdict": {
+    "status": "tiny_weight_drift_large_rank_ic_loss",
+    "one_line": "P1 last moves only 0.46% relative L2 from C2 (cosine 0.99999) but D10 Rank IC falls 0.1844 -> 0.0705; residual Rank IC 0.012 so the new prediction component has almost no alpha.",
+    "core_question": "is a very small weight drift associated with a large cross-section Rank IC loss?",
+    "core_answer": true,
+    "evidence": [
+      "P1 last all-parameter relative L2 = 0.00458 with cosine 0.9999895, yet D10 Rank IC 0.1844 -> 0.0705 (-62%)",
+      "P1 last vs-C2 daily Spearman 0.473 and Top/Bottom 10% retention 0.414 (random expectation 0.10, not 0.10-0.20)",
+      "P1 last residual Rank IC 0.0124; residual daily mean 0.0010",
+      "P0a is the same mechanism with slightly more drift (0.00517) and slightly worse last IC (0.0643)",
+      "Pearson(all relative L2, D10 Rank IC) = -0.997 on P1 and -0.999 on P0a; Spearman = -1.0; n=3 descriptive only",
+      "dependency_layer accounts for 92.7% of P1 backbone delta L2; Q_proj.weight alone has 11.08% relative L2"
+    ],
+    "alpha_checkpoint_remains": "C2 best segment 179",
+    "forbidden": [
+      "do not continue P2/P3 full-model CE training",
+      "do not treat P1 last as an alpha candidate",
+      "P1 only falsifies the current weak rank implementation; it does not falsify rank loss",
+      "13-date OOS is diagnostic only; do not use it for production model selection",
+      "do not design a new loss before short freeze-mask probes"
+    ]
+  },
+  "next_freeze_probes": {
+    "horizon": "1/3/5 segments from C2 best; freeze everything else; do not design a new loss first",
+    "loss": "keep current Stage2 weighted CE; no new rank/path/KL recipe",
+    "selection_rule": "chosen by P0a/P1 relative-L2 landing, hottest to negative-control",
+    "B": {
+      "train": "dependency_layer only (cross-attn Q/K/V/out)",
+      "freeze": "transformer, forecast_head, condition_branch",
+      "why": "hottest module; P1 last relative L2 0.0642; 92.7% of backbone delta L2; Q_proj.weight 0.1108"
+    },
+    "C": {
+      "train": "condition_branch (size_mlp + sector_emb)",
+      "freeze": "transformer, dependency_layer, forecast_head",
+      "why": "second hotspot; size_mlp 0.00895 vs sector 0.00241 at P1 last"
+    },
+    "D": {
+      "train": "transformer blocks 7-8 only",
+      "freeze": "blocks 1-6, dependency_layer, condition_branch, forecast_head",
+      "why": "next transformer hotspot (0.00381) vs blocks 1-6 (0.00169); block 8 > block 7"
+    },
+    "E": {
+      "train": "forecast_head only",
+      "freeze": "backbone including dependency_layer and condition_branch",
+      "why": "negative control: lowest requested-module drift (0.00111). If head-only CE also kills Rank IC, poison is not module-local; if it holds, CE toxicity is concentrated off-head"
+    },
+    "do_not_launch_in_this_commit": true
+  },
+  "frozen_conclusions": [
+    "C2 best segment 179 remains the frozen Alpha baseline",
+    "Do not run P2/P3-style full-model CE continuation",
+    "P1 only falsifies the current weak rank implementation; it does not falsify rank loss",
+    "The 13-date OOS is diagnostic only and is not a production selection window",
+    "Next step is B/C/D/E freeze-mask probes at 1/3/5 segments; do not design a new loss first"
+  ],
+  "takeaways": [
+    "purpose=diagnostic_only; zero training; zero inference; 13-date OOS is design-contaminated",
+    "tiny dense drift: P1 last changes 98.86% of parameters but only 0.46% relative L2 / cosine 0.99999",
+    "cross-section ranking is rewritten: Spearman 1.00 -> 0.878 -> 0.735 -> 0.473; tail retention 1.00 -> 0.789 -> 0.592 -> 0.414",
+    "residual alpha collapses to ~0.012; new prediction mass after projecting on C2 has almost no Rank IC",
+    "drift lands in dependency_layer cross-attn, then size_mlp, then blocks 7-8; forecast_head barely moves",
+    "P0a and P1 overlay; restoring weighted CE + 0.05 naive rank did not change the drift geometry"
+  ],
+  "provenance": {
+    "c2": {
+      "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/outputs/models/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors",
+      "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a"
+    },
+    "checkpoints": {
+      "p0a_seg00": {
+        "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/outputs/models/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors",
+        "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a"
+      },
+      "p0a_seg05": {
+        "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-ce-only-control/stage3_joint_path_smoke/checkpoints/milestone_seg05/model.safetensors",
+        "sha256": "fa051d1a3b570bf7d4ea712371594f38d6b27d16edc3e3bbb6621a1526ee37d6"
+      },
+      "p0a_seg10": {
+        "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-ce-only-control/stage3_joint_path_smoke/checkpoints/milestone_seg10/model.safetensors",
+        "sha256": "4607a1038f0a6df990a08b521665a376b96eaa8f6fbd235ebff01935071ed308"
+      },
+      "p0a_seg15": {
+        "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-ce-only-control/stage3_joint_path_smoke/checkpoints/last_model/model.safetensors",
+        "sha256": "c2abaf001ca4a1c6652a8358460d2281b0031fcfbe0037e9007a117ab252ebb8"
+      },
+      "p1_seg00": {
+        "path": "/kaggle/input/notebooks/smmt315/kronos-small-0-1-stage2-cosine-refinement-c2/kronos_small_v21/outputs/models/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors",
+        "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a"
+      },
+      "p1_seg05": {
+        "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-p1-ce-rank/stage3_joint_path_smoke/checkpoints/milestone_seg05/model.safetensors",
+        "sha256": "ba0069900e79e21e0a3c9a5b2d272321caa0985d7823e9bc8cd95585bc42685c"
+      },
+      "p1_seg10": {
+        "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-p1-ce-rank/stage3_joint_path_smoke/checkpoints/milestone_seg10/model.safetensors",
+        "sha256": "a2eb2e9371bb7fcf33e4787954d33f8cb03117d01c11ba5675eb7415e5841ee2"
+      },
+      "p1_seg15": {
+        "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-p1-ce-rank/stage3_joint_path_smoke/checkpoints/last_model/model.safetensors",
+        "sha256": "5e3621abfae9089ceac768c412d205448090449ba54ae0ae5ebf4398c8d2765a"
+      }
+    },
+    "oos_shard_roots": {
+      "p0a": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-ce-only-oos/kronos_small_0_1_stage3_ce_only_oos/shards",
+      "p1": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-stage3-p1-ce-rank-oos/kronos_small_0_1_stage3_p1_ce_rank_oos/shards"
+    }
+  },
+  "artifact_sha256": {
+    "summary_json": "ebbfc282dc50b94b5908c7737c037f0aed416c32a05d156924b32be9066f9437",
+    "weight_drift_by_module_csv": "701bc0925247726bd03132f6ee8977f523c42970d7fa2453603c3564d1c45ae9",
+    "weight_drift_by_tensor_csv": "1f52a951e2950ac8468e6adfa31b1ead26800aaba6d3e389f3f667d301ab08af",
+    "prediction_drift_by_horizon_csv": "2abbaf94636f0f20753264663f29b0f54fe9e765023e6dee7976d2ee7878387e",
+    "prediction_drift_by_date_csv": "679edb7afec1789a5ad1b746123fc8c70b92e8eda36b87d04aaf7bc63fe882a5",
+    "checkpoint_trajectory_csv": "97eb27607dbc4dca1370469c771e62179d6f7f791a5c92de0e9e7884f78f7f62",
+    "drift_ic_correlations_csv": "70410a187766a9db0b7376f543519db47d7a784325ac3c4d6a8c75b4e3ab321d"
+  },
+  "next_decision": "Use module localization and drift magnitude to choose short 1/3/5-segment trainable-mask probes; do not continue full-model CE training"
+}
