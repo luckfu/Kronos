@@ -9,11 +9,13 @@ from finetune.stage3_trainable_mask import (
 )
 from finetune.stage3_training_model import Stage3TrainingModel
 from model import Kronos, KronosTokenizer
-from tests.test_stage3_training_framework import batch, make_model
 
 
-def named_requires_grad(predictor):
-    return {name: bool(parameter.requires_grad) for name, parameter in predictor.named_parameters()}
+def make_model():
+    torch.manual_seed(715)
+    predictor = Kronos(4, 4, 2, 32, 4, 64, 0.0, 0.0, 0.0, 0.0, False)
+    tokenizer = KronosTokenizer(6, 32, 4, 64, 2, 2, 0.0, 0.0, 0.0, 4, 4, 0.25, 1., 1., 1., 4)
+    return Stage3TrainingModel(predictor, tokenizer, lookback=7, horizon=10, synchronize_ema=False)
 
 
 def make_conditioned_model():
@@ -24,6 +26,17 @@ def make_conditioned_model():
     )
     tokenizer = KronosTokenizer(6, 32, 4, 64, 2, 2, 0.0, 0.0, 0.0, 4, 4, 0.25, 1., 1., 1., 4)
     return Stage3TrainingModel(predictor, tokenizer, lookback=7, horizon=10, synchronize_ema=False)
+
+
+def batch(n=4):
+    generator = torch.Generator().manual_seed(617)
+    x = torch.randn(n, 18, 6, generator=generator)
+    stamps = torch.zeros(n, 18, 5)
+    return x, stamps
+
+
+def named_requires_grad(predictor):
+    return {name: bool(parameter.requires_grad) for name, parameter in predictor.named_parameters()}
 
 
 def test_unknown_mask_is_rejected():

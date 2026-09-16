@@ -15,6 +15,8 @@ def test_smoke_fetches_pinned_commit_not_master_tip():
     assert "'--trainable-mask', TRAINABLE_MASK" in source
     assert 'tests/test_stage3_trainable_mask.py' in source
     assert 'freeze_audit.json' in source
+    mask_tests = (ROOT / 'tests/test_stage3_trainable_mask.py').read_text()
+    assert 'tests.test_stage3_training_framework' not in mask_tests
 
 
 def test_freeze_probe_b_kernel_is_dep_layer_five_segment_weighted_ce():
