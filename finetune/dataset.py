@@ -386,6 +386,7 @@ class QlibDataset(Dataset):
         self.use_beta_v21_auxiliary = bool(
             getattr(self.config, 'use_beta_v21_auxiliary', False)
         )
+        self.use_stage3_rank = os.environ.get('KRONOS_STAGE3_RANK_LOSS', '0') == '1'
         self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
         self.has_inline_percentile = self.use_size_percentile and any(
             'size_percentile' in frame.columns for frame in self.data.values()
@@ -639,7 +640,7 @@ class QlibDataset(Dataset):
         end = min(start + self.n_samples, self.total_samples)
         self.coverage_start = start
         self.active_positions = self.coverage_order[start:end]
-        if getattr(self, 'use_beta_v21_auxiliary', False):
+        if getattr(self, 'use_beta_v21_auxiliary', False) or getattr(self, 'use_stage3_rank', False):
             date_order = np.argsort(
                 self.signal_date_ids[self.active_positions], kind='stable'
             )
@@ -731,14 +732,35 @@ class QlibDataset(Dataset):
                     result = (*result, period_code)
                 if auxiliary_labels is not None:
                     result = (*result, auxiliary_labels)
+                if self.use_stage3_rank:
+                    result = (
+                        *result,
+                        torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
+                        torch.from_numpy(x_mean.astype(np.float32)),
+                        torch.from_numpy(x_std.astype(np.float32)),
+                    )
                 return result
             result = (x_tensor, x_stamp_tensor, sector_id, size_bucket)
             if auxiliary_labels is not None:
                 result = (*result, auxiliary_labels)
+            if self.use_stage3_rank:
+                result = (
+                    *result,
+                    torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
+                    torch.from_numpy(x_mean.astype(np.float32)),
+                    torch.from_numpy(x_std.astype(np.float32)),
+                )
             return result
         result = (x_tensor, x_stamp_tensor)
         if auxiliary_labels is not None:
             result = (*result, auxiliary_labels)
+        if self.use_stage3_rank:
+            result = (
+                *result,
+                torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
+                torch.from_numpy(x_mean.astype(np.float32)),
+                torch.from_numpy(x_std.astype(np.float32)),
+            )
         return result
 
 

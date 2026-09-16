@@ -3,6 +3,7 @@ from dataclasses import asdict
 import torch
 from torch import nn
 
+from finetune.stage3_ce_rank import Stage3CERankConfig, compute_rank_terms, compute_weighted_ce_objective
 from finetune.stage3_path_alignment import (
     DetachedLossEMA, PathAlignmentConfig, compute_path_alignment_loss,
 )
@@ -10,22 +11,72 @@ from finetune.stage3_path_alignment import (
 
 class Stage3TrainingModel(nn.Module):
     def __init__(self, predictor, tokenizer, config=None, lookback=120, horizon=10,
-                 synchronize_ema=True):
+                 synchronize_ema=True, ce_rank_config=None):
         super().__init__()
         self.predictor = predictor
         self.tokenizer = tokenizer.requires_grad_(False).eval()
         self.config = config or PathAlignmentConfig()
+        self.ce_rank_config = ce_rank_config or Stage3CERankConfig()
         self.lookback, self.horizon = int(lookback), int(horizon)
         self.synchronize_ema = bool(synchronize_ema)
         self.path_ema = DetachedLossEMA(self.config.ema_decay)
 
     def train(self, mode=True):
         super().train(mode)
-        # DDP/model.train must never enable dropout in the frozen tokenizer.
         self.tokenizer.eval()
         return self
 
-    def forward(self, x, stamp=None, sector_id=None, size_percentile=None):
+    def _ce_rank_forward(self, x, s1, s2, context, date_ids, feature_means, feature_stds):
+        seq_end = self.lookback + self.horizon - 1
+        target_slice = slice(self.lookback, self.lookback + self.horizon)
+        targets1 = s1[:, 1:seq_end + 1]
+        targets2 = s2[:, 1:seq_end + 1]
+        logits1 = self.predictor.predict_s1(context[:, :seq_end])
+        logits2 = self.predictor.predict_s2(
+            context, s1[:, 1:], is_causal=True,
+        )[:, :seq_end]
+        ce_terms = compute_weighted_ce_objective(
+            self.predictor.head, logits1, logits2, targets1, targets2,
+            self.lookback, self.horizon, self.ce_rank_config,
+        )
+        ce_objective = ce_terms['objective']
+        rank_loss = ce_objective.new_zeros(())
+        rank_diag = {}
+        if self.training and date_ids is not None and feature_means is not None:
+            rank_loss, rank_diag = compute_rank_terms(
+                self.predictor, self.tokenizer, context, logits1, x,
+                feature_means, feature_stds, date_ids,
+                self.lookback, self.horizon, self.ce_rank_config,
+            )
+        total = ce_objective + self.ce_rank_config.lambda_rank * rank_loss
+        with torch.no_grad():
+            logp1 = logits1[:, self.lookback - 1:].float().log_softmax(-1)
+            s1_entropy = -(logp1.exp() * logp1).sum(-1).mean()
+            metrics = {
+                'token_loss': ce_objective.detach(),
+                'ce_objective': ce_objective.detach(),
+                'history_loss': ce_terms['history_loss'].detach(),
+                'weighted_forecast_loss': ce_terms['weighted_forecast_loss'].detach(),
+                'rank_loss': rank_loss.detach(),
+                'raw_path_loss': ce_objective.new_zeros(()),
+                'normalized_path_loss': ce_objective.new_zeros(()),
+                'weighted_path_loss': ce_objective.new_zeros(()),
+                'total_loss': total.detach(),
+                'top16_joint_mass': ce_objective.new_zeros(()),
+                's1_entropy': s1_entropy,
+                's2_conditional_entropy_topk_s1': ce_objective.new_zeros(()),
+                'horizon_mae': ce_objective.new_zeros((self.horizon,)),
+                'max_residual': ce_objective.new_zeros(()),
+                'prediction_mean_hf': ce_objective.new_zeros((self.horizon, 6)),
+                'prediction_second_moment_hf': ce_objective.new_zeros((self.horizon, 6)),
+                'target_mean_hf': x[:, target_slice].detach().mean(0),
+                'target_second_moment_hf': x[:, target_slice].detach().square().mean(0),
+            }
+            metrics.update({key: value for key, value in rank_diag.items() if key != 'rank_loss'})
+        return total, metrics
+
+    def forward(self, x, stamp=None, sector_id=None, size_percentile=None,
+                date_ids=None, feature_means=None, feature_stds=None):
         if x.shape[1:] != (self.lookback + self.horizon + 1, 6):
             raise ValueError('Stage3 requires lookback + horizon + 1 rows and six features')
         with torch.no_grad():
@@ -36,14 +87,16 @@ class Stage3TrainingModel(nn.Module):
         )
         start, end = self.lookback - 1, self.lookback + self.horizon - 1
         target_slice = slice(self.lookback, self.lookback + self.horizon)
+        if self.ce_rank_config.enabled:
+            if self.config.weight != 0:
+                raise ValueError('P1 CE+rank requires lambda_path=0')
+            return self._ce_rank_forward(x, s1, s2, context, date_ids, feature_means, feature_stds)
         logits1 = self.predictor.predict_s1(context[:, start:end])
         logits2 = self.predictor.predict_s2(context, s1[:, 1:], is_causal=True)[:, start:end]
         token_loss = self.predictor.head.compute_loss(
             logits1, logits2, s1[:, target_slice], s2[:, target_slice],
         )[0]
         if self.config.weight == 0 and self.training:
-            # CE-only control: the candidate decode is pure overhead at lambda 0.
-            # Validation still decodes so raw path metrics stay comparable with C3.
             zeros_h = token_loss.new_zeros((self.horizon,))
             zeros_hf = token_loss.new_zeros((self.horizon, 6))
             with torch.no_grad():
@@ -72,7 +125,6 @@ class Stage3TrainingModel(nn.Module):
             position_start=start, is_causal=True,
             synchronize_ema=self.synchronize_ema and self.training,
         )
-        # compute_path_alignment_loss already applies lambda_path once.
         total = token_loss + path_loss
         with torch.no_grad():
             logp1 = logits1.float().log_softmax(-1)
@@ -99,21 +151,21 @@ class Stage3TrainingModel(nn.Module):
         return total, metrics
 
     def checkpoint_state(self, optimizer, step, segment):
-        """Predictor keys stay production-compatible; training state is separate."""
         return {
             'schema': 'stage3_conditional_joint_causal_v2',
             'model': self.predictor.state_dict(), 'optimizer': optimizer.state_dict(),
             'path_ema': self.path_ema.state_dict(), 'step': int(step), 'segment': int(segment),
-            'path_config': asdict(self.config), 'lookback': self.lookback, 'horizon': self.horizon,
+            'path_config': asdict(self.config), 'ce_rank_config': asdict(self.ce_rank_config),
+            'lookback': self.lookback, 'horizon': self.horizon,
             'torch_rng_state': torch.get_rng_state(),
             'cuda_rng_state': torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
         }
 
     def load_checkpoint_state(self, state, optimizer):
-        """Only resume this Stage3 schema, never import C2 optimizer state."""
         if state.get('schema') != 'stage3_conditional_joint_causal_v2':
             raise ValueError('Not a compatible Stage3 training checkpoint')
         if (state['path_config'] != asdict(self.config) or
+                state.get('ce_rank_config', asdict(Stage3CERankConfig())) != asdict(self.ce_rank_config) or
                 state['lookback'] != self.lookback or state['horizon'] != self.horizon):
             raise ValueError('Stage3 objective configuration changed on resume')
         self.predictor.load_state_dict(state['model'], strict=True)

@@ -22,6 +22,13 @@ HARD_TIMEOUT_SECONDS = int(os.environ.get('STAGE3_HARD_TIMEOUT_SECONDS', '18000'
 MAX_RUNTIME_SECONDS = int(os.environ.get('STAGE3_MAX_RUNTIME_SECONDS', '10800'))
 BASELINE_BEFORE_RESUME = os.environ.get('STAGE3_BASELINE_BEFORE_RESUME', '0') == '1'
 LAMBDA_PATH = float(os.environ.get('STAGE3_LAMBDA_PATH', '0.05'))
+LAMBDA_RANK = float(os.environ.get('STAGE3_LAMBDA_RANK', '0.05'))
+CE_RANK = os.environ.get('STAGE3_CE_RANK', '0') == '1'
+HISTORY_WEIGHT = float(os.environ.get('STAGE3_HISTORY_LOSS_WEIGHT', '0.02'))
+FORECAST_HORIZON_WEIGHTS = os.environ.get(
+    'STAGE3_FORECAST_HORIZON_WEIGHTS',
+    '1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455',
+)
 MILESTONE_SEGMENTS = os.environ.get('STAGE3_MILESTONE_SEGMENTS', '')
 HASHES = {
     'best': '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
@@ -84,7 +91,9 @@ def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
-          lr=2e-6, amp=False, lambda_path=LAMBDA_PATH, milestone_segments=MILESTONE_SEGMENTS,
+          lr=2e-6, amp=False, lambda_path=LAMBDA_PATH, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
+          history_weight=HISTORY_WEIGHT, forecast_horizon_weights=FORECAST_HORIZON_WEIGHTS,
+          milestone_segments=MILESTONE_SEGMENTS,
           hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
           max_runtime_seconds=MAX_RUNTIME_SECONDS, chunk=CHUNK)
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -199,8 +208,15 @@ def main():
                     'initialization': 'model_weights_only', 'optimizer': 'fresh_AdamW', 'scheduler': 'fixed',
                     'lr': 2e-6, 'amp': False, 'seed': 20260915, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': 32,
                     'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
-                    'lookback': 120, 'horizon': 10, 'loss': f'CE+{LAMBDA_PATH:g}*EMA_normalized_six_feature_Huber',
-                    'lambda_path': LAMBDA_PATH, 'milestone_segments': MILESTONE_SEGMENTS,
+                    'lookback': 120, 'horizon': 10,
+                    'loss': (
+                        f'weighted_CE+{HISTORY_WEIGHT:g}*history+{LAMBDA_RANK:g}*pairwise_rank'
+                        if CE_RANK else f'CE+{LAMBDA_PATH:g}*EMA_normalized_six_feature_Huber'
+                    ),
+                    'lambda_path': LAMBDA_PATH, 'ce_rank': CE_RANK, 'lambda_rank': LAMBDA_RANK,
+                    'history_weight': HISTORY_WEIGHT,
+                    'forecast_horizon_weights': FORECAST_HORIZON_WEIGHTS,
+                    'milestone_segments': MILESTONE_SEGMENTS,
                     'huber_delta': 0.02, 'top_k': 16, 'candidates': 16, 'ema_decay': 0.99,
                     'dependency_causal': True, 'devices': devices, 'torch': torch.__version__,
                     'run_id': RUN_ID, 'swanlab_url': dashboard_url, 'sha256': HASHES,
@@ -236,10 +252,16 @@ def main():
             resume_args.append('--baseline-before-resume')
         if MILESTONE_SEGMENTS:
             resume_args += ['--milestone-segments', MILESTONE_SEGMENTS]
-        run(torchrun + ['finetune.train_stage3_path_alignment'] + common +
-            ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32', '--lr', '2e-6',
-             '--seed', '20260915', '--log-interval', '10', '--lambda-path', str(LAMBDA_PATH),
-             '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)] + resume_args, cwd=repo, env=env)
+        train_args = ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32',
+                      '--lr', '2e-6', '--seed', '20260915', '--log-interval', '10',
+                      '--lambda-path', str(LAMBDA_PATH),
+                      '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)]
+        if CE_RANK:
+            train_args += ['--ce-rank', '--lambda-rank', str(LAMBDA_RANK),
+                           '--history-weight', str(HISTORY_WEIGHT),
+                           '--forecast-horizon-weights', FORECAST_HORIZON_WEIGHTS]
+        run(torchrun + ['finetune.train_stage3_path_alignment'] + common + train_args + resume_args,
+            cwd=repo, env=env)
         phase('verify_output')
         progress = json.loads((OUTPUT / 'progress.json').read_text())
         summary = json.loads((OUTPUT / 'summary.json').read_text())

@@ -8,8 +8,16 @@ from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
+from finetune.stage3_ce_rank import DEFAULT_FORECAST_HORIZON_WEIGHTS, Stage3CERankConfig
 from finetune.stage3_path_alignment import PathAlignmentConfig
 from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
+
+
+def parse_horizon_weights(raw: str) -> tuple[float, ...]:
+    values = tuple(float(item.strip()) for item in raw.split(',') if item.strip())
+    if not values:
+        raise ValueError('forecast horizon weights must not be empty')
+    return values
 
 def setup_dist():
     if 'RANK' in os.environ:
@@ -50,7 +58,8 @@ def record_metrics(out, values):
 def validate_resume(state, experiment, summary, world, lr, seed):
     """Fail closed on a different objective/data/run or a partial segment."""
     prior = state['experiment_manifest']
-    for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'huber_delta', 'top_k', 'candidates',
+    for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'lambda_rank', 'history_weight',
+                'forecast_horizon_weights', 'ce_rank', 'huber_delta', 'top_k', 'candidates',
                 'ema_decay', 'dependency_causal', 'amp', 'global_batch',
                 'batch_per_gpu', 'lookback', 'horizon', 'validation_samples'):
         if prior.get(key) != experiment.get(key):
@@ -128,6 +137,11 @@ def main(a):
         print('parent_model=' + str(a.model_dir), flush=True)
         print('optimizer_state=' + ('resume' if a.resume_state else 'reset'), flush=True)
         print(f'lambda_path={a.lambda_path}', flush=True)
+        print(f'ce_rank={a.ce_rank}', flush=True)
+        if a.ce_rank:
+            print(f'lambda_rank={a.lambda_rank}', flush=True)
+            print(f'history_weight={a.history_weight}', flush=True)
+            print(f'forecast_horizon_weights={a.forecast_horizon_weights}', flush=True)
         print(f'milestone_segments={sorted(milestones)}', flush=True)
         print(f'world_size={world}', flush=True)
         print('validation_mode=full', flush=True)
@@ -136,8 +150,19 @@ def main(a):
         print(f'chunk1_max_runtime_seconds={a.max_runtime_seconds}', flush=True)
     predictor = Kronos.from_pretrained(a.model_dir).to(device)
     tok = KronosTokenizer.from_pretrained(a.tokenizer_dir).to(device).eval()
-    model = Stage3TrainingModel(predictor, tok,
-                                config=PathAlignmentConfig(weight=a.lambda_path)).to(device)
+    ce_rank_config = Stage3CERankConfig(
+        enabled=a.ce_rank,
+        lambda_rank=a.lambda_rank,
+        history_weight=a.history_weight,
+        forecast_horizon_weights=parse_horizon_weights(a.forecast_horizon_weights),
+    )
+    if a.ce_rank and a.lambda_path != 0:
+        raise ValueError('P1 CE+rank requires lambda_path=0')
+    model = Stage3TrainingModel(
+        predictor, tok,
+        config=PathAlignmentConfig(weight=a.lambda_path),
+        ce_rank_config=ce_rank_config,
+    ).to(device)
     if world > 1:
         model = DDP(model, device_ids=[local], output_device=local,
                     find_unused_parameters=False, broadcast_buffers=False)
@@ -165,7 +190,14 @@ def main(a):
                     'top_k': 16, 'candidates': 16, 'parent': str(a.model_dir),
                     'lambda_path': a.lambda_path, 'milestone_segments': sorted(milestones),
                     'validation': 'full_causal',
-                    'validation_objective': f'token_ce+{a.lambda_path:g}*raw_path_huber',
+                    'validation_objective': (
+                        f'weighted_ce+{a.history_weight:g}*history+{a.lambda_rank:g}*rank'
+                        if a.ce_rank else f'token_ce+{a.lambda_path:g}*raw_path_huber'
+                    ),
+                    'ce_rank': a.ce_rank,
+                    'lambda_rank': a.lambda_rank,
+                    'history_weight': a.history_weight,
+                    'forecast_horizon_weights': a.forecast_horizon_weights,
                     'optimizer': 'resume' if a.resume_state else 'fresh', 'dependency_causal': True,
                     'ema': 'global_batch_detached', 'coverage_seed': a.seed,
                     'nproc': world, 'chunk': a.chunk},
@@ -178,6 +210,7 @@ def main(a):
     model.train()
     os.environ['KRONOS_COVERAGE_SEED'] = str(a.seed)
     os.environ['KRONOS_TRAIN_SAMPLES_PER_SEGMENT'] = '20000'
+    os.environ['KRONOS_STAGE3_RANK_LOSS'] = '1' if a.ce_rank else '0'
     print(json.dumps({'phase': 'load_training_dataset', 'rank': rank}), flush=True)
     ds = QlibDataset('train')
     train_sampler = DistributedSampler(ds, num_replicas=world, rank=rank, shuffle=False) if world > 1 else None
@@ -247,8 +280,16 @@ def main(a):
             x, stamp = batch[0].to(device), batch[1].to(device)
             sec = batch[2].to(device) if len(batch) > 2 else None
             pct = batch[4].to(device) if len(batch) > 4 else None
+            date_ids = means = stds = None
+            if a.ce_rank:
+                date_ids = batch[-3].to(device)
+                means = batch[-2].to(device)
+                stds = batch[-1].to(device)
             opt.zero_grad(set_to_none=True)
-            loss, metrics = model(x, stamp, sector_id=sec, size_percentile=pct)
+            loss, metrics = model(
+                x, stamp, sector_id=sec, size_percentile=pct,
+                date_ids=date_ids, feature_means=means, feature_stds=stds,
+            )
             if not torch.isfinite(loss): raise FloatingPointError('Nonfinite Stage3 loss')
             loss.backward()
             group_grads = gradient_metrics(raw)
@@ -257,10 +298,25 @@ def main(a):
             if step == 1 or step % a.log_interval == 0:
                 scalar_keys = ('token_loss', 'raw_path_loss', 'normalized_path_loss', 'total_loss',
                                'top16_joint_mass', 's1_entropy', 's2_conditional_entropy_topk_s1', 'max_residual')
-                logged = torch.stack([metrics[key] for key in scalar_keys])
-                if world > 1: dist.all_reduce(logged); logged /= world
-                if is_main(rank):
+                if a.ce_rank:
+                    scalar_keys = ('ce_objective', 'history_loss', 'weighted_forecast_loss', 'rank_loss',
+                                   'total_loss', 's1_entropy')
+                    tensor_keys = [key for key in scalar_keys if key in metrics]
+                    logged = torch.stack([metrics[key] for key in tensor_keys])
+                    if world > 1:
+                        dist.all_reduce(logged)
+                        logged /= world
+                    log = dict(zip(tensor_keys, logged.tolist()))
+                    for key in ('unique_signal_dates', 'stocks_per_date_mean', 'pair_count', 'return_dispersion'):
+                        if key in metrics:
+                            log[key] = float(metrics[key])
+                else:
+                    logged = torch.stack([metrics[key] for key in scalar_keys])
+                    if world > 1:
+                        dist.all_reduce(logged)
+                        logged /= world
                     log = dict(zip(scalar_keys, logged.tolist()))
+                if is_main(rank):
                     log.update({key: float(value) for key, value in group_grads.items()})
                     log.update(phase='train', segment=seg, step=step, grad_norm=float(grad))
                     print(json.dumps(log), flush=True)
@@ -281,7 +337,10 @@ def main(a):
                 best_val = val_loss; raw.save_pretrained(out / 'checkpoints/best_model')
                 atomic_json(out / 'checkpoints/best_model/best_metric.json',
                             {'segment': seg, 'step': step, 'validation_objective': val_loss,
-                             'definition': f'causal_token_ce+{a.lambda_path:g}*raw_path_huber'})
+                             'definition': (
+                                 f'weighted_ce+{a.history_weight:g}*history+{a.lambda_rank:g}*rank'
+                                 if a.ce_rank else f'causal_token_ce+{a.lambda_path:g}*raw_path_huber'
+                             )})
             if seg in milestones:
                 milestone = out / f'checkpoints/milestone_seg{seg:02d}'
                 raw.save_pretrained(milestone)
@@ -331,6 +390,10 @@ if __name__ == '__main__':
     p.add_argument('--seed', type=int, default=20260915)
     p.add_argument('--log-interval', type=int, default=50)
     p.add_argument('--lambda-path', type=float, default=0.05)
+    p.add_argument('--ce-rank', action='store_true')
+    p.add_argument('--lambda-rank', type=float, default=0.05)
+    p.add_argument('--history-weight', type=float, default=0.02)
+    p.add_argument('--forecast-horizon-weights', default=','.join(str(v) for v in DEFAULT_FORECAST_HORIZON_WEIGHTS))
     p.add_argument('--milestone-segments', default='')
     p.add_argument('--resume-state', default='')
     p.add_argument('--chunk', default='c1')
