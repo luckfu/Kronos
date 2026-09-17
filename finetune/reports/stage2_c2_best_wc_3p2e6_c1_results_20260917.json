@@ -1,0 +1,281 @@
+{
+  "status": "complete",
+  "date": "2026-09-17",
+  "kernel": "luckfu/kronos-small-0-1-stage2-c2-best-wc-3p2e6-c1",
+  "kernel_url": "https://www.kaggle.com/code/luckfu/kronos-small-0-1-stage2-c2-best-wc-3p2e6-c1",
+  "kernel_version": 1,
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "stage2_wc_from_c2_best; warmup_constant 3.2e-6; coverage_seed 20260917; first chunk 30/534; OOS gate before more segments",
+  "training_performed": true,
+  "oos_used": false,
+  "source_commit": "842c58ad5394beab1521f21f7cea289d442e698c",
+  "hardware": [
+    "Tesla T4",
+    "Tesla T4"
+  ],
+  "run_id": "small_0.1_stage2_c2_best_wc_3p2e6",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage2_c2_best_wc_3p2e6",
+  "wall_clock_utc": [
+    "2026-09-17T13:38:03Z",
+    "2026-09-17T15:06:28Z"
+  ],
+  "spec_checks": {
+    "parent_is_c2_best_segment_179": true,
+    "parent_predictor_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "parent_sha_matches_c2_best": true,
+    "tokenizer_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+    "tokenizer_sha_matches": true,
+    "scheduler": "warmup_constant",
+    "fixed_lr": 3.2e-06,
+    "train_learning_rate_identically_3p2e6": true,
+    "warmup_ratio": 0,
+    "coverage_seed": 20260917,
+    "coverage_passes": 1,
+    "samples_per_segment": 20000,
+    "global_batch": 64,
+    "amp": true,
+    "initialization": "c2_best_weights_fresh_adamw",
+    "auto_continuation_disabled": true,
+    "completed_segments": 30,
+    "total_segments_planned": 534,
+    "stop_reason": "segment_limit",
+    "resume_segment": 31,
+    "progress_status": "stopped",
+    "best_selection_metric": "forecast",
+    "best_segment": 15,
+    "best_equals_last": false,
+    "rank_ic_not_in_this_run": true
+  },
+  "best_checkpoint": {
+    "segment": 15,
+    "forecast_loss": 2.294968366622925,
+    "history_loss": 2.533069372177124,
+    "full_sequence_loss": 2.5129964351654053,
+    "weights_sha256": "432f201f6a17fb7e8e60a56d216dbc23f2bbca8b7629ac68b96e6945502ffc30"
+  },
+  "last_checkpoint": {
+    "segment": 30,
+    "forecast_loss": 2.2959346771240234,
+    "history_loss": 2.533212661743164,
+    "full_sequence_loss": 2.51320481300354,
+    "weights_sha256": "9d4ba6b7859dae16c788f178655e9f1ba454e13cea9a9b849425fcf1e39aa96c"
+  },
+  "validation_forecast_by_segment": [
+    {
+      "segment": 1,
+      "forecast_loss": 2.2963054180145264,
+      "history_loss": 2.5330748558044434,
+      "full_sequence_loss": 2.513110637664795,
+      "samples": 123836
+    },
+    {
+      "segment": 2,
+      "forecast_loss": 2.2965478897094727,
+      "history_loss": 2.532438039779663,
+      "full_sequence_loss": 2.512551784515381,
+      "samples": 123836
+    },
+    {
+      "segment": 3,
+      "forecast_loss": 2.297215700149536,
+      "history_loss": 2.5334606170654297,
+      "full_sequence_loss": 2.5135421752929688,
+      "samples": 123836
+    },
+    {
+      "segment": 4,
+      "forecast_loss": 2.295976161956787,
+      "history_loss": 2.532747983932495,
+      "full_sequence_loss": 2.5127835273742676,
+      "samples": 123836
+    },
+    {
+      "segment": 5,
+      "forecast_loss": 2.2965171337127686,
+      "history_loss": 2.5335166454315186,
+      "full_sequence_loss": 2.513532876968384,
+      "samples": 123836
+    },
+    {
+      "segment": 6,
+      "forecast_loss": 2.2965097427368164,
+      "history_loss": 2.5330119132995605,
+      "full_sequence_loss": 2.513073444366455,
+      "samples": 123836
+    },
+    {
+      "segment": 7,
+      "forecast_loss": 2.296430826187134,
+      "history_loss": 2.533480167388916,
+      "full_sequence_loss": 2.5134952068328857,
+      "samples": 123836
+    },
+    {
+      "segment": 8,
+      "forecast_loss": 2.295269012451172,
+      "history_loss": 2.5324132442474365,
+      "full_sequence_loss": 2.512420654296875,
+      "samples": 123836
+    },
+    {
+      "segment": 9,
+      "forecast_loss": 2.2964963912963867,
+      "history_loss": 2.5339016914367676,
+      "full_sequence_loss": 2.513885736465454,
+      "samples": 123836
+    },
+    {
+      "segment": 10,
+      "forecast_loss": 2.2968947887420654,
+      "history_loss": 2.5336835384368896,
+      "full_sequence_loss": 2.5137205123901367,
+      "samples": 123836
+    },
+    {
+      "segment": 11,
+      "forecast_loss": 2.296041250228882,
+      "history_loss": 2.5339722633361816,
+      "full_sequence_loss": 2.5139057636260986,
+      "samples": 123836
+    },
+    {
+      "segment": 12,
+      "forecast_loss": 2.2973594665527344,
+      "history_loss": 2.534411907196045,
+      "full_sequence_loss": 2.5144238471984863,
+      "samples": 123836
+    },
+    {
+      "segment": 13,
+      "forecast_loss": 2.296525239944458,
+      "history_loss": 2.534318685531616,
+      "full_sequence_loss": 2.5142691135406494,
+      "samples": 123836
+    },
+    {
+      "segment": 14,
+      "forecast_loss": 2.2962324619293213,
+      "history_loss": 2.533534526824951,
+      "full_sequence_loss": 2.5135269165039062,
+      "samples": 123836
+    },
+    {
+      "segment": 15,
+      "forecast_loss": 2.294968366622925,
+      "history_loss": 2.533069372177124,
+      "full_sequence_loss": 2.5129964351654053,
+      "samples": 123836
+    },
+    {
+      "segment": 16,
+      "forecast_loss": 2.2960562705993652,
+      "history_loss": 2.5332586765289307,
+      "full_sequence_loss": 2.5132596492767334,
+      "samples": 123836
+    },
+    {
+      "segment": 17,
+      "forecast_loss": 2.2959301471710205,
+      "history_loss": 2.533888578414917,
+      "full_sequence_loss": 2.5138278007507324,
+      "samples": 123836
+    },
+    {
+      "segment": 18,
+      "forecast_loss": 2.2976667881011963,
+      "history_loss": 2.534320831298828,
+      "full_sequence_loss": 2.5143661499023438,
+      "samples": 123836
+    },
+    {
+      "segment": 19,
+      "forecast_loss": 2.2951419353485107,
+      "history_loss": 2.53295636177063,
+      "full_sequence_loss": 2.5129072666168213,
+      "samples": 123836
+    },
+    {
+      "segment": 20,
+      "forecast_loss": 2.2979085445404053,
+      "history_loss": 2.534435987472534,
+      "full_sequence_loss": 2.514493703842163,
+      "samples": 123836
+    },
+    {
+      "segment": 21,
+      "forecast_loss": 2.29801344871521,
+      "history_loss": 2.5341343879699707,
+      "full_sequence_loss": 2.51422381401062,
+      "samples": 123836
+    },
+    {
+      "segment": 22,
+      "forecast_loss": 2.2962005138397217,
+      "history_loss": 2.532902956008911,
+      "full_sequence_loss": 2.5129456520080566,
+      "samples": 123836
+    },
+    {
+      "segment": 23,
+      "forecast_loss": 2.2959885597229004,
+      "history_loss": 2.533273696899414,
+      "full_sequence_loss": 2.5132689476013184,
+      "samples": 123836
+    },
+    {
+      "segment": 24,
+      "forecast_loss": 2.2972521781921387,
+      "history_loss": 2.5330471992492676,
+      "full_sequence_loss": 2.5131659507751465,
+      "samples": 123836
+    },
+    {
+      "segment": 25,
+      "forecast_loss": 2.297215700149536,
+      "history_loss": 2.533815622329712,
+      "full_sequence_loss": 2.513862371444702,
+      "samples": 123836
+    },
+    {
+      "segment": 26,
+      "forecast_loss": 2.296804189682007,
+      "history_loss": 2.533965587615967,
+      "full_sequence_loss": 2.5139718055725098,
+      "samples": 123836
+    },
+    {
+      "segment": 27,
+      "forecast_loss": 2.295839309692383,
+      "history_loss": 2.533745765686035,
+      "full_sequence_loss": 2.513688325881958,
+      "samples": 123836
+    },
+    {
+      "segment": 28,
+      "forecast_loss": 2.2967522144317627,
+      "history_loss": 2.533324718475342,
+      "full_sequence_loss": 2.5133774280548096,
+      "samples": 123836
+    },
+    {
+      "segment": 29,
+      "forecast_loss": 2.2971701622009277,
+      "history_loss": 2.532846212387085,
+      "full_sequence_loss": 2.512976884841919,
+      "samples": 123836
+    },
+    {
+      "segment": 30,
+      "forecast_loss": 2.2959346771240234,
+      "history_loss": 2.533212661743164,
+      "full_sequence_loss": 2.51320481300354,
+      "samples": 123836
+    }
+  ],
+  "next": "13-date diagnostic OOS on C2 init / best_seg15 / last_seg30 before any further Stage2 chunks",
+  "takeaways": [
+    "contract matched: Stage2 wc_dual_t4 method, C2 best parent, coverage_seed 20260917, LR glued at 3.2e-6, 30/534 stop",
+    "val forecast moved little: 2.2963 (seg1) -> 2.2950 (best seg15) -> 2.2959 (last seg30)",
+    "Rank IC not measured; do not continue to 534 until OOS gate"
+  ]
+}
