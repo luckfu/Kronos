@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 from safetensors.torch import load_file
 
-SOURCE_COMMIT = "0" * 40
+SOURCE_COMMIT = "a99df25dbe83db417baf9b79be92ae6515e7aefb"
 OUTPUT = Path("/kaggle/working/kronos_small_0_1_stage3_freeze_probe_be_oos")
 INPUT = Path("/kaggle/input")
 HARD_LIMIT_SECONDS = 39600
