@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 
-SOURCE_COMMIT = "0" * 40
+SOURCE_COMMIT = "842c58ad5394beab1521f21f7cea289d442e698c"
 OUTPUT_NAME = "small_0.1_stage2_c2_best_wc_3p2e6"
 COVERAGE_SEED = "20260917"
 MAX_SEGMENTS_PER_RUN = 30
