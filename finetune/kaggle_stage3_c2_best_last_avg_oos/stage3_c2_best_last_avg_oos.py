@@ -21,7 +21,7 @@ import tempfile
 import time
 from pathlib import Path
 
-SOURCE_COMMIT = "0" * 40
+SOURCE_COMMIT = "4330ed6131d741cb59ea52ffc5b64e6e9376d587"
 OUTPUT = Path("/kaggle/working/kronos_small_0_1_stage3_c2_best_last_avg_oos")
 INPUT = Path("/kaggle/input")
 HARD_LIMIT_SECONDS = 39600
