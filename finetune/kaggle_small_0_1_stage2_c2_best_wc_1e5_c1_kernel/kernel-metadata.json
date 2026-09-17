@@ -1,0 +1,13 @@
+{
+  "id": "luckfu/kronos-small-0-1-stage2-c2-best-wc-1e5-c1",
+  "title": "Kronos Small 0 1 Stage2 C2 Best Wc 1e5 C1",
+  "code_file": "kaggle_small_0_1_stage2_c2_best_wc_1e5_c1.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": ["smmt315/kronos-small-0-1-stage2-cosine-refinement-c2"]
+}
