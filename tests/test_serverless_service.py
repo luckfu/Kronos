@@ -95,8 +95,8 @@ def test_predict_returns_mean_and_close_intervals(monkeypatch):
         "pred_len": 10,
         "sample_count": 3,
         "model_device": "cpu",
-        "model_release": "beta-v1.2",
-        "model_checkpoint": "Best@871",
+        "model_release": "small-0.1-cosine-c2",
+        "model_checkpoint": "Segment@179",
     }
     assert result["predictions"][0]["close"] == pytest.approx(2.0)
     assert result["predictions"][0]["close_p50"] == pytest.approx(2.0)

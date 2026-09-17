@@ -1,8 +1,7 @@
-# Kronos Beta V1.2 Modal Serverless 部署
+# Kronos Small 0.1 Modal Serverless 部署
 
-这个目录只负责把 Beta V1.2 `Best@871` 发布为独立的 Modal 公网 API。训练、评估、
-回测、行情采集、数据清洗和 Web UI 仍在本地或网关完成，不进入线上服务。Beta V1.2
-仍是研究候选；它使用独立 App 名，不覆盖既有 V6 服务。
+这个目录把 `luckfu/Kronos-small-0.1-Cosine-C2-Best` 的 `Segment@179` 发布为
+独立的 Modal 公网 API。训练、评估、行情采集和 Web UI 不进入线上服务。
 
 ## 目录职责
 
@@ -13,9 +12,8 @@
 - `../../model/`：本地与 Modal 共用的 Kronos 模型实现。
 
 Modal 镜像不会包含 `finetune/`、`webui/`、本地数据集或训练输出。镜像构建阶段从
-ModelScope 仓库 `luckfu/Kronos-A-Share-Beta-V1-2` 下载仓库根目录的 `Best@871` 和
-配套的 `tokenizer/`，不会上传本地 checkpoint。`last_model/` 中的 `Last@1056` 只作为
-完整训练终点保留，不是服务默认权重。
+ModelScope 仓库提供 Small 模型的 `config.json` 和 `model.safetensors`。Tokenizer
+从 Hugging Face 的 `NeoQuasar/Kronos-Tokenizer-base` 固定提交下载。不会上传本地 checkpoint。
 
 ## 首次准备
 
@@ -93,23 +91,22 @@ KRONOS_API_KEY='your-api-key' ./deploy/modal/curl_test.sh
 ```
 
 脚本使用 `curl` 发送请求，使用 Python 标准库生成和格式化 JSON，不依赖 `jq`。
-一次冷启动会加载 Beta V1.2 权重和 tokenizer，首次 `/predict` 通常比热实例请求慢。
+一次冷启动会加载 Small 权重和 tokenizer，首次 `/predict` 通常比热实例请求慢。
 容器在请求结束 10 秒后缩容到零，避免低频请求继续占用 T4。`/predict-batch` 支持
 一次提交 2–12 组等长行情，在同一次 GPU batch 中完成推理；行情采集仍由调用方负责。
 
-Beta V1.2 的接口是严格契约：每组请求必须包含 120 行 OHLCVA、10 个未来交易日、
+Small 0.1 的接口沿用严格契约：每组请求必须包含 120 行 OHLCVA、10 个未来交易日、
 `sector_id` 和 `[0, 1]` 范围的连续 `size_percentile`。旧 `size_bucket` 会被拒绝。
 
-## 发布 Beta V1.2
+## 发布 Small 0.1
 
 部署前必须确认 ModelScope 快照与本地发布物一致：
 
-1. 校验 `luckfu/Kronos-A-Share-Beta-V1-2` 的 `best_model` 权重 SHA-256 与
-   `Beta V1.2 Best@871` 一致。
-2. 确认仓库包含与模型配套的 `tokenizer/`。
+1. 确认 `luckfu/Kronos-small-0.1-Cosine-C2-Best` 可下载。
+2. 确认固定版本的 `NeoQuasar/Kronos-Tokenizer-base` 可下载。
 3. 运行本地 serverless 测试。
 4. 使用 `--strategy recreate` 部署并运行 `curl_test.sh`。
-5. 检查 `/health` 返回 `beta-v1.2`、`Best@871` 和正确仓库名，并确认 `/predict`
+5. 检查 `/health` 返回 `small-0.1-cosine-c2`、`Segment@179` 和正确仓库名，并确认 `/predict`
    返回 200、`model_device` 为 `cuda:0`。
 
 这个流程不会修改 V6 App，也不会让 Modal 参与训练、行情采集或条件计算。

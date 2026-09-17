@@ -85,10 +85,10 @@ KRONOS_INFERENCE_URL = os.getenv(
 ).rstrip('/')
 KRONOS_API_KEY = os.getenv('KRONOS_API_KEY')
 KRONOS_INFERENCE_TIMEOUT = float(os.getenv('KRONOS_INFERENCE_TIMEOUT', '210'))
-KRONOS_MODEL_ID = 'luckfu/Kronos-A-Share-Beta-V1-2'
-KRONOS_MODEL_KEY = 'a-share-beta-v1-2'
-KRONOS_RELEASE_ID = 'beta-v1.2'
-KRONOS_CHECKPOINT = 'Best@871'
+KRONOS_MODEL_ID = 'luckfu/Kronos-small-0.1-Cosine-C2-Best'
+KRONOS_MODEL_KEY = 'small-0.1-cosine-c2'
+KRONOS_RELEASE_ID = 'small-0.1-cosine-c2'
+KRONOS_CHECKPOINT = 'Segment@179'
 KRONOS_NUM_SECTORS = 86
 PREDICTION_RESULTS_DIR = os.getenv(
     'KRONOS_HISTORY_DIR',
@@ -142,14 +142,14 @@ market_data_cache_lock = threading.Lock()
 # Available model configurations
 AVAILABLE_MODELS = {
     KRONOS_MODEL_KEY: {
-        'name': 'A-share Full-Market Beta V1.2',
+        'name': 'Kronos Small 0.1 Cosine C2',
         'model_id': A_SHARE_MODEL_PATH,
         'tokenizer_id': A_SHARE_TOKENIZER_PATH,
         'context_length': 512,
-        'params': '102.4M',
+        'params': '24.8M',
         'release_id': KRONOS_RELEASE_ID,
         'checkpoint': KRONOS_CHECKPOINT,
-        'description': 'Full-market A-share Beta V1.2 with sector and continuous size-percentile conditioning',
+        'description': 'Kronos Small 0.1 Cosine C2 with sector and continuous size-percentile conditioning',
         'num_sectors': KRONOS_NUM_SECTORS,
         'num_size_buckets': 0,
         'use_size_percentile': True,
@@ -161,7 +161,7 @@ AVAILABLE_MODELS = {
         'model_kwargs': {
             'num_sectors': KRONOS_NUM_SECTORS,
             'num_size_buckets': 0,
-            'context_layer': 10,
+            'context_layer': 6,
             'use_size_percentile': True,
             'size_mlp_hidden_dim': 64,
         },

@@ -1597,7 +1597,7 @@
                 <h1>A股预测工作台</h1>
                 <p id="view-subtitle">单股详情 · 股票池排名 · 概率路径</p>
             </div>
-            <div id="model-caption" class="model-caption">BETA V1.2 · BEST@871 · 102.4M PARAMS</div>
+            <div id="model-caption" class="model-caption">SMALL 0.1 COSINE C2 · SEGMENT@179 · 24.8M PARAMS</div>
         </div>
 
         <div class="workspace">
@@ -1851,10 +1851,10 @@
                 setRuntime('ready', sourceLabel + ' · 模型就绪');
                 document.getElementById('inference-service').textContent =
                     info.backend === 'remote'
-                        ? 'Modal Serverless · Beta V1.2'
-                        : '本地 Beta V1.2 · ' + String(info.device).toUpperCase();
+                        ? 'Modal Serverless · Small 0.1'
+                        : '本地 Small 0.1 · ' + String(info.device).toUpperCase();
                 document.getElementById('model-caption').textContent =
-                    `${String(info.release_id || 'beta-v1.2').toUpperCase()} · ${String(info.checkpoint || 'Best@871').toUpperCase()} · ${info.params} PARAMS`;
+                    `${String(info.release_id || 'small-0.1-cosine-c2').toUpperCase()} · ${String(info.checkpoint || 'Segment@179').toUpperCase()} · ${info.params} PARAMS`;
                 syncPredictButton();
             } catch (error) {
                 state.modelReady = false;

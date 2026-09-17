@@ -8,12 +8,13 @@ import pytest
 import webui.app as web_app
 
 
-def test_frontend_model_uses_beta_v1_2_best_checkpoint():
+def test_frontend_model_uses_small_cosine_c2_checkpoint():
     config = web_app.AVAILABLE_MODELS[web_app.KRONOS_MODEL_KEY]
 
     assert config['default_lookback'] == 120
-    assert 'beta_v1.2' in config['model_id']
-    assert config['checkpoint'] == 'Best@871'
+    assert web_app.KRONOS_MODEL_ID == 'luckfu/Kronos-small-0.1-Cosine-C2-Best'
+    assert config['checkpoint'] == 'Segment@179'
+    assert config['params'] == '24.8M'
     assert config['num_sectors'] == 86
     assert config['num_size_buckets'] == 0
     assert config['use_size_percentile'] is True

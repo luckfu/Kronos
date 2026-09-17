@@ -1,4 +1,4 @@
-"""Modal deployment for the Beta V1.2 model-only inference API."""
+"""Modal deployment for the Kronos Small model-only inference API."""
 
 import os
 from pathlib import Path
@@ -9,10 +9,12 @@ from fastapi.responses import JSONResponse
 
 
 DEPLOY_DIR = Path(__file__).resolve().parent
-MODEL_REPO_ID = "luckfu/Kronos-A-Share-Beta-V1-2"
-REMOTE_REPO_PATH = "/opt/kronos/models/a_share_beta_v1_2"
+MODEL_REPO_ID = "luckfu/Kronos-small-0.1-Cosine-C2-Best"
+TOKENIZER_REPO_ID = "NeoQuasar/Kronos-Tokenizer-base"
+TOKENIZER_REVISION = "0e0117387f39004a9016484a186a908917e22426"
+REMOTE_REPO_PATH = "/opt/kronos/models/small_0_1_cosine_c2_best"
 REMOTE_MODEL_PATH = REMOTE_REPO_PATH
-REMOTE_TOKENIZER_PATH = f"{REMOTE_REPO_PATH}/tokenizer"
+REMOTE_TOKENIZER_PATH = "/opt/kronos/models/kronos_tokenizer_base"
 TOKENIZER_ID = os.getenv("KRONOS_TOKENIZER_ID", REMOTE_TOKENIZER_PATH)
 SECRET_NAME = os.getenv("MODAL_KRONOS_SECRET_NAME", "")
 
@@ -24,7 +26,10 @@ image = (
     .run_commands(
         "python -c \"from modelscope import snapshot_download; "
         f"snapshot_download('{MODEL_REPO_ID}', local_dir='{REMOTE_REPO_PATH}', "
-        "allow_patterns=['config.json', 'model.safetensors', 'tokenizer/*'])\"",
+        "allow_patterns=['config.json', 'model.safetensors'])\"",
+        "python -c \"from huggingface_hub import snapshot_download; "
+        f"snapshot_download(repo_id='{TOKENIZER_REPO_ID}', revision='{TOKENIZER_REVISION}', "
+        f"local_dir='{REMOTE_TOKENIZER_PATH}', allow_patterns=['config.json', 'model.safetensors'])\"",
         # Re-read the release snapshot on every deployment so a replaced remote
         # artifact cannot remain hidden in a cached Modal image layer.
         force_build=True,
@@ -60,7 +65,7 @@ def _check_api_key(authorization: str | None) -> None:
 def web():
     from serverless.service import RequestError, predict, predict_batch
 
-    api = FastAPI(title="Kronos Beta V1.2 Inference API", version="1.2")
+    api = FastAPI(title="Kronos Small 0.1 Inference API", version="small-0.1")
 
     @api.get("/health")
     def health():
@@ -68,8 +73,8 @@ def web():
             "status": "ok",
             "service": "kronos-beta-v1-2-inference",
             "model": MODEL_REPO_ID,
-            "release": "beta-v1.2",
-            "checkpoint": "Best@871",
+            "release": "small-0.1-cosine-c2",
+            "checkpoint": "Segment@179",
         }
 
     @api.post("/predict")

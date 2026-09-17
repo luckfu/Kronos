@@ -1,6 +1,6 @@
-# Oracle Kronos Beta V1.2 Web Gateway
+# Oracle Kronos Small 0.1 Web Gateway
 
-This directory deploys only the lightweight Kronos web UI and market-data gateway. The Oracle host does not receive a model, checkpoint, training dataset, PyTorch, ModelScope, or Hugging Face tooling. Inference is sent to the independent Beta V1.2 Modal service backed by `luckfu/Kronos-A-Share-Beta-V1-2` `Best@871`.
+This directory deploys only the lightweight Kronos web UI and market-data gateway. The Oracle host does not receive a model or training dependencies. Inference is sent to the Modal service backed by `luckfu/Kronos-small-0.1-Cosine-C2-Best` `Segment@179`.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ Browser -> https://allmoneybymehold.com/kronos/
         -> incremental market-data cache and collection
         -> fixed sector vocabulary + replaceable symbol mapping
         -> full-market size-percentile reference
-        -> Beta V1.2 Modal Serverless inference API
+        -> Small 0.1 Modal Serverless inference API
 ```
 
 The deployment creates only `/opt/kronos-web`, an isolated `kronos-web.service`, and `/etc/nginx/default.d/kronos.conf`. It does not modify the main Nginx file or stop existing services. Existing Kronos-specific files are timestamp-backed up before replacement. Supabase is not used. Prediction records are stored as JSON under `/opt/kronos-web/data/prediction_results`, survive redeployments, and are grouped in the UI by their market-data cutoff date rather than submission mode. Adjusted daily market data is cached per stock under `/opt/kronos-web/data/market_data_cache`; refreshes request a small overlap after the cached last date, merge and deduplicate rows, and then send only the requested context to Modal.
@@ -24,7 +24,7 @@ Prerequisites are the SSH alias `oracle4C24G`, `ssh`, and `rsync`. The server ne
 bash deploy/oracle-kronos/deploy.sh
 ```
 
-A different alias can be supplied with `SSH_TARGET=opc@example-host`. The service enforces `KRONOS_REMOTE_ONLY=1`, so request payloads cannot select local inference. Deploy the Modal Beta V1.2 App first; this gateway points to `https://luckfu--kronos-beta-v1-2-inference-web.modal.run`.
+A different alias can be supplied with `SSH_TARGET=opc@example-host`. The service enforces `KRONOS_REMOTE_ONLY=1`, so request payloads cannot select local inference. Deploy the Modal Small App first; the existing URL remains `https://luckfu--kronos-beta-v1-2-inference-web.modal.run`.
 
 The `/kronos/` location uses `/etc/nginx/.htpasswd_clawd`. This is standard Nginx Basic Auth, so each person can have a separate username and password. The deployment never creates, replaces, or prints that password file.
 

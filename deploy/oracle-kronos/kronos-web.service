@@ -1,5 +1,5 @@
 [Unit]
-Description=Kronos Beta V1.2 remote-only web gateway
+Description=Kronos Small 0.1 remote-only web gateway
 After=network-online.target
 Wants=network-online.target
 

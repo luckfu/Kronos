@@ -23,8 +23,8 @@ REQUIRED_CONTEXT = 120
 REQUIRED_PRED_LEN = 10
 NUM_SECTORS = 86
 UNKNOWN_SECTOR_ID = NUM_SECTORS
-MODEL_RELEASE = "beta-v1.2"
-MODEL_CHECKPOINT = "Best@871"
+MODEL_RELEASE = os.getenv("KRONOS_MODEL_RELEASE", "small-0.1-cosine-c2")
+MODEL_CHECKPOINT = os.getenv("KRONOS_MODEL_CHECKPOINT", "Segment@179")
 # 10 paths makes P10/P50/P90 very sensitive to a single sampled trajectory.
 # The grid-optimized production configuration uses the API maximum of 50 paths.
 MAX_SAMPLE_COUNT = 50
@@ -87,13 +87,10 @@ def get_predictor() -> KronosPredictor:
         tokenizer = KronosTokenizer.from_pretrained(
             os.getenv("KRONOS_TOKENIZER_ID", DEFAULT_TOKENIZER_ID)
         ).eval()
+        # The checkpoint config is authoritative: Small and Beta use different
+        # architectures, so overriding these values can silently build the wrong model.
         model = Kronos.from_pretrained(
-            os.getenv("KRONOS_MODEL_ID", DEFAULT_MODEL_PATH),
-            num_sectors=NUM_SECTORS,
-            num_size_buckets=0,
-            context_layer=10,
-            use_size_percentile=True,
-            size_mlp_hidden_dim=64,
+            os.getenv("KRONOS_MODEL_ID", DEFAULT_MODEL_PATH)
         ).eval()
         _predictor = KronosPredictor(
             model, tokenizer, device=_device(), max_context=MAX_CONTEXT
