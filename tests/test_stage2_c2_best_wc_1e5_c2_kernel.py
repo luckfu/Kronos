@@ -18,6 +18,8 @@ def test_c2_best_wc_1e5_c2_continues_c1_last_for_200_segments():
     source = KERNEL.read_text()
     for token in (
         'OUTPUT_NAME = "small_0.1_stage2_c2_best_wc_1e5_c2"',
+        'SWANLAB_RUN_ID = "small_0.1_stage2_c2_best_wc_1e5"',
+        'KRONOS_SWANLAB_SEGMENT_OFFSET": str(COVERAGE_EPOCH_OFFSET)',
         'COVERAGE_SEED = "20260918"',
         'COVERAGE_EPOCH_OFFSET = 100',
         'EXPECTED_PARENT_SEGMENT = 100',
@@ -41,6 +43,7 @@ def test_c2_best_wc_1e5_c2_continues_c1_last_for_200_segments():
     assert "'--branch', 'master'" not in source
     assert 'KRONOS_SMALL_V21_CONTINUATION_ROOT' not in source
     assert 'FIXED_LR = "3.2e-6"' not in source
+    assert 'SWANLAB_RUN_ID = "small_0.1_stage2_c2_best_wc_1e5_c2"' not in source
     metadata = json.loads(META.read_text())
     assert metadata['id'] == 'luckfu/kronos-small-0-1-stage2-c2-best-wc-1e5-c2'
     assert metadata['code_file'] == 'kaggle_small_0_1_stage2_c2_best_wc_1e5_c2.py'

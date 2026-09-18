@@ -117,3 +117,10 @@ def test_main_stage_uses_full_natural_validation(tmp_path, monkeypatch):
     assert env["KRONOS_VAL_SIGNAL_START"] == "2025-07-01"
     assert env["KRONOS_VAL_SIGNAL_END"] == "2026-07-02"
     assert "KRONOS_FIXED_VALIDATION_MANIFEST_PATH" not in env
+
+
+def test_swanlab_chart_segment_continues_from_offset():
+    ns = load_runner()
+    assert ns["swanlab_chart_segment"](1, {}) == 1
+    assert ns["swanlab_chart_segment"](1, {"KRONOS_SWANLAB_SEGMENT_OFFSET": "100"}) == 101
+    assert ns["swanlab_chart_segment"](200, {"KRONOS_SWANLAB_SEGMENT_OFFSET": "100"}) == 300

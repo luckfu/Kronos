@@ -28,6 +28,13 @@ VALIDATION_LOG_RE = re.compile(
 )
 
 
+def swanlab_chart_segment(local_segment, env=None):
+    """Map a local coverage segment onto a continued SwanLab x-axis."""
+    source = env if env is not None else os.environ
+    offset = max(0, int(source.get("KRONOS_SWANLAB_SEGMENT_OFFSET", "0") or 0))
+    return int(local_segment) + offset
+
+
 STAGES = {
     "bootstrap": {
         "output": "small_0.1_bootstrap",
@@ -455,22 +462,24 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
                     if run is not None:
+                        chart_segment = swanlab_chart_segment(segment, env)
                         run.log({
                                 "train/loss": float(record["loss"]),
                                 "train/forecast_loss": float(record["forecast_loss"]),
                                 "train/history_loss": float(record["history_loss"]),
-                                "segment": segment,
-                            }, step=(segment - 1) * total_steps + step)
+                                "segment": chart_segment,
+                            }, step=(chart_segment - 1) * total_steps + step)
                     elif record_type in {"validation", "validation_large"}:
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
                         if run is not None:
+                            chart_segment = swanlab_chart_segment(segment, env)
                             run.log({
                                 "validation/forecast_loss": float(record["forecast_loss"]),
                                 "validation/history_loss": float(record["history_loss"]),
                                 "validation/full_loss": float(record["full_sequence_loss"]),
-                                "segment": segment,
-                            }, step=segment * total_steps)
+                                "segment": chart_segment,
+                            }, step=chart_segment * total_steps)
                 except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                     continue
     except Exception as exc:
@@ -515,16 +524,19 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
                 segment, step, total_steps = int(segment), int(step), int(total_steps)
                 if run is not None:
+                    chart_segment = swanlab_chart_segment(segment, env)
                     run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
                              "train/history_loss": float(history), "train/learning_rate": float(lr),
-                             "train/condition_learning_rate": float(condition_lr), "segment": segment},
-                            step=(segment - 1) * total_steps + step)
+                             "train/condition_learning_rate": float(condition_lr), "segment": chart_segment},
+                            step=(chart_segment - 1) * total_steps + step)
             match = VALIDATION_LOG_RE.search(line)
             if match and segment:
                 forecast, history, full = map(float, match.groups())
                 if run is not None:
+                    chart_segment = swanlab_chart_segment(segment, env)
                     run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
-                             "validation/full_loss": full, "segment": segment}, step=segment * total_steps)
+                             "validation/full_loss": full, "segment": chart_segment},
+                            step=chart_segment * total_steps)
     finally:
         return_code = child.wait()
         log_handle.close()
