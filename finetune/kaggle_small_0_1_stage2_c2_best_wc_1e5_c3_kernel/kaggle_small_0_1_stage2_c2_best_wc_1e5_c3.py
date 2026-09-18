@@ -28,9 +28,11 @@ MAX_RUNTIME_SECONDS = 40500
 FIXED_LR = "1e-5"
 EXPECTED_C2_LAST_SHA = "7f0dba2304d26c7dd466d463b8e4ee1597370d237bd68106e73258980f448877"
 EXPECTED_TOKENIZER_SHA = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
+TOKENIZER_REPO = "NeoQuasar/Kronos-Tokenizer-base"
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 INPUT = Path("/kaggle/input")
+TOKENIZER_CACHE = Path("/kaggle/working/kronos_tokenizer_base")
 
 
 def sha256_file(path):
@@ -73,6 +75,32 @@ def clone_source():
             time.sleep(3 * attempt)
 
 
+def resolve_tokenizer():
+    matches = [
+        path for path in INPUT.glob("**/Kronos-Tokenizer-base/model.safetensors")
+        if "cosine-refinement-c2" in str(path)
+    ]
+    if len(matches) == 1:
+        tokenizer_dir = matches[0].parent
+    elif not matches:
+        run([
+            "python", "-m", "pip", "install", "-q", "huggingface_hub",
+        ])
+        from huggingface_hub import snapshot_download
+        tokenizer_dir = Path(snapshot_download(
+            TOKENIZER_REPO,
+            local_dir=str(TOKENIZER_CACHE),
+            local_dir_use_symlinks=False,
+        ))
+    else:
+        raise RuntimeError(f"Expected one tokenizer, found {matches}")
+    tokenizer_file = tokenizer_dir / "model.safetensors"
+    tokenizer_sha = sha256_file(tokenizer_file)
+    if tokenizer_sha != EXPECTED_TOKENIZER_SHA:
+        raise RuntimeError(f"Tokenizer sha mismatch: {tokenizer_sha}")
+    return tokenizer_dir, tokenizer_sha
+
+
 def find_parent_output():
     state_file = find_one("**/small_0.1_stage2_c2_best_wc_1e5_c2/checkpoints/last_state.pt")
     source_root = state_file.parent.parent
@@ -104,12 +132,7 @@ def find_parent_output():
 
 def main():
     os.environ["PYTHONUNBUFFERED"] = "1"
-    in_c2 = lambda path: "cosine-refinement-c2" in str(path)
-    tokenizer_file = find_one("**/Kronos-Tokenizer-base/model.safetensors", in_c2)
-    tokenizer_dir = tokenizer_file.parent
-    tokenizer_sha = sha256_file(tokenizer_file)
-    if tokenizer_sha != EXPECTED_TOKENIZER_SHA:
-        raise RuntimeError(f"Tokenizer sha mismatch: {tokenizer_sha}")
+    tokenizer_dir, tokenizer_sha = resolve_tokenizer()
 
     print(json.dumps({
         "phase": "started",

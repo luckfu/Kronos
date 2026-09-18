@@ -33,6 +33,8 @@ def test_c2_best_wc_1e5_c3_finishes_coverage_from_c2_last():
         'KRONOS_SCHEDULER_TRANSITION_STATE": str(source_state)',
         'KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION": "1"',
         'c2_last_state_preserve_adamw_new_234_segment_stage',
+        'TOKENIZER_REPO = "NeoQuasar/Kronos-Tokenizer-base"',
+        'def resolve_tokenizer():',
         '["git", "fetch", "--depth", "1", "origin", SOURCE_COMMIT]',
         'finetune/kaggle_kronos_small_v21.py',
     ):
@@ -47,5 +49,4 @@ def test_c2_best_wc_1e5_c3_finishes_coverage_from_c2_last():
     assert metadata['machine_shape'] == 'NvidiaTeslaT4'
     assert metadata['kernel_sources'] == [
         'luckfu/kronos-small-0-1-stage2-c2-best-wc-1e5-c2',
-        'smmt315/kronos-small-0-1-stage2-cosine-refinement-c2',
     ]

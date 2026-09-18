@@ -10,7 +10,6 @@
   "machine_shape": "NvidiaTeslaT4",
   "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
   "kernel_sources": [
-    "luckfu/kronos-small-0-1-stage2-c2-best-wc-1e5-c2",
-    "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2"
+    "luckfu/kronos-small-0-1-stage2-c2-best-wc-1e5-c2"
   ]
 }
