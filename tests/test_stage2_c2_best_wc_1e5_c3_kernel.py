@@ -43,7 +43,7 @@ def test_c2_best_wc_1e5_c3_finishes_coverage_from_c2_last():
     assert 'KRONOS_SMALL_V21_CONTINUATION_ROOT' not in source
     assert 'SWANLAB_RUN_ID = "small_0.1_stage2_c2_best_wc_1e5_c3"' not in source
     metadata = json.loads(META.read_text())
-    assert metadata['id'] == 'luckfu/kronos-small-0-1-stage2-c2-best-wc-1e5-c3'
+    assert metadata['id'] == 'user281434/kronos-small-0-1-stage2-c2-best-wc-1e5-c3'
     assert metadata['code_file'] == 'kaggle_small_0_1_stage2_c2_best_wc_1e5_c3.py'
     assert metadata['enable_gpu'] is True
     assert metadata['machine_shape'] == 'NvidiaTeslaT4'
