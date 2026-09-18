@@ -124,3 +124,15 @@ def test_swanlab_chart_segment_continues_from_offset():
     assert ns["swanlab_chart_segment"](1, {}) == 1
     assert ns["swanlab_chart_segment"](1, {"KRONOS_SWANLAB_SEGMENT_OFFSET": "100"}) == 101
     assert ns["swanlab_chart_segment"](200, {"KRONOS_SWANLAB_SEGMENT_OFFSET": "100"}) == 300
+
+
+def test_globalize_training_log_uses_experiment_wide_segments():
+    ns = load_runner()
+    line = (
+        "[Rank 0, Segment 1/200, Step 100/313] Adaptation LR 1.0000000000e-05, "
+        "Condition LR 1.0000000000e-05, Loss: 2.2691, Forecast: 2.2501, "
+        "History: 2.4575\n"
+    )
+    env = {"KRONOS_SWANLAB_SEGMENT_OFFSET": "100"}
+    assert "Segment 101/300, Step 100/313" in ns["globalize_training_log"](line, env)
+    assert ns["globalize_training_log"](line, {}) == line

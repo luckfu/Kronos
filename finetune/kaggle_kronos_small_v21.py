@@ -35,6 +35,26 @@ def swanlab_chart_segment(local_segment, env=None):
     return int(local_segment) + offset
 
 
+def globalize_training_log(line, env=None):
+    """Display staged training progress on the experiment-wide segment axis."""
+    source = env if env is not None else os.environ
+    offset = max(0, int(source.get("KRONOS_SWANLAB_SEGMENT_OFFSET", "0") or 0))
+    if not offset:
+        return line
+    match = TRAIN_LOG_RE.search(line)
+    if match is None:
+        return line
+    local_segment = int(match.group(1))
+    local_total = int(match.group(2))
+    start, end = match.span(0)
+    matched = match.group(0).replace(
+        f"Segment {local_segment}/{local_total}",
+        f"Segment {local_segment + offset}/{local_total + offset}",
+        1,
+    )
+    return line[:start] + matched + line[end:]
+
+
 STAGES = {
     "bootstrap": {
         "output": "small_0.1_bootstrap",
@@ -514,11 +534,12 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     total_steps = 1
     try:
         for line in child.stdout:
-            # Persist first, then forward. Both writes are line-buffered and
-            # the explicit flush makes the parent visible to Kaggle capture.
-            log_handle.write(line)
+            # Parse the trainer's local stage coordinates, but persist and
+            # display experiment-wide segment numbers for continued stages.
+            forwarded_line = globalize_training_log(line, env)
+            log_handle.write(forwarded_line)
             log_handle.flush()
-            print(line, end="", flush=True)
+            print(forwarded_line, end="", flush=True)
             match = TRAIN_LOG_RE.search(line)
             if match:
                 segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
