@@ -1,0 +1,261 @@
+{
+  "status": "complete",
+  "date": "2026-09-19",
+  "kernel": "user281434/kronos-small-0-1-stage2-c2-best-wc-1e5-c4",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kronos-small-0-1-stage2-c2-best-wc-1e5-c4",
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "stage2_wc_from_c2_best; warmup_constant 1e-5; coverage_seed 20260918; finish last 27 slices from C3 last; coverage 534 complete",
+  "training_performed": true,
+  "oos_used": false,
+  "source_commit": "efcb2ff9009c1c765f0a63585b53ebab473e2321",
+  "hardware": [
+    "Tesla T4",
+    "Tesla T4"
+  ],
+  "run_id": "small_0.1_stage2_c2_best_wc_1e5",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage2_c2_best_wc_1e5",
+  "wall_clock_utc": [
+    "2026-09-19T02:11:43Z",
+    "2026-09-19T03:36:07Z"
+  ],
+  "spec_checks": {
+    "parent_is_c3_last_segment_207": true,
+    "parent_last_sha256": "1bd30e3c66aefd1364967bb906ac77652bcf9bfad89044f385995c3e931f9a49",
+    "tokenizer_sha256": "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee",
+    "scheduler": "warmup_constant",
+    "fixed_lr": 1e-05,
+    "coverage_seed": 20260918,
+    "coverage_epoch_offset": 507,
+    "completed_segments": 27,
+    "total_segments_planned": 27,
+    "global_segments_after_chunk": 534,
+    "coverage_pass_complete": true,
+    "stop_reason": "completed",
+    "progress_status": "completed",
+    "best_selection_metric": "forecast",
+    "best_segment_local": 21,
+    "best_segment_global": 528,
+    "best_equals_last": false,
+    "rank_ic_not_in_this_run": true
+  },
+  "best_checkpoint": {
+    "local_segment": 21,
+    "global_segment": 528,
+    "forecast_loss": 2.2728769779205322,
+    "history_loss": 2.515472650527954,
+    "full_sequence_loss": 2.4950242042541504,
+    "weights_sha256": "9c5605d08e4f63e223d7b5edf9c6c8d2acad88ddfe022e5b27c098588d743075"
+  },
+  "last_checkpoint": {
+    "local_segment": 27,
+    "global_segment": 534,
+    "forecast_loss": 2.2752511501312256,
+    "history_loss": 2.5160837173461914,
+    "full_sequence_loss": 2.495790719985962,
+    "weights_sha256": "c285a652419841c05e3b2c7b696cb4e1d86d92bc6cfae0ec00e30f076d407f7b"
+  },
+  "campaign_val_forecast": {
+    "c1_best_g95": 2.2885897159576416,
+    "c2_best_g289": 2.279949903488159,
+    "c3_best_g476": 2.2735209465026855,
+    "c4_best_g528": 2.2728769779205322,
+    "c4_last_g534": 2.2752511501312256
+  },
+  "validation_forecast_by_segment": [
+    {
+      "segment": 1,
+      "forecast_loss": 2.2762033939361572,
+      "history_loss": 2.515395402908325,
+      "full_sequence_loss": 2.495244026184082,
+      "samples": 123836
+    },
+    {
+      "segment": 2,
+      "forecast_loss": 2.2757580280303955,
+      "history_loss": 2.5165677070617676,
+      "full_sequence_loss": 2.4962849617004395,
+      "samples": 123836
+    },
+    {
+      "segment": 3,
+      "forecast_loss": 2.2757396697998047,
+      "history_loss": 2.51676344871521,
+      "full_sequence_loss": 2.496455430984497,
+      "samples": 123836
+    },
+    {
+      "segment": 4,
+      "forecast_loss": 2.2765653133392334,
+      "history_loss": 2.518592119216919,
+      "full_sequence_loss": 2.4982032775878906,
+      "samples": 123836
+    },
+    {
+      "segment": 5,
+      "forecast_loss": 2.2762718200683594,
+      "history_loss": 2.515072822570801,
+      "full_sequence_loss": 2.494955062866211,
+      "samples": 123836
+    },
+    {
+      "segment": 6,
+      "forecast_loss": 2.2744505405426025,
+      "history_loss": 2.517382860183716,
+      "full_sequence_loss": 2.4969186782836914,
+      "samples": 123836
+    },
+    {
+      "segment": 7,
+      "forecast_loss": 2.2755682468414307,
+      "history_loss": 2.516780138015747,
+      "full_sequence_loss": 2.496447801589966,
+      "samples": 123836
+    },
+    {
+      "segment": 8,
+      "forecast_loss": 2.274963855743408,
+      "history_loss": 2.5162277221679688,
+      "full_sequence_loss": 2.4958996772766113,
+      "samples": 123836
+    },
+    {
+      "segment": 9,
+      "forecast_loss": 2.2767961025238037,
+      "history_loss": 2.5178298950195312,
+      "full_sequence_loss": 2.4975223541259766,
+      "samples": 123836
+    },
+    {
+      "segment": 10,
+      "forecast_loss": 2.2750320434570312,
+      "history_loss": 2.5159144401550293,
+      "full_sequence_loss": 2.495624303817749,
+      "samples": 123836
+    },
+    {
+      "segment": 11,
+      "forecast_loss": 2.2743489742279053,
+      "history_loss": 2.5160181522369385,
+      "full_sequence_loss": 2.495661735534668,
+      "samples": 123836
+    },
+    {
+      "segment": 12,
+      "forecast_loss": 2.2775888442993164,
+      "history_loss": 2.5175442695617676,
+      "full_sequence_loss": 2.4973185062408447,
+      "samples": 123836
+    },
+    {
+      "segment": 13,
+      "forecast_loss": 2.279045820236206,
+      "history_loss": 2.5155885219573975,
+      "full_sequence_loss": 2.495657205581665,
+      "samples": 123836
+    },
+    {
+      "segment": 14,
+      "forecast_loss": 2.274721145629883,
+      "history_loss": 2.515002727508545,
+      "full_sequence_loss": 2.4947547912597656,
+      "samples": 123836
+    },
+    {
+      "segment": 15,
+      "forecast_loss": 2.2739980220794678,
+      "history_loss": 2.5147907733917236,
+      "full_sequence_loss": 2.494502305984497,
+      "samples": 123836
+    },
+    {
+      "segment": 16,
+      "forecast_loss": 2.2753257751464844,
+      "history_loss": 2.5157289505004883,
+      "full_sequence_loss": 2.4954793453216553,
+      "samples": 123836
+    },
+    {
+      "segment": 17,
+      "forecast_loss": 2.278229236602783,
+      "history_loss": 2.5187203884124756,
+      "full_sequence_loss": 2.498453140258789,
+      "samples": 123836
+    },
+    {
+      "segment": 18,
+      "forecast_loss": 2.2729921340942383,
+      "history_loss": 2.5146753787994385,
+      "full_sequence_loss": 2.4943161010742188,
+      "samples": 123836
+    },
+    {
+      "segment": 19,
+      "forecast_loss": 2.2753524780273438,
+      "history_loss": 2.5154709815979004,
+      "full_sequence_loss": 2.495237350463867,
+      "samples": 123836
+    },
+    {
+      "segment": 20,
+      "forecast_loss": 2.2792961597442627,
+      "history_loss": 2.518475294113159,
+      "full_sequence_loss": 2.4983179569244385,
+      "samples": 123836
+    },
+    {
+      "segment": 21,
+      "forecast_loss": 2.2728769779205322,
+      "history_loss": 2.515472650527954,
+      "full_sequence_loss": 2.4950242042541504,
+      "samples": 123836
+    },
+    {
+      "segment": 22,
+      "forecast_loss": 2.2759931087493896,
+      "history_loss": 2.5175275802612305,
+      "full_sequence_loss": 2.4971776008605957,
+      "samples": 123836
+    },
+    {
+      "segment": 23,
+      "forecast_loss": 2.274709463119507,
+      "history_loss": 2.516841173171997,
+      "full_sequence_loss": 2.496436357498169,
+      "samples": 123836
+    },
+    {
+      "segment": 24,
+      "forecast_loss": 2.2751662731170654,
+      "history_loss": 2.51751446723938,
+      "full_sequence_loss": 2.497093915939331,
+      "samples": 123836
+    },
+    {
+      "segment": 25,
+      "forecast_loss": 2.273308753967285,
+      "history_loss": 2.5168967247009277,
+      "full_sequence_loss": 2.49638032913208,
+      "samples": 123836
+    },
+    {
+      "segment": 26,
+      "forecast_loss": 2.273030996322632,
+      "history_loss": 2.516885995864868,
+      "full_sequence_loss": 2.4963366985321045,
+      "samples": 123836
+    },
+    {
+      "segment": 27,
+      "forecast_loss": 2.2752511501312256,
+      "history_loss": 2.5160837173461914,
+      "full_sequence_loss": 2.495790719985962,
+      "samples": 123836
+    }
+  ],
+  "next": "13-date diagnostic OOS on saved 1e-5 late checkpoints including C4 best/last",
+  "takeaways": [
+    "C4 completed 27/27; one Stage2 coverage pass is now 534/534",
+    "campaign CE best moved again: C3 2.2735 @g476 -> C4 2.2729 @g528",
+    "Rank IC not measured in this run; do not treat lower CE as higher Alpha"
+  ]
+}

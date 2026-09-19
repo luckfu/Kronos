@@ -1,0 +1,42 @@
+{
+  "date": "2026-09-19",
+  "status": "judgment_updated",
+  "judgment": "C2 best is not necessarily frozen. Stage2 original objective + LR=1e-5 continued lowering val CE while keeping 13-day OOS D10 pooled Rank IC at 0.1836 vs C2 0.1844. 2e-6 P0a/P1 both collapsed. Primary variable is LR / optimization trajectory, not 'continuation itself'. This is Alpha preservation, not improvement.",
+  "not_claimed": [
+    "1e-5 is the optimal LR",
+    "1e-5 improved Alpha vs C2 best",
+    "full-model training after C2 best always preserves Alpha"
+  ],
+  "paused": ["path_alignment", "rank_auxiliary", "lambda_sweep", "mixture_decode_fix", "kl", "5e-6_1e-5_2e-5_full_runs"],
+  "existing_2e6_trajectory_d10_pooled_rank_ic": {
+    "note": "same 13-date evaluator/seed; ~313 optimizer steps per segment",
+    "p0a_uniform_ce_2e-6": [
+      {"label": "init_c2_best", "segment": 0, "approx_steps": 0, "ic": 0.18440434213929857},
+      {"label": "seg05", "segment": 5, "approx_steps": 1565, "ic": 0.16041311126632743},
+      {"label": "seg10", "segment": 10, "approx_steps": 3130, "ic": 0.11628192282948374},
+      {"label": "last_seg15", "segment": 15, "approx_steps": 4695, "ic": 0.0642869478967645}
+    ],
+    "p1_weighted_ce_history_rank_2e-6": [
+      {"label": "init_c2_best", "segment": 0, "approx_steps": 0, "ic": 0.18440434213929857},
+      {"label": "seg05", "segment": 5, "approx_steps": 1565, "ic": 0.16107309255903515},
+      {"label": "seg10", "segment": 10, "approx_steps": 3130, "ic": 0.12812431635747357},
+      {"label": "last_seg15", "segment": 15, "approx_steps": 4695, "ic": 0.07051105590162271}
+    ]
+  },
+  "wc_1e5_requested_vs_available": {
+    "requested_steps": [0, 10000, 20000, 40000, 60000, 80000, "best", "last"],
+    "available": [
+      {"label": "init_c2_best", "global_segment": 0, "approx_steps": 0, "ic": 0.18440434213929857, "have_weights": true, "oos_done": true},
+      {"label": "c1_best_seg95", "global_segment": 95, "approx_steps": 29735, "ic": null, "have_weights": "luckfu C1; current CLI cannot access", "oos_done": false},
+      {"label": "c1_last_seg100", "global_segment": 100, "approx_steps": 31300, "ic": null, "have_weights": "luckfu C1; current CLI cannot access", "oos_done": false},
+      {"label": "c2_best_local189", "global_segment": 289, "approx_steps": 90457, "ic": 0.18364682977280178, "have_weights": true, "oos_done": true},
+      {"label": "c2_last_local200", "global_segment": 300, "approx_steps": 93900, "ic": null, "have_weights": true, "oos_done": false},
+      {"label": "c3_best_local176", "global_segment": 476, "approx_steps": 148988, "ic": null, "have_weights": true, "oos_done": false},
+      {"label": "c3_last_local207", "global_segment": 507, "approx_steps": 158691, "ic": null, "have_weights": true, "oos_done": false},
+      {"label": "c4_best_local21", "global_segment": 528, "approx_steps": 165264, "ic": null, "have_weights": true, "oos_done": false, "val_forecast": 2.2728769779205322},
+      {"label": "c4_last_local27", "global_segment": 534, "approx_steps": 167142, "ic": null, "have_weights": true, "oos_done": false, "val_forecast": 2.2752511501312256}
+    ],
+    "missing_exact_milestones": [10000, 20000, 40000, 60000, 80000],
+    "critical_gap": "2e-6 collapsed by ~5k steps; first 1e-5 OOS is ~90k. Early 1e-5 (especially C1 ~30k) is the hole."
+  }
+}
