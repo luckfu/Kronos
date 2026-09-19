@@ -8,7 +8,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-COMMIT = '0' * 40
+COMMIT = 'f73c3e04612f4904c58cb18bb23800a6ed0f33fb'
 
 
 def main():
