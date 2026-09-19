@@ -13,7 +13,14 @@ from datetime import datetime, timezone
 
 SOURCE_COMMIT = os.environ.get('STAGE3_SOURCE_COMMIT', 'a854641420068dbbc6daf2dcfa329c8ecbaa425a')
 RUN_ID = os.environ.get('STAGE3_SWANLAB_RUN_ID', 'small_0.1_stage3_joint_path_alignment_from_c2_best_v2')
-PARENT = 'smmt315/kronos-small-0-1-stage2-cosine-refinement-c2'
+PARENT = os.environ.get('STAGE3_PARENT_KERNEL', 'smmt315/kronos-small-0-1-stage2-cosine-refinement-c2')
+LR = float(os.environ.get('STAGE3_LR', '2e-6'))
+SEED = int(os.environ.get('STAGE3_SEED', '20260915'))
+PARENT_BEST_GLOB = os.environ.get(
+    'STAGE3_PARENT_BEST_GLOB',
+    '**/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors',
+)
+TOKENIZER_REPO = os.environ.get('STAGE3_TOKENIZER_REPO', '')
 OUTPUT = Path('/kaggle/working/stage3_joint_path_smoke')
 RESUME_KERNEL = os.environ.get('STAGE3_RESUME_KERNEL', '')
 TARGET_SEGMENTS = int(os.environ.get('STAGE3_TARGET_SEGMENTS', '1'))
@@ -32,7 +39,10 @@ FORECAST_HORIZON_WEIGHTS = os.environ.get(
 MILESTONE_SEGMENTS = os.environ.get('STAGE3_MILESTONE_SEGMENTS', '')
 TRAINABLE_MASK = os.environ.get('STAGE3_TRAINABLE_MASK', 'all')
 HASHES = {
-    'best': '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
+    'best': os.environ.get(
+        'STAGE3_PARENT_BEST_SHA',
+        '4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a',
+    ),
     'tokenizer': '59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee',
     'train': '034c5315547e35e38e6f3a3279ecc3ce01b625f1139229e6371d3f6c4e927a90',
     'val': '4cce31bc3e70eab83d5b7ea05f19fce04aa57a87f3acf00b882ddfbac4219bf7',
@@ -66,18 +76,37 @@ def run(command, cwd=None, env=None):
     if proc.wait(): raise subprocess.CalledProcessError(proc.returncode, command)
 
 
+def resolve_tokenizer(root):
+    tokenizer = list(root.glob('**/Kronos-Tokenizer-base/model.safetensors'))
+    if len(tokenizer) == 1:
+        return tokenizer[0]
+    if len(tokenizer) > 1:
+        raise RuntimeError(f'Expected unique tokenizer; got {tokenizer}')
+    if not TOKENIZER_REPO:
+        raise RuntimeError('Tokenizer not mounted and STAGE3_TOKENIZER_REPO is empty')
+    from huggingface_hub import snapshot_download
+    cache = Path('/kaggle/working/kronos_tokenizer_base')
+    snapshot_download(TOKENIZER_REPO, local_dir=str(cache), local_dir_use_symlinks=False)
+    path = cache / 'model.safetensors'
+    if not path.is_file():
+        raise RuntimeError(f'Tokenizer download missing: {path}')
+    return path
+
+
 def resolve_inputs(root):
     manifests = [p for p in root.rglob('data_manifest.json')
                  if (p.parent / 'processed_datasets/train_data.pkl').is_file()
                  and (p.parent / 'processed_datasets/val_data.pkl').is_file()]
-    best = list(root.glob('**/small_0.1_stage2_cosine_refinement/checkpoints/best_model/model.safetensors'))
-    tokenizer = list(root.glob('**/models/Kronos-Tokenizer-base/model.safetensors'))
-    for name, matches in [('public dataset', manifests), ('C2 best', best), ('tokenizer', tokenizer)]:
-        if len(matches) != 1: raise RuntimeError(f'Expected unique {name}; got {matches}')
+    best = list(root.glob(PARENT_BEST_GLOB))
+    if len(manifests) != 1:
+        raise RuntimeError(f'Expected unique public dataset; got {manifests}')
+    if len(best) != 1:
+        raise RuntimeError(f'Expected unique parent best; got {best}')
+    tokenizer = resolve_tokenizer(root)
     data_root = manifests[0].parent
     return {'manifest': manifests[0], 'train': data_root / 'processed_datasets/train_data.pkl',
             'val': data_root / 'processed_datasets/val_data.pkl',
-            'metadata': data_root / 'asset_metadata.csv', 'best': best[0], 'tokenizer': tokenizer[0]}
+            'metadata': data_root / 'asset_metadata.csv', 'best': best[0], 'tokenizer': tokenizer}
 
 
 def verify_hashes(inputs):
@@ -92,7 +121,7 @@ def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
-          lr=2e-6, amp=False, lambda_path=LAMBDA_PATH, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
+          lr=LR, amp=False, lambda_path=LAMBDA_PATH, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
           history_weight=HISTORY_WEIGHT, forecast_horizon_weights=FORECAST_HORIZON_WEIGHTS,
           milestone_segments=MILESTONE_SEGMENTS, trainable_mask=TRAINABLE_MASK,
           hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
@@ -207,10 +236,10 @@ def main():
                    KRONOS_LOOKBACK_WINDOW='120', KRONOS_PREDICT_WINDOW='10', KRONOS_USE_SIZE_PERCENTILE='1',
                    KRONOS_NUM_SIZE_BUCKETS='0', KRONOS_VALIDATION_SAMPLES='0',
                    KRONOS_VAL_SIGNAL_START='2025-07-01', KRONOS_VAL_SIGNAL_END='2026-07-02',
-                   KRONOS_COVERAGE_SEED='20260915', KRONOS_TRAIN_SAMPLES_PER_SEGMENT='20000')
+                   KRONOS_COVERAGE_SEED=str(SEED), KRONOS_TRAIN_SAMPLES_PER_SEGMENT='20000')
         manifest = {'source_commit': SOURCE_COMMIT, 'parent_kernel': PARENT, 'parent_checkpoint': 'best_model',
                     'initialization': 'model_weights_only', 'optimizer': 'fresh_AdamW', 'scheduler': 'fixed',
-                    'lr': 2e-6, 'amp': False, 'seed': 20260915, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': 32,
+                    'lr': LR, 'amp': False, 'seed': SEED, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': 32,
                     'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
                     'lookback': 120, 'horizon': 10,
                     'loss': (
@@ -260,7 +289,7 @@ def main():
         if MILESTONE_SEGMENTS:
             resume_args += ['--milestone-segments', MILESTONE_SEGMENTS]
         train_args = ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32',
-                      '--lr', '2e-6', '--seed', '20260915', '--log-interval', '10',
+                      '--lr', str(LR), '--seed', str(SEED), '--log-interval', '10',
                       '--lambda-path', str(LAMBDA_PATH), '--trainable-mask', TRAINABLE_MASK,
                       '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)]
         if CE_RANK:

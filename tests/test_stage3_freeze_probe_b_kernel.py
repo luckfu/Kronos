@@ -13,6 +13,7 @@ def test_smoke_fetches_pinned_commit_not_master_tip():
     assert "'--branch', 'master'" not in source
     assert 'STAGE3_TRAINABLE_MASK' in source
     assert "'--trainable-mask', TRAINABLE_MASK" in source
+    assert "'--lr', str(LR)" in source
     assert 'tests/test_stage3_trainable_mask.py' in source
     assert 'freeze_audit.json' in source
     mask_tests = (ROOT / 'tests/test_stage3_trainable_mask.py').read_text()
