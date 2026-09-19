@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 
-SOURCE_COMMIT = "0" * 40
+SOURCE_COMMIT = "efcb2ff9009c1c765f0a63585b53ebab473e2321"
 OUTPUT_NAME = "small_0.1_stage2_c2_best_wc_1e5_c4"
 SWANLAB_RUN_ID = "small_0.1_stage2_c2_best_wc_1e5"
 COVERAGE_SEED = "20260918"
