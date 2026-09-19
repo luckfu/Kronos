@@ -14,10 +14,11 @@ import time
 from pathlib import Path
 
 
-SOURCE_COMMIT = "0" * 40
+SOURCE_COMMIT = "7e5c95e1a3dec8baec971c63579ed6045510d3e8"
 OUTPUT_NAME = "small_0.1_stage2_c4_best_wc_2e5"
 SWANLAB_RUN_ID = "small_0.1_stage2_c4_best_wc_2e5"
 COVERAGE_SEED = "20260919"
+COVERAGE_EPOCH_OFFSET = 0
 MAX_SEGMENTS_PER_RUN = 100
 TARGET_SEGMENTS = 100
 MAX_RUNTIME_SECONDS = 39600
@@ -133,6 +134,7 @@ def main():
         "warmup_start_lr": FIXED_LR,
         "warmup_ratio": 0,
         "coverage_seed": COVERAGE_SEED,
+        "coverage_epoch_offset": COVERAGE_EPOCH_OFFSET,
         "target_segments": TARGET_SEGMENTS,
         "max_segments_this_chunk": MAX_SEGMENTS_PER_RUN,
         "initialization": "c4_best_weights_fresh_adamw",
@@ -174,6 +176,7 @@ def main():
         "KRONOS_BATCH_SIZE": "32",
         "KRONOS_NUM_WORKERS": "2",
         "KRONOS_COVERAGE_SEED": COVERAGE_SEED,
+        "KRONOS_COVERAGE_EPOCH_OFFSET": str(COVERAGE_EPOCH_OFFSET),
         "KRONOS_COVERAGE_PASSES": "1",
         "KRONOS_SCHEDULER": "warmup_constant",
         "KRONOS_SCHEDULER_WARMUP_RATIO": "0",

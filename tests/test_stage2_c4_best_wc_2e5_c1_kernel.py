@@ -20,6 +20,8 @@ def test_c4_best_wc_2e5_c1_is_stage2_warmup_constant_100_segments():
         'OUTPUT_NAME = "small_0.1_stage2_c4_best_wc_2e5"',
         'SWANLAB_RUN_ID = "small_0.1_stage2_c4_best_wc_2e5"',
         'COVERAGE_SEED = "20260919"',
+        'COVERAGE_EPOCH_OFFSET = 0',
+        'KRONOS_COVERAGE_EPOCH_OFFSET": str(COVERAGE_EPOCH_OFFSET)',
         'MAX_SEGMENTS_PER_RUN = 100',
         'TARGET_SEGMENTS = 100',
         'FIXED_LR = "2e-5"',
@@ -43,6 +45,8 @@ def test_c4_best_wc_2e5_c1_is_stage2_warmup_constant_100_segments():
     assert 'KRONOS_SCHEDULER_TRANSITION_STATE' not in source
     assert 'SWANLAB_RUN_ID = "small_0.1_stage2_c2_best_wc_1e5"' not in source
     assert 'FIXED_LR = "1e-5"' not in source
+    assert 'COVERAGE_SEED = "20260918"' not in source
+    assert 'COVERAGE_EPOCH_OFFSET = 507' not in source
     metadata = json.loads(META.read_text())
     assert metadata['id'] == 'user281434/kronos-small-0-1-stage2-c4-best-wc-2e5-c1'
     assert metadata['code_file'] == 'kaggle_small_0_1_stage2_c4_best_wc_2e5_c1.py'
