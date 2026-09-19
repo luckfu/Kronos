@@ -1,0 +1,185 @@
+{
+  "status": "complete",
+  "date": "2026-09-19",
+  "kernel": "user281434/kronos-small-0-1-stage2-c2-best-wc-1e5-c4-best-oos",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kronos-small-0-1-stage2-c2-best-wc-1e5-c4-best-oos",
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "exploratory_only; 13-date OOS design-contaminated; production candidate requires sealed fresh-window OOS",
+  "training_performed": false,
+  "oos_used": true,
+  "evaluated": "wc_1e5_c4_best_g528",
+  "global_segment": 528,
+  "local_segment": 21,
+  "val_forecast_ce": 2.2728769779205322,
+  "weights_sha256": "9c5605d08e4f63e223d7b5edf9c6c8d2acad88ddfe022e5b27c098588d743075",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-08-27",
+  "samples": 66986,
+  "signal_dates": 13,
+  "elapsed_sec": 713.4737181663513,
+  "d10": {
+    "pooled_rank_ic": 0.17918741695116097,
+    "daily_rank_ic_mean": 0.17144403876208686,
+    "positive_ic_ratio": 1.0,
+    "direction_accuracy": 0.4930881079628579,
+    "mean_top_bottom_10pct": 0.032760378123768225
+  },
+  "comparisons": {
+    "c2_best_d10_pooled_rank_ic": 0.18440434213929857,
+    "wc_1e5_c2_kernel_best_d10_pooled_rank_ic": 0.18364682977280178,
+    "delta_vs_c2": -0.0052169251881376,
+    "rel_vs_c2": -0.028290685173762056,
+    "delta_vs_c2_kernel_best": -0.004459412821640807,
+    "rel_vs_c2_kernel_best": -0.02428254725201496
+  },
+  "by_horizon_pooled_rank_ic": [
+    {
+      "horizon_day": 1,
+      "pooled_rank_ic": 0.12897203559728707,
+      "direction_accuracy": 0.5299316275042546
+    },
+    {
+      "horizon_day": 2,
+      "pooled_rank_ic": 0.11475706304190948,
+      "direction_accuracy": 0.523318305317529
+    },
+    {
+      "horizon_day": 3,
+      "pooled_rank_ic": 0.07200142118960262,
+      "direction_accuracy": 0.49671573164541843
+    },
+    {
+      "horizon_day": 4,
+      "pooled_rank_ic": 0.07167363527572633,
+      "direction_accuracy": 0.49252082524706653
+    },
+    {
+      "horizon_day": 5,
+      "pooled_rank_ic": 0.08219474589317864,
+      "direction_accuracy": 0.49695458752575167
+    },
+    {
+      "horizon_day": 6,
+      "pooled_rank_ic": 0.09851426339258311,
+      "direction_accuracy": 0.502224345385603
+    },
+    {
+      "horizon_day": 7,
+      "pooled_rank_ic": 0.12337433698379015,
+      "direction_accuracy": 0.5024333442808945
+    },
+    {
+      "horizon_day": 8,
+      "pooled_rank_ic": 0.14509909541133525,
+      "direction_accuracy": 0.5006717821634371
+    },
+    {
+      "horizon_day": 9,
+      "pooled_rank_ic": 0.16001696251147587,
+      "direction_accuracy": 0.49719344340608485
+    },
+    {
+      "horizon_day": 10,
+      "pooled_rank_ic": 0.17918741695116097,
+      "direction_accuracy": 0.4930881079628579
+    }
+  ],
+  "by_signal_date_d10": [
+    {
+      "asof_date": "2026-08-11",
+      "samples": 5162,
+      "rank_ic": 0.11973606014276555,
+      "direction_accuracy": 0.5524990313831848,
+      "top_bottom_10pct": 0.006386253082083538
+    },
+    {
+      "asof_date": "2026-08-12",
+      "samples": 5161,
+      "rank_ic": 0.21025186199862395,
+      "direction_accuracy": 0.587483045921333,
+      "top_bottom_10pct": 0.023215062152486234
+    },
+    {
+      "asof_date": "2026-08-13",
+      "samples": 5162,
+      "rank_ic": 0.12675501258047575,
+      "direction_accuracy": 0.5197597830298334,
+      "top_bottom_10pct": 0.005450244452552123
+    },
+    {
+      "asof_date": "2026-08-14",
+      "samples": 5158,
+      "rank_ic": 0.19367970834809028,
+      "direction_accuracy": 0.5494377665761924,
+      "top_bottom_10pct": 0.026550597460695
+    },
+    {
+      "asof_date": "2026-08-17",
+      "samples": 5154,
+      "rank_ic": 0.23575459626631134,
+      "direction_accuracy": 0.5397749320915793,
+      "top_bottom_10pct": 0.039923835863438666
+    },
+    {
+      "asof_date": "2026-08-18",
+      "samples": 5153,
+      "rank_ic": 0.30876172118355394,
+      "direction_accuracy": 0.5138754123811372,
+      "top_bottom_10pct": 0.07599598076916478
+    },
+    {
+      "asof_date": "2026-08-19",
+      "samples": 5153,
+      "rank_ic": 0.1541486947315499,
+      "direction_accuracy": 0.42693576557345236,
+      "top_bottom_10pct": 0.045944390948428636
+    },
+    {
+      "asof_date": "2026-08-20",
+      "samples": 5152,
+      "rank_ic": 0.10259273145869169,
+      "direction_accuracy": 0.4514751552795031,
+      "top_bottom_10pct": 0.017436234987983395
+    },
+    {
+      "asof_date": "2026-08-21",
+      "samples": 5148,
+      "rank_ic": 0.22564836161343133,
+      "direction_accuracy": 0.44463869463869465,
+      "top_bottom_10pct": 0.05439813472692247
+    },
+    {
+      "asof_date": "2026-08-24",
+      "samples": 5149,
+      "rank_ic": 0.11109838937212074,
+      "direction_accuracy": 0.4171683822101379,
+      "top_bottom_10pct": 0.025503318402373652
+    },
+    {
+      "asof_date": "2026-08-25",
+      "samples": 5147,
+      "rank_ic": 0.12919071688703332,
+      "direction_accuracy": 0.41577618029920344,
+      "top_bottom_10pct": 0.033650659820408484
+    },
+    {
+      "asof_date": "2026-08-26",
+      "samples": 5146,
+      "rank_ic": 0.09231012522040137,
+      "direction_accuracy": 0.44617178390983286,
+      "top_bottom_10pct": 0.021894208667347717
+    },
+    {
+      "asof_date": "2026-08-27",
+      "samples": 5141,
+      "rank_ic": 0.21884452410407976,
+      "direction_accuracy": 0.5446411204045906,
+      "top_bottom_10pct": 0.04953599427510232
+    }
+  ],
+  "takeaways": [
+    "C4 best D10 pooled Rank IC 0.1792 vs C2 0.1844 (-0.0052, -2.8%) and vs 1e-5 C2-kernel best 0.1836 (-0.0045)",
+    "Not a 2e-6-style collapse (0.064/0.070), but more Alpha leak than the mid-campaign 0.1836 checkpoint",
+    "val CE continued down 2.2799 -> 2.2729 while Rank IC went 0.1836 -> 0.1792; 13/13 days still positive"
+  ]
+}

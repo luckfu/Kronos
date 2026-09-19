@@ -1,0 +1,151 @@
+{
+  "status": "complete",
+  "date": "2026-09-19",
+  "kernel": "user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only",
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "stage3_ce_only_from_c4_best; lr=1e-5; 15-segment rehearsal; Rank IC not measured",
+  "training_performed": true,
+  "oos_used": false,
+  "source_commit": "f73c3e04612f4904c58cb18bb23800a6ed0f33fb",
+  "run_id": "small_0.1_stage3_c4_best_1e5_ce_only_v1",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_c4_best_1e5_ce_only_v1",
+  "spec_checks": {
+    "parent": "c4_best_g528",
+    "parent_sha256": "9c5605d08e4f63e223d7b5edf9c6c8d2acad88ddfe022e5b27c098588d743075",
+    "lr": 1e-05,
+    "seed": 20260919,
+    "lambda_path": 0.0,
+    "ce_rank": false,
+    "loss_string": "CE+0*EMA_normalized_six_feature_Huber",
+    "completed_segments": 15,
+    "final_step": 4695,
+    "best_equals_last": true,
+    "best_segment": 15
+  },
+  "validation_token_ce": {
+    "seg01": 2.318882932376945,
+    "seg05": 2.103628,
+    "seg10": 1.969756,
+    "best_last_seg15": 1.919825055859587,
+    "drop_seg01_to_seg15": -0.3990578765173578
+  },
+  "p0a_2e6_reference": {
+    "from": "C2 best",
+    "lr": 2e-06,
+    "c2_baseline_token_ce": 2.338481148317605,
+    "last_token_ce": 2.278021842257652
+  },
+  "by_segment": [
+    {
+      "segment": 1,
+      "step": 313,
+      "token_loss": 2.318882932376945,
+      "raw_path_loss": 0.006584165989657726,
+      "top16_joint_mass": 0.583951185694067
+    },
+    {
+      "segment": 2,
+      "step": 626,
+      "token_loss": 2.3082167789214396,
+      "raw_path_loss": 0.0066656256799782765,
+      "top16_joint_mass": 0.5812216672698959
+    },
+    {
+      "segment": 3,
+      "step": 939,
+      "token_loss": 2.2661383610763015,
+      "raw_path_loss": 0.006696924947720466,
+      "top16_joint_mass": 0.594858404564578
+    },
+    {
+      "segment": 4,
+      "step": 1252,
+      "token_loss": 2.181097343878335,
+      "raw_path_loss": 0.0066295952775983005,
+      "top16_joint_mass": 0.6192807799833967
+    },
+    {
+      "segment": 5,
+      "step": 1565,
+      "token_loss": 2.1036281466749758,
+      "raw_path_loss": 0.00668534697044445,
+      "top16_joint_mass": 0.645233116818474
+    },
+    {
+      "segment": 6,
+      "step": 1878,
+      "token_loss": 2.0563428766363416,
+      "raw_path_loss": 0.006704468952863458,
+      "top16_joint_mass": 0.6595675018386341
+    },
+    {
+      "segment": 7,
+      "step": 2191,
+      "token_loss": 2.026234156397941,
+      "raw_path_loss": 0.006696725961991662,
+      "top16_joint_mass": 0.6676494528533853
+    },
+    {
+      "segment": 8,
+      "step": 2504,
+      "token_loss": 2.0027970784994795,
+      "raw_path_loss": 0.0067146581251467455,
+      "top16_joint_mass": 0.676747560843798
+    },
+    {
+      "segment": 9,
+      "step": 2817,
+      "token_loss": 1.9829129359377051,
+      "raw_path_loss": 0.006723812423360847,
+      "top16_joint_mass": 0.6794714489258931
+    },
+    {
+      "segment": 10,
+      "step": 3130,
+      "token_loss": 1.9697558627140461,
+      "raw_path_loss": 0.006685071974087751,
+      "top16_joint_mass": 0.686962691246799
+    },
+    {
+      "segment": 11,
+      "step": 3443,
+      "token_loss": 1.9582278126893862,
+      "raw_path_loss": 0.006687749998731595,
+      "top16_joint_mass": 0.6915563356314578
+    },
+    {
+      "segment": 12,
+      "step": 3756,
+      "token_loss": 1.9452505049315367,
+      "raw_path_loss": 0.0067099324510677925,
+      "top16_joint_mass": 0.6966677791683237
+    },
+    {
+      "segment": 13,
+      "step": 4069,
+      "token_loss": 1.9368680231411552,
+      "raw_path_loss": 0.006702647356977298,
+      "top16_joint_mass": 0.7007319563800325
+    },
+    {
+      "segment": 14,
+      "step": 4382,
+      "token_loss": 1.9275675009778583,
+      "raw_path_loss": 0.006719523498634694,
+      "top16_joint_mass": 0.7084091026740864
+    },
+    {
+      "segment": 15,
+      "step": 4695,
+      "token_loss": 1.919825055859587,
+      "raw_path_loss": 0.006658194007404579,
+      "top16_joint_mass": 0.7096316558582199
+    }
+  ],
+  "takeaways": [
+    "Stage3 CE-only at 1e-5 from C4 best completed 15/15; val token CE 2.319 -> 1.920, still falling, best=last",
+    "Much larger CE move than P0a 2e-6 (2.338 -> 2.278)",
+    "Rank IC not measured; do not assume Alpha preserved"
+  ]
+}
