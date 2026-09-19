@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 
-SOURCE_COMMIT = "75831271790e26b18d96bd670426dd27a54a47a6"
+SOURCE_COMMIT = "5db9bf08ce67cb172607825ef091314f4298a203"
 OUTPUT = Path("/kaggle/working/kronos_small_0_1_stage3_c4_best_1e5_ce_only_oos")
 INPUT = Path("/kaggle/input")
 HARD_LIMIT_SECONDS = 39600
