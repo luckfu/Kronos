@@ -102,8 +102,8 @@ def wants_json():
         return True
     if request.is_json:
         return True
-    best = request.accept_mimetypes.best_match(['application/json', 'text/html'])
-    return best == 'application/json'
+    accept = (request.headers.get('Accept') or '').lower()
+    return 'application/json' in accept and 'text/html' not in accept
 
 
 class PrefixMiddleware:

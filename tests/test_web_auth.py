@@ -157,10 +157,14 @@ def test_html_without_cookie_redirects_to_login(monkeypatch, tmp_path):
     enable_auth(monkeypatch, tmp_path)
     client = web_app.app.test_client()
 
-    response = client.get('/', headers={'Accept': 'text/html'})
+    browser = client.get('/', headers={'Accept': 'text/html'})
+    generic = client.get('/')
 
-    assert response.status_code == 302
-    assert '/login' in response.headers['Location']
+    assert browser.status_code == 302
+    assert '/login' in browser.headers['Location']
+    assert generic.status_code == 302
+    assert '/login' in generic.headers['Location']
+    assert 'WWW-Authenticate' not in generic.headers
 
 
 def test_health_and_login_page_are_public(monkeypatch, tmp_path):
