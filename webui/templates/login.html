@@ -8,6 +8,7 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png', v=kronos_icon_v) }}" sizes="32x32">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
+  {% include '_pwa_head.html' %}
   <style>
     :root {
       color-scheme: light;
@@ -27,11 +28,16 @@
     body {
       margin: 0;
       min-height: 100vh;
+      min-height: 100dvh;
       display: grid;
       place-items: center;
+      align-content: center;
       padding: 24px 16px;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
       color: var(--text);
       background: var(--bg);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     main {
       width: min(420px, 100%);
@@ -130,6 +136,27 @@
       line-height: 1.5;
       text-align: center;
     }
+    @media (orientation: landscape) and (max-height: 520px), (max-height: 560px) {
+      body {
+        place-items: start center;
+        align-content: start;
+        padding: 10px 16px;
+      }
+      main {
+        padding: 14px 18px 12px;
+        width: min(520px, 100%);
+      }
+      .brand { margin-bottom: 8px; }
+      .brand-mark { width: 32px; height: 32px; }
+      h1 { font-size: 18px; }
+      p.lead { margin: 0 0 10px; font-size: 12px; }
+      .hint { display: none; }
+      label.field { margin-bottom: 8px; }
+      input[type="text"],
+      input[type="password"] { min-height: 40px; }
+      .remember { margin: 0 0 10px; }
+      button[type="submit"] { min-height: 42px; }
+    }
   </style>
 </head>
 <body>
@@ -160,5 +187,6 @@
     </form>
     <p class="hint">账号由管理员用 htpasswd 创建。登录状态保存在本机 Cookie 中，可随时退出。</p>
   </main>
+  {% include '_pwa_register.html' %}
 </body>
 </html>
