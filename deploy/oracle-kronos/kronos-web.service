@@ -20,6 +20,15 @@ Environment=KRONOS_SESSION_DAYS=30
 Environment=KRONOS_COOKIE_PATH=/kronos
 Environment=KRONOS_COOKIE_SECURE=1
 Environment=FLASK_DEBUG=0
+# Hermes CLI oneshot for ranking-card DeepSeek analysis. opc must be able to
+# exec this binary; secrets stay in /home/opc/.hermes/.env and are never copied
+# into Kronos. Override model/provider/bin via kronos-web.env if needed.
+Environment=HOME=/home/opc
+Environment=PATH=/data/miniconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=KRONOS_HERMES_BIN=/data/miniconda3/bin/hermes
+Environment=KRONOS_HERMES_PROVIDER=deepseek
+Environment=KRONOS_HERMES_MODEL=deepseek-v4-pro
+Environment=KRONOS_HERMES_TIMEOUT=120
 EnvironmentFile=-/opt/kronos-web/data/kronos-web.env
 ExecStart=/opt/kronos-web/.venv/bin/gunicorn --workers 2 --threads 4 --timeout 240 --bind 127.0.0.1:7072 app:app
 Restart=on-failure
