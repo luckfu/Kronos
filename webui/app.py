@@ -57,6 +57,11 @@ try:
 except ImportError:
     from auth import configure_auth, init_auth
 
+try:
+    from webui import hermes_analysis
+except ImportError:
+    import hermes_analysis
+
 init_auth(app)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2314,6 +2319,79 @@ def daily_ranking_detail(asof, symbol):
         prediction['history_source'] = chart_history['history_source']
         prediction['history_note'] = chart_history['history_note']
         return jsonify(prediction)
+    except FileNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+
+
+def _daily_ranking_facts(asof, symbol):
+    """Read code/name/close/D1/D10 from the published ranking CSV only."""
+    path, _summary = _daily_prediction_dir(asof)
+    normalized = normalize_a_share_symbol(symbol)
+    if not re.fullmatch(r'(sh|sz|bj)\.\d{6}', normalized):
+        raise ValueError('股票代码无效')
+    ranking = pd.read_csv(path / 'ranking.csv')
+    matches = ranking[ranking['code'] == normalized]
+    if matches.empty:
+        raise FileNotFoundError(f'{normalized} 未进入 {asof} 预测截面')
+    rank = matches.iloc[0].to_dict()
+
+    def cell(key):
+        value = rank.get(key)
+        if value is None:
+            return None
+        if isinstance(value, float) and not np.isfinite(value):
+            return None
+        if isinstance(value, np.generic):
+            value = value.item()
+        if isinstance(value, float) and not np.isfinite(value):
+            return None
+        return value
+
+    return {
+        'asof': str(cell('asof') or asof),
+        'code': normalized,
+        'name': ranking_row_stock_name(rank),
+        'close_asof': cell('close_asof'),
+        'predicted_return_d1': cell('predicted_return_d1'),
+        'predicted_return_d10': cell('predicted_return_d10'),
+        'close_p50_d1': cell('close_p50_d1'),
+        'close_p50_d10': cell('close_p50_d10'),
+        'rank_d10': cell('rank_d10'),
+        'sector_label': cell('sector_label'),
+        'size_percentile': cell('size_percentile'),
+    }
+
+
+@app.route('/api/daily-rankings/<asof>/<symbol>/hermes-analysis', methods=['POST'])
+def daily_ranking_hermes_analysis(asof, symbol):
+    """On-demand Hermes/DeepSeek analysis for one published ranking row."""
+    try:
+        if hermes_analysis.hermes_disabled():
+            raise hermes_analysis.HermesDisabledError(
+                'Hermes 分析已禁用（KRONOS_HERMES_DISABLED）。'
+            )
+        facts = _daily_ranking_facts(asof, symbol)
+        cached = hermes_analysis.get_cached(facts['asof'], facts['code'])
+        if cached:
+            return jsonify(cached)
+        prompt = hermes_analysis.build_hermes_prompt(facts)
+        result = hermes_analysis.run_hermes_oneshot(prompt)
+        payload = {
+            'analysis': result['analysis'],
+            'model': result['model'],
+            'provider': result['provider'],
+            'elapsed_sec': result['elapsed_sec'],
+            'asof': facts['asof'],
+            'code': facts['code'],
+            'name': facts.get('name'),
+            'cached': False,
+        }
+        hermes_analysis.put_cached(facts['asof'], facts['code'], payload)
+        return jsonify(payload)
+    except hermes_analysis.HermesError as exc:
+        return jsonify({'error': str(exc)}), exc.status_code
     except FileNotFoundError as exc:
         return jsonify({'error': str(exc)}), 404
     except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
