@@ -270,6 +270,10 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert "未来10日预测路径" not in page
     assert "drawChart(result)" in page
     assert "result.history" in page
+    assert "当时收盘 ${price(closePrice)}" in page
+    assert 'x1="${left}"' in page
+    assert "当时收盘价参考线" in page or "当时收盘" in page
+    assert 'x1="${(hasHistory ? histRight : left)' not in page
 
 
 def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
