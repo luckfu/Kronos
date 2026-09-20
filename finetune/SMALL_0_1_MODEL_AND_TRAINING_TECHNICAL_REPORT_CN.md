@@ -850,6 +850,99 @@ r_h=\frac{C^{raw}_{t+h}}{C^{raw}_t}-1,\qquad
 
 三模型所有 horizon 的统计、D10 逐日期 IC/Top-Bottom、数据与预测 SHA-256 见随仓库保存的 [统一复算报告](/Users/fupengcheng/Documents/Kronos/finetune/reports/small_0_1_oos_raw_audit_20260915.json)，实现见 [audit_small_0_1_oos.py](/Users/fupengcheng/Documents/Kronos/finetune/audit_small_0_1_oos.py)；脚本还会输出所有 horizon 的逐日期明细。19 日仍短，且相邻 D10 标签重叠；未在此声称统计显著性、长期稳定 Alpha 或可交易净收益。该 OOS 已用于研究讨论，不能在 Stage 3 再次使用时声称为完全未见的确认集。
 
+### 8.4 解码协议与单样本测量衰减
+
+第 8.1–8.3 节只写明各模型使用「同一随机采样设置和同一自回归解码流程」，未给出该流程的参数。本节补全该协议，并说明它对所有已报告 Rank IC 的口径限制。
+
+#### 实际解码参数
+
+所有 OOS 评估经由 [evaluate_v1_beta_checkpoints.py](/Users/fupengcheng/Documents/Kronos/finetune/evaluate_v1_beta_checkpoints.py) 的 `evaluate_predictions` 调用 [model/kronos.py](/Users/fupengcheng/Documents/Kronos/model/kronos.py) 的 `auto_regressive_inference`，参数为：
+
+| 参数 | 取值 | 说明 |
+|---|---:|---|
+| `max_context` | 512 | 实际序列长度 130，未触发滚动 |
+| `pred_len` | 10 | H1–H10 |
+| `clip` | 5 | 归一化输入裁剪 |
+| `T` | 0.6 | 采样温度，小于 1 收窄分布 |
+| `top_k` | 0 | 不启用 |
+| `top_p` | 0.9 | nucleus 截断 |
+| `sample_count` | **1** | 每个窗口只解码一条路径 |
+| `batch_size` | 64 | 每日期内按顺序成批 |
+| autocast | fp16 | `use_amp=True` |
+| seed | 20260906 | 每个日期调用前重置 |
+
+关键事实是 `sample_count = 1`。`auto_regressive_inference` 在 `return_samples=False` 时返回 `np.mean(samples, axis=1)`，该平均在 `sample_count = 1` 时退化为那一条路径本身。因此第 8.1–8.3 节及第 6.7 节全部 Rank IC 所排序的横截面分数，是预测分布的**单次蒙特卡洛抽样**，不是条件均值的估计。
+
+#### 测量衰减的形式
+
+记第 \(i\) 只股票的横截面分数为 \(s_i=\mu_i+\varepsilon_i\)，其中 \(\mu_i\) 为条件均值、\(\varepsilon_i\) 为解码抽样噪声，二者在同日横截面上近似独立。取 \(N\) 条路径平均后噪声方差降为 \(\sigma_\varepsilon^2/N\)，测得的 Rank IC 满足
+
+\[
+\mathrm{IC}_{\text{obs}}(N)\;\approx\;\frac{\mathrm{IC}_{\text{true}}}{\sqrt{1+r/N}},\qquad r=\frac{\sigma_\varepsilon^2}{\sigma_\mu^2}.
+\]
+
+十日尺度上 A 股单条路径的离散度远大于条件均值的横截面价差，故 \(r\gg 1\)，\(N=1\) 处衰减最强。由此得到第一条口径限制：**本文已报告的全部 Rank IC 都是真实排序能力的下界，而非无偏估计。**
+
+#### 对模型间比较的污染
+
+衰减因子本身依赖 \(\sigma_\varepsilon\)，即预测分布的宽度。若训练降低 token NLL 的一部分收益来自方差校准变宽（分布更诚实），则 \(\sigma_\varepsilon\) 随 CE 改善而增大，在 \(N=1\) 下测得的 IC 会随之下降，即使 \(\mu\) 不变甚至改善。固定 \(N=1\) 的跨模型 IC 比较因此与「预测分布宽度」混淆，不是纯粹的排序能力比较。
+
+这一机制与 `1e-5` 续训链上的实测走向一致。下表为同一 13 日窗口、同一评估器、同一解码协议下的结果：
+
+| checkpoint | 验证 forecast CE | D10 pooled Rank IC | D10 方向准确率 |
+|---|---:|---:|---:|
+| Cosine C2 best（Segment 179） | 2.294402 | 0.18440 | — |
+| WC `1e-5` C2 kernel best（local 189 / 全局 289） | 2.279950 | 0.18365 | — |
+| WC `1e-5` C4 best（local 21 / 全局 528） | 2.272877 | 0.17919 | 49.309% |
+| 自 C4 last 起的 cosine 退火 best（local 148） | 2.269375 | 0.16578 | 48.918% |
+
+CE 单调下降、同口径 D10 IC 单调下降。该现象存在两种互斥解释：训练确实在损失排序能力，或衰减因子随分布变宽而增大。**在 `sample_count = 1` 的协议下这两者不可识别**，因此本文不把该表作为「CE 与 Alpha 反向」的证据。
+
+#### 波动预测尚未被评价
+
+`T = 0.6` 与 `top_p = 0.9` 都会收窄预测分布，故当前协议下样本离散度不是模型校准后的分布宽度，不能直接作为波动预测评分。本文此前未报告任何波动准确度指标，且 token NLL 混合了漂移、方差与尾部形状三种成分，不能替代对波动的直接评价。
+
+#### 预注册的解码扫描实验
+
+为分离上述混淆，已提交解码侧扫描 [luckfu/kronos-small-0-1-decode-sample-sweep](https://www.kaggle.com/code/luckfu/kronos-small-0-1-decode-sample-sweep)，实现见 [decode_sample_sweep.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_decode_sample_sweep/decode_sample_sweep.py)，自动测试见 [test_decode_sample_sweep_kernel.py](/Users/fupengcheng/Documents/Kronos/tests/test_decode_sample_sweep_kernel.py)。该实验不训练、不改权重，只改解码：
+
+| arm | checkpoint | `sample_count` | `T` | `top_p` | seed | 用途 |
+|---|---|---:|---:|---:|---:|---|
+| `c2_best_n1_s1` | C2 best 179 | 1 | 0.6 | 0.9 | 20260906 | 复现 0.18440 的对照 |
+| `wc_1e5_c4_best_n1_s1` | C4 best 528 | 1 | 0.6 | 0.9 | 20260906 | 复现 0.17919 的对照 |
+| `c2_best_n1_s2` | C2 best 179 | 1 | 0.6 | 0.9 | 20260921 | 单次抽样噪声地板 |
+| `wc_1e5_c4_best_n1_s2` | C4 best 528 | 1 | 0.6 | 0.9 | 20260921 | 单次抽样噪声地板 |
+| `c2_best_n4` / `wc_1e5_c4_best_n4` | 两者 | 4 | 0.6 | 0.9 | 20260906 | 衰减曲线中点 |
+| `c2_best_n16` / `wc_1e5_c4_best_n16` | 两者 | 16 | 0.6 | 0.9 | 20260906 | 衰减曲线端点 |
+| `c2_best_n8_honest` / `wc_1e5_c4_best_n8_honest` | 两者 | 8 | **1.0** | **1.0** | 20260906 | 未截断分布，用于波动评分 |
+
+两个 checkpoint 取上表中反向跨度最大、且本账号 Kaggle 凭据可访问的一对：`1e-5` 续训链的起点 C2 best 与链上 C4 best，二者 CE 相差 0.021525、同口径 D10 IC 相差 0.00522。CE 更优的 cosine 退火 best（2.269375 / 0.16578）反向更强，但其训练 kernel 属另一账号，当前凭据无法挂载。实验在 2×T4 上按 `(arm, date)` 轮转切到两卡，每个任务解码前重置随机种子，故切分不改变任何结果；按分片断点续跑，臂序保证超时也先留下完整衰减曲线。有效批大小固定为 64，即 `batch_size = 64 / sample_count`。
+
+判定标准在执行前固定为三条：
+
+1. **噪声地板**。若同一 checkpoint 两个种子的 N=1 pooled IC 之差达到或超过 0.005，则 0.18440 / 0.18365 / 0.17919 三者之间的排序在单样本协议下不可区分，第 6.7 节及本节据此排序得出的结论须相应收窄。
+2. **衰减幅度**。以 \(1/\mathrm{IC}^2\) 对 \(1/N\) 最小二乘拟合，报告 \(\mathrm{IC}_\infty\) 与 \(r\)。若 \(\mathrm{IC}_{\text{obs}}(16)\) 显著高于 \(\mathrm{IC}_{\text{obs}}(1)\)，则已报告 IC 的下界性质成立，后续评估应改用多样本均值作为横截面分数。
+3. **反向是否成立**。若 C2 best 与 C4 best 的 IC 差随 \(N\) 增大而收敛或反号，则上表的 CE/IC 反向主要是解码假象；若差值在 \(N=16\) 下保持，则该反向是权重层面的真实效应。
+
+未截断臂另行输出波动评价：以样本内逐日收益标准差的样本间均值作为波动预测 `predicted_path_vol`，以真实路径逐日收益标准差作为 `realized_path_vol`，报告二者的横截面 Rank IC、QLIKE、以及 \(\mathbb{E}[\text{realized}/\text{predicted}]\) 校准比；同时报告终端累计收益的样本间离散度与实际十日绝对收益的 Rank IC。这是本项目首次对波动预测本身给出指标。
+
+```mermaid
+flowchart TD
+    M[checkpoint] --> D{解码}
+    D -->|sample_count=1<br/>T=0.6 top_p=0.9| S1[单条路径]
+    D -->|sample_count=N<br/>T=1.0 top_p=1.0| SN[N条路径]
+    S1 --> SC1[横截面分数<br/>条件均值+抽样噪声]
+    SN --> MU[样本均值<br/>低噪条件均值估计]
+    SN --> SD[样本标准差<br/>波动预测]
+    SC1 --> IC1[Rank IC 被衰减<br/>衰减幅度随分布宽度变化]
+    MU --> IC2[Rank IC<br/>随N上升趋近真实值]
+    SD --> VOL[波动 Rank IC / QLIKE / 校准比]
+```
+
+#### 口径边界
+
+该扫描沿用第 8.1–8.2 节的裁剪还原标签口径，以便与 0.18440 等既有数字同底比较，**不是**第 8.3 节的统一原始价格口径；因此其结论是同口径内的相对比较，绝对水平在进入论文正文前应按第 8.3 节方法复算。分片保留 `identity` 字段，可据此恢复原始价格口径。该 13 日窗口已多次用于研究讨论，属设计污染的探索性窗口，不能作为生产晋级依据。本节只登记协议、机制与判定标准；结果回填前，不得据此宣称任何 checkpoint 的排序能力被低估或被高估。
+
 ## 9. 训练健康性与解释边界
 
 Stage 2 的五段正式训练均更新全部 predictor 参数。Main 的全量验证 forecast 从 2.6384 降至约 2.5052，Extend 01 在 190 segments 内继续降至约 2.4379，WC first round 最佳约 2.3531，WC dual T4 最佳约 2.3042，最终 Cosine refinement 最佳为 2.294402。两轮 WC 未发散，随后退火也已完成；这些是已完成阶段的优化轨迹，不是当前继续训练指令。
@@ -925,6 +1018,8 @@ Stage 2 优化加权 token NLL 与 history 辅助项，而金融评价报告方�
 
 当前采用第 6.7 节的结构保持方案：均匀 H1–H10 token CE 加归一化 OHLCVA 路径 Huber，不增加收益头或排序头。应逐 horizon 报告路径误差、方向准确率和 Rank IC；为了识别路径损失的增量效果，优先补充相同 C2 best、均匀 CE、无 history、因果验证及训练预算下的 CE-only 对照。优化路径代理损失不等同于直接优化金融指标，二者都需要独立实测。
 
+「目标差异」这一判断本身还受到评价侧的限制。第 8.4 节说明，token NLL 同时包含漂移、方差与尾部形状，而当前解码协议用单次抽样构造横截面分数，其 Rank IC 衰减幅度又依赖预测分布宽度。因此在解码扫描回填前，不能把 `1e-5` 续训链上「CE 降而 IC 降」直接读作训练目标与金融目标反向：该现象与「方差校准变好导致单样本噪声增大」在当前协议下观测等价。若扫描判定该反向为权重层面的真实效应，则选模指标应从原始 forecast NLL 改为在验证集上直接计算的横截面代理指标，并同时报告波动校准，使「波动准确」与「排序准确」成为两个分别可测、可同时优化的目标，而不是压缩进一个标量。
+
 ### 10.4 Warmup-Constant 的公平比较
 
 Extend 01 更换 coverage seed 的性质是 optimization continuation，而不是独立泛化实验。Warmup-Constant 的两轮 continuation 已分别完成 534 个 segments；但由于起点和 coverage seed 均不同，仍不能把它们与 cosine 结果当作严格的 scheduler A/B。严格比较应使用相同 checkpoint 起点、数据集合、batch、seed、验证集和 segment 预算，至少比较 100%、200% 和完整 coverage 的验证轨迹，再进行 OOS 比较。
@@ -968,6 +1063,14 @@ flowchart LR
 
 退火完成后，仍建议在相同起点、相同 seed、相同验证集和相同预算下做 cosine 与 constant 的公平比较；按 forecast horizon 分解验证 loss；比较初始底座与最终 checkpoint 的分层 relative weight drift；扩展 OOS 日期后再评估方向准确率、Rank IC、分组收益及统计显著性。
 
+### 11.3 解码协议扫描（已提交，结果待回填）
+
+第 8.4 节登记的解码侧扫描已提交运行，尚未回填结果。它不训练、不改权重，只沿 `sample_count` 与采样温度两个维度重解码 C2 best 与 WC `1e-5` C4 best，用于回答三个问题：单次抽样的噪声地板是否已经大于既有 checkpoint 之间的 IC 差；已报告 Rank IC 被衰减了多少；以及 CE 与 IC 的反向是权重层面的真实效应还是解码假象。判定标准已在执行前固定，见第 8.4 节。
+
+回填时应同时更新三处：第 8.4 节的结果表与判定结论；若噪声地板超过 0.005，则第 6.7.10 节与第 8.4 节中依赖 checkpoint 间 IC 排序的表述须相应收窄；若多样本均值显著抬高 IC，则第 8.1–8.3 节的绝对水平应在新协议下重评，并在第 5 节的选模口径中说明原始 forecast NLL 不再是唯一选点依据。扫描沿用裁剪还原标签口径，绝对水平进入正文前需按第 8.3 节方法复算到原始价格口径。
+
+此外，本项目至今未报告任何波动预测准确度指标。未截断臂给出的 `predicted_path_vol` 与 `realized_path_vol` 的横截面 Rank IC、QLIKE 与校准比是首次测量，应作为与排序指标并列的第二组评价，而不是作为 token NLL 的附属说明。
+
 ## 12. 可复核文件
 
 - 模型定义：[model/kronos.py](/Users/fupengcheng/Documents/Kronos/model/kronos.py)、[model/module.py](/Users/fupengcheng/Documents/Kronos/model/module.py)
@@ -987,5 +1090,7 @@ flowchart LR
 - Stage 3 单段验收归档（随仓库保存）：[stage3_joint_path_smoke_v1_acceptance.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_smoke_v1_acceptance.json)
 - Stage 3 C2/C3 十五段指标归档（无权重）：[stage3_joint_path_c3_metrics.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_joint_path_c3_metrics.json)
 - Stage 3 分梯度与 C2/C3 OOS 机制审计：[stage3_c2_c3_mechanism_audit_20260915.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_c2_c3_mechanism_audit_20260915.json)
+- OOS 解码实现（采样温度、nucleus 截断与 `sample_count` 归约）：[evaluate_v1_beta_checkpoints.py](/Users/fupengcheng/Documents/Kronos/finetune/evaluate_v1_beta_checkpoints.py)、[model/kronos.py](/Users/fupengcheng/Documents/Kronos/model/kronos.py) 的 `auto_regressive_inference`
+- 解码协议扫描入口与自动测试：[decode_sample_sweep.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_decode_sample_sweep/decode_sample_sweep.py)、[test_decode_sample_sweep_kernel.py](/Users/fupengcheng/Documents/Kronos/tests/test_decode_sample_sweep_kernel.py)
 
 本文以日志和当前代码为准；若历史计划文档与实测配置冲突，应优先引用本报告中的代码/日志事实，并在论文实验设置中注明具体 commit、seed、数据快照和 checkpoint 标识。
