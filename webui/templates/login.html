@@ -50,12 +50,9 @@
     .brand-mark {
       width: 36px;
       height: 36px;
-      display: grid;
-      place-items: center;
       border-radius: 8px;
-      background: var(--text);
-      color: #fff;
-      font-weight: 700;
+      display: block;
+      object-fit: cover;
     }
     h1 {
       margin: 0;
@@ -138,7 +135,7 @@
 <body>
   <main>
     <div class="brand">
-      <div class="brand-mark">K</div>
+      <img class="brand-mark" src="{{ url_for('static', filename='logo-64.png') }}" srcset="{{ url_for('static', filename='logo-128.png') }} 2x" width="36" height="36" alt="Kronos">
       <h1>登录 Kronos</h1>
     </div>
     <p class="lead">使用已分配的账号登录。勾选记住登录后，再次打开此页不会重复要求输入密码。</p>

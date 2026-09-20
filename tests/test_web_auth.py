@@ -1,3 +1,4 @@
+import struct
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -189,6 +190,7 @@ def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
     ico = client.get('/favicon.ico')
     png = client.get('/static/favicon-32.png')
     apple = client.get('/static/apple-touch-icon.png')
+    logo = client.get('/static/logo-64.png')
     login = client.get('/login', headers=headers)
 
     assert ico.status_code == 200
@@ -196,12 +198,15 @@ def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
     assert png.status_code == 200
     assert png.data[:8] == b'\x89PNG\r\n\x1a\n'
     assert apple.status_code == 200
+    assert logo.status_code == 200
     html = login.get_data(as_text=True)
     assert 'rel="icon"' in html
     assert 'rel="apple-touch-icon"' in html
     assert '/kronos/static/favicon.ico' in html
     assert '/kronos/static/favicon-32.png' in html
     assert '/kronos/static/apple-touch-icon.png' in html
+    assert '/kronos/static/logo-64.png' in html
+    assert '<div class="brand-mark">K</div>' not in html
     assert 'href="/static/' not in html
     assert 'href="/favicon.ico"' not in html
 
@@ -252,7 +257,35 @@ def test_nginx_location_no_longer_uses_basic_auth():
     assert 'alias /opt/kronos-web/webui/static/;' in text
     assert 'webui/static/favicon.ico' in deploy
     assert 'webui/static/apple-touch-icon.png' in deploy
+    assert 'webui/static/logo-64.png' in deploy
+    assert 'webui/static/logo-128.png' in deploy
+    assert 'webui/static/icon-512.png' in deploy
     assert '$root/webui/static' in deploy
+
+
+def _png_size(path):
+    data = Path(path).read_bytes()
+    assert data[:8] == b'\x89PNG\r\n\x1a\n'
+    return struct.unpack('>II', data[16:24])
+
+
+def test_brand_icons_are_true_squares():
+    assert _png_size('webui/static/favicon-32.png') == (32, 32)
+    assert _png_size('webui/static/apple-touch-icon.png') == (180, 180)
+    assert _png_size('webui/static/icon-512.png') == (512, 512)
+    assert _png_size('webui/static/logo-64.png') == (64, 64)
+    assert _png_size('webui/static/logo-128.png') == (128, 128)
+
+    ico = Path('webui/static/favicon.ico').read_bytes()
+    assert ico[:4] == b'\x00\x00\x01\x00'
+    count = struct.unpack_from('<H', ico, 4)[0]
+    assert count >= 1
+    for i in range(count):
+        off = 6 + i * 16
+        width, height = ico[off], ico[off + 1]
+        width = 256 if width == 0 else width
+        height = 256 if height == 0 else height
+        assert width == height
 
 
 def test_prefixed_login_redirects_under_kronos(monkeypatch, tmp_path):

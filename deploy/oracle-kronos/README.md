@@ -17,13 +17,13 @@ Browser -> https://allmoneybymehold.com/kronos/
 
 The deployment creates only `/opt/kronos-web`, an isolated `kronos-web.service`, and `/etc/nginx/default.d/kronos.conf`. It does not modify the main Nginx file or stop existing services. Existing Kronos-specific files are timestamp-backed up before replacement.
 
-`deploy.sh` copies `webui/static/favicon.ico` (plus PNG variants) onto Oracle. The Kronos nginx snippet owns the browser-default **site-root** icon so `https://allmoneybymehold.com/favicon.ico` is a static file instead of a 502 from some other catch-all proxy:
+`deploy.sh` copies `webui/static/favicon.ico` plus square PNG variants (`favicon-32.png`, `apple-touch-icon.png`, `icon-512.png`, `logo-64.png`, `logo-128.png`) onto Oracle. The icons are true 1:1 crops of the gold-K + candlestick art (no widescreen letterboxing). Login and daily rankings use `logo-64.png` as the brand mark. The Kronos nginx snippet owns the browser-default **site-root** icon so `https://allmoneybymehold.com/favicon.ico` is a static file instead of a 502 from some other catch-all proxy:
 
 - `location = /favicon.ico` and `location = /apple-touch-icon.png` alias `/opt/kronos-web/webui/static/...`
 - `/kronos/favicon.ico` aliases the same `.ico`
 - `/kronos/static/` is served from that directory (login and rankings pages `url_for('static', ...)` under the `/kronos` prefix)
 
-If `nginx -t` fails with a duplicate `location = /favicon.ico`, delete or comment the other copy in the main server config so Kronos can keep the site-root icon. Then rerun `bash deploy/oracle-kronos/deploy.sh` (it already reloads nginx). Verify with `curl -I https://allmoneybymehold.com/favicon.ico` and `curl -I https://allmoneybymehold.com/kronos/static/favicon.ico`. If Cloudflare still returns 502 after origin is 200, purge that URL at the edge.
+If `nginx -t` fails with a duplicate `location = /favicon.ico`, delete or comment the other copy in the main server config so Kronos can keep the site-root icon. Then rerun `bash deploy/oracle-kronos/deploy.sh` (it already reloads nginx). Verify with `curl -I https://allmoneybymehold.com/favicon.ico` and `curl -I https://allmoneybymehold.com/kronos/static/favicon.ico`. After this icon refresh, purge Cloudflare (and hard-refresh the tab) for `/favicon.ico`, `/apple-touch-icon.png`, `/kronos/favicon.ico`, and `/kronos/static/*` — nginx caches these for 30 days, so the previous stretched favicon will otherwise stick.
 
 Supabase is not used. Prediction records are stored as JSON under `/opt/kronos-web/data/prediction_results`, survive redeployments, and are grouped in the UI by their market-data cutoff date rather than submission mode. Adjusted daily market data is cached per stock under `/opt/kronos-web/data/market_data_cache`; refreshes request a small overlap after the cached last date, merge and deduplicate rows, and then send only the requested context to Modal.
 
