@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
   <title>Kronos 每日排名</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}" sizes="180x180">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png', v=kronos_icon_v) }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <style>
     :root {
@@ -34,9 +34,9 @@
     .app { min-height: 100vh; display: grid; grid-template-columns: 210px minmax(0, 1fr); }
     .sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 22px 14px; display: flex; flex-direction: column; }
     .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 26px; }
-    .brand-mark { width: 34px; height: 34px; border-radius: 8px; display: block; object-fit: cover; }
+    .brand-mark { width: 42px; height: 42px; border-radius: 8px; display: block; object-fit: cover; }
     .brand strong, .brand small { display: block; }
-    .brand strong { font-size: 15px; font-weight: 600; }
+    .brand strong { font-size: 16px; font-weight: 600; }
     .brand small { margin-top: 2px; color: var(--muted); font-size: 11px; }
     .nav-label { padding: 9px 10px 7px; color: var(--muted); font-size: 11px; }
     .nav { display: grid; gap: 3px; }
@@ -291,7 +291,7 @@
 <body data-view="ranking">
   <div class="app">
     <aside class="sidebar">
-      <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='logo-64.png') }}" srcset="{{ url_for('static', filename='logo-128.png') }} 2x" width="34" height="34" alt="Kronos"><div><strong>Kronos</strong><small>A股预测台</small></div></div>
+      <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='logo-64.png', v=kronos_icon_v) }}" srcset="{{ url_for('static', filename='logo-128.png', v=kronos_icon_v) }} 2x" width="42" height="42" alt="Kronos"><div><strong>Kronos</strong><small>A股预测台</small></div></div>
       <div class="nav-label">研究工作台</div>
       <nav class="nav" aria-label="主导航">
         <button class="active" type="button" data-view="ranking"><i data-lucide="list-filter"></i>每日排名</button>

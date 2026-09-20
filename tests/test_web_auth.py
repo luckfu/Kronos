@@ -195,6 +195,9 @@ def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
 
     assert ico.status_code == 200
     assert ico.data[:4] == b'\x00\x00\x01\x00'
+    cache_control = ico.headers.get('Cache-Control', '')
+    assert 'max-age=3600' in cache_control
+    assert '2592000' not in cache_control
     assert png.status_code == 200
     assert png.data[:8] == b'\x89PNG\r\n\x1a\n'
     assert apple.status_code == 200
@@ -202,10 +205,13 @@ def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
     html = login.get_data(as_text=True)
     assert 'rel="icon"' in html
     assert 'rel="apple-touch-icon"' in html
-    assert '/kronos/static/favicon.ico' in html
-    assert '/kronos/static/favicon-32.png' in html
-    assert '/kronos/static/apple-touch-icon.png' in html
-    assert '/kronos/static/logo-64.png' in html
+    icon_v = web_app.BRAND_ICON_VERSION
+    assert f'/kronos/static/favicon.ico?v={icon_v}' in html
+    assert f'/kronos/static/favicon-32.png?v={icon_v}' in html
+    assert f'/kronos/static/apple-touch-icon.png?v={icon_v}' in html
+    assert f'/kronos/static/logo-64.png?v={icon_v}' in html
+    assert f'/kronos/static/logo-128.png?v={icon_v}' in html
+    assert 'width="42" height="42"' in html
     assert '<div class="brand-mark">K</div>' not in html
     assert 'href="/static/' not in html
     assert 'href="/favicon.ico"' not in html
@@ -261,6 +267,10 @@ def test_nginx_location_no_longer_uses_basic_auth():
     assert 'webui/static/logo-128.png' in deploy
     assert 'webui/static/icon-512.png' in deploy
     assert '$root/webui/static' in deploy
+    assert 'expires 30d' not in text
+    assert 'expires 1h' in text
+    assert 'max-age=3600' in text
+    assert 'must-revalidate' in text
 
 
 def _png_size(path):
