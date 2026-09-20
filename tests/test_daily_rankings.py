@@ -294,6 +294,10 @@ def test_daily_rankings_page_includes_kronos_favicon():
     assert "/static/favicon.ico" in page
     assert "/static/favicon-32.png" in page
     assert "/static/apple-touch-icon.png" in page
+    assert "/static/logo-64.png" in page
+    assert "/static/logo-128.png" in page
+    assert '<div class="brand-mark">K</div>' not in page
+    assert 'class="brand-mark"' in page
 
 
 def test_daily_rankings_page_has_explicit_search_submit():
