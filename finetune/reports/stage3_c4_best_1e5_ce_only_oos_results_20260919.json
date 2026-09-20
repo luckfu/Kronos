@@ -1,0 +1,58 @@
+{
+  "status": "complete",
+  "date": "2026-09-19",
+  "kernel": "user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only-oos",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only-oos",
+  "kaggle_status": "KernelWorkerStatus.COMPLETE",
+  "purpose": "exploratory_only; 13-date OOS design-contaminated; production candidate requires sealed fresh-window OOS",
+  "training_performed": false,
+  "oos_used": true,
+  "source_commit": "5db9bf08ce67cb172607825ef091314f4298a203",
+  "evaluated": "stage3_c4_best_1e5_ce_only_seg15",
+  "segment": 15,
+  "step": 4695,
+  "val_token_ce": 1.919825055859587,
+  "weights_sha256": "20e3bb6fa401d4a739054bdf88e3ed38331a45fea322b7287a6e16e8c8c88113",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-08-27",
+  "samples": 66986,
+  "signal_dates": 13,
+  "elapsed_sec": 702.3621377944946,
+  "d10": {
+    "pooled_rank_ic": 0.11323220411413162,
+    "daily_rank_ic_mean": 0.11923612670200677,
+    "positive_ic_ratio": 1.0,
+    "direction_accuracy": 0.5599080404860717,
+    "mean_top_bottom_10pct": 0.021617922137747235
+  },
+  "comparisons": {
+    "c2_best_d10_pooled_rank_ic": 0.18440434213929857,
+    "wc_1e5_c2_kernel_best_d10_pooled_rank_ic": 0.18364682977280178,
+    "wc_1e5_c4_best_d10_pooled_rank_ic": 0.17918741695116097,
+    "p0a_2e6_last_d10_pooled_rank_ic": 0.0642869478967645,
+    "delta_vs_c2": -0.07117213802516695,
+    "rel_vs_c2": -0.385849210214535,
+    "delta_vs_c4_best": -0.06595521283702935,
+    "rel_vs_c4_best": -0.3680798132281403,
+    "delta_vs_p0a_last": 0.04894525621736712,
+    "rel_vs_p0a_last": 0.7613561409803925
+  },
+  "by_horizon_pooled_rank_ic": [
+    {"horizon_day": 1, "pooled_rank_ic": 0.10711650366963993, "direction_accuracy": 0.5278864240289015},
+    {"horizon_day": 2, "pooled_rank_ic": 0.08369440853169928, "direction_accuracy": 0.5211686023945302},
+    {"horizon_day": 3, "pooled_rank_ic": 0.054802786479379126, "direction_accuracy": 0.5100319469739946},
+    {"horizon_day": 4, "pooled_rank_ic": 0.05148885346435794, "direction_accuracy": 0.5164511987579494},
+    {"horizon_day": 5, "pooled_rank_ic": 0.05486096422482279, "direction_accuracy": 0.5163466993103036},
+    {"horizon_day": 6, "pooled_rank_ic": 0.06488472519564453, "direction_accuracy": 0.5153614188039292},
+    {"horizon_day": 7, "pooled_rank_ic": 0.08278379257690624, "direction_accuracy": 0.5301854118771087},
+    {"horizon_day": 8, "pooled_rank_ic": 0.0944875080364683, "direction_accuracy": 0.542799988057206},
+    {"horizon_day": 9, "pooled_rank_ic": 0.1018776530813717, "direction_accuracy": 0.5502791628101394},
+    {"horizon_day": 10, "pooled_rank_ic": 0.11323220411413162, "direction_accuracy": 0.5599080404860717}
+  ],
+  "takeaways": [
+    "Stage3 CE-only 1e-5 from C4 best, 15 segs: D10 pooled Rank IC 0.1132 vs parent C4 best 0.1792 (delta -0.066, -36.8%)",
+    "Not a P0a-style collapse to 0.0643, but Alpha leaked hard while val token CE 2.319 -> 1.920",
+    "13/13 daily IC still positive; D10 direction 55.99% (C4 best was 49.31%) — ranking quality fell, sign accuracy rose",
+    "Do not treat this 15-seg CE-only rehearsal as an Alpha-preserving Stage3 recipe"
+  ]
+}
