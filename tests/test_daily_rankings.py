@@ -1,6 +1,7 @@
 import json
 import time
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -274,6 +275,12 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert 'x1="${left}"' in page
     assert "当时收盘价参考线" in page or "当时收盘" in page
     assert 'x1="${(hasHistory ? histRight : left)' not in page
+    assert "Hermes 分析" not in page
+    assert "hermes-analysis" not in page
+    assert "analyzeWithHermes" not in page
+    assert "resetHermesPanel" not in page
+    assert "hermes-analyze" not in page
+    assert "DeepSeek" not in page
 
 
 def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
@@ -481,4 +488,42 @@ def test_ranking_chart_history_clips_to_asof_and_skips_modal(monkeypatch, tmp_pa
     assert payload["history"][-1]["timestamp"] == "2026-09-18"
     assert len(payload["history"]) == 90
     assert all(row["timestamp"] <= "2026-09-18" for row in payload["history"])
+
+
+def test_hermes_analysis_route_is_removed(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+    client = web_app.app.test_client()
+
+    missing = client.post("/api/daily-rankings/2026-09-18/000063/hermes-analysis")
+    detail = client.get("/api/daily-rankings/2026-09-18/000063")
+
+    assert missing.status_code == 404
+    assert detail.status_code == 200
+    payload = detail.get_json()
+    assert payload["code"] == "sz.000063"
+    assert "predictions" in payload
+    assert "history" in payload
+    assert "analysis" not in payload
+
+
+def test_deploy_no_longer_wires_hermes_analysis():
+    root = Path(web_app.PROJECT_ROOT)
+    deploy = (root / "deploy" / "oracle-kronos" / "deploy.sh").read_text(encoding="utf-8")
+    service = (root / "deploy" / "oracle-kronos" / "kronos-web.service").read_text(encoding="utf-8")
+    readme = (root / "deploy" / "oracle-kronos" / "README.md").read_text(encoding="utf-8")
+    root_readme = (root / "README.md").read_text(encoding="utf-8")
+
+    assert 'cp "$PROJECT_DIR/webui/hermes_analysis.py"' not in deploy
+    assert 'sudo install -o opc -g opc -m 0644 "$stage/webui/hermes_analysis.py"' not in deploy
+    assert 'sudo rm -f "$root/webui/hermes_analysis.py"' in deploy
+    assert "KRONOS_HERMES" not in deploy
+    assert "KRONOS_HERMES" not in service
+    assert "miniconda3/bin/hermes" not in service
+    assert "Hermes 分析" not in readme
+    assert "KRONOS_HERMES" not in readme
+    assert "hermes-analysis" not in root_readme
+    assert "Hermes 分析" not in root_readme
 

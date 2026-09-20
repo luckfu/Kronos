@@ -127,7 +127,6 @@ PYTHONPATH=. python webui/app.py
 - `POST /api/predict`：提交 `{"symbol": "300395"}`，刷新行情并返回单股区间预测。
 - `POST /api/a-share/rankings`：提交 `{"symbols": ["300395", "600519"]}`，返回自选股票池排名。
 - `GET /api/a-share/symbols`：返回当前行业映射中的股票、行业 ID 和行业标签。
-- `POST /api/daily-rankings/<asof>/<symbol>/hermes-analysis`：详情卡「Hermes 分析」按需调用本机 Hermes CLI（强制 DeepSeek），返回分析文本。不在打开详情时自动请求。Oracle 部署说明见 [`deploy/oracle-kronos/README.md`](deploy/oracle-kronos/README.md)。
 
 行情采集、缓存和预测结果保存都属于 Web 网关职责；`webui/market_data_cache/` 与
 `webui/prediction_results/` 是运行时目录，不纳入 Git。Modal Serverless 只接收已整理的

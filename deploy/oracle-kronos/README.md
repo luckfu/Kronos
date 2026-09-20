@@ -78,48 +78,6 @@ username to change its password. Opening `https://allmoneybymehold.com/kronos/`
 shows the in-app login form until a session cookie is set. Use **退出** on the
 rankings page to clear the cookie.
 
-## Hermes / DeepSeek ranking analysis
-
-The daily-rankings detail card has an on-demand **Hermes 分析** button. Opening
-a stock does not call the model. Clicking the button sends `POST
-/api/daily-rankings/<asof>/<symbol>/hermes-analysis`. Kronos builds a short
-Chinese prompt from the published ranking row (code, name, asof, close, D1,
-D10, rank, sector) and execs the local Hermes CLI as `opc`:
-
-```bash
-hermes chat -q "PROMPT" --oneshot -Q -m deepseek-v4-pro --provider deepseek
-```
-
-It captures stdout only and returns `{analysis, model, provider, elapsed_sec}`.
-Kronos never scrapes the Hermes WebUI (`127.0.0.1:18787` / `/hermes/`) and never
-reads `~/.hermes/.env`. DeepSeek keys stay with Hermes.
-
-After deploy, `kronos-web.service` must be installed and restarted so the new
-route, template, and environment are picked up. `hermes` must remain executable
-for `opc` (default `KRONOS_HERMES_BIN=/data/miniconda3/bin/hermes`, with
-`/data/miniconda3/bin` on `PATH`). Confirm with:
-
-```bash
-ssh oracle4C24G 'sudo -u opc -H /data/miniconda3/bin/hermes -z "ping"'
-```
-
-Configurable through the unit file or `/opt/kronos-web/data/kronos-web.env`:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `KRONOS_HERMES_BIN` | `/data/miniconda3/bin/hermes` | CLI path |
-| `KRONOS_HERMES_PROVIDER` | `deepseek` | Forced provider (not the Hermes default gpt-5.5) |
-| `KRONOS_HERMES_MODEL` | `deepseek-v4-pro` | Forced model |
-| `KRONOS_HERMES_TIMEOUT` | `120` | Subprocess timeout in seconds (capped at 180) |
-| `KRONOS_HERMES_CACHE_TTL` | `1800` | In-process cache for repeat clicks; `0` disables |
-| `KRONOS_HERMES_DISABLED` | unset | Set `1` to return HTTP 503 without calling Hermes |
-
-If the binary is missing or the flag is set, the API returns HTTP 503 with an
-`error` string the detail card displays. Timeouts return HTTP 504. Live Oracle
-smoke: search `000063` / `sz.000063`, open the card, click **Hermes 分析**, and
-wait for DeepSeek text under the history+forecast chart. CI uses a mocked
-subprocess and does not call DeepSeek.
-
 ## Verify
 
 This checks health, model status, and performs one billable Modal prediction for `600519`:
