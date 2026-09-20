@@ -132,7 +132,7 @@
     .status-row:last-child { border-bottom: 0; }
     .status-row.header { color: var(--muted); background: var(--surface-2); font-size: 11px; }
     .mobile-menu { display: none; }
-    .card-meta { display: none; }
+    .card-meta, .card-code { display: none; }
     button, input, select, tbody tr { touch-action: manipulation; }
     .nav button:focus-visible, .filter:focus-visible, .control:focus-visible,
     .icon-button:focus-visible, .pool-button:focus-visible, .pager button:focus-visible {
@@ -198,13 +198,15 @@
       }
       tbody tr[data-code] td:nth-child(1) { grid-area: rank; font-size: 15px; align-self: center; }
       tbody tr[data-code] td:nth-child(2) { grid-area: name; white-space: normal; }
+      .row-name { display: block; font-weight: 600; }
+      .card-code { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 1px; }
+      .card-meta { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       tbody tr[data-code] td:nth-child(3),
       tbody tr[data-code] td:nth-child(4),
       tbody tr[data-code] td:nth-child(5),
       tbody tr[data-code] td:nth-child(6) { display: none; }
       tbody tr[data-code] td:nth-child(7) { grid-area: d1; text-align: right; font-size: 12px; }
       tbody tr[data-code] td:nth-child(8) { grid-area: d10; text-align: right; font-size: 16px; }
-      .card-meta { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; white-space: normal; }
       tbody tr:has(.empty), tbody tr:has(.loading) { display: block; }
       td.empty, td.loading { display: block; padding: 48px 16px; }
       .pager { min-height: 56px; }
@@ -485,7 +487,7 @@
       }
       body.innerHTML = rows.map(row => `<tr data-code="${escapeHtml(row.code)}" class="${state.selected === row.code ? 'selected' : ''}">
         <td class="rank">${row.rank_d10}</td>
-        <td><span>${escapeHtml(row.name || '—')}</span><span class="card-meta">${escapeHtml(row.code)} · ${escapeHtml(stripSector(row.sector_label))} · 市值 ${percent(row.size_percentile)} · ${price(row.close_asof)}</span></td>
+        <td><span class="row-name">${escapeHtml(row.name || '—')}</span><span class="card-code">${escapeHtml(row.code)}</span><span class="card-meta">${escapeHtml(stripSector(row.sector_label))} · 市值 ${percent(row.size_percentile)} · ${price(row.close_asof)}</span></td>
         <td class="code">${escapeHtml(row.code)}</td>
         <td class="sector" title="${escapeHtml(stripSector(row.sector_label))}">${escapeHtml(stripSector(row.sector_label))}</td>
         <td>${percent(row.size_percentile)}</td>
