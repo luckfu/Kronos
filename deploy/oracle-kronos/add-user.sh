@@ -20,5 +20,5 @@ if [[ ! "$username" =~ ^[A-Za-z0-9._-]+$ ]]; then
 fi
 
 echo "Adding/updating '$username' on $SSH_TARGET. The password will not be displayed."
-ssh -t "$SSH_TARGET" "sudo htpasswd '$AUTH_FILE' '$username' && sudo nginx -t && sudo systemctl reload nginx"
-echo "Kronos access updated for '$username'."
+ssh -t "$SSH_TARGET" "sudo htpasswd '$AUTH_FILE' '$username'"
+echo "Kronos cookie login will accept '$username' on the next sign-in. Hermes and other shared Basic Auth locations still use the same file."

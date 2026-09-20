@@ -6,8 +6,9 @@ This directory deploys only the lightweight Kronos web UI and market-data gatewa
 
 ```text
 Browser -> https://allmoneybymehold.com/kronos/
-        -> existing Nginx Basic Auth (/etc/nginx/.htpasswd_clawd)
+        -> Nginx reverse proxy (no Basic Auth)
         -> Gunicorn at 127.0.0.1:7072
+        -> Flask cookie session, checked against /etc/nginx/.htpasswd_clawd
         -> incremental market-data cache and collection
         -> fixed sector vocabulary + replaceable symbol mapping
         -> full-market size-percentile reference
@@ -26,7 +27,28 @@ bash deploy/oracle-kronos/deploy.sh
 
 A different alias can be supplied with `SSH_TARGET=opc@example-host`. The service enforces `KRONOS_REMOTE_ONLY=1`, so request payloads cannot select local inference. Deploy the Modal Small App first; the existing URL remains `https://luckfu--kronos-beta-v1-2-inference-web.modal.run`.
 
-The `/kronos/` location uses `/etc/nginx/.htpasswd_clawd`. This is standard Nginx Basic Auth, so each person can have a separate username and password. The deployment never creates, replaces, or prints that password file.
+`/kronos/` is no longer protected by Nginx Basic Auth. The Flask app shows a
+mobile-friendly login form and stores an HttpOnly, Secure, SameSite=Lax cookie
+(`kronos_session`, path `/kronos`). Credentials are still validated against the
+existing `/etc/nginx/.htpasswd_clawd` file (apr1 or bcrypt, as `htpasswd`
+writes). The deployment never creates, replaces, or prints that password file;
+it only needs the `opc` service user to be able to read it. Remember-me
+defaults to on and lasts 30 days (`KRONOS_SESSION_DAYS`).
+
+The cookie is signed with `KRONOS_SECRET_KEY`. Generate it once on Oracle and
+keep it in `/opt/kronos-web/data/kronos-web.env` (mode `0600`), which the
+systemd unit loads via `EnvironmentFile`. The deploy script creates this file
+on first install if the key is missing:
+
+```bash
+python3 -c 'import secrets; print(secrets.token_hex(32))'
+# store as KRONOS_SECRET_KEY=... in /opt/kronos-web/data/kronos-web.env
+```
+
+Do not commit or rotate that value casually: changing it signs every existing
+session out. The first deploy after this change must reload Nginx (to drop
+`auth_basic`) and restart `kronos-web` so the new login code and environment
+file are picked up. `deploy.sh` already does both.
 
 ## Update Industry Mapping
 
@@ -48,7 +70,13 @@ Add or change a user without exposing the password in shell history:
 bash deploy/oracle-kronos/add-user.sh analyst
 ```
 
-The script prompts securely on the Oracle host, validates the Nginx configuration, and reloads Nginx. Set `SSH_TARGET=opc@example-host` when using a different SSH target. Existing users remain valid; use the same command with an existing username to change its password. The browser will show a username/password prompt when opening `https://allmoneybymehold.com/kronos/`.
+The script prompts securely on the Oracle host and updates the shared htpasswd
+file. Kronos does not need an Nginx reload after a password change; the next
+login reads the file. Set `SSH_TARGET=opc@example-host` when using a different
+SSH target. Existing users remain valid; use the same command with an existing
+username to change its password. Opening `https://allmoneybymehold.com/kronos/`
+shows the in-app login form until a session cookie is set. Use **退出** on the
+rankings page to clear the cookie.
 
 ## Verify
 

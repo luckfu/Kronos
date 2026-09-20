@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
+  <title>登录 Kronos</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --text: #18212b;
+      --muted: #6b7785;
+      --line: #e1e6ea;
+      --accent: #126b58;
+      --accent-dark: #0e5646;
+      --danger: #c33d37;
+      --danger-soft: #f8eceb;
+      --shadow: 0 12px 32px rgba(25, 37, 48, .08);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px 16px;
+      color: var(--text);
+      background: var(--bg);
+    }
+    main {
+      width: min(420px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 28px 22px 22px;
+      box-shadow: var(--shadow);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--text);
+      color: #fff;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 650;
+    }
+    p.lead {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    label.field {
+      display: block;
+      margin-bottom: 12px;
+    }
+    label.field span {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      min-height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 16px;
+      background: #fff;
+    }
+    input:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+    .remember {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0 16px;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .remember input {
+      width: 18px;
+      height: 18px;
+    }
+    button[type="submit"] {
+      width: 100%;
+      min-height: 48px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button[type="submit"]:hover { background: var(--accent-dark); }
+    .error {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: 13px;
+    }
+    .hint {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">
+      <div class="brand-mark">K</div>
+      <h1>登录 Kronos</h1>
+    </div>
+    <p class="lead">使用已分配的账号登录。勾选记住登录后，再次打开此页不会重复要求输入密码。</p>
+    {% if error %}
+    <p class="error" role="alert">{{ error }}</p>
+    {% endif %}
+    <form id="login-form" method="post" action="{{ url_for('login') }}" autocomplete="on">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <label class="field">
+        <span>用户名</span>
+        <input type="text" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <label class="remember">
+        <input type="checkbox" name="remember" value="1"{% if remember %} checked{% endif %}>
+        记住登录（{{ session_days }} 天）
+      </label>
+      <button type="submit">登录</button>
+    </form>
+    <p class="hint">账号由管理员用 htpasswd 创建。登录状态保存在本机 Cookie 中，可随时退出。</p>
+  </main>
+</body>
+</html>

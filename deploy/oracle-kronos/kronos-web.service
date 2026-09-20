@@ -15,7 +15,12 @@ Environment=KRONOS_INFERENCE_TIMEOUT=210
 Environment=KRONOS_HISTORY_DIR=/opt/kronos-web/data/prediction_results
 Environment=KRONOS_MARKET_DATA_CACHE_DIR=/opt/kronos-web/data/market_data_cache
 Environment=KRONOS_STOCK_NAME_CACHE_PATH=/opt/kronos-web/data/stock_name_cache.json
+Environment=KRONOS_HTPASSWD_PATH=/etc/nginx/.htpasswd_clawd
+Environment=KRONOS_SESSION_DAYS=30
+Environment=KRONOS_COOKIE_PATH=/kronos
+Environment=KRONOS_COOKIE_SECURE=1
 Environment=FLASK_DEBUG=0
+EnvironmentFile=-/opt/kronos-web/data/kronos-web.env
 ExecStart=/opt/kronos-web/.venv/bin/gunicorn --workers 2 --threads 4 --timeout 240 --bind 127.0.0.1:7072 app:app
 Restart=on-failure
 RestartSec=5
