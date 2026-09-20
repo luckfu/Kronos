@@ -98,3 +98,5 @@ tmp/
 
 # Local evaluation/download scratch artifacts
 /scratch/
+/webui/stock_name_cache.json
+/webui/stock_name_cache.json.lock

@@ -1,11 +1,13 @@
 import json
+import time
+from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 
 from webui import app as web_app
 
 
-def published_run(tmp_path):
+def published_run(tmp_path, names=None):
     run = tmp_path / "2026-09-18" / "full_market"
     run.mkdir(parents=True)
     (run / "summary.json").write_text(json.dumps({
@@ -14,7 +16,7 @@ def published_run(tmp_path):
         "batch_count": 1,
         "model": {"sample_count": 5, "model_release": "small-0.1-cosine-c2"},
     }))
-    pd.DataFrame([
+    rows = [
         {
             "asof": "2026-09-18", "code": "sh.600000", "sector_id": 63,
             "sector_label": "J66货币金融服务", "size_percentile": 0.9,
@@ -37,7 +39,12 @@ def published_run(tmp_path):
             "predicted_return_d1": 0.007, "predicted_return_d10": 0.033,
             "rank_d10": 11, "rank_percentile_d10": 0.01,
         },
-    ]).to_csv(run / "ranking.csv", index=False)
+    ]
+    if names:
+        for row in rows:
+            if row["code"] in names:
+                row["name"] = names[row["code"]]
+    pd.DataFrame(rows).to_csv(run / "ranking.csv", index=False)
     detail = {
         "asof": "2026-09-18", "code": "sh.600000", "sector_id": 63,
         "sector_label": "J66货币金融服务", "size_percentile": 0.9,
@@ -47,6 +54,37 @@ def published_run(tmp_path):
     }
     (run / "predictions.jsonl").write_text(json.dumps(detail) + "\n")
     return run
+
+
+def reset_stock_name_cache(monkeypatch, tmp_path, names=None, updated_at=None):
+    cache_path = tmp_path / "stock_name_cache.json"
+    monkeypatch.setattr(web_app, "STOCK_NAME_CACHE_PATH", str(cache_path))
+    web_app.stock_name_cache.clear()
+    web_app.stock_name_cache_loaded = False
+    web_app.stock_name_cache_loaded_path = None
+    web_app.stock_name_cache_updated_at = None
+    web_app.stock_name_cache_mtime = None
+    if names is not None:
+        payload = {
+            "updated_at": (
+                updated_at
+                if isinstance(updated_at, str)
+                else (updated_at or datetime.now(timezone.utc)).isoformat()
+            ),
+            "names": names,
+        }
+        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+    return cache_path
+
+
+def forbid_live_name_lookups(monkeypatch):
+    def explode(*args, **kwargs):
+        raise AssertionError("live stock-name lookup should not run")
+
+    monkeypatch.setattr(web_app, "fetch_baostock_stock_names", explode)
+    monkeypatch.setattr(web_app, "query_baostock_stock_name", explode)
+    monkeypatch.setattr(web_app, "query_eastmoney_stock_name", explode)
+
 
 
 def test_daily_rankings_only_lists_complete_runs(monkeypatch, tmp_path):
@@ -66,6 +104,8 @@ def test_daily_rankings_only_lists_complete_runs(monkeypatch, tmp_path):
 def test_daily_rankings_supports_filters_and_detail(monkeypatch, tmp_path):
     published_run(tmp_path)
     monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
     client = web_app.app.test_client()
 
     ranking = client.get("/api/daily-rankings?asof=2026-09-18&query=600000&size_group=large")
@@ -82,6 +122,8 @@ def test_daily_rankings_supports_filters_and_detail(monkeypatch, tmp_path):
 def test_daily_rankings_re_ranks_selected_pool(monkeypatch, tmp_path):
     published_run(tmp_path)
     monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
     client = web_app.app.test_client()
 
     response = client.get(
@@ -109,7 +151,7 @@ def test_home_uses_daily_ranking_experience():
 def test_daily_rankings_query_ignores_top_n(monkeypatch, tmp_path):
     published_run(tmp_path)
     monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
-    monkeypatch.setattr(web_app, "query_remote_stock_name", lambda symbol: None)
+    monkeypatch.setattr(web_app, "query_remote_stock_name", lambda symbol, **kwargs: None)
     client = web_app.app.test_client()
 
     limited = client.get("/api/daily-rankings?asof=2026-09-18&top=10")
@@ -138,7 +180,7 @@ def test_daily_rankings_query_ignores_top_n(monkeypatch, tmp_path):
 def test_daily_rankings_empty_query_still_applies_top_n(monkeypatch, tmp_path):
     published_run(tmp_path)
     monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
-    monkeypatch.setattr(web_app, "query_remote_stock_name", lambda symbol: None)
+    monkeypatch.setattr(web_app, "query_remote_stock_name", lambda symbol, **kwargs: None)
 
     response = web_app.app.test_client().get(
         "/api/daily-rankings?asof=2026-09-18&query=%20&top=10"
@@ -158,3 +200,137 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert "card-meta" in page
     assert "grid-template-areas:" in page
     assert "@media (max-width: 430px)" in page
+
+
+def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path, names={
+        "sh.600000": "浦发银行",
+        "sz.000001": "平安银行",
+    })
+    forbid_live_name_lookups(monkeypatch)
+    web_app.preload_stock_name_cache()
+    web_app.stock_name_cache.clear()
+    web_app.stock_name_cache_loaded = False
+    web_app.stock_name_cache_loaded_path = None
+    web_app.stock_name_cache_mtime = None
+    web_app.stock_name_cache_updated_at = None
+
+    started = time.perf_counter()
+    response = web_app.app.test_client().get(
+        "/api/daily-rankings?asof=2026-09-18&top=10"
+    )
+    elapsed = time.perf_counter() - started
+
+    assert response.status_code == 200
+    assert elapsed < 2
+    rows = {row["code"]: row["name"] for row in response.get_json()["rows"]}
+    assert rows["sh.600000"] == "浦发银行"
+    assert rows["sz.000001"] == "平安银行"
+    assert [row["code"] for row in response.get_json()["rows"]] == [
+        "sh.600000",
+        "sz.000001",
+    ]
+
+
+def test_daily_rankings_without_cache_still_returns_codes(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+
+    started = time.perf_counter()
+    response = web_app.app.test_client().get(
+        "/api/daily-rankings?asof=2026-09-18&top=10"
+    )
+    elapsed = time.perf_counter() - started
+
+    assert response.status_code == 200
+    assert elapsed < 2
+    payload = response.get_json()
+    assert payload["total"] == 2
+    assert payload["rows"][0]["code"] == "sh.600000"
+    assert payload["rows"][0]["name"] is None
+
+
+def test_daily_rankings_uses_csv_name_column_without_remote(monkeypatch, tmp_path):
+    published_run(tmp_path, names={"sh.600000": "浦发银行", "sz.000001": "平安银行"})
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+
+    ranking = web_app.app.test_client().get(
+        "/api/daily-rankings?asof=2026-09-18&top=10"
+    )
+    detail = web_app.app.test_client().get("/api/daily-rankings/2026-09-18/600000")
+
+    assert ranking.status_code == 200
+    assert ranking.get_json()["rows"][0]["name"] == "浦发银行"
+    assert detail.status_code == 200
+    assert detail.get_json()["name"] == "浦发银行"
+
+
+def test_stock_name_refresh_writes_disk_and_survives_cold_memory(monkeypatch, tmp_path):
+    cache_path = reset_stock_name_cache(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        web_app,
+        "fetch_baostock_stock_names",
+        lambda: {"sh.600000": "浦发银行", "sz.000001": "平安银行"},
+    )
+    monkeypatch.setattr(web_app, "query_baostock_stock_name", lambda symbol: None)
+    monkeypatch.setattr(web_app, "query_eastmoney_stock_name", lambda symbol: None)
+
+    written = web_app.refresh_stock_name_cache()
+
+    assert written["sh.600000"] == "浦发银行"
+    assert cache_path.is_file()
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert payload["names"]["sz.000001"] == "平安银行"
+
+    web_app.stock_name_cache.clear()
+    web_app.stock_name_cache_loaded = False
+    web_app.stock_name_cache_loaded_path = None
+    web_app.stock_name_cache_mtime = None
+    web_app.stock_name_cache_updated_at = None
+    monkeypatch.setattr(
+        web_app,
+        "fetch_baostock_stock_names",
+        lambda: (_ for _ in ()).throw(AssertionError("BaoStock should not rerun")),
+    )
+
+    assert web_app.query_remote_stock_name("sh.600000", allow_remote=False) == "浦发银行"
+    web_app.load_stock_name_reference()
+    assert web_app.stock_name_cache["sz.000001"] == "平安银行"
+
+
+def test_fresh_disk_cache_skips_baostock_refresh(monkeypatch, tmp_path):
+    reset_stock_name_cache(
+        monkeypatch,
+        tmp_path,
+        names={"sh.600000": "浦发银行"},
+        updated_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    forbid_live_name_lookups(monkeypatch)
+
+    names = web_app.refresh_stock_name_cache()
+
+    assert names["sh.600000"] == "浦发银行"
+
+
+def test_daily_rankings_search_still_bypasses_top_n_with_name_cache(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path, names={"sz.000063": "中兴通讯"})
+    forbid_live_name_lookups(monkeypatch)
+
+    response = web_app.app.test_client().get(
+        "/api/daily-rankings?asof=2026-09-18&query=000063&top=10"
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["total"] == 1
+    assert payload["rows"][0]["code"] == "sz.000063"
+    assert payload["rows"][0]["name"] == "中兴通讯"
+    assert payload["rows"][0]["rank_d10"] == 11
