@@ -258,6 +258,9 @@ MARKET_DATA_COLUMNS = [
     'timestamps', 'open', 'high', 'low', 'close', 'volume', 'amount',
     'turn', 'pctChg',
 ]
+RANKING_CHART_LOOKBACK = 90
+RANKING_CHART_MIN_CACHE_ROWS = 60
+RANKING_HISTORY_FETCH_TIMEOUT = 8
 
 
 def _market_cache_path(symbol):
@@ -306,6 +309,225 @@ def _merge_market_data_cache(symbol, frame):
         merged.to_csv(temporary_path, index=False, date_format='%Y-%m-%d')
         os.replace(temporary_path, path)
         return merged
+
+
+def _json_number(value):
+    number = pd.to_numeric(value, errors='coerce')
+    if pd.isna(number) or not np.isfinite(number):
+        return None
+    return float(number)
+
+
+def _clip_history_to_asof(frame, asof, lookback=RANKING_CHART_LOOKBACK):
+    """Keep lookback trading days ending on the ranking signal date."""
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+    clipped = frame.copy()
+    clipped['timestamps'] = pd.to_datetime(clipped['timestamps'], errors='coerce')
+    for column in ('open', 'high', 'low', 'close'):
+        if column in clipped.columns:
+            clipped[column] = pd.to_numeric(clipped[column], errors='coerce')
+    clipped = clipped.dropna(subset=['timestamps', 'open', 'high', 'low', 'close'])
+    clipped = clipped[clipped['close'] > 0]
+    asof_ts = pd.Timestamp(asof).normalize()
+    clipped = clipped[clipped['timestamps'].dt.normalize() <= asof_ts]
+    if clipped.empty:
+        return pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+    return clipped.sort_values('timestamps').drop_duplicates(
+        'timestamps', keep='last'
+    ).tail(int(lookback)).reset_index(drop=True)
+
+
+def _history_covers_asof(frame, asof):
+    if frame is None or frame.empty:
+        return False
+    last = pd.Timestamp(frame['timestamps'].iloc[-1]).normalize()
+    return last == pd.Timestamp(asof).normalize()
+
+
+def _history_records(frame):
+    rows = []
+    for record in frame.to_dict('records'):
+        timestamp = pd.Timestamp(record['timestamps'])
+        open_price = _json_number(record.get('open'))
+        high_price = _json_number(record.get('high'))
+        low_price = _json_number(record.get('low'))
+        close_price = _json_number(record.get('close'))
+        if None in (open_price, high_price, low_price, close_price):
+            continue
+        rows.append({
+            'timestamp': timestamp.strftime('%Y-%m-%d'),
+            'open': open_price,
+            'high': high_price,
+            'low': low_price,
+            'close': close_price,
+            'volume': _json_number(record.get('volume')),
+        })
+    return rows
+
+
+def _normalize_ohlc_frame(frame):
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+    normalized = frame.copy()
+    if 'timestamps' not in normalized.columns and 'date' in normalized.columns:
+        normalized = normalized.rename(columns={'date': 'timestamps'})
+    normalized['timestamps'] = pd.to_datetime(normalized['timestamps'], errors='coerce')
+    for column in MARKET_DATA_COLUMNS[1:]:
+        if column not in normalized.columns:
+            normalized[column] = np.nan
+        normalized[column] = pd.to_numeric(normalized[column], errors='coerce')
+    normalized = normalized.dropna(subset=['timestamps', 'open', 'high', 'low', 'close'])
+    for column in ('volume', 'amount', 'turn', 'pctChg'):
+        normalized[column] = normalized[column].fillna(0)
+    normalized = normalized[(normalized['close'] > 0) & (normalized['volume'] >= 0)]
+    return normalized.sort_values('timestamps').drop_duplicates(
+        'timestamps', keep='last'
+    ).reset_index(drop=True)
+
+
+def _query_eastmoney_ohlc_range(symbol, start, end):
+    """Fetch adjusted daily bars through an inclusive end date from Eastmoney."""
+    market, code = str(symbol).lower().split('.', 1)
+    secid = f'1.{code}' if market == 'sh' else f'0.{code}'
+    query = urlencode({
+        'secid': secid,
+        'klt': '101',
+        'fqt': '1',
+        'beg': pd.Timestamp(start).strftime('%Y%m%d'),
+        'end': pd.Timestamp(end).strftime('%Y%m%d'),
+        'fields1': 'f1',
+        'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+    })
+    url = f'https://push2his.eastmoney.com/api/qt/stock/kline/get?{query}'
+    timeout = str(RANKING_HISTORY_FETCH_TIMEOUT)
+    response = subprocess.run(
+        [
+            'curl', '--fail', '--silent', '--show-error', '--compressed',
+            '--max-time', timeout, '-A', 'Mozilla/5.0', url,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=RANKING_HISTORY_FETCH_TIMEOUT + 4,
+    )
+    payload = json.loads(response.stdout)
+    klines = (payload.get('data') or {}).get('klines') or []
+    columns = [
+        'timestamps', 'open', 'close', 'high', 'low', 'volume', 'amount',
+        'amplitude', 'pctChg', 'change', 'turn',
+    ]
+    history = pd.DataFrame([row.split(',') for row in klines], columns=columns)
+    return _normalize_ohlc_frame(history)
+
+
+def _query_baostock_ohlc_range(symbol, start, end):
+    """Fetch adjusted daily bars through an inclusive end date from BaoStock."""
+    if not BAOSTOCK_AVAILABLE:
+        raise RuntimeError('BaoStock is not installed')
+    fields = 'date,code,open,high,low,close,volume,amount,turn,pctChg'
+    with baostock_lock:
+        login = bs.login()
+        if login.error_code != '0':
+            raise RuntimeError(
+                f'BaoStock login failed: {login.error_code} {login.error_msg}'
+            )
+        try:
+            history_result = bs.query_history_k_data_plus(
+                symbol,
+                fields,
+                start_date=pd.Timestamp(start).strftime('%Y-%m-%d'),
+                end_date=pd.Timestamp(end).strftime('%Y-%m-%d'),
+                frequency='d',
+                adjustflag='2',
+            )
+            history_rows = read_baostock_result(history_result)
+            history = pd.DataFrame(history_rows, columns=fields.split(','))
+            return _normalize_ohlc_frame(history)
+        finally:
+            bs.logout()
+
+
+def _fetch_ranking_history_remote(symbol, asof, lookback=RANKING_CHART_LOOKBACK):
+    """Best-effort OHLC through asof. Never calls Modal inference."""
+    asof_ts = pd.Timestamp(asof).normalize()
+    start = asof_ts - pd.Timedelta(days=max(365, int(lookback) * 4))
+    errors = []
+    try:
+        frame = _query_eastmoney_ohlc_range(symbol, start, asof_ts)
+        if frame is not None and not frame.empty:
+            try:
+                _merge_market_data_cache(symbol, frame)
+            except (OSError, ValueError, TypeError):
+                pass
+            return _clip_history_to_asof(frame, asof_ts, lookback), 'eastmoney'
+    except (
+        OSError, ValueError, RuntimeError, TypeError, json.JSONDecodeError,
+        subprocess.SubprocessError, TimeoutError, KeyError,
+    ) as exc:
+        errors.append(f'Eastmoney: {exc}')
+    try:
+        frame = _query_baostock_ohlc_range(symbol, start, asof_ts)
+        if frame is not None and not frame.empty:
+            try:
+                _merge_market_data_cache(symbol, frame)
+            except (OSError, ValueError, TypeError):
+                pass
+            return _clip_history_to_asof(frame, asof_ts, lookback), 'baostock'
+    except (
+        OSError, ValueError, RuntimeError, TypeError, json.JSONDecodeError,
+    ) as exc:
+        errors.append(f'BaoStock: {exc}')
+    if errors:
+        raise RuntimeError('; '.join(errors))
+    return pd.DataFrame(columns=MARKET_DATA_COLUMNS), None
+
+
+def ranking_chart_history(symbol, asof, lookback=RANKING_CHART_LOOKBACK):
+    """Return recent OHLC through asof for the rankings detail chart."""
+    asof_ts = pd.Timestamp(asof).normalize()
+    cached = _clip_history_to_asof(_read_market_data_cache(symbol), asof_ts, lookback)
+    if (
+        _history_covers_asof(cached, asof_ts)
+        and len(cached) >= min(int(lookback), RANKING_CHART_MIN_CACHE_ROWS)
+    ):
+        return {
+            'history': _history_records(cached),
+            'history_source': 'market_data_cache',
+            'history_note': None,
+        }
+
+    remote = pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+    remote_source = None
+    try:
+        remote, remote_source = _fetch_ranking_history_remote(symbol, asof_ts, lookback)
+    except (OSError, ValueError, RuntimeError, TypeError, json.JSONDecodeError):
+        remote = pd.DataFrame(columns=MARKET_DATA_COLUMNS)
+        remote_source = None
+    remote = _clip_history_to_asof(remote, asof_ts, lookback)
+    if _history_covers_asof(remote, asof_ts) and len(remote) >= 1:
+        return {
+            'history': _history_records(remote),
+            'history_source': remote_source,
+            'history_note': None,
+        }
+
+    if len(cached) >= 1:
+        last = pd.Timestamp(cached['timestamps'].iloc[-1]).normalize()
+        note = None
+        if last < asof_ts:
+            note = f'历史行情仅到 {last:%Y-%m-%d}，未覆盖信号日，预测路径仍从信号日收盘起算'
+        return {
+            'history': _history_records(cached),
+            'history_source': 'market_data_cache',
+            'history_note': note,
+        }
+
+    return {
+        'history': [],
+        'history_source': None,
+        'history_note': '缺少截至信号日的历史行情，仅展示预测路径',
+    }
 
 
 def query_baostock_stock_name(symbol):
@@ -2087,6 +2309,10 @@ def daily_ranking_detail(asof, symbol):
         }
         prediction['name'] = ranking_row_stock_name(rank)
         prediction['model'] = summary.get('model') or {}
+        chart_history = ranking_chart_history(normalized, asof)
+        prediction['history'] = chart_history['history']
+        prediction['history_source'] = chart_history['history_source']
+        prediction['history_note'] = chart_history['history_note']
         return jsonify(prediction)
     except FileNotFoundError as exc:
         return jsonify({'error': str(exc)}), 404
