@@ -35,6 +35,9 @@ except ImportError:
 
 # Add project root directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
+if _WEBUI_DIR not in sys.path:
+    sys.path.insert(0, _WEBUI_DIR)
 KRONOS_REMOTE_ONLY = os.getenv('KRONOS_REMOTE_ONLY', '0').lower() in ('1', 'true', 'yes')
 
 try:
@@ -48,6 +51,13 @@ except ImportError:
 
 app = Flask(__name__)
 CORS(app)
+
+try:
+    from webui.auth import configure_auth, init_auth
+except ImportError:
+    from auth import configure_auth, init_auth
+
+init_auth(app)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 A_SHARE_DATASET_DIR = os.path.join(

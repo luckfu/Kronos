@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
   <title>Kronos 每日排名</title>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <style>
@@ -49,6 +50,19 @@
     .title h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0; }
     .title p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
     .top-actions { display: flex; align-items: center; gap: 8px; }
+    .logout-link {
+      height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .logout-link:hover { color: var(--text); border-color: var(--text); }
     .control, .icon-button { height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
     .control { padding: 0 10px; }
     .icon-button { width: 36px; display: grid; place-items: center; cursor: pointer; }
@@ -157,7 +171,7 @@
       .topbar { height: auto; min-height: 56px; padding: 10px 12px; gap: 10px; }
       .title p { display: none; }
       .title h1 { font-size: 17px; }
-      .control, .icon-button, .pool-button, .pager button { min-height: 44px; }
+      .control, .icon-button, .pool-button, .pager button, .logout-link { min-height: 44px; }
       .icon-button { width: 44px; height: 44px; }
       .content { padding: 12px; }
       .summary { grid-template-columns: 1fr 1fr; }
@@ -258,6 +272,9 @@
         <div class="top-actions">
           <select id="date-select" class="control" aria-label="信号日"></select>
           <button id="refresh-button" class="icon-button" type="button" aria-label="刷新"><i data-lucide="refresh-cw"></i></button>
+          {% if kronos_auth_enabled|default(false) %}
+          <a class="logout-link" href="{{ kronos_logout_url }}">退出{% if kronos_user %} {{ kronos_user }}{% endif %}</a>
+          {% endif %}
         </div>
       </header>
 
@@ -403,7 +420,11 @@
       }));
     }
     async function getJson(url) {
-      const response = await fetch(url, {headers: {'Accept': 'application/json'}});
+      const response = await fetch(url, {headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
+      if (response.status === 401) {
+        window.location.href = `${base}/login`;
+        throw new Error('需要登录');
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
       return payload;
