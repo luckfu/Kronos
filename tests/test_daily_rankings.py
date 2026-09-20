@@ -274,6 +274,9 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert "当时收盘 ${price(closePrice)}" not in page
     assert "closeLabel" not in page
     assert "${closePriceText}" in page
+    assert "const labelX = width - right - 3" not in page
+    assert "Math.min(markerX - labelPad, Math.max(left + 4, markerX - labelPad))" in page
+    assert 'text-anchor="end"' in page
     assert 'stroke="#916515" stroke-width="1.3" stroke-dasharray="5 4"' in page
     assert 'x1="${left}"' in page
     assert "当时收盘价参考线" in page or "当时收盘" in page
