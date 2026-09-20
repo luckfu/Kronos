@@ -133,8 +133,14 @@
     .return span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
     .return strong { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .chart-block { padding: 0 12px 14px; }
-    .chart-caption { padding: 0 4px 8px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
-    #path-chart { width: 100%; height: 170px; display: block; background: var(--surface-2); border-radius: 6px; }
+    .chart-caption { padding: 0 4px 8px; display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+    .chart-caption span:last-child { text-align: right; }
+    #path-chart { width: 100%; height: 188px; display: block; background: var(--surface-2); border-radius: 6px; }
+    .chart-legend { padding: 7px 4px 0; display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--muted); font-size: 10px; }
+    .chart-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 1px; vertical-align: -1px; }
+    .legend-hist i { background: var(--up); }
+    .legend-p50 i { background: var(--accent); }
+    .legend-band i { background: rgba(18,107,88,.28); }
     .facts { border-top: 1px solid var(--line); padding: 12px 16px; display: grid; gap: 9px; }
     .fact { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
     .fact span { color: var(--muted); }
@@ -327,8 +333,13 @@
               <div class="return"><span>1日中位预测</span><strong id="detail-d1">—</strong></div>
             </div>
             <div class="chart-block">
-              <div class="chart-caption"><span>未来10日预测路径</span><span id="detail-range">—</span></div>
-              <svg id="path-chart" viewBox="0 0 286 170" role="img" aria-label="未来十日预测路径"></svg>
+              <div class="chart-caption"><span>历史行情 + 未来10日预测</span><span id="detail-range">—</span></div>
+              <svg id="path-chart" viewBox="0 0 286 188" role="img" aria-label="信号日前历史行情与未来十日预测路径"></svg>
+              <div class="chart-legend" aria-hidden="true">
+                <span class="legend-hist"><i></i>历史K线</span>
+                <span class="legend-p50"><i></i>中位路径 P50</span>
+                <span class="legend-band"><i></i>P10–P90</span>
+              </div>
             </div>
             <div class="facts">
               <div class="fact"><span>信号日收盘</span><strong id="detail-close">—</strong></div>
@@ -541,38 +552,96 @@
         $('detail-leading').textContent = percent(rank.rank_percentile_d10);
         const sampleCount = result.model?.sample_count;
         $('detail-samples').textContent = `${sampleCount || '—'} 条`;
-        $('detail-note').textContent = `排名是同一信号日的截面比较结果，不代表确定收益。${sampleCount || '当前'}条路径用于降低单次采样偶然性，概率区间仅作参考。`;
+        const history = result.history || [];
+        const histNote = result.history_note ? ` ${result.history_note}。` : '';
+        $('detail-note').textContent = `排名是同一信号日的截面比较结果，不代表确定收益。${sampleCount || '当前'}条路径用于降低单次采样偶然性，概率区间仅作参考。${histNote}`.trim();
         const final = predictions[predictions.length - 1];
-        $('detail-range').textContent = final ? `${price(result.close_asof)} → ${price(final.close_p50)}` : '—';
-        drawChart(result.close_asof, predictions);
+        if (history.length && final) {
+          $('detail-range').textContent = `${history.length}日 ${price(history[0].close)} → D10 ${price(final.close_p50)}`;
+        } else {
+          $('detail-range').textContent = final ? `${price(result.close_asof)} → ${price(final.close_p50)}` : '—';
+        }
+        drawChart(result);
         document.querySelectorAll('#ranking-body tr').forEach(row => row.classList.toggle('selected', row.dataset.code === code));
       } catch (error) { toast(error.message); closeDetail(); }
     }
 
-    function drawChart(anchor, predictions) {
+    function shortDate(value) {
+      const text = String(value || '');
+      return text.length >= 10 ? text.slice(5) : (text || '—');
+    }
+    function drawChart(result) {
       const svg = $('path-chart');
-      const series = [{close_p10: anchor, close_p50: anchor, close_p90: anchor}, ...predictions];
-      const values = series.flatMap(item => [item.close_p10, item.close_p50, item.close_p90]).map(Number).filter(Number.isFinite);
+      const history = Array.isArray(result.history) ? result.history : [];
+      const predictions = Array.isArray(result.predictions) ? result.predictions : [];
+      const anchor = Number(result.close_asof);
+      const lastHistoryClose = Number(history.length ? history[history.length - 1].close : NaN);
+      const join = Number.isFinite(lastHistoryClose) ? lastHistoryClose : anchor;
+      const forecast = [{close_p10: join, close_p50: join, close_p90: join, timestamp: result.asof}, ...predictions];
+      const values = [
+        ...history.flatMap(item => [item.low, item.high, item.close]),
+        ...forecast.flatMap(item => [item.close_p10, item.close_p50, item.close_p90]),
+        anchor,
+      ].map(Number).filter(Number.isFinite);
       if (!values.length) { svg.innerHTML = ''; return; }
-      const width = 286, height = 170, left = 12, right = 12, top = 14, bottom = 24;
-      const min = Math.min(...values), max = Math.max(...values), pad = Math.max((max - min) * .15, Math.abs(max) * .01, .01);
+      const width = 286, height = 188, left = 8, right = 10, top = 16, bottom = 28;
+      const plotW = width - left - right;
+      const min = Math.min(...values), max = Math.max(...values);
+      const pad = Math.max((max - min) * .12, Math.abs(max) * .01, .01);
       const lo = min - pad, hi = max + pad;
-      const x = index => left + index * (width - left - right) / Math.max(1, series.length - 1);
       const y = value => top + (hi - value) * (height - top - bottom) / (hi - lo);
-      const line = key => series.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(item[key])).toFixed(1)}`).join(' ');
-      const upper = series.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(item.close_p90)).toFixed(1)}`).join(' ');
-      const lower = [...series].reverse().map((item, reverseIndex) => {
-        const index = series.length - 1 - reverseIndex;
-        return `L${x(index).toFixed(1)},${y(Number(item.close_p10)).toFixed(1)}`;
-      }).join(' ');
+      const hasHistory = history.length > 0;
+      const histRight = left + plotW * (hasHistory ? 0.70 : 0);
+      const xHist = index => history.length <= 1
+        ? left + (histRight - left) / 2
+        : left + index * (histRight - left) / (history.length - 1);
+      const xPred = index => {
+        const start = hasHistory ? histRight : left;
+        const end = width - right;
+        return forecast.length <= 1 ? start : start + index * (end - start) / (forecast.length - 1);
+      };
       const grid = [0, .5, 1].map(ratio => {
         const gy = top + ratio * (height - top - bottom);
         const value = hi - ratio * (hi - lo);
         return `<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}" stroke="#e1e6ea"/><text x="${left+2}" y="${gy-4}" fill="#6b7785" font-size="9">${value.toFixed(2)}</text>`;
       }).join('');
-      const anchorY = y(Number(anchor));
-      const baseline = `<line x1="${left}" y1="${anchorY}" x2="${width-right}" y2="${anchorY}" stroke="#916515" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${width-right-3}" y="${anchorY-4}" text-anchor="end" fill="#916515" font-size="9" font-weight="600">当前收盘 ${price(anchor)}</text>`;
-      svg.innerHTML = `${grid}<path d="${upper} ${lower} Z" fill="rgba(18,107,88,.12)"/>${baseline}<path d="${line('close_p50')}" fill="none" stroke="#126b58" stroke-width="2.2"/><text x="${left}" y="${height-7}" fill="#6b7785" font-size="9">信号日</text><text x="${width-right}" y="${height-7}" text-anchor="end" fill="#6b7785" font-size="9">D10</text>`;
+      const candleWidth = Math.min(4.2, Math.max(1.15, (histRight - left) / Math.max(history.length, 1) * 0.68));
+      const candles = history.map((item, index) => {
+        const open = Number(item.open), high = Number(item.high), low = Number(item.low), close = Number(item.close);
+        if (![open, high, low, close].every(Number.isFinite)) {
+          const cy = y(close);
+          return Number.isFinite(close) ? `<circle cx="${xHist(index).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.4" fill="#6b7785"/>` : '';
+        }
+        const cx = xHist(index);
+        const up = close >= open;
+        const color = up ? '#c33d37' : '#19845b';
+        const bodyTop = y(Math.max(open, close));
+        const bodyHeight = Math.max(1, y(Math.min(open, close)) - bodyTop);
+        return `<line x1="${cx.toFixed(1)}" y1="${y(high).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(low).toFixed(1)}" stroke="${color}" stroke-width="1"/><rect x="${(cx - candleWidth / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleWidth.toFixed(1)}" height="${bodyHeight.toFixed(1)}" fill="${color}"/>`;
+      }).join('');
+      const line = key => forecast.map((item, index) => `${index ? 'L' : 'M'}${xPred(index).toFixed(1)},${y(Number(item[key])).toFixed(1)}`).join(' ');
+      const upper = forecast.map((item, index) => `${index ? 'L' : 'M'}${xPred(index).toFixed(1)},${y(Number(item.close_p90)).toFixed(1)}`).join(' ');
+      const lower = [...forecast].reverse().map((item, reverseIndex) => {
+        const index = forecast.length - 1 - reverseIndex;
+        return `L${xPred(index).toFixed(1)},${y(Number(item.close_p10)).toFixed(1)}`;
+      }).join(' ');
+      const markerX = hasHistory ? histRight : left;
+      const forecastBg = hasHistory
+        ? `<rect x="${histRight.toFixed(1)}" y="${top}" width="${(width - right - histRight).toFixed(1)}" height="${height - top - bottom}" fill="rgba(18,107,88,.06)"/>`
+        : '';
+      const marker = hasHistory
+        ? `<line x1="${markerX.toFixed(1)}" y1="${top}" x2="${markerX.toFixed(1)}" y2="${height - bottom}" stroke="#916515" stroke-width="1.1" stroke-dasharray="3 3"/>`
+        : '';
+      const anchorY = y(Number.isFinite(anchor) ? anchor : join);
+      const baseline = Number.isFinite(anchorY)
+        ? `<line x1="${(hasHistory ? histRight : left).toFixed(1)}" y1="${anchorY.toFixed(1)}" x2="${width-right}" y2="${anchorY.toFixed(1)}" stroke="#916515" stroke-width="1" stroke-dasharray="4 3"/>`
+        : '';
+      const leftLabel = hasHistory ? shortDate(history[0].timestamp) : '信号日';
+      const rightLabel = predictions.length ? (shortDate(predictions[predictions.length - 1].timestamp) || 'D10') : 'D10';
+      const midText = hasHistory
+        ? `<text x="${markerX.toFixed(1)}" y="${height-7}" text-anchor="middle" fill="#916515" font-size="9">信号日</text>`
+        : '';
+      svg.innerHTML = `${forecastBg}${grid}${candles}<path d="${upper} ${lower} Z" fill="rgba(18,107,88,.16)"/>${baseline}${marker}<path d="${line('close_p50')}" fill="none" stroke="#126b58" stroke-width="2.1"/><text x="${left}" y="${height-7}" fill="#6b7785" font-size="9">${leftLabel}</text>${midText}<text x="${width-right}" y="${height-7}" text-anchor="end" fill="#6b7785" font-size="9">${rightLabel}</text>`;
     }
 
     function closeDetail() { state.selected = null; $('workspace').classList.remove('detail-open'); }

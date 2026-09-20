@@ -2,7 +2,9 @@ import json
 import time
 from datetime import datetime, timezone, timedelta
 
+import numpy as np
 import pandas as pd
+import pytest
 
 from webui import app as web_app
 
@@ -52,7 +54,34 @@ def published_run(tmp_path, names=None):
         "predictions": [{"timestamp": "2026-09-21", "close_p10": 9.8, "close_p50": 10.1, "close_p90": 10.4}],
         "samples": {"close": [[10.1], [10.2], [10.0], [9.9], [10.3]]},
     }
-    (run / "predictions.jsonl").write_text(json.dumps(detail) + "\n")
+    extra = []
+    for row in rows:
+        if row["code"] == "sh.600000":
+            continue
+        extra.append({
+            "asof": row["asof"], "code": row["code"], "sector_id": row["sector_id"],
+            "sector_label": row["sector_label"], "size_percentile": row["size_percentile"],
+            "close_asof": row["close_asof"],
+            "predictions": [
+                {
+                    "timestamp": "2026-09-21",
+                    "close_p10": row["close_p50_d1"] - 0.3,
+                    "close_p50": row["close_p50_d1"],
+                    "close_p90": row["close_p50_d1"] + 0.3,
+                },
+                {
+                    "timestamp": "2026-10-09",
+                    "close_p10": row["close_p50_d10"] - 0.4,
+                    "close_p50": row["close_p50_d10"],
+                    "close_p90": row["close_p50_d10"] + 0.4,
+                },
+            ],
+            "samples": {"close": [[row["close_p50_d1"]], [row["close_p50_d10"]]]},
+        })
+    (run / "predictions.jsonl").write_text(
+        json.dumps(detail) + "\n"
+        + "".join(json.dumps(item) + "\n" for item in extra)
+    )
     return run
 
 
@@ -86,6 +115,38 @@ def forbid_live_name_lookups(monkeypatch):
     monkeypatch.setattr(web_app, "query_eastmoney_stock_name", explode)
 
 
+@pytest.fixture(autouse=True)
+def no_live_ranking_history(monkeypatch):
+    monkeypatch.setattr(
+        web_app,
+        "_fetch_ranking_history_remote",
+        lambda *args, **kwargs: (pd.DataFrame(columns=web_app.MARKET_DATA_COLUMNS), None),
+    )
+
+
+def history_frame(asof="2026-09-18", rows=90, close=10.0, extra_after=0):
+    dates = list(pd.bdate_range(end=asof, periods=rows))
+    closes = list(close * (1 + np.linspace(-0.05, 0.0, rows)))
+    if extra_after:
+        dates.extend(pd.bdate_range(
+            start=pd.Timestamp(dates[-1]) + pd.Timedelta(days=1),
+            periods=extra_after,
+        ))
+        closes.extend(close * (1 + np.linspace(0.01, 0.08, extra_after)))
+    closes = np.asarray(closes, dtype=float)
+    return pd.DataFrame({
+        "timestamps": dates,
+        "open": closes - 0.12,
+        "high": closes + 0.25,
+        "low": closes - 0.22,
+        "close": closes,
+        "volume": np.full(len(dates), 1000.0),
+        "amount": np.full(len(dates), 10000.0),
+        "turn": np.full(len(dates), 1.0),
+        "pctChg": np.zeros(len(dates)),
+    })
+
+
 
 def test_daily_rankings_only_lists_complete_runs(monkeypatch, tmp_path):
     published_run(tmp_path)
@@ -115,8 +176,13 @@ def test_daily_rankings_supports_filters_and_detail(monkeypatch, tmp_path):
     assert ranking.get_json()["total"] == 1
     assert ranking.get_json()["rows"][0]["code"] == "sh.600000"
     assert detail.status_code == 200
-    assert detail.get_json()["model"]["sample_count"] == 5
-    assert detail.get_json()["ranking"]["rank_d10"] == 1
+    payload = detail.get_json()
+    assert payload["model"]["sample_count"] == 5
+    assert payload["ranking"]["rank_d10"] == 1
+    assert payload["history"] == []
+    assert payload["history_source"] is None
+    assert "缺少截至信号日的历史行情" in payload["history_note"]
+    assert payload["predictions"][0]["close_p50"] == 10.1
 
 
 def test_daily_rankings_re_ranks_selected_pool(monkeypatch, tmp_path):
@@ -200,6 +266,10 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert "card-meta" in page
     assert "grid-template-areas:" in page
     assert "@media (max-width: 430px)" in page
+    assert "历史行情 + 未来10日预测" in page
+    assert "未来10日预测路径" not in page
+    assert "drawChart(result)" in page
+    assert "result.history" in page
 
 
 def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
@@ -334,3 +404,77 @@ def test_daily_rankings_search_still_bypasses_top_n_with_name_cache(monkeypatch,
     assert payload["rows"][0]["code"] == "sz.000063"
     assert payload["rows"][0]["name"] == "中兴通讯"
     assert payload["rows"][0]["rank_d10"] == 11
+
+
+def test_daily_ranking_detail_uses_cached_history_through_asof(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    monkeypatch.setattr(web_app, "MARKET_DATA_CACHE_DIR", str(tmp_path / "market_data_cache"))
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+
+    def explode(*args, **kwargs):
+        raise AssertionError("live ranking history lookup should not run")
+
+    monkeypatch.setattr(web_app, "_fetch_ranking_history_remote", explode)
+    web_app._merge_market_data_cache("sz.000063", history_frame(close=30.0, extra_after=5))
+
+    by_code = web_app.app.test_client().get("/api/daily-rankings/2026-09-18/000063")
+    by_prefixed = web_app.app.test_client().get("/api/daily-rankings/2026-09-18/sz.000063")
+
+    assert by_code.status_code == 200
+    payload = by_code.get_json()
+    assert payload["code"] == "sz.000063"
+    assert payload["history_source"] == "market_data_cache"
+    assert payload["history_note"] is None
+    assert len(payload["history"]) == 90
+    assert payload["history"][0]["timestamp"] < "2026-09-18"
+    assert payload["history"][-1]["timestamp"] == "2026-09-18"
+    assert payload["history"][-1]["close"] == pytest.approx(30.0)
+    assert payload["history"][-1]["high"] >= payload["history"][-1]["close"]
+    assert payload["predictions"][-1]["close_p50"] == pytest.approx(31.0)
+    assert by_prefixed.get_json()["history"][-1]["timestamp"] == "2026-09-18"
+    assert "2026-09-21" not in [row["timestamp"] for row in payload["history"]]
+
+
+def test_daily_ranking_detail_uses_remote_history_when_cache_is_empty(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    monkeypatch.setattr(web_app, "MARKET_DATA_CACHE_DIR", str(tmp_path / "market_data_cache"))
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+    remote = history_frame(close=10.0, rows=80)
+
+    def fake_remote(symbol, asof, lookback=90):
+        assert symbol == "sh.600000"
+        return remote, "eastmoney"
+
+    monkeypatch.setattr(web_app, "_fetch_ranking_history_remote", fake_remote)
+
+    payload = web_app.app.test_client().get("/api/daily-rankings/2026-09-18/600000").get_json()
+
+    assert payload["history_source"] == "eastmoney"
+    assert payload["history_note"] is None
+    assert len(payload["history"]) == 80
+    assert payload["history"][-1]["timestamp"] == "2026-09-18"
+
+
+def test_ranking_chart_history_clips_to_asof_and_skips_modal(monkeypatch, tmp_path):
+    monkeypatch.setattr(web_app, "MARKET_DATA_CACHE_DIR", str(tmp_path / "market_data_cache"))
+    called = {"remote": False}
+
+    def fake_remote(*args, **kwargs):
+        called["remote"] = True
+        raise AssertionError("cache already covers asof")
+
+    monkeypatch.setattr(web_app, "_fetch_ranking_history_remote", fake_remote)
+    web_app._merge_market_data_cache("sh.600000", history_frame(rows=120, extra_after=8))
+
+    payload = web_app.ranking_chart_history("sh.600000", "2026-09-18")
+
+    assert called["remote"] is False
+    assert payload["history_source"] == "market_data_cache"
+    assert payload["history"][-1]["timestamp"] == "2026-09-18"
+    assert len(payload["history"]) == 90
+    assert all(row["timestamp"] <= "2026-09-18" for row in payload["history"])
+
