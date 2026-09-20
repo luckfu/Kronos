@@ -9,12 +9,15 @@ REMOTE_STAGE=/tmp/kronos-web-release
 release_dir=$(mktemp -d)
 trap 'rm -rf "$release_dir"' EXIT
 
-mkdir -p "$release_dir/webui/templates" "$release_dir/deploy"
+mkdir -p "$release_dir/webui/templates" "$release_dir/webui/static" "$release_dir/deploy"
 cp "$PROJECT_DIR/webui/app.py" "$release_dir/webui/app.py"
 cp "$PROJECT_DIR/webui/auth.py" "$release_dir/webui/auth.py"
 cp "$PROJECT_DIR/webui/templates/index.html" "$release_dir/webui/templates/index.html"
 cp "$PROJECT_DIR/webui/templates/daily_rankings.html" "$release_dir/webui/templates/daily_rankings.html"
 cp "$PROJECT_DIR/webui/templates/login.html" "$release_dir/webui/templates/login.html"
+cp "$PROJECT_DIR/webui/static/favicon.ico" "$release_dir/webui/static/favicon.ico"
+cp "$PROJECT_DIR/webui/static/favicon-32.png" "$release_dir/webui/static/favicon-32.png"
+cp "$PROJECT_DIR/webui/static/apple-touch-icon.png" "$release_dir/webui/static/apple-touch-icon.png"
 cp "$PROJECT_DIR/webui/size_reference.json" "$release_dir/webui/size_reference.json"
 cp "$PROJECT_DIR/webui/sector_vocabulary.json" "$release_dir/webui/sector_vocabulary.json"
 cp "$PROJECT_DIR/webui/symbol_sector_map.json" "$release_dir/webui/symbol_sector_map.json"
@@ -34,7 +37,7 @@ set -euo pipefail
 stage=/tmp/kronos-web-release
 root=/opt/kronos-web
 stamp=$(date +%Y%m%d%H%M%S)
-sudo mkdir -p "$root/webui/templates" "$root/deploy" "$root/data/prediction_results" "$root/data/market_data_cache"
+sudo mkdir -p "$root/webui/templates" "$root/webui/static" "$root/deploy" "$root/data/prediction_results" "$root/data/market_data_cache"
 sudo chown opc:opc "$root"
 sudo chown -R opc:opc "$root/data"
 sudo install -o opc -g opc -m 0644 "$stage/webui/app.py" "$root/webui/app.py"
@@ -43,6 +46,9 @@ sudo rm -f "$root/webui/hermes_analysis.py"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/index.html" "$root/webui/templates/index.html"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/daily_rankings.html" "$root/webui/templates/daily_rankings.html"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/login.html" "$root/webui/templates/login.html"
+sudo install -o opc -g opc -m 0644 "$stage/webui/static/favicon.ico" "$root/webui/static/favicon.ico"
+sudo install -o opc -g opc -m 0644 "$stage/webui/static/favicon-32.png" "$root/webui/static/favicon-32.png"
+sudo install -o opc -g opc -m 0644 "$stage/webui/static/apple-touch-icon.png" "$root/webui/static/apple-touch-icon.png"
 sudo install -o opc -g opc -m 0644 "$stage/webui/size_reference.json" "$root/webui/size_reference.json"
 sudo install -o opc -g opc -m 0644 "$stage/webui/sector_vocabulary.json" "$root/webui/sector_vocabulary.json"
 sudo install -o opc -g opc -m 0755 "$stage/webui/update_sector_mapping.py" "$root/webui/update_sector_mapping.py"
@@ -94,7 +100,15 @@ sudo systemctl enable --now kronos-web
 sudo systemctl restart kronos-web
 sudo systemctl reload nginx
 for attempt in 1 2 3 4 5; do
-  if curl -fsS http://127.0.0.1:7072/health; then printf '\n'; exit 0; fi
+  if curl -fsS http://127.0.0.1:7072/health \
+    && curl -fsS -o /dev/null http://127.0.0.1:7072/favicon.ico \
+    && curl -fsS -o /dev/null http://127.0.0.1:7072/static/favicon.ico; then
+    printf '\n'
+    # Site-root /favicon.ico is served by nginx from the same static file.
+    curl -fsS -o /dev/null http://127.0.0.1/favicon.ico || true
+    curl -fsS -o /dev/null http://127.0.0.1/kronos/static/favicon.ico || true
+    exit 0
+  fi
   sleep 2
 done
 sudo journalctl -u kronos-web -n 80 --no-pager

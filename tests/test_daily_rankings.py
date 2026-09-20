@@ -286,6 +286,16 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert "DeepSeek" not in page
 
 
+def test_daily_rankings_page_includes_kronos_favicon():
+    page = web_app.app.test_client().get("/").get_data(as_text=True)
+
+    assert 'rel="icon"' in page
+    assert 'rel="apple-touch-icon"' in page
+    assert "/static/favicon.ico" in page
+    assert "/static/favicon-32.png" in page
+    assert "/static/apple-touch-icon.png" in page
+
+
 def test_daily_rankings_page_has_explicit_search_submit():
     page = web_app.app.test_client().get("/").get_data(as_text=True)
 

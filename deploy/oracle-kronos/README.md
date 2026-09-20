@@ -15,7 +15,17 @@ Browser -> https://allmoneybymehold.com/kronos/
         -> Small 0.1 Modal Serverless inference API
 ```
 
-The deployment creates only `/opt/kronos-web`, an isolated `kronos-web.service`, and `/etc/nginx/default.d/kronos.conf`. It does not modify the main Nginx file or stop existing services. Existing Kronos-specific files are timestamp-backed up before replacement. Supabase is not used. Prediction records are stored as JSON under `/opt/kronos-web/data/prediction_results`, survive redeployments, and are grouped in the UI by their market-data cutoff date rather than submission mode. Adjusted daily market data is cached per stock under `/opt/kronos-web/data/market_data_cache`; refreshes request a small overlap after the cached last date, merge and deduplicate rows, and then send only the requested context to Modal.
+The deployment creates only `/opt/kronos-web`, an isolated `kronos-web.service`, and `/etc/nginx/default.d/kronos.conf`. It does not modify the main Nginx file or stop existing services. Existing Kronos-specific files are timestamp-backed up before replacement.
+
+`deploy.sh` copies `webui/static/favicon.ico` (plus PNG variants) onto Oracle. The Kronos nginx snippet owns the browser-default **site-root** icon so `https://allmoneybymehold.com/favicon.ico` is a static file instead of a 502 from some other catch-all proxy:
+
+- `location = /favicon.ico` and `location = /apple-touch-icon.png` alias `/opt/kronos-web/webui/static/...`
+- `/kronos/favicon.ico` aliases the same `.ico`
+- `/kronos/static/` is served from that directory (login and rankings pages `url_for('static', ...)` under the `/kronos` prefix)
+
+If `nginx -t` fails with a duplicate `location = /favicon.ico`, delete or comment the other copy in the main server config so Kronos can keep the site-root icon. Then rerun `bash deploy/oracle-kronos/deploy.sh` (it already reloads nginx). Verify with `curl -I https://allmoneybymehold.com/favicon.ico` and `curl -I https://allmoneybymehold.com/kronos/static/favicon.ico`. If Cloudflare still returns 502 after origin is 200, purge that URL at the edge.
+
+Supabase is not used. Prediction records are stored as JSON under `/opt/kronos-web/data/prediction_results`, survive redeployments, and are grouped in the UI by their market-data cutoff date rather than submission mode. Adjusted daily market data is cached per stock under `/opt/kronos-web/data/market_data_cache`; refreshes request a small overlap after the cached last date, merge and deduplicate rows, and then send only the requested context to Modal.
 
 ## Deploy
 
@@ -140,7 +150,7 @@ runner never writes to Supabase or the web UI's production prediction folder.
 
 ## Release Contents
 
-Only the Web gateway, template, size reference, fixed sector vocabulary, initial symbol-sector
+Only the Web gateway, templates, favicon static files, size reference, fixed sector vocabulary, initial symbol-sector
 mapping, mapping updater, and deployment configuration files are uploaded. Model directories,
 checkpoints, datasets, outputs, artifacts, training code, and credentials are never included.
 After the first installation, ordinary deployments preserve the Oracle host's current
