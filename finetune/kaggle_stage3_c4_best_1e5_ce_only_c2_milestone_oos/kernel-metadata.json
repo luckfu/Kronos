@@ -1,0 +1,15 @@
+{
+  "id": "user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only-c2-ms-oos",
+  "title": "Kronos Small 0 1 Stage3 C4 Best 1e5 Ce Only C2 Ms Oos",
+  "code_file": "stage3_c4_best_1e5_ce_only_c2_milestone_oos.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaP100",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": [
+    "user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only-c2"
+  ]
+}
