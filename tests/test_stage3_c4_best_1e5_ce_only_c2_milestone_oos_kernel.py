@@ -31,7 +31,7 @@ def test_milestone_oos_covers_20_to_70_not_80():
     assert 'EXPECTED_SEGMENT = 80' not in source
     assert "'--branch', 'master'" not in source
     metadata = json.loads(META.read_text())
-    assert metadata['id'] == 'user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only-c2-ms-oos'
+    assert metadata['id'] == 'user281434/kronos-small-0-1-stage3-1e5-c2-ms-oos'
     assert metadata['kernel_sources'] == [
         'user281434/kronos-small-0-1-stage3-c4-best-1e5-ce-only-c2',
     ]
