@@ -132,38 +132,108 @@
     .status-row:last-child { border-bottom: 0; }
     .status-row.header { color: var(--muted); background: var(--surface-2); font-size: 11px; }
     .mobile-menu { display: none; }
+    .card-meta { display: none; }
+    button, input, select, tbody tr { touch-action: manipulation; }
+    .nav button:focus-visible, .filter:focus-visible, .control:focus-visible,
+    .icon-button:focus-visible, .pool-button:focus-visible, .pager button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .nav button:active, .pool-button:active, tbody tr:active { background: var(--accent-soft); }
     .toast { position: fixed; right: 20px; bottom: 20px; max-width: 360px; padding: 10px 13px; background: var(--text); color: white; border-radius: 6px; box-shadow: var(--shadow); display: none; z-index: 20; }
+    body[data-view="stock"] #search-input { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,107,88,.12); }
     @media (max-width: 1050px) {
       .workspace.detail-open { grid-template-columns: minmax(0, 1fr); }
       .detail { position: fixed; right: 14px; top: 78px; bottom: 14px; width: min(360px, calc(100vw - 28px)); overflow-y: auto; z-index: 10; }
     }
     @media (max-width: 760px) {
       .app { grid-template-columns: 1fr; }
-      .sidebar { padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
-      .brand { padding: 2px 4px 10px; }
+      .sidebar { padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { padding: 2px 4px 8px; }
       .nav-label, .sidebar-status { display: none; }
-      .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .nav button { justify-content: center; padding: 0 4px; font-size: 11px; }
-      .nav svg { display: none; }
-      .topbar { height: auto; min-height: 62px; padding: 11px 14px; }
+      .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .nav button { min-height: 52px; flex-direction: column; justify-content: center; gap: 4px; padding: 6px 2px; font-size: 11px; }
+      .nav svg { display: block; width: 16px; height: 16px; }
+      .topbar { height: auto; min-height: 56px; padding: 10px 12px; gap: 10px; }
       .title p { display: none; }
-      .content { padding: 14px; }
+      .title h1 { font-size: 17px; }
+      .control, .icon-button, .pool-button, .pager button { min-height: 44px; }
+      .icon-button { width: 44px; height: 44px; }
+      .content { padding: 12px; }
       .summary { grid-template-columns: 1fr 1fr; }
       .stat:nth-child(2) { border-right: 0; }
       .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-      .toolbar { align-items: flex-start; flex-direction: column; }
-      .filter { max-width: 160px; }
+      .toolbar { align-items: stretch; flex-direction: column; gap: 8px; }
+      .filters { width: 100%; }
+      .pool-controls { width: 100%; }
+      .pool-controls select { flex: 1 1 auto; min-width: 0; max-width: none; }
+      .filter { max-width: none; min-height: 44px; }
+      input.filter { width: 100%; flex: 1 1 100%; font-size: 16px; }
+      select.filter { flex: 1 1 calc(50% - 8px); }
+      .result-count { align-self: flex-start; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; table-layout: auto; display: block; }
+      thead { display: none; }
+      tbody { display: block; }
+      tbody tr[data-code] {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        grid-template-areas:
+          "rank name d10"
+          "rank name d1";
+        column-gap: 10px;
+        row-gap: 2px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line-soft);
+        min-height: 72px;
+        align-items: center;
+      }
+      tbody tr[data-code] td {
+        border: 0;
+        padding: 0;
+        white-space: nowrap;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      tbody tr[data-code] td:nth-child(1) { grid-area: rank; font-size: 15px; align-self: center; }
+      tbody tr[data-code] td:nth-child(2) { grid-area: name; white-space: normal; }
+      tbody tr[data-code] td:nth-child(3),
+      tbody tr[data-code] td:nth-child(4),
+      tbody tr[data-code] td:nth-child(5),
+      tbody tr[data-code] td:nth-child(6) { display: none; }
+      tbody tr[data-code] td:nth-child(7) { grid-area: d1; text-align: right; font-size: 12px; }
+      tbody tr[data-code] td:nth-child(8) { grid-area: d10; text-align: right; font-size: 16px; }
+      .card-meta { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.45; white-space: normal; }
+      tbody tr:has(.empty), tbody tr:has(.loading) { display: block; }
+      td.empty, td.loading { display: block; padding: 48px 16px; }
+      .pager { min-height: 56px; }
+      .pager button { min-width: 76px; }
+      .status-row, .status-row.header { grid-template-columns: 1fr 1fr; }
+      .detail {
+        inset: auto 10px 10px;
+        top: auto;
+        width: auto;
+        max-height: min(80vh, calc(100dvh - 88px));
+        z-index: 15;
+      }
+      body[data-view="stock"] #search-input { order: -1; height: 48px; }
+      .detail-title button { min-width: 44px; min-height: 44px; }
+      .pool-dialog-actions button { min-height: 44px; }
+      .pool-list-row button { min-height: 44px; min-width: 44px; }
     }
     @media (max-width: 430px) {
-      .topbar { align-items: flex-start; }
-      .top-actions { flex-direction: column; align-items: stretch; }
-      .stat { min-height: 74px; padding: 12px; }
+      .topbar { align-items: center; }
+      .top-actions { flex-direction: row; align-items: center; }
+      #date-select { min-width: 0; flex: 1; }
+      .stat { min-height: 70px; padding: 12px; }
       .stat strong { font-size: 16px; }
-      .detail { top: 132px; }
+      .nav button { font-size: 10px; min-height: 48px; }
+      .title h1 { font-size: 16px; }
     }
   </style>
 </head>
-<body>
+<body data-view="ranking">
   <div class="app">
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark">K</div><div><strong>Kronos</strong><small>A股预测台</small></div></div>
@@ -200,7 +270,7 @@
         <div class="toolbar">
           <div class="filters">
             <div class="pool-controls"><select id="pool-select" class="filter" aria-label="自定义股池"><option value="">全市场</option></select><button id="pool-manage" class="pool-button" type="button"><i data-lucide="settings-2"></i>管理股池</button></div>
-            <input id="search-input" class="filter" type="search" placeholder="股票代码，如 600519" aria-label="股票代码">
+            <input id="search-input" class="filter" type="search" placeholder="股票代码，如 000063 / 600519" aria-label="股票代码" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search">
             <select id="sector-select" class="filter" aria-label="行业"><option value="">全部行业</option></select>
             <select id="size-select" class="filter" aria-label="市值分组">
               <option value="">全部市值</option><option value="large">大市值 Top 20%</option><option value="mid">中市值</option><option value="small">小市值 Bottom 20%</option>
@@ -284,6 +354,7 @@
     const rankingPage = $('ranking-page');
     const statusPage = $('status-page');
     let searchTimer;
+    let lastTop = $('top-select').value;
 
     function toast(message) {
       const node = $('toast');
@@ -349,9 +420,20 @@
 
     function queryString() {
       const params = new URLSearchParams({asof: state.date, page: state.page, page_size: 50});
-      const values = {query: $('search-input').value.trim(), sector: $('sector-select').value, size_group: $('size-select').value, top: $('top-select').value, pool: state.pool ? state.pools[state.pool].join(',') : ''};
+      const query = $('search-input').value.trim();
+      const values = {query, sector: $('sector-select').value, size_group: $('size-select').value, top: query ? '' : $('top-select').value, pool: state.pool ? state.pools[state.pool].join(',') : ''};
       Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
       return params.toString();
+    }
+    function syncTopForSearch() {
+      const query = $('search-input').value.trim();
+      const topSelect = $('top-select');
+      if (query) {
+        if (topSelect.value) lastTop = topSelect.value;
+        topSelect.value = '';
+      } else if (!topSelect.value && lastTop) {
+        topSelect.value = lastTop;
+      }
     }
 
     async function loadRankings(resetPage = false) {
@@ -403,7 +485,7 @@
       }
       body.innerHTML = rows.map(row => `<tr data-code="${escapeHtml(row.code)}" class="${state.selected === row.code ? 'selected' : ''}">
         <td class="rank">${row.rank_d10}</td>
-        <td>${escapeHtml(row.name || '—')}</td>
+        <td><span>${escapeHtml(row.name || '—')}</span><span class="card-meta">${escapeHtml(row.code)} · ${escapeHtml(stripSector(row.sector_label))} · 市值 ${percent(row.size_percentile)} · ${price(row.close_asof)}</span></td>
         <td class="code">${escapeHtml(row.code)}</td>
         <td class="sector" title="${escapeHtml(stripSector(row.sector_label))}">${escapeHtml(stripSector(row.sector_label))}</td>
         <td>${percent(row.size_percentile)}</td>
@@ -481,13 +563,25 @@
       document.querySelectorAll('.nav button').forEach(item => item.classList.remove('active'));
       button.classList.add('active');
       const view = button.dataset.view;
+      document.body.dataset.view = view;
       const titles = {ranking:['每日排名','完整截面统一预测，按未来10日中位路径收益排序'], stock:['个股查询','从每日完整预测结果中读取，不重复调用模型'], history:['历史预测','切换信号日查看当日完整截面'], status:['运行状态','仅展示已经完整发布的预测批次']};
       $('page-title').textContent = titles[view][0];
       $('page-subtitle').textContent = titles[view][1];
       const status = view === 'status';
       rankingPage.style.display = status ? 'none' : 'block';
       statusPage.classList.toggle('active', status);
-      if (view === 'stock') setTimeout(() => $('search-input').focus(), 0);
+      const query = $('search-input').value.trim();
+      if (view === 'stock') {
+        if ($('top-select').value) {
+          lastTop = $('top-select').value;
+          $('top-select').value = '';
+          if (!status) { state.loading = false; loadRankings(true); }
+        }
+        setTimeout(() => $('search-input').focus(), 0);
+      } else if ((view === 'ranking' || view === 'history') && !query && lastTop && !$('top-select').value) {
+        $('top-select').value = lastTop;
+        if (!status) { state.loading = false; loadRankings(true); }
+      }
       if (view === 'history') setTimeout(() => $('date-select').focus(), 0);
     }));
     $('date-select').addEventListener('change', event => { state.date = event.target.value; closeDetail(); loadRankings(true); });
@@ -503,15 +597,23 @@
       state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
     });
     $('refresh-button').addEventListener('click', async () => { await loadDates(); await loadRankings(true); });
-    $('search-input').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadRankings(true), 280); });
-    [$('sector-select'), $('size-select'), $('top-select')].forEach(control => control.addEventListener('change', () => loadRankings(true)));
+    $('search-input').addEventListener('input', () => {
+      syncTopForSearch();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadRankings(true), 280);
+    });
+    [$('sector-select'), $('size-select')].forEach(control => control.addEventListener('change', () => loadRankings(true)));
+    $('top-select').addEventListener('change', () => {
+      lastTop = $('top-select').value;
+      loadRankings(true);
+    });
     $('prev-page').addEventListener('click', () => { if (state.page > 1) { state.page--; closeDetail(); loadRankings(); } });
     $('next-page').addEventListener('click', () => { if (state.page < state.pages) { state.page++; closeDetail(); loadRankings(); } });
     $('close-detail').addEventListener('click', closeDetail);
 
     (async () => {
       try { loadPools(); await loadDates(); await loadRankings(); }
-      catch (error) { $('ranking-body').innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(error.message)}</td></tr>`; toast(error.message); }
+      catch (error) { $('ranking-body').innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(error.message)}</td></tr>`; toast(error.message); }
       if (window.lucide) lucide.createIcons();
     })();
   </script>

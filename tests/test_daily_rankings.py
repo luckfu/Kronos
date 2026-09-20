@@ -29,6 +29,14 @@ def published_run(tmp_path):
             "predicted_return_d1": -0.01, "predicted_return_d10": -0.05,
             "rank_d10": 2, "rank_percentile_d10": 0.5,
         },
+        {
+            "asof": "2026-09-18", "code": "sz.000063", "sector_id": 39,
+            "sector_label": "C39计算机、通信和其他电子设备制造业",
+            "size_percentile": 0.85,
+            "close_asof": 30.0, "close_p50_d1": 30.2, "close_p50_d10": 31.0,
+            "predicted_return_d1": 0.007, "predicted_return_d10": 0.033,
+            "rank_d10": 11, "rank_percentile_d10": 0.01,
+        },
     ]).to_csv(run / "ranking.csv", index=False)
     detail = {
         "asof": "2026-09-18", "code": "sh.600000", "sector_id": 63,
@@ -96,3 +104,57 @@ def test_home_uses_daily_ranking_experience():
     assert "每日排名" in page
     assert "OOS表现" not in page
     assert "手动预测" not in page
+
+
+def test_daily_rankings_query_ignores_top_n(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    monkeypatch.setattr(web_app, "query_remote_stock_name", lambda symbol: None)
+    client = web_app.app.test_client()
+
+    limited = client.get("/api/daily-rankings?asof=2026-09-18&top=10")
+    by_code = client.get("/api/daily-rankings?asof=2026-09-18&query=000063&top=10")
+    by_prefixed = client.get(
+        "/api/daily-rankings?asof=2026-09-18&query=sz.000063&top=10"
+    )
+
+    assert limited.status_code == 200
+    assert limited.get_json()["total"] == 2
+    assert [row["code"] for row in limited.get_json()["rows"]] == [
+        "sh.600000",
+        "sz.000001",
+    ]
+
+    assert by_code.status_code == 200
+    assert by_code.get_json()["total"] == 1
+    assert by_code.get_json()["rows"][0]["code"] == "sz.000063"
+    assert by_code.get_json()["rows"][0]["rank_d10"] == 11
+
+    assert by_prefixed.status_code == 200
+    assert by_prefixed.get_json()["total"] == 1
+    assert by_prefixed.get_json()["rows"][0]["code"] == "sz.000063"
+
+
+def test_daily_rankings_empty_query_still_applies_top_n(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    monkeypatch.setattr(web_app, "query_remote_stock_name", lambda symbol: None)
+
+    response = web_app.app.test_client().get(
+        "/api/daily-rankings?asof=2026-09-18&query=%20&top=10"
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["total"] == 2
+    assert "sz.000063" not in [row["code"] for row in payload["rows"]]
+
+
+def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
+    page = web_app.app.test_client().get("/").get_data(as_text=True)
+
+    assert "top: query ? '' : $('top-select').value" in page
+    assert "syncTopForSearch" in page
+    assert "card-meta" in page
+    assert "grid-template-areas:" in page
+    assert "@media (max-width: 430px)" in page
