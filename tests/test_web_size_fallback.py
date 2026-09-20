@@ -264,7 +264,7 @@ def test_prediction_detail_shows_ten_day_high_and_low():
 
 def test_history_summary_drops_symbol_repeated_as_stock_name(monkeypatch):
     web_app.stock_name_cache.clear()
-    monkeypatch.setattr(web_app, 'query_remote_stock_name', lambda symbol: None)
+    monkeypatch.setattr(web_app, 'query_remote_stock_name', lambda symbol, **kwargs: None)
     summary = web_app.prediction_record_summary({
         'record_id': 'record-1',
         'symbol': 'sz.000001',
@@ -277,7 +277,7 @@ def test_history_summary_drops_symbol_repeated_as_stock_name(monkeypatch):
 
 
 def test_history_summary_recovers_missing_stock_name(monkeypatch):
-    monkeypatch.setattr(web_app, 'query_remote_stock_name', lambda symbol: {
+    monkeypatch.setattr(web_app, 'query_remote_stock_name', lambda symbol, **kwargs: {
         'sz.000001': '平安银行',
         'sh.600000': '浦发银行',
     }.get(symbol))
@@ -407,7 +407,7 @@ def test_prediction_history_can_delete_one_stock_from_signal_date(monkeypatch, t
 
 def test_prediction_history_deduplicates_symbol_within_signal_date(monkeypatch, tmp_path):
     monkeypatch.setattr(web_app, 'PREDICTION_RESULTS_DIR', str(tmp_path))
-    monkeypatch.setattr(web_app, 'query_remote_stock_name', lambda symbol: None)
+    monkeypatch.setattr(web_app, 'query_remote_stock_name', lambda symbol, **kwargs: None)
     records = [
         {
             'record_id': '20260830_new', 'created_at': '2026-08-30T12:00:00+00:00',

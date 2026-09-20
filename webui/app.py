@@ -1,6 +1,7 @@
 import os
 import pickle
 import re
+import fcntl
 import threading
 import pandas as pd
 import numpy as np
@@ -98,6 +99,12 @@ MARKET_DATA_CACHE_DIR = os.getenv(
     'KRONOS_MARKET_DATA_CACHE_DIR',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'market_data_cache'),
 )
+STOCK_NAME_CACHE_PATH = os.getenv(
+    'KRONOS_STOCK_NAME_CACHE_PATH',
+    os.path.join(os.path.dirname(MARKET_DATA_CACHE_DIR), 'stock_name_cache.json'),
+)
+STOCK_NAME_CACHE_MAX_AGE = datetime.timedelta(hours=24)
+STOCK_NAME_REFRESH_RETRY = datetime.timedelta(minutes=5)
 DAILY_PREDICTION_ROOT = Path(os.getenv(
     'KRONOS_DAILY_PREDICTION_ROOT',
     str(Path(PREDICTION_RESULTS_DIR).parent / 'prediction_shadow'),
@@ -142,6 +149,8 @@ size_reference_lock = threading.Lock()
 sector_reference_cache = None
 sector_reference_lock = threading.Lock()
 market_data_cache_lock = threading.Lock()
+stock_name_lock = threading.Lock()
+stock_name_refresh_lock = threading.Lock()
 
 # Available model configurations
 AVAILABLE_MODELS = {
@@ -227,6 +236,12 @@ def read_baostock_result(result):
 
 
 stock_name_cache = {}
+stock_name_cache_loaded = False
+stock_name_cache_loaded_path = None
+stock_name_cache_updated_at = None
+stock_name_cache_mtime = None
+stock_name_refresh_thread = None
+stock_name_refresh_last_attempt = None
 stock_name_reference_loaded = False
 
 MARKET_DATA_COLUMNS = [
@@ -304,43 +319,227 @@ def query_baostock_stock_name(symbol):
         return None
 
 
-def load_stock_name_reference():
-    """Load all BaoStock names once so ranking pages do not login per row."""
-    global stock_name_reference_loaded
-    if stock_name_reference_loaded or not BAOSTOCK_AVAILABLE:
-        return
+def fetch_baostock_stock_names():
+    """Download the full BaoStock name table. Never call this on a ranking request."""
+    if not BAOSTOCK_AVAILABLE:
+        return {}
+    names = {}
+    with baostock_lock:
+        login = bs.login()
+        if getattr(login, 'error_code', '1') != '0':
+            return {}
+        try:
+            result = bs.query_stock_basic()
+            while result.next():
+                row = result.get_row_data()
+                if len(row) > 1 and row[0] and row[1]:
+                    names[str(row[0]).strip().lower()] = str(row[1]).strip()
+        finally:
+            bs.logout()
+    return names
+
+
+def _parse_stock_name_cache_timestamp(value):
+    if not value:
+        return None
     try:
-        with baostock_lock:
-            if stock_name_reference_loaded:
-                return
-            login = bs.login()
-            if getattr(login, 'error_code', '1') == '0':
-                try:
-                    result = bs.query_stock_basic()
-                    while result.next():
-                        row = result.get_row_data()
-                        if len(row) > 1 and row[0] and row[1]:
-                            stock_name_cache[str(row[0]).strip().lower()] = str(row[1]).strip()
-                finally:
-                    bs.logout()
-            stock_name_reference_loaded = True
-    except Exception:
-        # The per-symbol remote fallback remains available when BaoStock is down.
+        parsed = datetime.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def _normalize_stock_name_map(raw_names):
+    names = {}
+    for key, value in (raw_names or {}).items():
+        symbol = str(key).strip().lower()
+        text = '' if value is None else str(value).strip()
+        if symbol and text:
+            names[symbol] = text
+    return names
+
+
+def _stock_name_cache_is_stale():
+    if not stock_name_cache:
+        return True
+    if stock_name_cache_updated_at is None:
+        return True
+    age = datetime.datetime.now(datetime.timezone.utc) - stock_name_cache_updated_at
+    return age > STOCK_NAME_CACHE_MAX_AGE
+
+
+def _persist_stock_name_cache(names, updated_at):
+    path = STOCK_NAME_CACHE_PATH
+    os.makedirs(os.path.dirname(os.path.abspath(path)) or '.', exist_ok=True)
+    payload = {
+        'updated_at': (
+            updated_at.isoformat()
+            if updated_at is not None
+            else datetime.datetime.now(datetime.timezone.utc).isoformat()
+        ),
+        'names': names,
+    }
+    temporary_path = f'{path}.tmp.{os.getpid()}'
+    with open(temporary_path, 'w', encoding='utf-8') as handle:
+        json.dump(payload, handle, ensure_ascii=False, separators=(',', ':'))
+    os.replace(temporary_path, path)
+
+
+def _load_stock_name_cache_from_disk(force=False):
+    """Load the durable name table, skipping unchanged files."""
+    global stock_name_cache_loaded, stock_name_cache_loaded_path
+    global stock_name_cache_updated_at, stock_name_cache_mtime
+    global stock_name_reference_loaded
+    path = STOCK_NAME_CACHE_PATH
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        mtime = None
+        if (
+            stock_name_cache_loaded
+            and not force
+            and stock_name_cache_loaded_path == path
+        ):
+            return
+    else:
+        if (
+            stock_name_cache_loaded
+            and not force
+            and mtime == stock_name_cache_mtime
+            and stock_name_cache_loaded_path == path
+        ):
+            return
+
+    names = {}
+    updated_at = None
+    try:
+        with open(path, encoding='utf-8') as handle:
+            payload = json.load(handle)
+        if isinstance(payload, dict) and isinstance(payload.get('names'), dict):
+            names = _normalize_stock_name_map(payload.get('names'))
+            updated_at = _parse_stock_name_cache_timestamp(payload.get('updated_at'))
+        elif isinstance(payload, dict):
+            names = _normalize_stock_name_map(payload)
+    except FileNotFoundError:
+        names = {}
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        names = {}
+
+    if updated_at is None and mtime is not None and names:
+        updated_at = datetime.datetime.fromtimestamp(mtime, datetime.timezone.utc)
+
+    with stock_name_lock:
+        if names:
+            stock_name_cache.update(names)
+        if updated_at is not None:
+            stock_name_cache_updated_at = updated_at
+        stock_name_cache_mtime = mtime
+        stock_name_cache_loaded = True
+        stock_name_cache_loaded_path = path
         stock_name_reference_loaded = True
-def query_remote_stock_name(symbol):
-    """Resolve a Chinese display name with BaoStock and a network fallback."""
+
+
+def _remember_stock_name(symbol, name):
+    if not symbol or not name:
+        return
+    with stock_name_lock:
+        stock_name_cache[symbol] = name
+
+
+def _should_auto_refresh_stock_names():
+    configured = os.getenv('KRONOS_STOCK_NAME_AUTO_REFRESH')
+    if configured is None:
+        return 'pytest' not in sys.modules
+    return configured.lower() not in ('0', 'false', 'no')
+
+
+def _schedule_stock_name_refresh_if_stale():
+    """Kick a background BaoStock refresh; never block the caller."""
+    global stock_name_refresh_thread, stock_name_refresh_last_attempt
+    if not _should_auto_refresh_stock_names():
+        return
+    if not _stock_name_cache_is_stale():
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if (
+        stock_name_refresh_last_attempt is not None
+        and now - stock_name_refresh_last_attempt < STOCK_NAME_REFRESH_RETRY
+    ):
+        return
+    with stock_name_refresh_lock:
+        if stock_name_refresh_thread is not None and stock_name_refresh_thread.is_alive():
+            return
+        stock_name_refresh_last_attempt = now
+        stock_name_refresh_thread = threading.Thread(
+            target=_refresh_stock_name_cache_worker,
+            name='kronos-stock-name-refresh',
+            daemon=True,
+        )
+        stock_name_refresh_thread.start()
+
+
+def _refresh_stock_name_cache_worker():
+    try:
+        refresh_stock_name_cache()
+    except Exception:
+        # Rankings keep serving codes or previously cached names.
+        return
+
+
+def refresh_stock_name_cache():
+    """Refresh names from BaoStock if the on-disk cache is missing or stale."""
+    global stock_name_cache_updated_at, stock_name_cache_mtime, stock_name_cache_loaded
+    global stock_name_cache_loaded_path, stock_name_reference_loaded
+    global stock_name_refresh_last_attempt
+    path = STOCK_NAME_CACHE_PATH
+    os.makedirs(os.path.dirname(os.path.abspath(path)) or '.', exist_ok=True)
+    lock_path = f'{path}.lock'
+    with open(lock_path, 'a', encoding='utf-8') as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            _load_stock_name_cache_from_disk(force=True)
+            if not _stock_name_cache_is_stale():
+                return dict(stock_name_cache)
+            names = fetch_baostock_stock_names() or {}
+            stock_name_refresh_last_attempt = datetime.datetime.now(datetime.timezone.utc)
+            if not names:
+                return dict(stock_name_cache)
+            updated_at = datetime.datetime.now(datetime.timezone.utc)
+            with stock_name_lock:
+                stock_name_cache.update(names)
+                stock_name_cache_updated_at = updated_at
+                snapshot = dict(stock_name_cache)
+                stock_name_cache_loaded = True
+                stock_name_cache_loaded_path = path
+                stock_name_reference_loaded = True
+            _persist_stock_name_cache(snapshot, updated_at)
+            try:
+                stock_name_cache_mtime = os.path.getmtime(path)
+            except OSError:
+                stock_name_cache_mtime = None
+            return snapshot
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def preload_stock_name_cache():
+    """Worker-start hook: load disk names before the first ranking request."""
+    _load_stock_name_cache_from_disk()
+    _schedule_stock_name_refresh_if_stale()
+
+
+def load_stock_name_reference():
+    """Load persisted names; refresh BaoStock in the background if stale."""
+    preload_stock_name_cache()
+
+
+def query_eastmoney_stock_name(symbol):
+    """Resolve a display name through the Eastmoney quote endpoint."""
     normalized_symbol = str(symbol).strip().lower()
-    if normalized_symbol in stock_name_cache:
-        return stock_name_cache[normalized_symbol]
-    load_stock_name_reference()
-    if normalized_symbol in stock_name_cache:
-        return stock_name_cache[normalized_symbol]
     if '.' not in normalized_symbol:
         return None
-    name = query_baostock_stock_name(normalized_symbol)
-    if name:
-        stock_name_cache[normalized_symbol] = name
-        return name
     market, code = normalized_symbol.split('.', 1)
     secid = f"1.{code}" if market == 'sh' else f"0.{code}"
     query = urlencode({'secid': secid, 'fields': 'f57,f58'})
@@ -356,11 +555,60 @@ def query_remote_stock_name(symbol):
         )
         payload = json.loads(response.stdout)
         name = ((payload.get('data') or {}).get('f58') or '').strip()
-        if name:
-            stock_name_cache[normalized_symbol] = name
         return name or None
     except Exception:
         return None
+
+
+def csv_record_stock_name(record):
+    """Use a ranking.csv name column when present; ignore symbol-as-name placeholders."""
+    if not record:
+        return None
+    code = str(record.get('code') or '').strip().lower()
+    for key in ('name', 'stock_name'):
+        value = record.get(key)
+        if value is None:
+            continue
+        if isinstance(value, float) and not np.isfinite(value):
+            continue
+        text = str(value).strip()
+        if text and text.lower() != code:
+            return text
+    return None
+
+
+def ranking_row_stock_name(record):
+    """Resolve a ranking row name without blocking on live BaoStock."""
+    csv_name = csv_record_stock_name(record)
+    if csv_name:
+        _remember_stock_name(str(record.get('code') or '').strip().lower(), csv_name)
+        return csv_name
+    return query_remote_stock_name(record.get('code'), allow_remote=False)
+
+
+def query_remote_stock_name(symbol, allow_remote=True):
+    """Resolve a Chinese display name from disk, then optional remote fallbacks."""
+    if symbol is None:
+        return None
+    normalized_symbol = str(symbol).strip().lower()
+    if not normalized_symbol:
+        return None
+    _load_stock_name_cache_from_disk()
+    with stock_name_lock:
+        cached = stock_name_cache.get(normalized_symbol)
+    if cached:
+        return cached
+    _schedule_stock_name_refresh_if_stale()
+    if not allow_remote or '.' not in normalized_symbol:
+        return None
+    name = query_baostock_stock_name(normalized_symbol)
+    if name:
+        _remember_stock_name(normalized_symbol, name)
+        return name
+    name = query_eastmoney_stock_name(normalized_symbol)
+    if name:
+        _remember_stock_name(normalized_symbol, name)
+    return name or None
 
 
 def require_fresh_market_data(history, source):
@@ -1178,7 +1426,7 @@ def prediction_record_summary(payload):
     if name and symbol and str(name).strip().lower() == str(symbol).strip().lower():
         name = None
     if not name and symbol:
-        name = query_remote_stock_name(symbol)
+        name = query_remote_stock_name(symbol, allow_remote=False)
     return {
         'record_id': payload.get('record_id'),
         'created_at': payload.get('created_at') or payload.get('timestamp'),
@@ -1759,7 +2007,7 @@ def daily_rankings():
         page_frame = frame.iloc[start:start + page_size]
         rows = []
         for record in page_frame.to_dict('records'):
-            record['name'] = query_remote_stock_name(record.get('code'))
+            record['name'] = ranking_row_stock_name(record)
             rows.append({key: (
                 None if value is None or (isinstance(value, float) and not np.isfinite(value))
                 else value.item() if isinstance(value, np.generic) else value
@@ -1827,7 +2075,7 @@ def daily_ranking_detail(asof, symbol):
             key: value.item() if isinstance(value, np.generic) else value
             for key, value in rank.items()
         }
-        prediction['name'] = query_remote_stock_name(normalized)
+        prediction['name'] = ranking_row_stock_name(rank)
         prediction['model'] = summary.get('model') or {}
         return jsonify(prediction)
     except FileNotFoundError as exc:
@@ -2652,6 +2900,21 @@ def get_model_status():
             'loaded': False,
             'message': 'Kronos model library not available, please install related dependencies'
         })
+
+def _auto_preload_stock_name_cache():
+    """Load on-disk names when a Gunicorn worker imports this module."""
+    if os.getenv('KRONOS_STOCK_NAME_PRELOAD', '1').lower() in ('0', 'false', 'no'):
+        return
+    if 'pytest' in sys.modules:
+        return
+    try:
+        preload_stock_name_cache()
+    except Exception:
+        return
+
+
+_auto_preload_stock_name_cache()
+
 
 if __name__ == '__main__':
     print("Starting Kronos Web UI...")
