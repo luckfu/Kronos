@@ -8,6 +8,7 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png', v=kronos_icon_v) }}" sizes="32x32">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
+  {% include '_pwa_head.html' %}
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <style>
     :root {
@@ -783,5 +784,6 @@
       if (window.lucide) lucide.createIcons();
     })();
   </script>
+  {% include '_pwa_register.html' %}
 </body>
 </html>

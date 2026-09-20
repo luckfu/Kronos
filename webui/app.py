@@ -65,7 +65,13 @@ try:
 except ImportError:
     from auth import configure_auth, init_auth
 
+try:
+    from webui.pwa import init_pwa
+except ImportError:
+    from pwa import init_pwa
+
 init_auth(app)
+init_pwa(app)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 A_SHARE_DATASET_DIR = os.path.join(

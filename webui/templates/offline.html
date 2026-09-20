@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
+  <title>Kronos 离线</title>
+  {% include '_pwa_head.html' %}
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 24px 16px;
+      background: #0a0e14;
+      color: #e8ecf1;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    main { width: min(28rem, 100%); text-align: center; }
+    img { width: 64px; height: 64px; border-radius: 12px; }
+    h1 { margin: 14px 0 8px; font-size: 20px; font-weight: 650; }
+    p { margin: 0 0 12px; color: #6b7a8d; font-size: 14px; line-height: 1.55; }
+    a { color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="{{ url_for('static', filename='icon-192.png', v=kronos_icon_v) }}" width="64" height="64" alt="Kronos">
+    <h1>Kronos</h1>
+    <p>当前处于离线状态。已安装的界面壳可用，行情、排名和预测数据需要联网后刷新。</p>
+    <p><a href="{{ url_for('index') }}">重试</a></p>
+  </main>
+</body>
+</html>

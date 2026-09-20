@@ -385,11 +385,30 @@ def logout_view():
     return response
 
 
+PUBLIC_ENDPOINTS = (
+    'login',
+    'logout',
+    'static',
+    'health',
+    'favicon',
+    'service_worker',
+    'pwa_manifest',
+    'offline',
+)
+PUBLIC_PATHS = (
+    '/health',
+    '/favicon.ico',
+    '/sw.js',
+    '/manifest.webmanifest',
+    '/offline',
+)
+
+
 def require_login():
     path = request.path or '/'
-    if path == '/health' or path == '/favicon.ico' or path.startswith('/static/'):
+    if path in PUBLIC_PATHS or path.startswith('/static/'):
         return None
-    if request.endpoint in ('login', 'logout', 'static', 'health', 'favicon'):
+    if request.endpoint in PUBLIC_ENDPOINTS:
         return None
     if not auth_enabled():
         return None

@@ -12,15 +12,22 @@ trap 'rm -rf "$release_dir"' EXIT
 mkdir -p "$release_dir/webui/templates" "$release_dir/webui/static" "$release_dir/deploy"
 cp "$PROJECT_DIR/webui/app.py" "$release_dir/webui/app.py"
 cp "$PROJECT_DIR/webui/auth.py" "$release_dir/webui/auth.py"
+cp "$PROJECT_DIR/webui/pwa.py" "$release_dir/webui/pwa.py"
 cp "$PROJECT_DIR/webui/templates/index.html" "$release_dir/webui/templates/index.html"
 cp "$PROJECT_DIR/webui/templates/daily_rankings.html" "$release_dir/webui/templates/daily_rankings.html"
 cp "$PROJECT_DIR/webui/templates/login.html" "$release_dir/webui/templates/login.html"
+cp "$PROJECT_DIR/webui/templates/offline.html" "$release_dir/webui/templates/offline.html"
+cp "$PROJECT_DIR/webui/templates/_pwa_head.html" "$release_dir/webui/templates/_pwa_head.html"
+cp "$PROJECT_DIR/webui/templates/_pwa_register.html" "$release_dir/webui/templates/_pwa_register.html"
 cp "$PROJECT_DIR/webui/static/favicon.ico" "$release_dir/webui/static/favicon.ico"
 cp "$PROJECT_DIR/webui/static/favicon-32.png" "$release_dir/webui/static/favicon-32.png"
 cp "$PROJECT_DIR/webui/static/apple-touch-icon.png" "$release_dir/webui/static/apple-touch-icon.png"
+cp "$PROJECT_DIR/webui/static/icon-192.png" "$release_dir/webui/static/icon-192.png"
 cp "$PROJECT_DIR/webui/static/icon-512.png" "$release_dir/webui/static/icon-512.png"
 cp "$PROJECT_DIR/webui/static/logo-64.png" "$release_dir/webui/static/logo-64.png"
 cp "$PROJECT_DIR/webui/static/logo-128.png" "$release_dir/webui/static/logo-128.png"
+cp "$PROJECT_DIR/webui/static/manifest.webmanifest" "$release_dir/webui/static/manifest.webmanifest"
+cp "$PROJECT_DIR/webui/static/sw.js" "$release_dir/webui/static/sw.js"
 cp "$PROJECT_DIR/webui/size_reference.json" "$release_dir/webui/size_reference.json"
 cp "$PROJECT_DIR/webui/sector_vocabulary.json" "$release_dir/webui/sector_vocabulary.json"
 cp "$PROJECT_DIR/webui/symbol_sector_map.json" "$release_dir/webui/symbol_sector_map.json"
@@ -45,16 +52,23 @@ sudo chown opc:opc "$root"
 sudo chown -R opc:opc "$root/data"
 sudo install -o opc -g opc -m 0644 "$stage/webui/app.py" "$root/webui/app.py"
 sudo install -o opc -g opc -m 0644 "$stage/webui/auth.py" "$root/webui/auth.py"
+sudo install -o opc -g opc -m 0644 "$stage/webui/pwa.py" "$root/webui/pwa.py"
 sudo rm -f "$root/webui/hermes_analysis.py"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/index.html" "$root/webui/templates/index.html"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/daily_rankings.html" "$root/webui/templates/daily_rankings.html"
 sudo install -o opc -g opc -m 0644 "$stage/webui/templates/login.html" "$root/webui/templates/login.html"
+sudo install -o opc -g opc -m 0644 "$stage/webui/templates/offline.html" "$root/webui/templates/offline.html"
+sudo install -o opc -g opc -m 0644 "$stage/webui/templates/_pwa_head.html" "$root/webui/templates/_pwa_head.html"
+sudo install -o opc -g opc -m 0644 "$stage/webui/templates/_pwa_register.html" "$root/webui/templates/_pwa_register.html"
 sudo install -o opc -g opc -m 0644 "$stage/webui/static/favicon.ico" "$root/webui/static/favicon.ico"
 sudo install -o opc -g opc -m 0644 "$stage/webui/static/favicon-32.png" "$root/webui/static/favicon-32.png"
 sudo install -o opc -g opc -m 0644 "$stage/webui/static/apple-touch-icon.png" "$root/webui/static/apple-touch-icon.png"
+sudo install -o opc -g opc -m 0644 "$stage/webui/static/icon-192.png" "$root/webui/static/icon-192.png"
 sudo install -o opc -g opc -m 0644 "$stage/webui/static/icon-512.png" "$root/webui/static/icon-512.png"
 sudo install -o opc -g opc -m 0644 "$stage/webui/static/logo-64.png" "$root/webui/static/logo-64.png"
 sudo install -o opc -g opc -m 0644 "$stage/webui/static/logo-128.png" "$root/webui/static/logo-128.png"
+sudo install -o opc -g opc -m 0644 "$stage/webui/static/manifest.webmanifest" "$root/webui/static/manifest.webmanifest"
+sudo install -o opc -g opc -m 0644 "$stage/webui/static/sw.js" "$root/webui/static/sw.js"
 sudo install -o opc -g opc -m 0644 "$stage/webui/size_reference.json" "$root/webui/size_reference.json"
 sudo install -o opc -g opc -m 0644 "$stage/webui/sector_vocabulary.json" "$root/webui/sector_vocabulary.json"
 sudo install -o opc -g opc -m 0755 "$stage/webui/update_sector_mapping.py" "$root/webui/update_sector_mapping.py"
@@ -108,11 +122,16 @@ sudo systemctl reload nginx
 for attempt in 1 2 3 4 5; do
   if curl -fsS http://127.0.0.1:7072/health \
     && curl -fsS -o /dev/null http://127.0.0.1:7072/favicon.ico \
-    && curl -fsS -o /dev/null http://127.0.0.1:7072/static/favicon.ico; then
+    && curl -fsS -o /dev/null http://127.0.0.1:7072/static/favicon.ico \
+    && curl -fsS -o /dev/null http://127.0.0.1:7072/sw.js \
+    && curl -fsS -o /dev/null http://127.0.0.1:7072/manifest.webmanifest \
+    && curl -fsS -o /dev/null http://127.0.0.1:7072/offline; then
     printf '\n'
     # Site-root /favicon.ico is served by nginx from the same static file.
     curl -fsS -o /dev/null http://127.0.0.1/favicon.ico || true
     curl -fsS -o /dev/null http://127.0.0.1/kronos/static/favicon.ico || true
+    curl -fsS -o /dev/null http://127.0.0.1/kronos/sw.js || true
+    curl -fsS -o /dev/null http://127.0.0.1/kronos/manifest.webmanifest || true
     exit 0
   fi
   sleep 2

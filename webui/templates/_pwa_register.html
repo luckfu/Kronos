@@ -1,0 +1,11 @@
+<script>
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+  var host = location.hostname;
+  var secure = location.protocol === 'https:' || host === 'localhost' || host === '127.0.0.1';
+  if (!secure) return;
+  var meta = document.querySelector('meta[name="kronos-base-path"]');
+  var base = (meta && meta.content ? String(meta.content) : '').replace(/\/$/, '');
+  navigator.serviceWorker.register(base + '/sw.js', {scope: (base || '') + '/'}).catch(function () {});
+})();
+</script>

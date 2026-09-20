@@ -178,8 +178,12 @@ def test_health_and_login_page_are_public(monkeypatch, tmp_path):
     assert health.status_code == 200
     assert health.get_json()['status'] == 'ok'
     assert login.status_code == 200
-    assert 'name="password"' in login.get_data(as_text=True)
-    assert '记住登录' in login.get_data(as_text=True)
+    html = login.get_data(as_text=True)
+    assert 'name="password"' in html
+    assert '记住登录' in html
+    assert 'rel="manifest"' in html
+    assert 'serviceWorker' in html
+    assert 'orientation: landscape' in html
 
 
 def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
@@ -265,7 +269,16 @@ def test_nginx_location_no_longer_uses_basic_auth():
     assert 'webui/static/apple-touch-icon.png' in deploy
     assert 'webui/static/logo-64.png' in deploy
     assert 'webui/static/logo-128.png' in deploy
+    assert 'webui/static/icon-192.png' in deploy
     assert 'webui/static/icon-512.png' in deploy
+    assert 'webui/static/manifest.webmanifest' in deploy
+    assert 'webui/static/sw.js' in deploy
+    assert 'webui/pwa.py' in deploy
+    assert 'location = /kronos/sw.js' in text
+    assert 'location = /kronos/manifest.webmanifest' in text
+    assert 'Service-Worker-Allowed' in text
+    assert 'application/manifest+json' in text
+    assert 'alias /opt/kronos-web/webui/static/sw.js;' in text
     assert '$root/webui/static' in deploy
     assert 'expires 30d' not in text
     assert 'expires 1h' in text
@@ -282,6 +295,7 @@ def _png_size(path):
 def test_brand_icons_are_true_squares():
     assert _png_size('webui/static/favicon-32.png') == (32, 32)
     assert _png_size('webui/static/apple-touch-icon.png') == (180, 180)
+    assert _png_size('webui/static/icon-192.png') == (192, 192)
     assert _png_size('webui/static/icon-512.png') == (512, 512)
     assert _png_size('webui/static/logo-64.png') == (64, 64)
     assert _png_size('webui/static/logo-128.png') == (128, 128)

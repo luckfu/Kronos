@@ -8,6 +8,7 @@
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png', v=kronos_icon_v) }}" sizes="32x32">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
+    {% include '_pwa_head.html' %}
     <script src="https://cdn.plot.ly/plotly-3.7.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2412,5 +2413,6 @@
             return number.toFixed(0);
         }
     </script>
+    {% include '_pwa_register.html' %}
 </body>
 </html>
