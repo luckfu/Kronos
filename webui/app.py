@@ -1749,7 +1749,8 @@ def daily_rankings():
                 ['predicted_return_d10', 'code'], ascending=[False, True], kind='stable'
             ).copy()
             frame['rank_d10'] = np.arange(1, len(frame) + 1)
-        if top_n is not None:
+        # Stock search should still find a match outside the selected Top N.
+        if top_n is not None and not query:
             frame = frame[pd.to_numeric(frame['rank_d10']) <= top_n]
         page = max(1, int(request.args.get('page', 1)))
         page_size = min(100, max(10, int(request.args.get('page_size', 50))))
