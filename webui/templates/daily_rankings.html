@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
   <title>Kronos 每日排名</title>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <style>
@@ -49,6 +50,19 @@
     .title h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0; }
     .title p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
     .top-actions { display: flex; align-items: center; gap: 8px; }
+    .logout-link {
+      height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .logout-link:hover { color: var(--text); border-color: var(--text); }
     .control, .icon-button { height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
     .control { padding: 0 10px; }
     .icon-button { width: 36px; display: grid; place-items: center; cursor: pointer; }
@@ -66,6 +80,26 @@
     .filter { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
     input.filter { width: 170px; }
     select.filter { max-width: 230px; }
+    .search-row { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; }
+    .search-row input.filter { flex: 1 1 170px; min-width: 0; }
+    .search-button {
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+    .search-button:hover { filter: brightness(1.06); }
+    .search-button:active { color: var(--accent); background: var(--accent-soft); }
     .result-count { white-space: nowrap; color: var(--muted); font-size: 12px; }
     .pool-controls { display: flex; gap: 8px; align-items: center; }
     .pool-controls select { min-width: 150px; }
@@ -119,8 +153,18 @@
     .return span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
     .return strong { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .chart-block { padding: 0 12px 14px; }
-    .chart-caption { padding: 0 4px 8px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
-    #path-chart { width: 100%; height: 170px; display: block; background: var(--surface-2); border-radius: 6px; }
+    .chart-caption { padding: 0 4px 8px; display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+    .chart-caption span:last-child { text-align: right; }
+    #path-chart { width: 100%; height: 188px; display: block; background: var(--surface-2); border-radius: 6px; }
+    .chart-legend { padding: 7px 4px 0; display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--muted); font-size: 10px; }
+    .chart-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 1px; vertical-align: -1px; }
+    .legend-hist i { background: var(--up); }
+    .legend-p50 i { background: var(--accent); }
+    .legend-band i { background: rgba(18,107,88,.28); }
+    .legend-close i {
+      width: 12px; height: 0; border-radius: 0; background: transparent;
+      border-top: 1.6px dashed #916515; vertical-align: 3px;
+    }
     .facts { border-top: 1px solid var(--line); padding: 12px 16px; display: grid; gap: 9px; }
     .fact { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
     .fact span { color: var(--muted); }
@@ -135,7 +179,8 @@
     .card-meta, .card-code { display: none; }
     button, input, select, tbody tr { touch-action: manipulation; }
     .nav button:focus-visible, .filter:focus-visible, .control:focus-visible,
-    .icon-button:focus-visible, .pool-button:focus-visible, .pager button:focus-visible {
+    .icon-button:focus-visible, .pool-button:focus-visible, .search-button:focus-visible,
+    .pager button:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
@@ -157,7 +202,7 @@
       .topbar { height: auto; min-height: 56px; padding: 10px 12px; gap: 10px; }
       .title p { display: none; }
       .title h1 { font-size: 17px; }
-      .control, .icon-button, .pool-button, .pager button { min-height: 44px; }
+      .control, .icon-button, .pool-button, .pager button, .logout-link { min-height: 44px; }
       .icon-button { width: 44px; height: 44px; }
       .content { padding: 12px; }
       .summary { grid-template-columns: 1fr 1fr; }
@@ -169,6 +214,9 @@
       .pool-controls select { flex: 1 1 auto; min-width: 0; max-width: none; }
       .filter { max-width: none; min-height: 44px; }
       input.filter { width: 100%; flex: 1 1 100%; font-size: 16px; }
+      .search-row { flex: 1 1 100%; width: 100%; }
+      .search-row input.filter { flex: 1 1 auto; width: auto; min-width: 0; }
+      .search-button { min-height: 48px; min-width: 72px; padding: 0 16px; font-size: 15px; }
       select.filter { flex: 1 1 calc(50% - 8px); }
       .result-count { align-self: flex-start; }
       .table-wrap { overflow: visible; }
@@ -219,7 +267,9 @@
         max-height: min(80vh, calc(100dvh - 88px));
         z-index: 15;
       }
-      body[data-view="stock"] #search-input { order: -1; height: 48px; }
+      body[data-view="stock"] .search-row { order: -1; }
+      body[data-view="stock"] #search-input,
+      body[data-view="stock"] .search-button { height: 48px; }
       .detail-title button { min-width: 44px; min-height: 44px; }
       .pool-dialog-actions button { min-height: 44px; }
       .pool-list-row button { min-height: 44px; min-width: 44px; }
@@ -258,6 +308,9 @@
         <div class="top-actions">
           <select id="date-select" class="control" aria-label="信号日"></select>
           <button id="refresh-button" class="icon-button" type="button" aria-label="刷新"><i data-lucide="refresh-cw"></i></button>
+          {% if kronos_auth_enabled|default(false) %}
+          <a class="logout-link" href="{{ kronos_logout_url }}">退出{% if kronos_user %} {{ kronos_user }}{% endif %}</a>
+          {% endif %}
         </div>
       </header>
 
@@ -272,7 +325,10 @@
         <div class="toolbar">
           <div class="filters">
             <div class="pool-controls"><select id="pool-select" class="filter" aria-label="自定义股池"><option value="">全市场</option></select><button id="pool-manage" class="pool-button" type="button"><i data-lucide="settings-2"></i>管理股池</button></div>
-            <input id="search-input" class="filter" type="search" placeholder="股票代码，如 000063 / 600519" aria-label="股票代码" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search">
+            <form id="search-form" class="search-row" role="search" action="#" method="get">
+              <input id="search-input" class="filter" name="query" type="search" placeholder="股票代码，如 000063 / 600519" aria-label="股票代码" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search">
+              <button id="search-button" class="search-button" type="submit">查询</button>
+            </form>
             <select id="sector-select" class="filter" aria-label="行业"><option value="">全部行业</option></select>
             <select id="size-select" class="filter" aria-label="市值分组">
               <option value="">全部市值</option><option value="large">大市值 Top 20%</option><option value="mid">中市值</option><option value="small">小市值 Bottom 20%</option>
@@ -310,8 +366,14 @@
               <div class="return"><span>1日中位预测</span><strong id="detail-d1">—</strong></div>
             </div>
             <div class="chart-block">
-              <div class="chart-caption"><span>未来10日预测路径</span><span id="detail-range">—</span></div>
-              <svg id="path-chart" viewBox="0 0 286 170" role="img" aria-label="未来十日预测路径"></svg>
+              <div class="chart-caption"><span>历史行情 + 未来10日预测</span><span id="detail-range">—</span></div>
+              <svg id="path-chart" viewBox="0 0 286 188" role="img" aria-label="信号日前历史行情、当时收盘价参考线与未来十日预测路径"></svg>
+              <div class="chart-legend" aria-hidden="true">
+                <span class="legend-hist"><i></i>历史K线</span>
+                <span class="legend-p50"><i></i>中位路径 P50</span>
+                <span class="legend-band"><i></i>P10–P90</span>
+                <span class="legend-close"><i></i>当时收盘</span>
+              </div>
             </div>
             <div class="facts">
               <div class="fact"><span>信号日收盘</span><strong id="detail-close">—</strong></div>
@@ -356,6 +418,7 @@
     const rankingPage = $('ranking-page');
     const statusPage = $('status-page');
     let searchTimer;
+    let lastSearchApply = 0;
     let lastTop = $('top-select').value;
 
     function toast(message) {
@@ -402,12 +465,21 @@
         savePools(); renderPoolList(); loadRankings(true);
       }));
     }
-    async function getJson(url) {
-      const response = await fetch(url, {headers: {'Accept': 'application/json'}});
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, {
+        credentials: 'same-origin',
+        ...options,
+        headers: {'Accept': 'application/json', ...(options.headers || {})},
+      });
+      if (response.status === 401) {
+        window.location.href = `${base}/login`;
+        throw new Error('需要登录');
+      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
       return payload;
     }
+    async function getJson(url) { return requestJson(url); }
 
     async function loadDates() {
       const result = await getJson(api('/api/daily-rankings/dates'));
@@ -436,6 +508,16 @@
       } else if (!topSelect.value && lastTop) {
         topSelect.value = lastTop;
       }
+    }
+    function applySearch() {
+      const now = Date.now();
+      if (now - lastSearchApply < 120) return;
+      lastSearchApply = now;
+      syncTopForSearch();
+      clearTimeout(searchTimer);
+      searchTimer = null;
+      state.loading = false;
+      loadRankings(true);
     }
 
     async function loadRankings(resetPage = false) {
@@ -520,41 +602,107 @@
         $('detail-leading').textContent = percent(rank.rank_percentile_d10);
         const sampleCount = result.model?.sample_count;
         $('detail-samples').textContent = `${sampleCount || '—'} 条`;
-        $('detail-note').textContent = `排名是同一信号日的截面比较结果，不代表确定收益。${sampleCount || '当前'}条路径用于降低单次采样偶然性，概率区间仅作参考。`;
+        const history = result.history || [];
+        const histNote = result.history_note ? ` ${result.history_note}。` : '';
+        $('detail-note').textContent = `排名是同一信号日的截面比较结果，不代表确定收益。${sampleCount || '当前'}条路径用于降低单次采样偶然性，概率区间仅作参考。${histNote}`.trim();
         const final = predictions[predictions.length - 1];
-        $('detail-range').textContent = final ? `${price(result.close_asof)} → ${price(final.close_p50)}` : '—';
-        drawChart(result.close_asof, predictions);
+        if (history.length && final) {
+          $('detail-range').textContent = `${history.length}日 ${price(history[0].close)} → D10 ${price(final.close_p50)}`;
+        } else {
+          $('detail-range').textContent = final ? `${price(result.close_asof)} → ${price(final.close_p50)}` : '—';
+        }
+        drawChart(result);
         document.querySelectorAll('#ranking-body tr').forEach(row => row.classList.toggle('selected', row.dataset.code === code));
       } catch (error) { toast(error.message); closeDetail(); }
     }
 
-    function drawChart(anchor, predictions) {
+    function shortDate(value) {
+      const text = String(value || '');
+      return text.length >= 10 ? text.slice(5) : (text || '—');
+    }
+    function drawChart(result) {
       const svg = $('path-chart');
-      const series = [{close_p10: anchor, close_p50: anchor, close_p90: anchor}, ...predictions];
-      const values = series.flatMap(item => [item.close_p10, item.close_p50, item.close_p90]).map(Number).filter(Number.isFinite);
+      const history = Array.isArray(result.history) ? result.history : [];
+      const predictions = Array.isArray(result.predictions) ? result.predictions : [];
+      const anchor = Number(result.close_asof);
+      const lastHistoryClose = Number(history.length ? history[history.length - 1].close : NaN);
+      const join = Number.isFinite(lastHistoryClose) ? lastHistoryClose : anchor;
+      const forecast = [{close_p10: join, close_p50: join, close_p90: join, timestamp: result.asof}, ...predictions];
+      const values = [
+        ...history.flatMap(item => [item.low, item.high, item.close]),
+        ...forecast.flatMap(item => [item.close_p10, item.close_p50, item.close_p90]),
+        anchor,
+      ].map(Number).filter(Number.isFinite);
       if (!values.length) { svg.innerHTML = ''; return; }
-      const width = 286, height = 170, left = 12, right = 12, top = 14, bottom = 24;
-      const min = Math.min(...values), max = Math.max(...values), pad = Math.max((max - min) * .15, Math.abs(max) * .01, .01);
+      const width = 286, height = 188, left = 8, right = 10, top = 16, bottom = 28;
+      const plotW = width - left - right;
+      const min = Math.min(...values), max = Math.max(...values);
+      const pad = Math.max((max - min) * .12, Math.abs(max) * .01, .01);
       const lo = min - pad, hi = max + pad;
-      const x = index => left + index * (width - left - right) / Math.max(1, series.length - 1);
       const y = value => top + (hi - value) * (height - top - bottom) / (hi - lo);
-      const line = key => series.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(item[key])).toFixed(1)}`).join(' ');
-      const upper = series.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(item.close_p90)).toFixed(1)}`).join(' ');
-      const lower = [...series].reverse().map((item, reverseIndex) => {
-        const index = series.length - 1 - reverseIndex;
-        return `L${x(index).toFixed(1)},${y(Number(item.close_p10)).toFixed(1)}`;
-      }).join(' ');
+      const hasHistory = history.length > 0;
+      const histRight = left + plotW * (hasHistory ? 0.70 : 0);
+      const xHist = index => history.length <= 1
+        ? left + (histRight - left) / 2
+        : left + index * (histRight - left) / (history.length - 1);
+      const xPred = index => {
+        const start = hasHistory ? histRight : left;
+        const end = width - right;
+        return forecast.length <= 1 ? start : start + index * (end - start) / (forecast.length - 1);
+      };
       const grid = [0, .5, 1].map(ratio => {
         const gy = top + ratio * (height - top - bottom);
         const value = hi - ratio * (hi - lo);
         return `<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}" stroke="#e1e6ea"/><text x="${left+2}" y="${gy-4}" fill="#6b7785" font-size="9">${value.toFixed(2)}</text>`;
       }).join('');
-      const anchorY = y(Number(anchor));
-      const baseline = `<line x1="${left}" y1="${anchorY}" x2="${width-right}" y2="${anchorY}" stroke="#916515" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${width-right-3}" y="${anchorY-4}" text-anchor="end" fill="#916515" font-size="9" font-weight="600">当前收盘 ${price(anchor)}</text>`;
-      svg.innerHTML = `${grid}<path d="${upper} ${lower} Z" fill="rgba(18,107,88,.12)"/>${baseline}<path d="${line('close_p50')}" fill="none" stroke="#126b58" stroke-width="2.2"/><text x="${left}" y="${height-7}" fill="#6b7785" font-size="9">信号日</text><text x="${width-right}" y="${height-7}" text-anchor="end" fill="#6b7785" font-size="9">D10</text>`;
+      const candleWidth = Math.min(4.2, Math.max(1.15, (histRight - left) / Math.max(history.length, 1) * 0.68));
+      const candles = history.map((item, index) => {
+        const open = Number(item.open), high = Number(item.high), low = Number(item.low), close = Number(item.close);
+        if (![open, high, low, close].every(Number.isFinite)) {
+          const cy = y(close);
+          return Number.isFinite(close) ? `<circle cx="${xHist(index).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.4" fill="#6b7785"/>` : '';
+        }
+        const cx = xHist(index);
+        const up = close >= open;
+        const color = up ? '#c33d37' : '#19845b';
+        const bodyTop = y(Math.max(open, close));
+        const bodyHeight = Math.max(1, y(Math.min(open, close)) - bodyTop);
+        return `<line x1="${cx.toFixed(1)}" y1="${y(high).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(low).toFixed(1)}" stroke="${color}" stroke-width="1"/><rect x="${(cx - candleWidth / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleWidth.toFixed(1)}" height="${bodyHeight.toFixed(1)}" fill="${color}"/>`;
+      }).join('');
+      const line = key => forecast.map((item, index) => `${index ? 'L' : 'M'}${xPred(index).toFixed(1)},${y(Number(item[key])).toFixed(1)}`).join(' ');
+      const upper = forecast.map((item, index) => `${index ? 'L' : 'M'}${xPred(index).toFixed(1)},${y(Number(item.close_p90)).toFixed(1)}`).join(' ');
+      const lower = [...forecast].reverse().map((item, reverseIndex) => {
+        const index = forecast.length - 1 - reverseIndex;
+        return `L${xPred(index).toFixed(1)},${y(Number(item.close_p10)).toFixed(1)}`;
+      }).join(' ');
+      const markerX = hasHistory ? histRight : left;
+      const forecastBg = hasHistory
+        ? `<rect x="${histRight.toFixed(1)}" y="${top}" width="${(width - right - histRight).toFixed(1)}" height="${height - top - bottom}" fill="rgba(18,107,88,.06)"/>`
+        : '';
+      const marker = hasHistory
+        ? `<line x1="${markerX.toFixed(1)}" y1="${top}" x2="${markerX.toFixed(1)}" y2="${height - bottom}" stroke="#916515" stroke-width="1.1" stroke-dasharray="3 3"/>`
+        : '';
+      const closePrice = Number.isFinite(anchor) ? anchor : join;
+      const anchorY = y(closePrice);
+      const closePriceText = price(closePrice);
+      const labelAbove = Number.isFinite(anchorY) && (anchorY - top > 14);
+      const labelY = Number.isFinite(anchorY) ? (labelAbove ? anchorY - 5 : anchorY + 11) : 0;
+      const labelX = width - right - 3;
+      const baseline = Number.isFinite(anchorY)
+        ? `<line x1="${left}" y1="${anchorY.toFixed(1)}" x2="${width-right}" y2="${anchorY.toFixed(1)}" stroke="#ffffff" stroke-width="2.8" stroke-dasharray="5 4" opacity=".92"/><line x1="${left}" y1="${anchorY.toFixed(1)}" x2="${width-right}" y2="${anchorY.toFixed(1)}" stroke="#916515" stroke-width="1.3" stroke-dasharray="5 4"/><text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="end" fill="#916515" font-size="9" font-weight="600" stroke="#f8fafb" stroke-width="3.5" paint-order="stroke">${closePriceText}</text>`
+        : '';
+      const leftLabel = hasHistory ? shortDate(history[0].timestamp) : '信号日';
+      const rightLabel = predictions.length ? (shortDate(predictions[predictions.length - 1].timestamp) || 'D10') : 'D10';
+      const midText = hasHistory
+        ? `<text x="${markerX.toFixed(1)}" y="${height-7}" text-anchor="middle" fill="#916515" font-size="9">信号日</text>`
+        : '';
+      svg.innerHTML = `${forecastBg}${grid}${candles}<path d="${upper} ${lower} Z" fill="rgba(18,107,88,.16)"/><path d="${line('close_p50')}" fill="none" stroke="#126b58" stroke-width="2.1"/>${baseline}${marker}<text x="${left}" y="${height-7}" fill="#6b7785" font-size="9">${leftLabel}</text>${midText}<text x="${width-right}" y="${height-7}" text-anchor="end" fill="#6b7785" font-size="9">${rightLabel}</text>`;
     }
 
-    function closeDetail() { state.selected = null; $('workspace').classList.remove('detail-open'); }
+    function closeDetail() {
+      state.selected = null;
+      $('workspace').classList.remove('detail-open');
+    }
     function renderStatus() {
       $('status-latest').textContent = state.dates[0]?.asof || '—';
       $('status-dates').textContent = state.dates.length;
@@ -599,6 +747,18 @@
       state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
     });
     $('refresh-button').addEventListener('click', async () => { await loadDates(); await loadRankings(true); });
+    $('search-form').addEventListener('submit', event => {
+      event.preventDefault();
+      applySearch();
+    });
+    $('search-input').addEventListener('keydown', event => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applySearch();
+      }
+    });
+    $('search-input').addEventListener('search', applySearch);
     $('search-input').addEventListener('input', () => {
       syncTopForSearch();
       clearTimeout(searchTimer);
