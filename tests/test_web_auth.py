@@ -211,6 +211,7 @@ def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
     assert f'/kronos/static/apple-touch-icon.png?v={icon_v}' in html
     assert f'/kronos/static/logo-64.png?v={icon_v}' in html
     assert f'/kronos/static/logo-128.png?v={icon_v}' in html
+    assert 'width="42" height="42"' in html
     assert '<div class="brand-mark">K</div>' not in html
     assert 'href="/static/' not in html
     assert 'href="/favicon.ico"' not in html

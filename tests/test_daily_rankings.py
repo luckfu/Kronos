@@ -297,6 +297,8 @@ def test_daily_rankings_page_includes_kronos_favicon():
     assert f"/static/apple-touch-icon.png?v={icon_v}" in page
     assert f"/static/logo-64.png?v={icon_v}" in page
     assert f"/static/logo-128.png?v={icon_v}" in page
+    assert 'width="42" height="42"' in page
+    assert 'width: 42px; height: 42px' in page
     assert '<div class="brand-mark">K</div>' not in page
     assert 'class="brand-mark"' in page
 
