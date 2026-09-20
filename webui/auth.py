@@ -387,9 +387,9 @@ def logout_view():
 
 def require_login():
     path = request.path or '/'
-    if path == '/health' or path.startswith('/static/'):
+    if path == '/health' or path == '/favicon.ico' or path.startswith('/static/'):
         return None
-    if request.endpoint in ('login', 'logout', 'static', 'health'):
+    if request.endpoint in ('login', 'logout', 'static', 'health', 'favicon'):
         return None
     if not auth_enabled():
         return None

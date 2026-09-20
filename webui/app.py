@@ -15,7 +15,7 @@ try:
     import torch
 except ImportError:
     torch = None
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sys
 import warnings
@@ -2137,6 +2137,17 @@ def create_operational_chart(context, pred_df, interval_df):
 def index():
     """Home page"""
     return render_template('daily_rankings.html')
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Browser default icon path after nginx strips /kronos/."""
+    return send_from_directory(
+        app.static_folder,
+        'favicon.ico',
+        mimetype='image/vnd.microsoft.icon',
+        max_age=30 * 24 * 3600,
+    )
 
 
 def _daily_prediction_dir(asof):

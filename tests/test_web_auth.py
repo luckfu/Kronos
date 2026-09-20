@@ -181,6 +181,31 @@ def test_health_and_login_page_are_public(monkeypatch, tmp_path):
     assert '记住登录' in login.get_data(as_text=True)
 
 
+def test_favicon_is_public_and_uses_kronos_prefix(monkeypatch, tmp_path):
+    enable_auth(monkeypatch, tmp_path)
+    client = web_app.app.test_client()
+    headers = {'X-Forwarded-Prefix': '/kronos'}
+
+    ico = client.get('/favicon.ico')
+    png = client.get('/static/favicon-32.png')
+    apple = client.get('/static/apple-touch-icon.png')
+    login = client.get('/login', headers=headers)
+
+    assert ico.status_code == 200
+    assert ico.data[:4] == b'\x00\x00\x01\x00'
+    assert png.status_code == 200
+    assert png.data[:8] == b'\x89PNG\r\n\x1a\n'
+    assert apple.status_code == 200
+    html = login.get_data(as_text=True)
+    assert 'rel="icon"' in html
+    assert 'rel="apple-touch-icon"' in html
+    assert '/kronos/static/favicon.ico' in html
+    assert '/kronos/static/favicon-32.png' in html
+    assert '/kronos/static/apple-touch-icon.png' in html
+    assert 'href="/static/' not in html
+    assert 'href="/favicon.ico"' not in html
+
+
 def test_login_does_not_rewrite_htpasswd(monkeypatch, tmp_path):
     htpath = enable_auth(monkeypatch, tmp_path)
     before = htpath.read_bytes()
@@ -217,8 +242,17 @@ def test_auth_stays_off_without_htpasswd(monkeypatch):
 
 def test_nginx_location_no_longer_uses_basic_auth():
     text = Path('deploy/oracle-kronos/nginx-kronos-location.conf').read_text(encoding='utf-8')
+    deploy = Path('deploy/oracle-kronos/deploy.sh').read_text(encoding='utf-8')
     assert 'auth_basic' not in text
     assert 'proxy_set_header X-Forwarded-Prefix /kronos' in text
+    assert 'location = /favicon.ico' in text
+    assert 'location = /kronos/favicon.ico' in text
+    assert 'location ^~ /kronos/static/' in text
+    assert 'alias /opt/kronos-web/webui/static/favicon.ico;' in text
+    assert 'alias /opt/kronos-web/webui/static/;' in text
+    assert 'webui/static/favicon.ico' in deploy
+    assert 'webui/static/apple-touch-icon.png' in deploy
+    assert '$root/webui/static' in deploy
 
 
 def test_prefixed_login_redirects_under_kronos(monkeypatch, tmp_path):
