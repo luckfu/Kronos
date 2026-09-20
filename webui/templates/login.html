@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
   <title>登录 Kronos</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}" sizes="180x180">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png', v=kronos_icon_v) }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
   <style>
     :root {
       color-scheme: light;
@@ -135,7 +135,7 @@
 <body>
   <main>
     <div class="brand">
-      <img class="brand-mark" src="{{ url_for('static', filename='logo-64.png') }}" srcset="{{ url_for('static', filename='logo-128.png') }} 2x" width="36" height="36" alt="Kronos">
+      <img class="brand-mark" src="{{ url_for('static', filename='logo-64.png', v=kronos_icon_v) }}" srcset="{{ url_for('static', filename='logo-128.png', v=kronos_icon_v) }} 2x" width="36" height="36" alt="Kronos">
       <h1>登录 Kronos</h1>
     </div>
     <p class="lead">使用已分配的账号登录。勾选记住登录后，再次打开此页不会重复要求输入密码。</p>

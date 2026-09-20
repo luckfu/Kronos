@@ -52,6 +52,14 @@ except ImportError:
 app = Flask(__name__)
 CORS(app)
 
+# Bump this when brand icons change so HTML hrefs skip stale CDN copies.
+BRAND_ICON_VERSION = '20260920b'
+
+
+@app.context_processor
+def inject_brand_icon_version():
+    return {'kronos_icon_v': BRAND_ICON_VERSION}
+
 try:
     from webui.auth import configure_auth, init_auth
 except ImportError:
@@ -2146,7 +2154,7 @@ def favicon():
         app.static_folder,
         'favicon.ico',
         mimetype='image/vnd.microsoft.icon',
-        max_age=30 * 24 * 3600,
+        max_age=3600,
     )
 
 

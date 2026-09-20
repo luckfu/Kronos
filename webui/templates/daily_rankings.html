@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="kronos-base-path" content="{{ request.headers.get('X-Forwarded-Prefix', '')|e }}">
   <title>Kronos 每日排名</title>
-  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}" sizes="180x180">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico', v=kronos_icon_v) }}" sizes="any">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon-32.png', v=kronos_icon_v) }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png', v=kronos_icon_v) }}" sizes="180x180">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <style>
     :root {
@@ -291,7 +291,7 @@
 <body data-view="ranking">
   <div class="app">
     <aside class="sidebar">
-      <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='logo-64.png') }}" srcset="{{ url_for('static', filename='logo-128.png') }} 2x" width="34" height="34" alt="Kronos"><div><strong>Kronos</strong><small>A股预测台</small></div></div>
+      <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='logo-64.png', v=kronos_icon_v) }}" srcset="{{ url_for('static', filename='logo-128.png', v=kronos_icon_v) }} 2x" width="34" height="34" alt="Kronos"><div><strong>Kronos</strong><small>A股预测台</small></div></div>
       <div class="nav-label">研究工作台</div>
       <nav class="nav" aria-label="主导航">
         <button class="active" type="button" data-view="ranking"><i data-lucide="list-filter"></i>每日排名</button>

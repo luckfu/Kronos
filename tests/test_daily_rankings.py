@@ -291,11 +291,12 @@ def test_daily_rankings_page_includes_kronos_favicon():
 
     assert 'rel="icon"' in page
     assert 'rel="apple-touch-icon"' in page
-    assert "/static/favicon.ico" in page
-    assert "/static/favicon-32.png" in page
-    assert "/static/apple-touch-icon.png" in page
-    assert "/static/logo-64.png" in page
-    assert "/static/logo-128.png" in page
+    icon_v = web_app.BRAND_ICON_VERSION
+    assert f"/static/favicon.ico?v={icon_v}" in page
+    assert f"/static/favicon-32.png?v={icon_v}" in page
+    assert f"/static/apple-touch-icon.png?v={icon_v}" in page
+    assert f"/static/logo-64.png?v={icon_v}" in page
+    assert f"/static/logo-128.png?v={icon_v}" in page
     assert '<div class="brand-mark">K</div>' not in page
     assert 'class="brand-mark"' in page
 
