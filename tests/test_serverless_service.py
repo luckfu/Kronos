@@ -41,6 +41,15 @@ def test_parse_request_accepts_only_caller_supplied_data():
     assert parsed.size_percentile == 0.55
 
 
+def test_parse_request_uses_five_production_paths_by_default():
+    payload = valid_payload()
+    payload.pop("sample_count")
+
+    parsed = service.parse_request(payload)
+
+    assert parsed.sample_count == 5
+
+
 def test_parse_request_rejects_symbol_only_requests():
     with pytest.raises(service.RequestError, match="data must be"):
         service.parse_request({"symbol": "600519"})

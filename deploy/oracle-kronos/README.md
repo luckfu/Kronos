@@ -66,6 +66,50 @@ ssh oracle4C24G 'sudo journalctl -u kronos-web -n 100 --no-pager'
 ssh oracle4C24G 'curl -fsS http://127.0.0.1:7072/health'
 ```
 
+## Full-market daily prediction
+
+`prediction_drill.py` is a portable, read-only data-to-inference runner. It can
+run from a developer machine or Oracle, connects directly to Supabase through
+`DB_URL` or `DATABASE_URL`, builds the strict full-market universe, and calls
+Modal in batches of at most 12 symbols. Completed batch files are reusable, so
+an interrupted run resumes without paying for successful batches again.
+
+Install the standalone runner dependencies into the current Conda environment:
+
+```bash
+python -m pip install -r deploy/oracle-kronos/prediction-requirements.txt
+```
+
+Run locally:
+
+```bash
+export DATABASE_URL='postgresql://...'
+python deploy/oracle-kronos/prediction_drill.py \
+  --asof 2026-09-18 \
+  --sector-map webui/symbol_sector_map.json \
+  --output-dir data/prediction_shadow/2026-09-18/full_market
+```
+
+Run on Oracle with the same program and its existing environment file:
+
+```bash
+set -a
+. /home/opc/.openclaw/.env
+set +a
+python /opt/kronos-web/deploy/prediction_drill.py \
+  --asof 2026-09-18 \
+  --sector-map /opt/kronos-web/webui/symbol_sector_map.json \
+  --output-dir /opt/kronos-web/data/prediction_shadow/2026-09-18/full_market
+```
+
+The default is the complete eligible universe, 12 symbols per request and 5
+samples per symbol. `--limit 12` is available for a billable smoke test. Future
+timestamps come from the A-share exchange calendar exposed by AkShare; a run
+fails rather than silently substituting weekdays when the calendar is absent.
+Artifacts include the data audit, frozen universe, one atomic JSON file per
+batch, progress state, complete JSONL predictions and the D10 ranking CSV. The
+runner never writes to Supabase or the web UI's production prediction folder.
+
 ## Release Contents
 
 Only the Web gateway, template, size reference, fixed sector vocabulary, initial symbol-sector

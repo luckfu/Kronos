@@ -98,6 +98,10 @@ MARKET_DATA_CACHE_DIR = os.getenv(
     'KRONOS_MARKET_DATA_CACHE_DIR',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'market_data_cache'),
 )
+DAILY_PREDICTION_ROOT = Path(os.getenv(
+    'KRONOS_DAILY_PREDICTION_ROOT',
+    str(Path(PREDICTION_RESULTS_DIR).parent / 'prediction_shadow'),
+))
 KRONOS_INFERENCE_BACKEND = (
     'remote' if KRONOS_REMOTE_ONLY
     else os.getenv('KRONOS_INFERENCE_BACKEND', 'local').lower()
@@ -157,7 +161,7 @@ AVAILABLE_MODELS = {
         'default_pred_len': 10,
         'default_temperature': 0.65,
         'default_top_p': 0.8,
-        'default_sample_count': 50,
+        'default_sample_count': 5,
         'model_kwargs': {
             'num_sectors': KRONOS_NUM_SECTORS,
             'num_size_buckets': 0,
@@ -223,6 +227,7 @@ def read_baostock_result(result):
 
 
 stock_name_cache = {}
+stock_name_reference_loaded = False
 
 MARKET_DATA_COLUMNS = [
     'timestamps', 'open', 'high', 'low', 'close', 'volume', 'amount',
@@ -299,9 +304,35 @@ def query_baostock_stock_name(symbol):
         return None
 
 
+def load_stock_name_reference():
+    """Load all BaoStock names once so ranking pages do not login per row."""
+    global stock_name_reference_loaded
+    if stock_name_reference_loaded or not BAOSTOCK_AVAILABLE:
+        return
+    try:
+        with baostock_lock:
+            if stock_name_reference_loaded:
+                return
+            login = bs.login()
+            if getattr(login, 'error_code', '1') == '0':
+                try:
+                    result = bs.query_stock_basic()
+                    while result.next():
+                        row = result.get_row_data()
+                        if len(row) > 1 and row[0] and row[1]:
+                            stock_name_cache[str(row[0]).strip().lower()] = str(row[1]).strip()
+                finally:
+                    bs.logout()
+            stock_name_reference_loaded = True
+    except Exception:
+        # The per-symbol remote fallback remains available when BaoStock is down.
+        stock_name_reference_loaded = True
 def query_remote_stock_name(symbol):
     """Resolve a Chinese display name with BaoStock and a network fallback."""
     normalized_symbol = str(symbol).strip().lower()
+    if normalized_symbol in stock_name_cache:
+        return stock_name_cache[normalized_symbol]
+    load_stock_name_reference()
     if normalized_symbol in stock_name_cache:
         return stock_name_cache[normalized_symbol]
     if '.' not in normalized_symbol:
@@ -1625,7 +1656,183 @@ def create_operational_chart(context, pred_df, interval_df):
 @app.route('/')
 def index():
     """Home page"""
-    return render_template('index.html')
+    return render_template('daily_rankings.html')
+
+
+def _daily_prediction_dir(asof):
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(asof or '')):
+        raise ValueError('asof 必须是 YYYY-MM-DD')
+    path = DAILY_PREDICTION_ROOT / str(asof) / 'full_market'
+    summary_path = path / 'summary.json'
+    if not summary_path.is_file():
+        raise FileNotFoundError(f'{asof} 没有已发布的全市场预测')
+    summary = json.loads(summary_path.read_text())
+    if summary.get('status') != 'complete':
+        raise RuntimeError(f'{asof} 的全市场预测尚未完成')
+    return path, summary
+
+
+def _available_daily_prediction_dates():
+    if not DAILY_PREDICTION_ROOT.is_dir():
+        return []
+    dates = []
+    for child in DAILY_PREDICTION_ROOT.iterdir():
+        if not child.is_dir() or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', child.name):
+            continue
+        try:
+            _, summary = _daily_prediction_dir(child.name)
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+            continue
+        dates.append({
+            'asof': child.name,
+            'prediction_count': int(summary.get('prediction_count', 0)),
+            'batch_count': int(summary.get('batch_count', 0)),
+            'model': summary.get('model') or {},
+        })
+    return sorted(dates, key=lambda item: item['asof'], reverse=True)
+
+
+@app.route('/api/daily-rankings/dates')
+def daily_ranking_dates():
+    dates = _available_daily_prediction_dates()
+    return jsonify({'dates': dates, 'latest': dates[0]['asof'] if dates else None})
+
+
+@app.route('/api/daily-rankings')
+def daily_rankings():
+    try:
+        dates = _available_daily_prediction_dates()
+        asof = request.args.get('asof') or (dates[0]['asof'] if dates else None)
+        if not asof:
+            return jsonify({'error': '暂无已完成的全市场预测'}), 404
+        path, summary = _daily_prediction_dir(asof)
+        frame = pd.read_csv(path / 'ranking.csv')
+        frame = frame.replace({np.nan: None})
+        query = request.args.get('query', '').strip().lower()
+        sector = request.args.get('sector', '').strip()
+        size_group = request.args.get('size_group', '').strip()
+        top = request.args.get('top', '').strip()
+        pool_raw = request.args.get('pool', '').strip()
+        pool_symbols = []
+        if pool_raw:
+            for value in pool_raw.split(','):
+                normalized = normalize_a_share_symbol(value.strip())
+                if re.fullmatch(r'(sh|sz|bj)\.\d{6}', normalized):
+                    pool_symbols.append(normalized)
+            pool_symbols = list(dict.fromkeys(pool_symbols))
+            if not pool_symbols:
+                raise ValueError('自定义股池没有有效的 A 股代码')
+            frame = frame[frame['code'].astype(str).str.lower().isin(pool_symbols)]
+        if query:
+            normalized = normalize_a_share_symbol(query)
+            frame = frame[frame['code'].astype(str).str.lower().str.contains(
+                re.escape(normalized if '.' in normalized else query), regex=True
+            )]
+        if sector:
+            frame = frame[frame['sector_label'].astype(str) == sector]
+        if size_group == 'large':
+            frame = frame[pd.to_numeric(frame['size_percentile']) >= 0.8]
+        elif size_group == 'mid':
+            values = pd.to_numeric(frame['size_percentile'])
+            frame = frame[(values >= 0.2) & (values < 0.8)]
+        elif size_group == 'small':
+            frame = frame[pd.to_numeric(frame['size_percentile']) < 0.2]
+        top_n = None
+        if top:
+            top_n = int(top)
+            if top_n not in (10, 20, 50, 100):
+                raise ValueError('top 只支持 10、20、50、100')
+        if pool_raw:
+            # A pool is a new comparison universe, so its displayed rank is
+            # relative to the selected stocks rather than the full market.
+            frame = frame.sort_values(
+                ['predicted_return_d10', 'code'], ascending=[False, True], kind='stable'
+            ).copy()
+            frame['rank_d10'] = np.arange(1, len(frame) + 1)
+        if top_n is not None:
+            frame = frame[pd.to_numeric(frame['rank_d10']) <= top_n]
+        page = max(1, int(request.args.get('page', 1)))
+        page_size = min(100, max(10, int(request.args.get('page_size', 50))))
+        total = len(frame)
+        start = (page - 1) * page_size
+        page_frame = frame.iloc[start:start + page_size]
+        rows = []
+        for record in page_frame.to_dict('records'):
+            record['name'] = query_remote_stock_name(record.get('code'))
+            rows.append({key: (
+                None if value is None or (isinstance(value, float) and not np.isfinite(value))
+                else value.item() if isinstance(value, np.generic) else value
+            ) for key, value in record.items()})
+        sectors = sorted(
+            value for value in pd.read_csv(path / 'ranking.csv', usecols=['sector_label'])['sector_label'].dropna().unique()
+            if value and str(value).lower() != 'unknown'
+        )
+        return jsonify({
+            'asof': asof,
+            'status': summary.get('status'),
+            'model': summary.get('model') or {},
+            'prediction_count': int(summary.get('prediction_count', 0)),
+            'batch_count': int(summary.get('batch_count', 0)),
+            'pool_count': len(pool_symbols) if pool_raw else None,
+            'rows': rows,
+            'sectors': sectors,
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'pages': max(1, (total + page_size - 1) // page_size),
+        })
+    except FileNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+
+
+@app.route('/api/daily-rankings/<asof>/<symbol>')
+def daily_ranking_detail(asof, symbol):
+    try:
+        path, summary = _daily_prediction_dir(asof)
+        normalized = normalize_a_share_symbol(symbol)
+        if not re.fullmatch(r'(sh|sz|bj)\.\d{6}', normalized):
+            raise ValueError('股票代码无效')
+        ranking = pd.read_csv(path / 'ranking.csv')
+        pool_raw = request.args.get('pool', '').strip()
+        if pool_raw:
+            pool_symbols = list(dict.fromkeys(
+                normalize_a_share_symbol(value.strip())
+                for value in pool_raw.split(',')
+                if re.fullmatch(r'(sh|sz|bj)\.\d{6}', normalize_a_share_symbol(value.strip()))
+            ))
+            if not pool_symbols:
+                raise ValueError('自定义股池没有有效的 A 股代码')
+            ranking = ranking[ranking['code'].astype(str).str.lower().isin(pool_symbols)]
+            ranking = ranking.sort_values(
+                ['predicted_return_d10', 'code'], ascending=[False, True], kind='stable'
+            ).copy()
+            ranking['rank_d10'] = np.arange(1, len(ranking) + 1)
+        matches = ranking[ranking['code'] == normalized]
+        if matches.empty:
+            return jsonify({'error': f'{normalized} 未进入 {asof} 预测截面'}), 404
+        prediction = None
+        with (path / 'predictions.jsonl').open() as stream:
+            for line in stream:
+                row = json.loads(line)
+                if row.get('code') == normalized:
+                    prediction = row
+                    break
+        if prediction is None:
+            return jsonify({'error': f'{normalized} 缺少预测详情'}), 404
+        rank = matches.iloc[0].to_dict()
+        prediction['ranking'] = {
+            key: value.item() if isinstance(value, np.generic) else value
+            for key, value in rank.items()
+        }
+        prediction['name'] = query_remote_stock_name(normalized)
+        prediction['model'] = summary.get('model') or {}
+        return jsonify(prediction)
+    except FileNotFoundError as exc:
+        return jsonify({'error': str(exc)}), 404
+    except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
 
 
 @app.route('/health')

@@ -25,10 +25,10 @@ NUM_SECTORS = 86
 UNKNOWN_SECTOR_ID = NUM_SECTORS
 MODEL_RELEASE = os.getenv("KRONOS_MODEL_RELEASE", "small-0.1-cosine-c2")
 MODEL_CHECKPOINT = os.getenv("KRONOS_MODEL_CHECKPOINT", "Segment@179")
-# 10 paths makes P10/P50/P90 very sensitive to a single sampled trajectory.
-# The grid-optimized production configuration uses the API maximum of 50 paths.
+# Keep the production default inexpensive while averaging a small ensemble of paths.
+# The higher limit remains available for explicit evaluation runs.
 MAX_SAMPLE_COUNT = 50
-DEFAULT_SAMPLE_COUNT = 50
+DEFAULT_SAMPLE_COUNT = 5
 MAX_BATCH_SIZE = 12
 INFERENCE_SEED = int(os.getenv("KRONOS_INFERENCE_SEED", "20260817"))
 

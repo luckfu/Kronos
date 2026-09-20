@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kronos 每日排名</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --surface-2: #f8fafb;
+      --text: #18212b;
+      --muted: #6b7785;
+      --line: #e1e6ea;
+      --line-soft: #edf0f2;
+      --accent: #126b58;
+      --accent-soft: #e7f3ef;
+      --up: #c33d37;
+      --down: #19845b;
+      --warn: #916515;
+      --shadow: 0 10px 28px rgba(25, 37, 48, .08);
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--text); background: var(--bg); font-size: 14px; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 210px minmax(0, 1fr); }
+    .sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 22px 14px; display: flex; flex-direction: column; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 26px; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; background: var(--text); color: white; border-radius: 7px; font-weight: 600; }
+    .brand strong, .brand small { display: block; }
+    .brand strong { font-size: 15px; font-weight: 600; }
+    .brand small { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .nav-label { padding: 9px 10px 7px; color: var(--muted); font-size: 11px; }
+    .nav { display: grid; gap: 3px; }
+    .nav button { min-height: 40px; border: 0; border-radius: 6px; background: transparent; padding: 0 10px; display: flex; align-items: center; gap: 9px; text-align: left; cursor: pointer; }
+    .nav button:hover { background: var(--surface-2); }
+    .nav button.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+    .nav svg { width: 17px; height: 17px; }
+    .sidebar-status { margin-top: auto; padding: 16px 9px 0; border-top: 1px solid var(--line); }
+    .status-line { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 600; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--down); box-shadow: 0 0 0 4px rgba(25,132,91,.12); }
+    .status-meta { color: var(--muted); font-size: 11px; line-height: 1.6; margin-top: 7px; }
+    .main { min-width: 0; }
+    .topbar { height: 64px; background: var(--surface); border-bottom: 1px solid var(--line); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .title h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0; }
+    .title p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .control, .icon-button { height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
+    .control { padding: 0 10px; }
+    .icon-button { width: 36px; display: grid; place-items: center; cursor: pointer; }
+    .icon-button svg { width: 17px; height: 17px; }
+    .content { padding: 20px 24px 28px; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+    .stat { min-height: 84px; padding: 15px 17px; border-right: 1px solid var(--line); }
+    .stat:last-child { border-right: 0; }
+    .stat span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+    .stat strong { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stat small { margin-left: 6px; color: var(--muted); font-size: 11px; }
+    .ready { color: var(--down); }
+    .toolbar { margin: 15px 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+    .filter { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
+    input.filter { width: 170px; }
+    select.filter { max-width: 230px; }
+    .result-count { white-space: nowrap; color: var(--muted); font-size: 12px; }
+    .pool-controls { display: flex; gap: 8px; align-items: center; }
+    .pool-controls select { min-width: 150px; }
+    .pool-button { height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 0 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .pool-button:hover { border-color: var(--accent); color: var(--accent); }
+    dialog { width: min(560px, calc(100vw - 28px)); border: 1px solid var(--line); border-radius: 8px; padding: 0; color: var(--text); box-shadow: var(--shadow); }
+    dialog::backdrop { background: rgba(24, 33, 43, .32); }
+    .pool-dialog-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    .pool-dialog-body { padding: 16px 18px; }
+    .pool-dialog-body label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .pool-dialog-body input, .pool-dialog-body textarea { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; }
+    .pool-dialog-body textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+    .pool-dialog-actions { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
+    .pool-dialog-actions button { height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 0 12px; cursor: pointer; }
+    .pool-dialog-actions .primary { color: white; background: var(--accent); border-color: var(--accent); }
+    .pool-list { margin-top: 16px; border-top: 1px solid var(--line-soft); }
+    .pool-list-row { padding: 10px 0; display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line-soft); align-items: center; }
+    .pool-list-row small { color: var(--muted); }
+    .pool-list-row button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+    .workspace.detail-open { grid-template-columns: minmax(560px, 1fr) 310px; }
+    .table-panel { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 780px; table-layout: fixed; }
+    th { padding: 10px 11px; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; }
+    td { padding: 11px; border-bottom: 1px solid var(--line-soft); text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    th:first-child, th:nth-child(2), th:nth-child(3), td:first-child, td:nth-child(2), td:nth-child(3) { text-align: left; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover, tbody tr.selected { background: var(--accent-soft); }
+    tbody tr:last-child td { border-bottom: 0; }
+    .rank { font-weight: 600; }
+    .code { font-weight: 600; }
+    .sector { color: var(--muted); }
+    .positive { color: var(--up); font-weight: 600; }
+    .negative { color: var(--down); font-weight: 600; }
+    .loading, .empty { padding: 72px 20px; text-align: center; color: var(--muted); }
+    .pager { min-height: 48px; padding: 8px 11px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+    .pager-actions { display: flex; gap: 6px; align-items: center; }
+    .pager button { height: 30px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); padding: 0 9px; cursor: pointer; }
+    .pager button:disabled { opacity: .45; cursor: default; }
+    .detail { display: none; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; box-shadow: var(--shadow); }
+    .workspace.detail-open .detail { display: block; }
+    .detail-head { padding: 15px 16px 13px; border-bottom: 1px solid var(--line); }
+    .detail-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .detail-title strong { font-size: 15px; }
+    .detail-title button { border: 0; background: transparent; padding: 3px; display: grid; place-items: center; cursor: pointer; }
+    .detail-title svg { width: 17px; height: 17px; }
+    .detail-subtitle { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .rank-badge { display: inline-flex; margin-top: 10px; color: var(--accent); background: var(--accent-soft); border-radius: 99px; padding: 4px 8px; font-size: 11px; font-weight: 600; }
+    .returns { display: grid; grid-template-columns: 1fr 1fr; padding: 15px 16px; gap: 14px; }
+    .return span { display: block; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+    .return strong { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .chart-block { padding: 0 12px 14px; }
+    .chart-caption { padding: 0 4px 8px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+    #path-chart { width: 100%; height: 170px; display: block; background: var(--surface-2); border-radius: 6px; }
+    .facts { border-top: 1px solid var(--line); padding: 12px 16px; display: grid; gap: 9px; }
+    .fact { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+    .fact span { color: var(--muted); }
+    .detail-note { margin: 0; padding: 0 16px 16px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .status-page { display: none; }
+    .status-page.active { display: block; }
+    .status-table { margin-top: 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .status-row { display: grid; grid-template-columns: 160px 1fr 120px 120px; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); align-items: center; }
+    .status-row:last-child { border-bottom: 0; }
+    .status-row.header { color: var(--muted); background: var(--surface-2); font-size: 11px; }
+    .mobile-menu { display: none; }
+    .toast { position: fixed; right: 20px; bottom: 20px; max-width: 360px; padding: 10px 13px; background: var(--text); color: white; border-radius: 6px; box-shadow: var(--shadow); display: none; z-index: 20; }
+    @media (max-width: 1050px) {
+      .workspace.detail-open { grid-template-columns: minmax(0, 1fr); }
+      .detail { position: fixed; right: 14px; top: 78px; bottom: 14px; width: min(360px, calc(100vw - 28px)); overflow-y: auto; z-index: 10; }
+    }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { padding: 2px 4px 10px; }
+      .nav-label, .sidebar-status { display: none; }
+      .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .nav button { justify-content: center; padding: 0 4px; font-size: 11px; }
+      .nav svg { display: none; }
+      .topbar { height: auto; min-height: 62px; padding: 11px 14px; }
+      .title p { display: none; }
+      .content { padding: 14px; }
+      .summary { grid-template-columns: 1fr 1fr; }
+      .stat:nth-child(2) { border-right: 0; }
+      .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .filter { max-width: 160px; }
+    }
+    @media (max-width: 430px) {
+      .topbar { align-items: flex-start; }
+      .top-actions { flex-direction: column; align-items: stretch; }
+      .stat { min-height: 74px; padding: 12px; }
+      .stat strong { font-size: 16px; }
+      .detail { top: 132px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">K</div><div><strong>Kronos</strong><small>A股预测台</small></div></div>
+      <div class="nav-label">研究工作台</div>
+      <nav class="nav" aria-label="主导航">
+        <button class="active" type="button" data-view="ranking"><i data-lucide="list-filter"></i>每日排名</button>
+        <button type="button" data-view="stock"><i data-lucide="search"></i>个股查询</button>
+        <button type="button" data-view="history"><i data-lucide="calendar-days"></i>历史预测</button>
+        <button type="button" data-view="status"><i data-lucide="activity"></i>运行状态</button>
+      </nav>
+      <div class="sidebar-status">
+        <div class="status-line"><span class="status-dot"></span><span id="side-status">读取预测结果</span></div>
+        <div class="status-meta" id="side-meta">正在检查最新发布批次</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="title"><h1 id="page-title">每日排名</h1><p id="page-subtitle">完整截面统一预测，按未来10日中位路径收益排序</p></div>
+        <div class="top-actions">
+          <select id="date-select" class="control" aria-label="信号日"></select>
+          <button id="refresh-button" class="icon-button" type="button" aria-label="刷新"><i data-lucide="refresh-cw"></i></button>
+        </div>
+      </header>
+
+      <section class="content" id="ranking-page">
+        <div class="summary">
+          <div class="stat"><span>信号日</span><strong id="metric-date">—</strong><small>收盘后</small></div>
+          <div class="stat"><span>严格合格股票</span><strong id="metric-count">—</strong><small>只</small></div>
+          <div class="stat"><span>预测方案</span><strong>未来10日</strong><small id="metric-paths">—条路径</small></div>
+          <div class="stat"><span>发布状态</span><strong class="ready" id="metric-status">读取中</strong><small id="metric-batches">—</small></div>
+        </div>
+
+        <div class="toolbar">
+          <div class="filters">
+            <div class="pool-controls"><select id="pool-select" class="filter" aria-label="自定义股池"><option value="">全市场</option></select><button id="pool-manage" class="pool-button" type="button"><i data-lucide="settings-2"></i>管理股池</button></div>
+            <input id="search-input" class="filter" type="search" placeholder="股票代码，如 600519" aria-label="股票代码">
+            <select id="sector-select" class="filter" aria-label="行业"><option value="">全部行业</option></select>
+            <select id="size-select" class="filter" aria-label="市值分组">
+              <option value="">全部市值</option><option value="large">大市值 Top 20%</option><option value="mid">中市值</option><option value="small">小市值 Bottom 20%</option>
+            </select>
+            <select id="top-select" class="filter" aria-label="排名范围">
+              <option value="">全部排名</option><option value="10" selected>Top 10</option><option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option>
+            </select>
+          </div>
+          <div class="result-count" id="result-count">正在读取…</div>
+        </div>
+
+        <div class="workspace" id="workspace">
+          <div class="table-panel">
+            <div class="table-wrap">
+              <table aria-label="全市场预测排名">
+                <colgroup><col style="width:8%"><col style="width:18%"><col style="width:13%"><col style="width:22%"><col style="width:11%"><col style="width:11%"><col style="width:9%"><col style="width:8%"></colgroup>
+                <thead><tr><th>排名</th><th>股票名称</th><th>代码</th><th>行业</th><th>市值位</th><th>收盘</th><th>D1预测</th><th>D10预测</th></tr></thead>
+                <tbody id="ranking-body"><tr><td colspan="8" class="loading">正在读取每日排名…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="pager">
+              <span id="page-label">第 1 页</span>
+              <div class="pager-actions"><button id="prev-page" type="button">上一页</button><button id="next-page" type="button">下一页</button></div>
+            </div>
+          </div>
+
+          <aside class="detail" id="detail-panel" aria-live="polite">
+            <div class="detail-head">
+              <div class="detail-title"><strong id="detail-code">—</strong><button id="close-detail" type="button" aria-label="关闭详情"><i data-lucide="x"></i></button></div>
+              <div class="detail-subtitle" id="detail-sector">—</div>
+              <span class="rank-badge" id="detail-rank">全市场排名 —</span>
+            </div>
+            <div class="returns">
+              <div class="return"><span>10日中位预测</span><strong id="detail-d10">—</strong></div>
+              <div class="return"><span>1日中位预测</span><strong id="detail-d1">—</strong></div>
+            </div>
+            <div class="chart-block">
+              <div class="chart-caption"><span>未来10日预测路径</span><span id="detail-range">—</span></div>
+              <svg id="path-chart" viewBox="0 0 286 170" role="img" aria-label="未来十日预测路径"></svg>
+            </div>
+            <div class="facts">
+              <div class="fact"><span>信号日收盘</span><strong id="detail-close">—</strong></div>
+              <div class="fact"><span>市值百分位</span><strong id="detail-size">—</strong></div>
+              <div class="fact"><span>领先市场</span><strong id="detail-leading">—</strong></div>
+              <div class="fact"><span>采样路径</span><strong id="detail-samples">—</strong></div>
+            </div>
+            <p class="detail-note" id="detail-note">排名是同一信号日的截面比较结果，不代表确定收益。概率区间仅作参考。</p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="content status-page" id="status-page">
+        <div class="summary">
+          <div class="stat"><span>最新发布日</span><strong id="status-latest">—</strong></div>
+          <div class="stat"><span>可用截面</span><strong id="status-dates">—</strong><small>个交易日</small></div>
+          <div class="stat"><span>模型版本</span><strong style="font-size:15px">Small 0.1 C2</strong></div>
+          <div class="stat"><span>服务状态</span><strong class="ready">正常</strong></div>
+        </div>
+        <div class="status-table" id="status-list"></div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="alert"></div>
+  <dialog id="pool-dialog" aria-labelledby="pool-dialog-title">
+    <div class="pool-dialog-head"><strong id="pool-dialog-title">管理自定义股池</strong><button id="pool-dialog-close" class="icon-button" type="button" aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <div class="pool-dialog-body">
+      <label for="pool-name">股池名称</label>
+      <input id="pool-name" type="text" maxlength="30" placeholder="例如：我的核心持仓">
+      <label for="pool-symbols" style="margin-top:14px">股票代码（逗号、空格或换行分隔，支持 600519 或 sh.600519）</label>
+      <textarea id="pool-symbols" placeholder="600519\n000858\nsh.600036"></textarea>
+      <div class="pool-list" id="pool-list"></div>
+    </div>
+    <div class="pool-dialog-actions"><button id="pool-dialog-cancel" type="button">取消</button><button id="pool-save" class="primary" type="button">保存股池</button></div>
+  </dialog>
+
+  <script>
+    const base = location.pathname.replace(/\/+$/, '');
+    const api = path => `${base}${path}`;
+    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '' };
+    const $ = id => document.getElementById(id);
+    const rankingPage = $('ranking-page');
+    const statusPage = $('status-page');
+    let searchTimer;
+
+    function toast(message) {
+      const node = $('toast');
+      node.textContent = message;
+      node.style.display = 'block';
+      clearTimeout(node.timer);
+      node.timer = setTimeout(() => node.style.display = 'none', 3500);
+    }
+    function percent(value, signed = false) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '—';
+      return `${signed && number >= 0 ? '+' : ''}${(number * 100).toFixed(2)}%`;
+    }
+    function price(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toFixed(2) : '—';
+    }
+    function directionClass(value) { return Number(value) >= 0 ? 'positive' : 'negative'; }
+    function stripSector(value) { return String(value || '—').replace(/^[A-Z]\d+/, ''); }
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+    function normalizeSymbol(value) {
+      const raw = String(value || '').trim().toLowerCase();
+      if (/^(sh|sz|bj)\.\d{6}$/.test(raw)) return raw;
+      if (/^\d{6}$/.test(raw)) return `${raw[0] === '6' ? 'sh' : raw[0] === '8' || raw[0] === '4' ? 'bj' : 'sz'}.${raw}`;
+      return '';
+    }
+    function loadPools() {
+      try { state.pools = JSON.parse(localStorage.getItem('kronos.customPools') || '{}') || {}; } catch (_) { state.pools = {}; }
+      const select = $('pool-select');
+      select.innerHTML = '<option value="">全市场</option>' + Object.keys(state.pools).sort().map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)} · ${state.pools[name].length}只</option>`).join('');
+      select.value = state.pool;
+    }
+    function savePools() { localStorage.setItem('kronos.customPools', JSON.stringify(state.pools)); loadPools(); }
+    function renderPoolList() {
+      $('pool-list').innerHTML = Object.entries(state.pools).sort(([a], [b]) => a.localeCompare(b)).map(([name, symbols]) => `<div class="pool-list-row"><span><strong>${escapeHtml(name)}</strong> <small>${symbols.length}只</small></span><button type="button" data-delete-pool="${escapeHtml(name)}" aria-label="删除 ${escapeHtml(name)}">删除</button></div>`).join('') || '<small>还没有自定义股池</small>';
+      $('pool-list').querySelectorAll('[data-delete-pool]').forEach(button => button.addEventListener('click', () => {
+        const name = button.dataset.deletePool;
+        if (!window.confirm(`删除股池“${name}”？`)) return;
+        delete state.pools[name];
+        if (state.pool === name) { state.pool = ''; }
+        savePools(); renderPoolList(); loadRankings(true);
+      }));
+    }
+    async function getJson(url) {
+      const response = await fetch(url, {headers: {'Accept': 'application/json'}});
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
+      return payload;
+    }
+
+    async function loadDates() {
+      const result = await getJson(api('/api/daily-rankings/dates'));
+      state.dates = result.dates || [];
+      const select = $('date-select');
+      select.innerHTML = state.dates.map(item => `<option value="${item.asof}">${item.asof} · 已完成</option>`).join('');
+      if (!state.dates.length) throw new Error('暂无已完成的每日预测');
+      state.date = result.latest;
+      select.value = state.date;
+      renderStatus();
+    }
+
+    function queryString() {
+      const params = new URLSearchParams({asof: state.date, page: state.page, page_size: 50});
+      const values = {query: $('search-input').value.trim(), sector: $('sector-select').value, size_group: $('size-select').value, top: $('top-select').value, pool: state.pool ? state.pools[state.pool].join(',') : ''};
+      Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
+      return params.toString();
+    }
+
+    async function loadRankings(resetPage = false) {
+      if (state.loading || !state.date) return;
+      if (resetPage) state.page = 1;
+      state.loading = true;
+      $('ranking-body').innerHTML = '<tr><td colspan="8" class="loading">正在读取每日排名…</td></tr>';
+      try {
+        const result = await getJson(api(`/api/daily-rankings?${queryString()}`));
+        state.pages = result.pages;
+        $('metric-date').textContent = result.asof;
+        $('metric-count').textContent = Number(result.prediction_count).toLocaleString('zh-CN');
+        $('metric-paths').textContent = `${result.model.sample_count || '—'}条路径`;
+        $('metric-status').textContent = '完整可用';
+        $('metric-batches').textContent = `${result.batch_count} 个批次`;
+        $('side-status').textContent = '数据与预测已就绪';
+        $('side-meta').textContent = `${result.asof} · ${Number(result.prediction_count).toLocaleString('zh-CN')}只 · ${result.model.sample_count || '—'}路径`;
+        $('result-count').textContent = `${state.pool ? `${state.pool} · ` : ''}筛选结果 ${Number(result.total).toLocaleString('zh-CN')} 只`;
+        $('page-label').textContent = `第 ${result.page} / ${result.pages} 页`;
+        $('prev-page').disabled = result.page <= 1;
+        $('next-page').disabled = result.page >= result.pages;
+        updateSectors(result.sectors || []);
+        renderRows(result.rows || []);
+      } catch (error) {
+        $('ranking-body').innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(error.message)}</td></tr>`;
+        $('metric-status').textContent = '不可用';
+        toast(error.message);
+      } finally { state.loading = false; }
+    }
+
+    function updateSectors(sectors) {
+      const select = $('sector-select');
+      const current = select.value;
+      if (select.options.length > 1) return;
+      sectors.forEach(sector => {
+        const option = document.createElement('option');
+        option.value = sector;
+        option.textContent = stripSector(sector);
+        select.appendChild(option);
+      });
+      select.value = current;
+    }
+
+    function renderRows(rows) {
+      const body = $('ranking-body');
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="8" class="empty">没有符合条件的股票</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.map(row => `<tr data-code="${escapeHtml(row.code)}" class="${state.selected === row.code ? 'selected' : ''}">
+        <td class="rank">${row.rank_d10}</td>
+        <td>${escapeHtml(row.name || '—')}</td>
+        <td class="code">${escapeHtml(row.code)}</td>
+        <td class="sector" title="${escapeHtml(stripSector(row.sector_label))}">${escapeHtml(stripSector(row.sector_label))}</td>
+        <td>${percent(row.size_percentile)}</td>
+        <td>${price(row.close_asof)}</td>
+        <td class="${directionClass(row.predicted_return_d1)}">${percent(row.predicted_return_d1, true)}</td>
+        <td class="${directionClass(row.predicted_return_d10)}">${percent(row.predicted_return_d10, true)}</td>
+      </tr>`).join('');
+      body.querySelectorAll('tr[data-code]').forEach(row => row.addEventListener('click', () => openDetail(row.dataset.code)));
+    }
+
+    async function openDetail(code) {
+      state.selected = code;
+      $('workspace').classList.add('detail-open');
+      $('detail-code').textContent = code;
+      $('detail-sector').textContent = '正在读取预测详情…';
+      try {
+        const detailPool = state.pool ? `?pool=${encodeURIComponent(state.pools[state.pool].join(','))}` : '';
+        const result = await getJson(api(`/api/daily-rankings/${encodeURIComponent(state.date)}/${encodeURIComponent(code)}${detailPool}`));
+        const rank = result.ranking || {};
+        const predictions = result.predictions || [];
+        $('detail-code').textContent = result.name ? `${result.name} · ${result.code}` : result.code;
+        $('detail-sector').textContent = stripSector(result.sector_label);
+        $('detail-rank').textContent = `${state.pool || '全市场'} #${rank.rank_d10}`;
+        $('detail-d10').textContent = percent(rank.predicted_return_d10, true);
+        $('detail-d10').className = directionClass(rank.predicted_return_d10);
+        $('detail-d1').textContent = percent(rank.predicted_return_d1, true);
+        $('detail-d1').className = directionClass(rank.predicted_return_d1);
+        $('detail-close').textContent = price(result.close_asof);
+        $('detail-size').textContent = percent(result.size_percentile);
+        $('detail-leading').textContent = percent(rank.rank_percentile_d10);
+        const sampleCount = result.model?.sample_count;
+        $('detail-samples').textContent = `${sampleCount || '—'} 条`;
+        $('detail-note').textContent = `排名是同一信号日的截面比较结果，不代表确定收益。${sampleCount || '当前'}条路径用于降低单次采样偶然性，概率区间仅作参考。`;
+        const final = predictions[predictions.length - 1];
+        $('detail-range').textContent = final ? `${price(result.close_asof)} → ${price(final.close_p50)}` : '—';
+        drawChart(result.close_asof, predictions);
+        document.querySelectorAll('#ranking-body tr').forEach(row => row.classList.toggle('selected', row.dataset.code === code));
+      } catch (error) { toast(error.message); closeDetail(); }
+    }
+
+    function drawChart(anchor, predictions) {
+      const svg = $('path-chart');
+      const series = [{close_p10: anchor, close_p50: anchor, close_p90: anchor}, ...predictions];
+      const values = series.flatMap(item => [item.close_p10, item.close_p50, item.close_p90]).map(Number).filter(Number.isFinite);
+      if (!values.length) { svg.innerHTML = ''; return; }
+      const width = 286, height = 170, left = 12, right = 12, top = 14, bottom = 24;
+      const min = Math.min(...values), max = Math.max(...values), pad = Math.max((max - min) * .15, Math.abs(max) * .01, .01);
+      const lo = min - pad, hi = max + pad;
+      const x = index => left + index * (width - left - right) / Math.max(1, series.length - 1);
+      const y = value => top + (hi - value) * (height - top - bottom) / (hi - lo);
+      const line = key => series.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(item[key])).toFixed(1)}`).join(' ');
+      const upper = series.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(item.close_p90)).toFixed(1)}`).join(' ');
+      const lower = [...series].reverse().map((item, reverseIndex) => {
+        const index = series.length - 1 - reverseIndex;
+        return `L${x(index).toFixed(1)},${y(Number(item.close_p10)).toFixed(1)}`;
+      }).join(' ');
+      const grid = [0, .5, 1].map(ratio => {
+        const gy = top + ratio * (height - top - bottom);
+        const value = hi - ratio * (hi - lo);
+        return `<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}" stroke="#e1e6ea"/><text x="${left+2}" y="${gy-4}" fill="#6b7785" font-size="9">${value.toFixed(2)}</text>`;
+      }).join('');
+      const anchorY = y(Number(anchor));
+      const baseline = `<line x1="${left}" y1="${anchorY}" x2="${width-right}" y2="${anchorY}" stroke="#916515" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${width-right-3}" y="${anchorY-4}" text-anchor="end" fill="#916515" font-size="9" font-weight="600">当前收盘 ${price(anchor)}</text>`;
+      svg.innerHTML = `${grid}<path d="${upper} ${lower} Z" fill="rgba(18,107,88,.12)"/>${baseline}<path d="${line('close_p50')}" fill="none" stroke="#126b58" stroke-width="2.2"/><text x="${left}" y="${height-7}" fill="#6b7785" font-size="9">信号日</text><text x="${width-right}" y="${height-7}" text-anchor="end" fill="#6b7785" font-size="9">D10</text>`;
+    }
+
+    function closeDetail() { state.selected = null; $('workspace').classList.remove('detail-open'); }
+    function renderStatus() {
+      $('status-latest').textContent = state.dates[0]?.asof || '—';
+      $('status-dates').textContent = state.dates.length;
+      $('status-list').innerHTML = '<div class="status-row header"><span>信号日</span><span>模型</span><span>股票数</span><span>状态</span></div>' + state.dates.map(item => `<div class="status-row"><strong>${item.asof}</strong><span>Small 0.1 C2 · ${item.model.sample_count || '—'}路径</span><span>${Number(item.prediction_count).toLocaleString('zh-CN')}只</span><span class="ready">完整可用</span></div>`).join('');
+    }
+
+    document.querySelectorAll('.nav button').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.nav button').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      const view = button.dataset.view;
+      const titles = {ranking:['每日排名','完整截面统一预测，按未来10日中位路径收益排序'], stock:['个股查询','从每日完整预测结果中读取，不重复调用模型'], history:['历史预测','切换信号日查看当日完整截面'], status:['运行状态','仅展示已经完整发布的预测批次']};
+      $('page-title').textContent = titles[view][0];
+      $('page-subtitle').textContent = titles[view][1];
+      const status = view === 'status';
+      rankingPage.style.display = status ? 'none' : 'block';
+      statusPage.classList.toggle('active', status);
+      if (view === 'stock') setTimeout(() => $('search-input').focus(), 0);
+      if (view === 'history') setTimeout(() => $('date-select').focus(), 0);
+    }));
+    $('date-select').addEventListener('change', event => { state.date = event.target.value; closeDetail(); loadRankings(true); });
+    $('pool-select').addEventListener('change', event => { state.pool = event.target.value; closeDetail(); loadRankings(true); });
+    $('pool-manage').addEventListener('click', () => { renderPoolList(); $('pool-dialog').showModal(); });
+    $('pool-dialog-close').addEventListener('click', () => $('pool-dialog').close());
+    $('pool-dialog-cancel').addEventListener('click', () => $('pool-dialog').close());
+    $('pool-save').addEventListener('click', () => {
+      const name = $('pool-name').value.trim();
+      const symbols = [...new Set($('pool-symbols').value.split(/[\s,，]+/).map(normalizeSymbol).filter(Boolean))];
+      if (!name) return toast('请填写股池名称');
+      if (!symbols.length) return toast('请至少填写一个有效的 A 股代码');
+      state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
+    });
+    $('refresh-button').addEventListener('click', async () => { await loadDates(); await loadRankings(true); });
+    $('search-input').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadRankings(true), 280); });
+    [$('sector-select'), $('size-select'), $('top-select')].forEach(control => control.addEventListener('change', () => loadRankings(true)));
+    $('prev-page').addEventListener('click', () => { if (state.page > 1) { state.page--; closeDetail(); loadRankings(); } });
+    $('next-page').addEventListener('click', () => { if (state.page < state.pages) { state.page++; closeDetail(); loadRankings(); } });
+    $('close-detail').addEventListener('click', closeDetail);
+
+    (async () => {
+      try { loadPools(); await loadDates(); await loadRankings(); }
+      catch (error) { $('ranking-body').innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(error.message)}</td></tr>`; toast(error.message); }
+      if (window.lucide) lucide.createIcons();
+    })();
+  </script>
+</body>
+</html>
