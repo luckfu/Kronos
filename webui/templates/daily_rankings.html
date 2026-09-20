@@ -80,6 +80,26 @@
     .filter { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
     input.filter { width: 170px; }
     select.filter { max-width: 230px; }
+    .search-row { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; }
+    .search-row input.filter { flex: 1 1 170px; min-width: 0; }
+    .search-button {
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+    .search-button:hover { filter: brightness(1.06); }
+    .search-button:active { color: var(--accent); background: var(--accent-soft); }
     .result-count { white-space: nowrap; color: var(--muted); font-size: 12px; }
     .pool-controls { display: flex; gap: 8px; align-items: center; }
     .pool-controls select { min-width: 150px; }
@@ -159,7 +179,8 @@
     .card-meta, .card-code { display: none; }
     button, input, select, tbody tr { touch-action: manipulation; }
     .nav button:focus-visible, .filter:focus-visible, .control:focus-visible,
-    .icon-button:focus-visible, .pool-button:focus-visible, .pager button:focus-visible {
+    .icon-button:focus-visible, .pool-button:focus-visible, .search-button:focus-visible,
+    .pager button:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
@@ -193,6 +214,9 @@
       .pool-controls select { flex: 1 1 auto; min-width: 0; max-width: none; }
       .filter { max-width: none; min-height: 44px; }
       input.filter { width: 100%; flex: 1 1 100%; font-size: 16px; }
+      .search-row { flex: 1 1 100%; width: 100%; }
+      .search-row input.filter { flex: 1 1 auto; width: auto; min-width: 0; }
+      .search-button { min-height: 48px; min-width: 72px; padding: 0 16px; font-size: 15px; }
       select.filter { flex: 1 1 calc(50% - 8px); }
       .result-count { align-self: flex-start; }
       .table-wrap { overflow: visible; }
@@ -243,7 +267,9 @@
         max-height: min(80vh, calc(100dvh - 88px));
         z-index: 15;
       }
-      body[data-view="stock"] #search-input { order: -1; height: 48px; }
+      body[data-view="stock"] .search-row { order: -1; }
+      body[data-view="stock"] #search-input,
+      body[data-view="stock"] .search-button { height: 48px; }
       .detail-title button { min-width: 44px; min-height: 44px; }
       .pool-dialog-actions button { min-height: 44px; }
       .pool-list-row button { min-height: 44px; min-width: 44px; }
@@ -299,7 +325,10 @@
         <div class="toolbar">
           <div class="filters">
             <div class="pool-controls"><select id="pool-select" class="filter" aria-label="自定义股池"><option value="">全市场</option></select><button id="pool-manage" class="pool-button" type="button"><i data-lucide="settings-2"></i>管理股池</button></div>
-            <input id="search-input" class="filter" type="search" placeholder="股票代码，如 000063 / 600519" aria-label="股票代码" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search">
+            <form id="search-form" class="search-row" role="search" action="#" method="get">
+              <input id="search-input" class="filter" name="query" type="search" placeholder="股票代码，如 000063 / 600519" aria-label="股票代码" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search">
+              <button id="search-button" class="search-button" type="submit">查询</button>
+            </form>
             <select id="sector-select" class="filter" aria-label="行业"><option value="">全部行业</option></select>
             <select id="size-select" class="filter" aria-label="市值分组">
               <option value="">全部市值</option><option value="large">大市值 Top 20%</option><option value="mid">中市值</option><option value="small">小市值 Bottom 20%</option>
@@ -389,6 +418,7 @@
     const rankingPage = $('ranking-page');
     const statusPage = $('status-page');
     let searchTimer;
+    let lastSearchApply = 0;
     let lastTop = $('top-select').value;
 
     function toast(message) {
@@ -478,6 +508,16 @@
       } else if (!topSelect.value && lastTop) {
         topSelect.value = lastTop;
       }
+    }
+    function applySearch() {
+      const now = Date.now();
+      if (now - lastSearchApply < 120) return;
+      lastSearchApply = now;
+      syncTopForSearch();
+      clearTimeout(searchTimer);
+      searchTimer = null;
+      state.loading = false;
+      loadRankings(true);
     }
 
     async function loadRankings(resetPage = false) {
@@ -707,6 +747,18 @@
       state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
     });
     $('refresh-button').addEventListener('click', async () => { await loadDates(); await loadRankings(true); });
+    $('search-form').addEventListener('submit', event => {
+      event.preventDefault();
+      applySearch();
+    });
+    $('search-input').addEventListener('keydown', event => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applySearch();
+      }
+    });
+    $('search-input').addEventListener('search', applySearch);
     $('search-input').addEventListener('input', () => {
       syncTopForSearch();
       clearTimeout(searchTimer);

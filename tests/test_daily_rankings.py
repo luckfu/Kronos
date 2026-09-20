@@ -286,6 +286,26 @@ def test_daily_rankings_page_search_skips_top_and_uses_mobile_cards():
     assert "DeepSeek" not in page
 
 
+def test_daily_rankings_page_has_explicit_search_submit():
+    page = web_app.app.test_client().get("/").get_data(as_text=True)
+
+    assert 'id="search-form"' in page
+    assert 'role="search"' in page
+    assert 'id="search-button"' in page
+    assert 'class="search-button" type="submit"' in page
+    assert ">查询</button>" in page
+    assert 'type="search"' in page
+    assert 'enterkeyhint="search"' in page
+    assert "function applySearch()" in page
+    assert "$('search-form').addEventListener('submit'" in page
+    assert "event.key === 'Enter'" in page
+    assert "addEventListener('search', applySearch)" in page
+    assert "state.loading = false;\n      loadRankings(true);" in page
+    assert 'body[data-view="stock"] .search-row { order: -1; }' in page
+    assert ".search-button { min-height: 48px;" in page
+    assert ".search-row input.filter { flex: 1 1 auto; width: auto; min-width: 0; }" in page
+
+
 def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
     published_run(tmp_path)
     monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
