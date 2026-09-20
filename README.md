@@ -1,35 +1,33 @@
 # Kronos A 股预测工作台
 
+<p align="center">
+  <img src="Generated_Image.jpeg" alt="Kronos C2 Best：1e-5 学习率续训与退火锁示意" width="920" />
+</p>
+
+<p align="center"><em>Kronos (C2 Best) · 1e-5 LR 续训压力 · 退火锁 · LR Drift Risk</em></p>
+
 > 在 Kaggle 上进行任何训练、续训、调参或验证前，必须先执行 [`finetune/KAGGLE_RUNBOOK_CN.md`](finetune/KAGGLE_RUNBOOK_CN.md) 的统一检查流程。
 
-当前可跨机器获取的最新正式研究权重为 **Beta v2.1 Best@475**。它使用整股票
-90/10 隔离验证选点，已发布到
-[ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)；Beta v2.1 Best@475
-模型 SHA-256 为 `e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97`。
-它是研究发布版本，不包含 Last 或优化器状态。跨机器开发、部署与训练监控的当前
-交接入口见 [`finetune/CROSS_MACHINE_HANDOFF_CN.md`](finetune/CROSS_MACHINE_HANDOFF_CN.md)。
-
-当前 Web UI 与 Serverless 推理契约仍按 **Beta V1.2** 运行，默认使用 `Best@871`，并保留
-`Last@1056` 作为完整两遍训练终点。稳定本地入口为
-`models/a_share_v1_beta/releases/beta_v1.2/best_model` 和
-`models/a_share_v1_beta/releases/beta_v1.2/last_model`。发布依据见
-[`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)。Beta V1.2 的 Modal
-配置使用独立 App 名，不会覆盖旧 V6 服务；线上切换仍需显式执行部署。
-
-Beta 系列的推理输入和全市场市值百分位准备规则见
-[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。该契约与 V6
-不同，不接受离散 `size_bucket`。
-
-2026-08-28 从 A800 迁回的 v1-beta 模型、严格未来评估数据和全部评估结果已直接合并
-到项目目录。当前模型血缘、精确 SHA-256、晋级状态与路径事件结论见
-[`finetune/V1_BETA_MODEL_LINEAGE_CN.md`](finetune/V1_BETA_MODEL_LINEAGE_CN.md)；机器可读
-清单为 [`models/a_share_v1_beta/LINEAGE.json`](models/a_share_v1_beta/LINEAGE.json)。
-
-这是一个基于 [Kronos](https://github.com/shiyu-coder/Kronos) 的 A 股日线预测项目，提供单股区间预测、自选股票池横截面排序、增训脚本和样本外回测脚本。
+这是一个基于 [Kronos](https://github.com/shiyu-coder/Kronos) 的 A 股日线预测项目：单股区间预测、自选池横截面排序、增训与样本外回测。当前研究主线是 **Kronos-small `small_0.1`**；线上 Web UI / Modal 仍跑 **Beta V1.2**。
 
 > 本项目用于研究和回测，不构成投资建议。模型预测、回测收益和排名都可能失效，不能直接替代交易系统或风险管理。
 
-## 当前推理部署
+## 当前状态（2026-09）
+
+| 层级 | 版本 | 说明 |
+|------|------|------|
+| 研究 alpha | **Cosine C2 Best @ Segment 179** | Kronos-small `small_0.1` 经 Bootstrap → Main → Extend → Warmup-Constant → Cosine 退火后的最佳点；主决策指标为 **D10 横截面 Rank IC** |
+| 研究旁路 | Stage 3 / P0a–P1 | Path Alignment、CE-only 对照、rank 辅助等；多数路径未超过 C2 Best，C2 仍是默认 alpha 检查点 |
+| 线上推理 | **Beta V1.2 `Best@871`** | Web UI + Modal Serverless；约 102.4M 参数，独立 App，不覆盖旧 V6 |
+| 历史发布 | Beta v2.1 Best@475 | [ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)；研究发布包，不含 Last / 优化器 |
+
+**C2 Best 探索性 OOS（短窗，非 sealed 生产结论）**：完整 19 个 signal dates、97,916 窗口上，D10 方向准确率约 50.7%，pooled Rank IC 约 0.169，日均 Rank IC 约 0.162。细节与血缘见 [`finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md`](finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md)。Stage 3 执行交接见 [`finetune/STAGE3_P0A_P0B_EXECUTION_HANDOFF_CN.md`](finetune/STAGE3_P0A_P0B_EXECUTION_HANDOFF_CN.md)。
+
+续训与诊断仍在进行：过小学习率（如固定 `1e-5`）、退火收口与 CE 配置漂移都会拉伤 D10 Rank IC；上图对应这段「钻 alpha、锁退火」的工作记忆。未合并实验分支 `cursor/c2-drift-diagnostic-results-1e05` 含 drift diagnostic、freeze-probe 与 Stage2 续训归档，需要时再合入。
+
+跨机器交接入口：[`finetune/CROSS_MACHINE_HANDOFF_CN.md`](finetune/CROSS_MACHINE_HANDOFF_CN.md)。Beta 推理契约（连续市值百分位，不接受离散 `size_bucket`）：[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。
+
+## 线上推理部署（Beta V1.2）
 
 - 模型：A-share Full-Market Beta V1.2（约 102.4M 参数）
 - 输入：120 个交易日的 `open/high/low/close/volume/amount`
@@ -40,8 +38,9 @@ Beta 系列的推理输入和全市场市值百分位准备规则见
 - 默认 checkpoint：`models/a_share_v1_beta/releases/beta_v1.2/best_model`（`Best@871`）
 - 完整训练终点：`models/a_share_v1_beta/releases/beta_v1.2/last_model`（`Last@1056`）
 - 设备：自动选择 `MPS → CUDA → CPU`
+- 发布说明：[`finetune/BETA_V1_2_RELEASE_CN.md`](finetune/BETA_V1_2_RELEASE_CN.md)；血缘：[`finetune/V1_BETA_MODEL_LINEAGE_CN.md`](finetune/V1_BETA_MODEL_LINEAGE_CN.md)
 
-公开权重发布在 [ModelScope: `luckfu/Kronos-A-Share-Beta-V2-1`](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)。Beta v2.1 Best@475 在 2026 年 8 月成熟时间外评估中方向准确率为 45.45%、balanced accuracy 为 38.21%、Rank IC 为 0.1102；这些指标不构成盈利承诺。
+公开研究权重另见 [ModelScope: `luckfu/Kronos-A-Share-Beta-V2-1`](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)（Best@475）。历史 Beta 指标不构成盈利承诺，也不代表当前 C2 研究主线的生产晋级状态。
 
 ## 行业与连续市值条件
 
@@ -261,14 +260,17 @@ PYTHONPATH=. python finetune/backtest_a_share_daily.py \
 ## 目录说明
 
 ```text
+Generated_Image.jpeg   C2 Best / 1e-5 续训与退火锁示意
 model/                 Kronos 模型与预测器
 webui/                 Flask 页面、接口和前端资源
 finetune/              A 股数据准备、增训、评估和回测
+deploy/modal/          Beta V1.2 Modal Serverless
+deploy/oracle-kronos/  Oracle Web 网关部署
 data/a_share/          本地数据（不纳入 Git）
 outputs/               checkpoint 与实验结果（不纳入 Git）
 ```
 
-旧版通用 Kronos 示例仍保留在 `examples/`，用于兼容原项目 API；本项目实际部署入口是 `webui/app.py`。
+研究主线技术报告：[`finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md`](finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md)。旧版通用 Kronos 示例仍保留在 `examples/`；本项目实际部署入口是 `webui/app.py`。
 
 ## 致谢与许可
 
