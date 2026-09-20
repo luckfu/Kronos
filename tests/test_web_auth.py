@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from webui import app as web_app
@@ -106,7 +108,10 @@ def test_remembered_session_allows_pages_and_apis(monkeypatch, tmp_path):
         'remember': '1',
     })
     cookie = cookie_header(login)
-    assert 'Max-Age=2592000' in cookie or 'max-age=2592000' in cookie.lower()
+    assert 'Expires=' in cookie
+    expires = parsedate_to_datetime(cookie.split('Expires=', 1)[1].split(';', 1)[0])
+    remaining = expires - datetime.now(timezone.utc)
+    assert timedelta(days=29) <= remaining <= timedelta(days=31)
 
     home = client.get('/')
     dates = client.get('/api/daily-rankings/dates')
