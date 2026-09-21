@@ -30,6 +30,9 @@ MAX_RUNTIME_SECONDS = int(os.environ.get('STAGE3_MAX_RUNTIME_SECONDS', '10800'))
 BASELINE_BEFORE_RESUME = os.environ.get('STAGE3_BASELINE_BEFORE_RESUME', '0') == '1'
 LAMBDA_PATH = float(os.environ.get('STAGE3_LAMBDA_PATH', '0.05'))
 LAMBDA_VOL = float(os.environ.get('STAGE3_LAMBDA_VOL', '0'))
+VOL_TEMPERATURE = float(os.environ.get('STAGE3_VOL_TEMPERATURE', '0.65'))
+VOL_TOP_P = float(os.environ.get('STAGE3_VOL_TOP_P', '0.8'))
+VOL_SAMPLES = int(os.environ.get('STAGE3_VOL_SAMPLES', '5'))
 LAMBDA_RANK = float(os.environ.get('STAGE3_LAMBDA_RANK', '0.05'))
 CE_RANK = os.environ.get('STAGE3_CE_RANK', '0') == '1'
 HISTORY_WEIGHT = float(os.environ.get('STAGE3_HISTORY_LOSS_WEIGHT', '0.02'))
@@ -122,7 +125,9 @@ def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
-          lr=LR, amp=False, lambda_path=LAMBDA_PATH, lambda_vol=LAMBDA_VOL, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
+          lr=LR, amp=False, lambda_path=LAMBDA_PATH, lambda_vol=LAMBDA_VOL,
+          vol_temperature=VOL_TEMPERATURE, vol_top_p=VOL_TOP_P, vol_samples=VOL_SAMPLES,
+          ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
           history_weight=HISTORY_WEIGHT, forecast_horizon_weights=FORECAST_HORIZON_WEIGHTS,
           milestone_segments=MILESTONE_SEGMENTS, trainable_mask=TRAINABLE_MASK,
           hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
@@ -244,7 +249,7 @@ def main():
                     'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
                     'lookback': 120, 'horizon': 10,
                     'loss': (
-                        f'CE+{LAMBDA_VOL:g}*log_vol_huber'
+                        f'CE+{LAMBDA_VOL:g}*log_vol_huber_T{VOL_TEMPERATURE:g}_p{VOL_TOP_P:g}_N{VOL_SAMPLES}'
                         if LAMBDA_VOL else
                         f'weighted_CE+{HISTORY_WEIGHT:g}*history+{LAMBDA_RANK:g}*pairwise_rank'
                         if CE_RANK and LAMBDA_RANK
@@ -253,11 +258,13 @@ def main():
                     ),
                     'lambda_path': 0.0 if LAMBDA_VOL else LAMBDA_PATH,
                     'lambda_vol': LAMBDA_VOL, 'ce_rank': CE_RANK, 'lambda_rank': LAMBDA_RANK,
+                    'vol_temperature': VOL_TEMPERATURE, 'vol_top_p': VOL_TOP_P, 'vol_samples': VOL_SAMPLES,
+                    'top_k': 16, 'candidates': VOL_SAMPLES if LAMBDA_VOL else 16,
                     'history_weight': HISTORY_WEIGHT,
                     'forecast_horizon_weights': FORECAST_HORIZON_WEIGHTS,
                     'trainable_mask': TRAINABLE_MASK,
                     'milestone_segments': MILESTONE_SEGMENTS,
-                    'huber_delta': 0.02, 'top_k': 16, 'candidates': 16, 'ema_decay': 0.99,
+                    'huber_delta': 0.02, 'ema_decay': 0.99,
                     'dependency_causal': True, 'devices': devices, 'torch': torch.__version__,
                     'run_id': RUN_ID, 'swanlab_url': dashboard_url, 'sha256': HASHES,
                     'inputs': {k: str(v) for k, v in inputs.items()}, 'oos_used': False}
@@ -297,6 +304,9 @@ def main():
                       '--lr', str(LR), '--seed', str(SEED), '--log-interval', '10',
                       '--lambda-path', '0' if LAMBDA_VOL else str(LAMBDA_PATH),
                       '--lambda-vol', str(LAMBDA_VOL),
+                      '--vol-temperature', str(VOL_TEMPERATURE),
+                      '--vol-top-p', str(VOL_TOP_P),
+                      '--vol-samples', str(VOL_SAMPLES),
                       '--trainable-mask', TRAINABLE_MASK,
                       '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)]
         if CE_RANK:

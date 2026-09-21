@@ -1,0 +1,53 @@
+{
+  "name": "stage3_vol_prod_decode_from_c2_best",
+  "status": "designed_not_started",
+  "designed_at": "2026-09-21",
+  "parent": {
+    "label": "cosine_c2_best",
+    "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "segment": 179,
+    "kernel": "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "load": "weights_only_fresh_adamw"
+  },
+  "supersedes": "stage3_vol_calibration_from_c2_best T=1 top-16 mixture smoke; that proxy was already over-vol (0.90) on causal val",
+  "objective": {
+    "token_ce": "uniform H1-H10, no history term",
+    "level_huber": "off",
+    "vol_term": "Huber(log E_n[std(daily close return of candidate n)], log std(realized daily close return))",
+    "lambda_vol": 0.15,
+    "decode": "teacher-forced joint mixture at production T=0.65 / top_p=0.8 / N=5; stop-grad tokenizer; live softmax weights",
+    "price_space": "denormalize close with window mean/std before returns"
+  },
+  "optimizer": {
+    "lr": 2e-6,
+    "scheduler": "fixed",
+    "batch_per_gpu": 32,
+    "global_batch": 64,
+    "coverage_seed": 20260921,
+    "trainable": "all 24819392 predictor params",
+    "tokenizer": "frozen"
+  },
+  "smoke": {
+    "segments": 8,
+    "windows_per_segment": 20000,
+    "causal_val": 123836,
+    "new_swanlab_run": "small_0.1_stage3_vol_prod_decode_from_c2_v1",
+    "kaggle_kernel": "luckfu/kronos-small-0-1-s3-vol-prod-smoke",
+    "resume_c3": false,
+    "resume_vol_cal_v1": false
+  },
+  "smoke_go": {
+    "no_nan": true,
+    "baseline_vol_ratio_above_1": true,
+    "val_vol_ratio_moves_toward_1": true,
+    "token_ce_increase_lt": 0.03
+  },
+  "not_this_run": [
+    "decode T/top_p/N grid",
+    "C4 parent",
+    "C3 resume",
+    "T=1 top-16 vol mixture",
+    "lambda_path level Huber",
+    "CE+rank head"
+  ]
+}

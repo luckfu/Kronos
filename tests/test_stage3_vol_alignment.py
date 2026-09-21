@@ -1,8 +1,25 @@
 import torch
 
 from finetune.stage3_vol_alignment import (
-    daily_returns_from_close, expected_path_vol, mixture_mean_path_vol,
+    apply_temperature_nucleus, daily_returns_from_close, expected_path_vol,
+    mixture_mean_path_vol,
 )
+
+
+def test_lower_temperature_peaks_the_distribution():
+    logits = torch.tensor([[0.0, 1.0, 0.2]])
+    hot = apply_temperature_nucleus(logits, 1.0, 1.0).softmax(-1)
+    cold = apply_temperature_nucleus(logits, 0.65, 1.0).softmax(-1)
+    assert cold.max() > hot.max()
+
+
+def test_nucleus_masks_the_tail():
+    logits = torch.tensor([[4.0, 1.0, -8.0, -9.0]])
+    filtered = apply_temperature_nucleus(logits, 1.0, 0.8)
+    probs = filtered.softmax(-1)
+    assert probs[0, -1] < 1e-6
+    assert probs[0, -2] < 1e-6
+    assert probs[0, 0] > 0.5
 
 
 def test_jensen_gap_expected_vol_exceeds_vol_of_mean():

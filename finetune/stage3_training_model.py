@@ -200,7 +200,7 @@ class Stage3TrainingModel(nn.Module):
 
     def checkpoint_state(self, optimizer, step, segment):
         payload = {
-            'schema': 'stage3_vol_calibration_v1' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2',
+            'schema': 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2',
             'model': self.predictor.state_dict(), 'optimizer': optimizer.state_dict(),
             'path_ema': self.path_ema.state_dict(), 'vol_ema': self.vol_ema.state_dict(),
             'step': int(step), 'segment': int(segment),
@@ -213,7 +213,7 @@ class Stage3TrainingModel(nn.Module):
         return payload
 
     def load_checkpoint_state(self, state, optimizer):
-        expected = 'stage3_vol_calibration_v1' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'
+        expected = 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'
         if state.get('schema') != expected:
             raise ValueError('Not a compatible Stage3 training checkpoint')
         if (state['path_config'] != asdict(self.config) or

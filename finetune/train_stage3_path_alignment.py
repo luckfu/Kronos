@@ -65,7 +65,8 @@ def validate_resume(state, experiment, summary, world, lr, seed):
     prior = state['experiment_manifest']
     for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'lambda_vol', 'lambda_rank', 'history_weight',
                 'forecast_horizon_weights', 'ce_rank', 'trainable_mask', 'huber_delta', 'top_k',
-                'candidates', 'ema_decay', 'dependency_causal', 'amp', 'global_batch',
+                'candidates', 'vol_temperature', 'vol_top_p', 'vol_samples', 'ema_decay',
+                'dependency_causal', 'amp', 'global_batch',
                 'batch_per_gpu', 'lookback', 'horizon', 'validation_samples'):
         default = 'all' if key == 'trainable_mask' else 0.0 if key == 'lambda_vol' else None
         if prior.get(key, default) != experiment.get(key, default):
@@ -124,7 +125,7 @@ def evaluate(model, loader, device, world, rank=0, log_interval=50):
             'target_mean_hf', 'target_second_moment_hf')
     if _vol_enabled(core):
         keys = keys + ('vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
-                       'mixture_mean_path_vol')
+                       'mixture_mean_path_vol', 'uniform_path_vol')
     sums = {k: torch.zeros((core.horizon, 6) if k.endswith('_hf') else
                           (core.horizon,) if k == 'horizon_mae' else (),
                           device=device, dtype=torch.float64) for k in keys}
@@ -173,6 +174,10 @@ def main(a):
         print('optimizer_state=' + ('resume' if a.resume_state else 'reset'), flush=True)
         print(f'lambda_path={a.lambda_path}', flush=True)
         print(f'lambda_vol={a.lambda_vol}', flush=True)
+        if a.lambda_vol:
+            print(f'vol_temperature={a.vol_temperature}', flush=True)
+            print(f'vol_top_p={a.vol_top_p}', flush=True)
+            print(f'vol_samples={a.vol_samples}', flush=True)
         print(f'ce_rank={a.ce_rank}', flush=True)
         if a.ce_rank:
             print(f'lambda_rank={a.lambda_rank}', flush=True)
@@ -201,7 +206,12 @@ def main(a):
         predictor, tok,
         config=PathAlignmentConfig(weight=a.lambda_path),
         ce_rank_config=ce_rank_config,
-        vol_config=VolAlignmentConfig(weight=a.lambda_vol),
+        vol_config=VolAlignmentConfig(
+            weight=a.lambda_vol,
+            temperature=a.vol_temperature,
+            top_p=a.vol_top_p,
+            candidates=a.vol_samples,
+        ),
     ).to(device)
     freeze_audit = apply_trainable_mask(model.predictor, a.trainable_mask)
     frozen_snapshot = snapshot_frozen_parameters(model.predictor)
@@ -225,6 +235,8 @@ def main(a):
             raise RuntimeError('Refusing to reuse aborted Stage3 C1 dashboard')
         if a.lambda_vol and 'joint_path_alignment_from_c2_best' in run_id:
             raise RuntimeError('Refusing to reuse Stage3 C3 path-alignment dashboard for vol calibration')
+        if a.lambda_vol and run_id == 'small_0.1_stage3_vol_cal_from_c2_best_v1':
+            raise RuntimeError('Refusing to reuse the T=1 top-16 vol-cal dashboard')
         # Match C2: fixed run id + resume=allow so multi-chunk handoffs stay on one dashboard.
         run = swanlab.init(
             id=run_id,
@@ -234,8 +246,10 @@ def main(a):
             experiment_name=experiment_name,
             config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world,
                     'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds,
-                    'top_k': 16, 'candidates': 16, 'parent': str(a.model_dir),
+                    'top_k': 16, 'candidates': a.vol_samples if a.lambda_vol else 16, 'parent': str(a.model_dir),
                     'lambda_path': a.lambda_path, 'lambda_vol': a.lambda_vol,
+                    'vol_temperature': a.vol_temperature, 'vol_top_p': a.vol_top_p,
+                    'vol_samples': a.vol_samples,
                     'milestone_segments': sorted(milestones),
                     'validation': 'full_causal',
                     'validation_objective': (
@@ -371,7 +385,7 @@ def main(a):
                 if a.lambda_vol:
                     scalar_keys = scalar_keys + (
                         'vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
-                        'mixture_mean_path_vol',
+                        'mixture_mean_path_vol', 'uniform_path_vol',
                     )
                 if a.ce_rank:
                     scalar_keys = ('ce_objective', 'history_loss', 'weighted_forecast_loss', 'rank_loss',
@@ -473,6 +487,9 @@ if __name__ == '__main__':
     p.add_argument('--log-interval', type=int, default=50)
     p.add_argument('--lambda-path', type=float, default=0.05)
     p.add_argument('--lambda-vol', type=float, default=0.0)
+    p.add_argument('--vol-temperature', type=float, default=0.65)
+    p.add_argument('--vol-top-p', type=float, default=0.8)
+    p.add_argument('--vol-samples', type=int, default=5)
     p.add_argument('--ce-rank', action='store_true')
     p.add_argument('--lambda-rank', type=float, default=0.05)
     p.add_argument('--history-weight', type=float, default=0.02)
