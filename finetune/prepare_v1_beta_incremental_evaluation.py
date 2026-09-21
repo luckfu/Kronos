@@ -30,12 +30,20 @@ def load_future_records(path: Path) -> list[dict]:
     with path.open() as handle:
         for line in handle:
             record = json.loads(line)
-            if record.get("set") == "future_all":
+            if record.get("set") in {"future_all", "incremental_future_all"}:
                 record.pop("set", None)
                 records.append(record)
     if not records:
         raise ValueError(f"No future_all records in {path}")
     return records
+
+
+def evaluation_package_name(signal_end: str) -> str:
+    return f"kronos_beta_v2_time_oos_through_{signal_end.replace('-', '')}"
+
+
+def evaluation_package_title(signal_end: str) -> str:
+    return f"Kronos Beta v2 time-OOS evaluation through {signal_end}"
 
 
 def validated_raw(path: Path, label: str) -> pd.DataFrame:
@@ -139,9 +147,11 @@ def main() -> None:
     if len(sectors) != 86:
         raise RuntimeError(f"Expected 86 sector labels, found {len(sectors)}")
 
+    signal_end = max(record["asof_date"] for record in records)
+    package_name = evaluation_package_name(signal_end)
     manifest = {
         "schema_version": 1,
-        "name": "kronos_beta_v2_incremental_time_oos_20260902",
+        "name": package_name,
         "purpose": "evaluation_only_never_train_or_tune",
         "model_contract": {
             "lookback": LOOKBACK,
@@ -211,8 +221,8 @@ def main() -> None:
     manifest_path = args.output_dir / "evaluation_manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     metadata = {
-        "id": manifest["name"],
-        "title": "Kronos Beta v2 incremental August 2026 time-OOS evaluation",
+        "id": package_name,
+        "title": evaluation_package_title(signal_end),
         "licenses": [{"name": "other"}],
     }
     (args.output_dir / "dataset-metadata.json").write_text(
