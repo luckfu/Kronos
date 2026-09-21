@@ -9,7 +9,7 @@ META = ROOT / 'finetune/kaggle_stage3_vol_cal_smoke' / 'kernel-metadata.json'
 def test_vol_cal_smoke_is_fresh_c2_eight_segments_not_c3():
     source = KERNEL.read_text()
     for token in (
-        "COMMIT = '049522b84d9fbd7095164c6ed38c724fdcb6f399'",
+        "COMMIT = 'aeb9d95f81af4182064fefaa7380563ecc772bc2'",
         "STAGE3_SOURCE_COMMIT=COMMIT",
         "STAGE3_TARGET_SEGMENTS='8'",
         "STAGE3_CHUNK='vol_cal_smoke'",
