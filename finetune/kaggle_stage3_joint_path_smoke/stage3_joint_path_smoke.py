@@ -29,6 +29,7 @@ HARD_TIMEOUT_SECONDS = int(os.environ.get('STAGE3_HARD_TIMEOUT_SECONDS', '18000'
 MAX_RUNTIME_SECONDS = int(os.environ.get('STAGE3_MAX_RUNTIME_SECONDS', '10800'))
 BASELINE_BEFORE_RESUME = os.environ.get('STAGE3_BASELINE_BEFORE_RESUME', '0') == '1'
 LAMBDA_PATH = float(os.environ.get('STAGE3_LAMBDA_PATH', '0.05'))
+LAMBDA_VOL = float(os.environ.get('STAGE3_LAMBDA_VOL', '0'))
 LAMBDA_RANK = float(os.environ.get('STAGE3_LAMBDA_RANK', '0.05'))
 CE_RANK = os.environ.get('STAGE3_CE_RANK', '0') == '1'
 HISTORY_WEIGHT = float(os.environ.get('STAGE3_HISTORY_LOSS_WEIGHT', '0.02'))
@@ -121,7 +122,7 @@ def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
     phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
-          lr=LR, amp=False, lambda_path=LAMBDA_PATH, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
+          lr=LR, amp=False, lambda_path=LAMBDA_PATH, lambda_vol=LAMBDA_VOL, ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
           history_weight=HISTORY_WEIGHT, forecast_horizon_weights=FORECAST_HORIZON_WEIGHTS,
           milestone_segments=MILESTONE_SEGMENTS, trainable_mask=TRAINABLE_MASK,
           hard_timeout_seconds=HARD_TIMEOUT_SECONDS,
@@ -243,12 +244,15 @@ def main():
                     'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
                     'lookback': 120, 'horizon': 10,
                     'loss': (
+                        f'CE+{LAMBDA_VOL:g}*log_vol_huber'
+                        if LAMBDA_VOL else
                         f'weighted_CE+{HISTORY_WEIGHT:g}*history+{LAMBDA_RANK:g}*pairwise_rank'
                         if CE_RANK and LAMBDA_RANK
                         else f'weighted_CE+{HISTORY_WEIGHT:g}*history'
                         if CE_RANK else f'CE+{LAMBDA_PATH:g}*EMA_normalized_six_feature_Huber'
                     ),
-                    'lambda_path': LAMBDA_PATH, 'ce_rank': CE_RANK, 'lambda_rank': LAMBDA_RANK,
+                    'lambda_path': 0.0 if LAMBDA_VOL else LAMBDA_PATH,
+                    'lambda_vol': LAMBDA_VOL, 'ce_rank': CE_RANK, 'lambda_rank': LAMBDA_RANK,
                     'history_weight': HISTORY_WEIGHT,
                     'forecast_horizon_weights': FORECAST_HORIZON_WEIGHTS,
                     'trainable_mask': TRAINABLE_MASK,
@@ -268,7 +272,8 @@ def main():
         (OUTPUT / 'experiment_manifest.json').write_text(json.dumps(manifest, indent=2))
         phase('cpu_preflight')
         run([sys.executable, '-u', '-m', 'pytest', 'tests/test_stage3_conditional_joint.py',
-             'tests/test_stage3_ce_rank.py', 'tests/test_stage3_trainable_mask.py', '-q'], cwd=repo,
+             'tests/test_stage3_ce_rank.py', 'tests/test_stage3_trainable_mask.py',
+             'tests/test_stage3_vol_alignment.py', '-q'], cwd=repo,
             env={**env, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1', 'CUDA_VISIBLE_DEVICES': ''})
         torchrun = [sys.executable, '-u', '-m', 'torch.distributed.run', '--standalone', '--nproc_per_node=2', '-m']
         common = ['--model-dir', str(inputs['best'].parent), '--tokenizer-dir', str(inputs['tokenizer'].parent)]
@@ -290,7 +295,9 @@ def main():
             resume_args += ['--milestone-segments', MILESTONE_SEGMENTS]
         train_args = ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32',
                       '--lr', str(LR), '--seed', str(SEED), '--log-interval', '10',
-                      '--lambda-path', str(LAMBDA_PATH), '--trainable-mask', TRAINABLE_MASK,
+                      '--lambda-path', '0' if LAMBDA_VOL else str(LAMBDA_PATH),
+                      '--lambda-vol', str(LAMBDA_VOL),
+                      '--trainable-mask', TRAINABLE_MASK,
                       '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)]
         if CE_RANK:
             train_args += ['--ce-rank', '--lambda-rank', str(LAMBDA_RANK),

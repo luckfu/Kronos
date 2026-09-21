@@ -943,6 +943,26 @@ flowchart TD
 
 该扫描沿用第 8.1–8.2 节的裁剪还原标签口径，以便与 0.18440 等既有数字同底比较，**不是**第 8.3 节的统一原始价格口径；因此其结论是同口径内的相对比较，绝对水平在进入论文正文前应按第 8.3 节方法复算。分片保留 `identity` 字段，可据此恢复原始价格口径。该 13 日窗口已多次用于研究讨论，属设计污染的探索性窗口，不能作为生产晋级依据。本节只登记协议、机制与判定标准；结果回填前，不得据此宣称任何 checkpoint 的排序能力被低估或被高估。
 
+### 8.5 18 日确认窗：中性化 Alpha、解码锁定与扣费净值
+
+密封确认窗为 `kronos_beta_v2_time_oos_through_20260903`：signal 2026-08-11 至 2026-09-03，18 个交易日，92,751 个窗口。解码在见窗前锁定为两臂：生产 `T=0.65 / top_p=0.8 / N=5`，排序诊断 `T=0.6 / top_p=0.9 / N=16`。评价包含行业+市值双重残差 Rank IC（门槛 0.15）以及重叠日 IC 的 Newey-West / 非重叠 / block bootstrap。实现见 [c2_18d_alpha_oos.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_c2_18d_alpha_oos/c2_18d_alpha_oos.py)，冻结产物见 [c2_18d_alpha_oos_summary.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_18d_alpha_oos_summary.json)。
+
+生产臂结果：原始 D10 pooled Rank IC 0.237，双重残差 Rank IC **0.121**（日均 0.118），**未越过 0.15 门槛**。残差 Newey-West t=3.87，block bootstrap 残差均值 95% 区间约 0.08–0.16 且全部为正。排序臂残差 IC 为 0.120，与生产臂几乎相同，因此 **生产解码锁定为 N=5，N=16 不再用于推理或搜参**。登记见 [c2_best_production_decode_lock.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_best_production_decode_lock.json)。路径波动校准比约 2.1×，波动低估改由第 8.7 节的 vol-calibration smoke 处理，本窗不再调 T/p/N。
+
+残差 IC 不是净值。用冻结的生产臂预测做行业+市值残差打分、Top/Bottom 10% 多空、10 层重叠持有（每层 1/10 资本）、双边千分之三扣费，实现见 [neutralized_ls_backtest.py](/Users/fupengcheng/Documents/Kronos/finetune/neutralized_ls_backtest.py)。18 个重叠 10 日买持多空价差均值为 **+1.32%**（15/18 为正）；这是重叠窗口上的截面价差，不能连乘当作成交净值。可交易 10 层叠加共 27 个标记日：零成本净值 **+1.86%**（年化 18.8%，夏普 1.02，最大回撤 −2.87%）；扣费后净值 **+0.12%**，年化 1.17%，夏普 0.15，最大回撤 −3.38%，Calmar 0.35，日均双边换手 10.6%。末三日（09-01 至 09-03）残差多空翻负，且 27 日过短，**不能把重叠价差或残差 IC 0.12 外推为扣费后夏普 >1.5**。更长独立 OOS（30–60 个 signal dates）仍待做。明细见 [c2_18d_neutralized_ls_backtest.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_18d_neutralized_ls_backtest.json)。
+
+同一冻结生产臂分数上，不改权重、只改交易规则（5 日调仓、10/15 滞后卖出、Top/Bottom 5%）后，扣费夏普从基线 0.15 最高升至 **0.77**（每 5 日开一个 10 日袖套，两层重叠）。5 日整簿调仓+滞后约为 0.51，集中到 5% 约为 0.49。没有任何规则把扣费夏普推到 0.8 或 1.0。日频滞后虽把零成本夏普抬到 4.1，但换手 58%，扣费后只剩 0.30。这是后处理，不是训练；Stage 3 波动放大在此结果出来前不启动。扫描见 [c2_18d_rule_sweep.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_18d_rule_sweep.json)。
+
+### 8.6 C2 与 C4 确认窗对比后封盘
+
+同一 18 日密封窗、同一锁定解码下，C2 best 生产臂残差 Rank IC 为 0.121（NW t=3.87），C4 best 为 0.114（NW t=4.24）。二者均未过 0.15，Block Bootstrap 残差均值区间全部为正。C4 的 t 更高来自更低的残差波动，不是更高的绝对 Alpha。18 日窗口上 0.121 对 0.114 的均值差距优先于 t 值差距，因此 **C2 锁定为论文主模型与生产模型**，C4 封存为对照，不再开 C5/C6，也不把 C4 换成生产。N=16 在两模型上都不抬残差 IC，生产解码保持 T=0.65 / top_p=0.8 / N=5。
+
+两模型波动校准比分别为 2.10× 与 2.02×，波动低估是 Token CE 解码期望路径的结构问题，不是 C2 独有。后续 Stage 3 若启动，目标是把该校准比打向 1.0–1.3，红线是残差 IC 不低于 0.10；不得续训已经完成的 Stage 3 C3（15 段 Path Alignment 未形成稳定路径下降，且 IC 弱于 C2）。封盘登记见 [c2_c4_18d_seal.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_c4_18d_seal.json)，Stage 3 预注册见 [stage3_vol_calibration_preregistration.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_vol_calibration_preregistration.json)。
+
+### 8.7 Stage 3 波动校准 smoke：E[vol] log-Huber，不续训 C3
+
+C3 的路径水平 Huber 没有把校准比打下来，本轮不再 resume 那次 15 段。新目标是把 close 反标准化后，对候选路径日收益标准差的期望做 log-Huber：训练 `E[vol(path)]`，而不是 `vol(E[path])`。λ_vol=0.15，水平 Huber 与 CE+rank 关闭。底座只加载 C2 best 权重，fresh AdamW，覆盖种子 20260921。8 段 smoke 的 Kaggle kernel 为 `luckfu/kronos-small-0-1-s3-vol-cal-smoke`，SwanLab 为 `small_0.1_stage3_vol_cal_from_c2_best_v1`。通过后再在同一 18 日密封窗上评估：校准比相对 2.10 至少下降 0.20，残差 Rank IC 红线 0.10。实现见 [stage3_vol_alignment.py](/Users/fupengcheng/Documents/Kronos/finetune/stage3_vol_alignment.py)。
+
 ## 9. 训练健康性与解释边界
 
 Stage 2 的五段正式训练均更新全部 predictor 参数。Main 的全量验证 forecast 从 2.6384 降至约 2.5052，Extend 01 在 190 segments 内继续降至约 2.4379，WC first round 最佳约 2.3531，WC dual T4 最佳约 2.3042，最终 Cosine refinement 最佳为 2.294402。两轮 WC 未发散，随后退火也已完成；这些是已完成阶段的优化轨迹，不是当前继续训练指令。
@@ -1092,5 +1112,7 @@ flowchart LR
 - Stage 3 分梯度与 C2/C3 OOS 机制审计：[stage3_c2_c3_mechanism_audit_20260915.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/stage3_c2_c3_mechanism_audit_20260915.json)
 - OOS 解码实现（采样温度、nucleus 截断与 `sample_count` 归约）：[evaluate_v1_beta_checkpoints.py](/Users/fupengcheng/Documents/Kronos/finetune/evaluate_v1_beta_checkpoints.py)、[model/kronos.py](/Users/fupengcheng/Documents/Kronos/model/kronos.py) 的 `auto_regressive_inference`
 - 解码协议扫描入口与自动测试：[decode_sample_sweep.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_decode_sample_sweep/decode_sample_sweep.py)、[test_decode_sample_sweep_kernel.py](/Users/fupengcheng/Documents/Kronos/tests/test_decode_sample_sweep_kernel.py)
+- 18 日确认窗与生产解码锁定：[c2_18d_alpha_oos.py](/Users/fupengcheng/Documents/Kronos/finetune/kaggle_c2_18d_alpha_oos/c2_18d_alpha_oos.py)、[c2_best_production_decode_lock.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_best_production_decode_lock.json)、[c2_18d_alpha_oos_summary.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_18d_alpha_oos_summary.json)
+- 中性化多空扣费回测：[neutralized_ls_backtest.py](/Users/fupengcheng/Documents/Kronos/finetune/neutralized_ls_backtest.py)、[c2_18d_neutralized_ls_backtest.json](/Users/fupengcheng/Documents/Kronos/finetune/reports/c2_18d_neutralized_ls_backtest.json)、[test_neutralized_ls_backtest.py](/Users/fupengcheng/Documents/Kronos/tests/test_neutralized_ls_backtest.py)
 
 本文以日志和当前代码为准；若历史计划文档与实测配置冲突，应优先引用本报告中的代码/日志事实，并在论文实验设置中注明具体 commit、seed、数据快照和 checkpoint 标识。

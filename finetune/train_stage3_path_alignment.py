@@ -10,6 +10,7 @@ from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
 from finetune.stage3_ce_rank import DEFAULT_FORECAST_HORIZON_WEIGHTS, Stage3CERankConfig
 from finetune.stage3_path_alignment import PathAlignmentConfig
+from finetune.stage3_vol_alignment import VolAlignmentConfig
 from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
 from finetune.stage3_trainable_mask import (
     KNOWN_MASKS, apply_trainable_mask, assert_frozen_parameters_unchanged,
@@ -62,11 +63,11 @@ def record_metrics(out, values):
 def validate_resume(state, experiment, summary, world, lr, seed):
     """Fail closed on a different objective/data/run or a partial segment."""
     prior = state['experiment_manifest']
-    for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'lambda_rank', 'history_weight',
+    for key in ('sha256', 'run_id', 'loss', 'lambda_path', 'lambda_vol', 'lambda_rank', 'history_weight',
                 'forecast_horizon_weights', 'ce_rank', 'trainable_mask', 'huber_delta', 'top_k',
                 'candidates', 'ema_decay', 'dependency_causal', 'amp', 'global_batch',
                 'batch_per_gpu', 'lookback', 'horizon', 'validation_samples'):
-        default = 'all' if key == 'trainable_mask' else None
+        default = 'all' if key == 'trainable_mask' else 0.0 if key == 'lambda_vol' else None
         if prior.get(key, default) != experiment.get(key, default):
             raise ValueError(f'Resume manifest mismatch: {key}')
     if prior['seed'] != seed or experiment['seed'] != seed:
@@ -89,17 +90,37 @@ def validate_resume(state, experiment, summary, world, lr, seed):
         raise ValueError('Resume coverage cursor mismatch')
     return min(r['validation_objective'] for r in rows)
 
+def _vol_enabled(core):
+    return getattr(core, 'vol_config', None) is not None and core.vol_config.weight != 0
+
+
+def _grad_norm(grads):
+    terms = [g.detach().float().square().sum() for g in grads if g is not None]
+    if not terms:
+        return torch.zeros(())
+    return torch.stack(terms).sum().sqrt()
+
+
+def vol_vs_ce_grad_norm_ratio(core, token_loss, vol_loss):
+    params = [p for p in core.predictor.parameters() if p.requires_grad]
+    ce_grads = torch.autograd.grad(token_loss, params, retain_graph=True, allow_unused=True)
+    vol_grads = torch.autograd.grad(vol_loss, params, retain_graph=True, allow_unused=True)
+    ce_n = _grad_norm(ce_grads).clamp_min(1e-12)
+    return _grad_norm(vol_grads) / ce_n
+
+
 def evaluate(model, loader, device, world, rank=0, log_interval=50):
     was_training = model.training
     model.eval()
     core = model.module if isinstance(model, DDP) else model
-    # No per-batch DDP collectives: exact validation shards may differ in size.
-    # core.eval() disables EMA updates/all-reduce and all predictor dropout.
     n = torch.zeros((), device=device, dtype=torch.float64)
     keys = ('token_loss', 'raw_path_loss', 'total_loss', 'top16_joint_mass',
             's1_entropy', 's2_conditional_entropy_topk_s1', 'horizon_mae',
             'prediction_mean_hf', 'prediction_second_moment_hf',
             'target_mean_hf', 'target_second_moment_hf')
+    if _vol_enabled(core):
+        keys = keys + ('vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
+                       'mixture_mean_path_vol')
     sums = {k: torch.zeros((core.horizon, 6) if k.endswith('_hf') else
                           (core.horizon,) if k == 'horizon_mae' else (),
                           device=device, dtype=torch.float64) for k in keys}
@@ -109,7 +130,12 @@ def evaluate(model, loader, device, world, rank=0, log_interval=50):
             vx, vs = vb[0].to(device), vb[1].to(device)
             vsec = vb[2].to(device) if len(vb) > 2 else None
             vpct = vb[4].to(device) if len(vb) > 4 else None
-            _, metrics = core(vx, vs, sector_id=vsec, size_percentile=vpct)
+            means = stds = None
+            if _vol_enabled(core):
+                means = vb[-2].to(device)
+                stds = vb[-1].to(device)
+            _, metrics = core(vx, vs, sector_id=vsec, size_percentile=vpct,
+                              feature_means=means, feature_stds=stds)
             for key in keys:
                 sums[key] += metrics[key].double() * len(vx)
             max_residual = torch.maximum(max_residual, metrics['max_residual'])
@@ -142,6 +168,7 @@ def main(a):
         print('parent_model=' + str(a.model_dir), flush=True)
         print('optimizer_state=' + ('resume' if a.resume_state else 'reset'), flush=True)
         print(f'lambda_path={a.lambda_path}', flush=True)
+        print(f'lambda_vol={a.lambda_vol}', flush=True)
         print(f'ce_rank={a.ce_rank}', flush=True)
         if a.ce_rank:
             print(f'lambda_rank={a.lambda_rank}', flush=True)
@@ -164,10 +191,13 @@ def main(a):
     )
     if a.ce_rank and a.lambda_path != 0:
         raise ValueError('P1 CE+rank requires lambda_path=0')
+    if a.lambda_vol and (a.lambda_path != 0 or a.ce_rank):
+        raise ValueError('vol alignment requires lambda_path=0 and ce_rank disabled')
     model = Stage3TrainingModel(
         predictor, tok,
         config=PathAlignmentConfig(weight=a.lambda_path),
         ce_rank_config=ce_rank_config,
+        vol_config=VolAlignmentConfig(weight=a.lambda_vol),
     ).to(device)
     freeze_audit = apply_trainable_mask(model.predictor, a.trainable_mask)
     frozen_snapshot = snapshot_frozen_parameters(model.predictor)
@@ -189,6 +219,8 @@ def main(a):
         experiment_name = os.environ.get('SWANLAB_EXPERIMENT_NAME', run_id).strip()
         if run_id == 'small_0.1_stage3_path_alignment_from_c2_best' or not run_id:
             raise RuntimeError('Refusing to reuse aborted Stage3 C1 dashboard')
+        if a.lambda_vol and 'joint_path_alignment_from_c2_best' in run_id:
+            raise RuntimeError('Refusing to reuse Stage3 C3 path-alignment dashboard for vol calibration')
         # Match C2: fixed run id + resume=allow so multi-chunk handoffs stay on one dashboard.
         run = swanlab.init(
             id=run_id,
@@ -199,11 +231,15 @@ def main(a):
             config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world,
                     'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds,
                     'top_k': 16, 'candidates': 16, 'parent': str(a.model_dir),
-                    'lambda_path': a.lambda_path, 'milestone_segments': sorted(milestones),
+                    'lambda_path': a.lambda_path, 'lambda_vol': a.lambda_vol,
+                    'milestone_segments': sorted(milestones),
                     'validation': 'full_causal',
                     'validation_objective': (
                         f'weighted_ce+{a.history_weight:g}*history+{a.lambda_rank:g}*rank'
-                        if a.ce_rank else f'token_ce+{a.lambda_path:g}*raw_path_huber'
+                        if a.ce_rank else
+                        f'token_ce+{a.lambda_vol:g}*log_vol_huber'
+                        if a.lambda_vol else
+                        f'token_ce+{a.lambda_path:g}*raw_path_huber'
                     ),
                     'ce_rank': a.ce_rank,
                     'lambda_rank': a.lambda_rank,
@@ -223,6 +259,7 @@ def main(a):
     os.environ['KRONOS_COVERAGE_SEED'] = str(a.seed)
     os.environ['KRONOS_TRAIN_SAMPLES_PER_SEGMENT'] = '20000'
     os.environ['KRONOS_STAGE3_RANK_LOSS'] = '1' if a.ce_rank else '0'
+    os.environ['KRONOS_STAGE3_VOL_LOSS'] = '1' if a.lambda_vol else '0'
     print(json.dumps({'phase': 'load_training_dataset', 'rank': rank}), flush=True)
     ds = QlibDataset('train')
     train_sampler = DistributedSampler(ds, num_replicas=world, rank=rank, shuffle=False) if world > 1 else None
@@ -305,19 +342,33 @@ def main(a):
                 date_ids = batch[-3].to(device)
                 means = batch[-2].to(device)
                 stds = batch[-1].to(device)
+            elif a.lambda_vol:
+                means = batch[-2].to(device)
+                stds = batch[-1].to(device)
             opt.zero_grad(set_to_none=True)
             loss, metrics = model(
                 x, stamp, sector_id=sec, size_percentile=pct,
                 date_ids=date_ids, feature_means=means, feature_stds=stds,
             )
             if not torch.isfinite(loss): raise FloatingPointError('Nonfinite Stage3 loss')
+            will_log = step + 1 == 1 or (step + 1) % a.log_interval == 0
+            vol_ce_ratio = None
+            if a.lambda_vol and will_log:
+                vol_ce_ratio = vol_vs_ce_grad_norm_ratio(
+                    core, core._live_token_loss, core._live_vol_loss,
+                )
             loss.backward()
             group_grads = gradient_metrics(raw)
             grad = torch.nn.utils.clip_grad_norm_(raw.parameters(), 1.0, error_if_nonfinite=True)
             opt.step(); step += 1; seen += len(x)
-            if step == 1 or step % a.log_interval == 0:
+            if will_log:
                 scalar_keys = ('token_loss', 'raw_path_loss', 'normalized_path_loss', 'total_loss',
                                'top16_joint_mass', 's1_entropy', 's2_conditional_entropy_topk_s1', 'max_residual')
+                if a.lambda_vol:
+                    scalar_keys = scalar_keys + (
+                        'vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
+                        'mixture_mean_path_vol',
+                    )
                 if a.ce_rank:
                     scalar_keys = ('ce_objective', 'history_loss', 'weighted_forecast_loss', 'rank_loss',
                                    'total_loss', 's1_entropy')
@@ -339,6 +390,8 @@ def main(a):
                 if is_main(rank):
                     log.update({key: float(value) for key, value in group_grads.items()})
                     log.update(phase='train', segment=seg, step=step, grad_norm=float(grad))
+                    if vol_ce_ratio is not None:
+                        log['vol_vs_ce_grad_norm_ratio'] = float(vol_ce_ratio)
                     print(json.dumps(log), flush=True)
                     record_metrics(out, log)
                     if run is not None:
@@ -359,14 +412,17 @@ def main(a):
                             {'segment': seg, 'step': step, 'validation_objective': val_loss,
                              'definition': (
                                  f'weighted_ce+{a.history_weight:g}*history+{a.lambda_rank:g}*rank'
-                                 if a.ce_rank else f'causal_token_ce+{a.lambda_path:g}*raw_path_huber'
+                                 if a.ce_rank else
+                                 f'causal_token_ce+{a.lambda_vol:g}*log_vol_huber'
+                                 if a.lambda_vol else
+                                 f'causal_token_ce+{a.lambda_path:g}*raw_path_huber'
                              )})
             if seg in milestones:
                 milestone = out / f'checkpoints/milestone_seg{seg:02d}'
                 raw.save_pretrained(milestone)
                 atomic_json(milestone / 'milestone.json',
                             {'segment': seg, 'step': step, 'validation_objective': val_loss,
-                             'lambda_path': a.lambda_path})
+                             'lambda_path': a.lambda_path, 'lambda_vol': a.lambda_vol})
                 print(json.dumps({'phase': 'milestone_saved', 'segment': seg, 'step': step,
                                   'path': str(milestone)}), flush=True)
             summary['segments'].append(row)
@@ -412,6 +468,7 @@ if __name__ == '__main__':
     p.add_argument('--seed', type=int, default=20260915)
     p.add_argument('--log-interval', type=int, default=50)
     p.add_argument('--lambda-path', type=float, default=0.05)
+    p.add_argument('--lambda-vol', type=float, default=0.0)
     p.add_argument('--ce-rank', action='store_true')
     p.add_argument('--lambda-rank', type=float, default=0.05)
     p.add_argument('--history-weight', type=float, default=0.02)

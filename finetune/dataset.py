@@ -388,6 +388,7 @@ class QlibDataset(Dataset):
             getattr(self.config, 'use_beta_v21_auxiliary', False)
         )
         self.use_stage3_rank = os.environ.get('KRONOS_STAGE3_RANK_LOSS', '0') == '1'
+        self.use_stage3_vol = os.environ.get('KRONOS_STAGE3_VOL_LOSS', '0') == '1'
         self.has_inline_size = self.use_size_features and any('size_bucket' in frame.columns for frame in self.data.values())
         self.has_inline_percentile = self.use_size_percentile and any(
             'size_percentile' in frame.columns for frame in self.data.values()
@@ -700,6 +701,22 @@ class QlibDataset(Dataset):
                 x_std.astype(np.float32)
             )
 
+        def finish(result):
+            if self.use_stage3_rank:
+                return (
+                    *result,
+                    torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
+                    torch.from_numpy(x_mean.astype(np.float32)),
+                    torch.from_numpy(x_std.astype(np.float32)),
+                )
+            if self.use_stage3_vol:
+                return (
+                    *result,
+                    torch.from_numpy(x_mean.astype(np.float32)),
+                    torch.from_numpy(x_std.astype(np.float32)),
+                )
+            return result
+
         # Convert to PyTorch tensors.
         x_tensor = torch.from_numpy(x)
         x_stamp_tensor = torch.from_numpy(x_stamp)
@@ -733,36 +750,15 @@ class QlibDataset(Dataset):
                     result = (*result, period_code)
                 if auxiliary_labels is not None:
                     result = (*result, auxiliary_labels)
-                if self.use_stage3_rank:
-                    result = (
-                        *result,
-                        torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
-                        torch.from_numpy(x_mean.astype(np.float32)),
-                        torch.from_numpy(x_std.astype(np.float32)),
-                    )
-                return result
+                return finish(result)
             result = (x_tensor, x_stamp_tensor, sector_id, size_bucket)
             if auxiliary_labels is not None:
                 result = (*result, auxiliary_labels)
-            if self.use_stage3_rank:
-                result = (
-                    *result,
-                    torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
-                    torch.from_numpy(x_mean.astype(np.float32)),
-                    torch.from_numpy(x_std.astype(np.float32)),
-                )
-            return result
+            return finish(result)
         result = (x_tensor, x_stamp_tensor)
         if auxiliary_labels is not None:
             result = (*result, auxiliary_labels)
-        if self.use_stage3_rank:
-            result = (
-                *result,
-                torch.tensor(int(self.signal_date_ids[source_position]), dtype=torch.long),
-                torch.from_numpy(x_mean.astype(np.float32)),
-                torch.from_numpy(x_std.astype(np.float32)),
-            )
-        return result
+        return finish(result)
 
 
 if __name__ == '__main__':

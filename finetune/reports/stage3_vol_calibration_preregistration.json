@@ -1,0 +1,69 @@
+{
+  "name": "stage3_vol_calibration_from_c2_best",
+  "status": "designed_not_started",
+  "designed_at": "2026-09-21",
+  "parent": {
+    "label": "cosine_c2_best",
+    "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+    "segment": 179,
+    "kernel": "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "load": "weights_only_fresh_adamw"
+  },
+  "problem": {
+    "metric": "mean(realized_path_vol / predicted_path_vol) on production decode T=0.65/top_p=0.8/N=5",
+    "c2_18d": 2.10,
+    "c4_18d": 2.02,
+    "cause": "token CE plus mixing a mean path. Production predicted_path_vol is the mean of per-sample path stds. Averaging paths first (vol of the mean) is strictly smaller and is the wrong training target."
+  },
+  "objective": {
+    "token_ce": "uniform H1-H10, no history term",
+    "level_huber": "off",
+    "vol_term": "Huber(log E_n[std(daily close return of candidate n)], log std(realized daily close return))",
+    "lambda_vol": 0.15,
+    "decode": "teacher-forced Top-K=16 candidate mixture; stop-grad tokenizer; weights differentiable",
+    "price_space": "denormalize close with window mean/std before returns"
+  },
+  "optimizer": {
+    "lr": 2e-6,
+    "scheduler": "fixed",
+    "batch_per_gpu": 32,
+    "global_batch": 64,
+    "coverage_seed": 20260921,
+    "trainable": "all 24819392 predictor params",
+    "tokenizer": "frozen"
+  },
+  "smoke": {
+    "segments": 8,
+    "windows_per_segment": 20000,
+    "causal_val": 123836,
+    "new_swanlab_run": "small_0.1_stage3_vol_cal_from_c2_best_v1",
+    "kaggle_kernel": "luckfu/kronos-small-0-1-s3-vol-cal-smoke",
+    "resume_c3": false
+  },
+  "logged_every_segment": [
+    "token_ce",
+    "pred_path_vol",
+    "realized_path_vol",
+    "vol_calibration_ratio",
+    "mixture_mean_path_vol",
+    "vol_vs_ce_grad_norm_ratio"
+  ],
+  "smoke_go": {
+    "no_nan": true,
+    "val_vol_ratio_moves_toward_1": true,
+    "token_ce_increase_lt": 0.03
+  },
+  "after_smoke_18d_oos": {
+    "decode": "locked production T=0.65/top_p=0.8/N=5",
+    "success_vol": "calibration ratio drops by at least 0.20 from 2.10 (does not need to hit 1.0-1.3 in 8 segments)",
+    "red_line_ic": "industry+size residual D10 Rank IC >= 0.10 (baseline 0.121)"
+  },
+  "then": "only if smoke_go and 18d red line hold, continue 40-60 segments under the same contract",
+  "not_this_run": [
+    "decode T/top_p/N grid",
+    "C4 parent",
+    "C3 resume",
+    "lambda_path level Huber",
+    "CE+rank head"
+  ]
+}
