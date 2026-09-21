@@ -102,6 +102,10 @@ def _grad_norm(grads):
 
 
 def vol_vs_ce_grad_norm_ratio(core, token_loss, vol_loss):
+    if not token_loss.requires_grad:
+        raise RuntimeError('token loss has no grad_fn')
+    if not vol_loss.requires_grad:
+        raise RuntimeError('vol loss has no grad_fn; mixture weights were detached')
     params = [p for p in core.predictor.parameters() if p.requires_grad]
     ce_grads = torch.autograd.grad(token_loss, params, retain_graph=True, allow_unused=True)
     vol_grads = torch.autograd.grad(vol_loss, params, retain_graph=True, allow_unused=True)

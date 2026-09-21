@@ -83,10 +83,15 @@ def compute_vol_alignment_loss(
     normalizer: DetachedLossEMA | None = None,
     position_start=None, is_causal=None, synchronize_ema=False,
 ):
-    _, weights, extra = candidate_mixture_decode(
+    _, _, extra = candidate_mixture_decode(
         model, tokenizer, context, s1_logits, config.top_k, config.candidates,
         position_start, is_causal,
     )
+    # Decode returns weights.detach(); path-level Huber uses the live mixture
+    # prediction instead. Vol training must softmax the live joint logp.
+    weights = extra["selected_joint_logp"].softmax(-1)
+    if torch.is_grad_enabled() and not weights.requires_grad:
+        raise RuntimeError('vol alignment mixture weights are detached')
     close_mean = feature_mean[:, config.close_index]
     close_std = feature_std[:, config.close_index]
     candidate_z = extra["candidate_paths"][:, :, config.close_index, :]

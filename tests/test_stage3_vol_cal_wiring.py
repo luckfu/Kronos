@@ -33,6 +33,14 @@ def test_trainer_refuses_c3_dashboard_and_requires_vol_exclusive():
     assert "SWANLAB_RUN_ID', 'small_0.1_stage3_joint_path_alignment_from_c2_best_v2')" in source
 
 
+def test_vol_loss_softmaxes_live_joint_logp_not_detached_decode_weights():
+    source = (ROOT / 'finetune/stage3_vol_alignment.py').read_text()
+    assert 'extra["selected_joint_logp"].softmax(-1)' in source
+    assert 'vol alignment mixture weights are detached' in source
+    decode = (ROOT / 'finetune/stage3_path_alignment.py').read_text()
+    assert 'return prediction, weights.detach(), {' in decode
+
+
 def test_checkpoint_schema_splits_vol_from_c3_path():
     source = MODEL.read_text()
     assert "schema': 'stage3_vol_calibration_v1' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'" in source

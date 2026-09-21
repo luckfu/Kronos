@@ -24,6 +24,20 @@ def test_daily_returns_match_close_to_close():
     assert torch.allclose(daily[:, 1], (future[:, 1] / last) / (future[:, 0] / last) - 1.0)
 
 
+def test_detached_decode_weights_have_no_vol_gradient():
+    last = torch.ones(1)
+    candidates = (1.0 + 0.1 * torch.randn(1, 10, 2)).abs() + 0.5
+    logits = torch.tensor([[[0.0, 1.0]]]).repeat(1, 10, 1).requires_grad_(True)
+    live = logits.softmax(-1)
+    detached = live.detach()
+    pred_live, _, _ = expected_path_vol(candidates, live, last)
+    pred_dead, _, _ = expected_path_vol(candidates, detached, last)
+    assert pred_live.requires_grad
+    assert not pred_dead.requires_grad
+    pred_live.mean().backward()
+    assert logits.grad.abs().sum() > 0
+
+
 def test_expected_vol_has_weight_gradient():
     last = torch.ones(1)
     low = (1.0 + 0.01 * torch.randn(1, 10, 1)).abs() + 0.5
