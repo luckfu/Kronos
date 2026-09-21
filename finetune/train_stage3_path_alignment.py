@@ -10,7 +10,7 @@ from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
 from finetune.stage3_ce_rank import DEFAULT_FORECAST_HORIZON_WEIGHTS, Stage3CERankConfig
 from finetune.stage3_path_alignment import PathAlignmentConfig
-from finetune.stage3_vol_alignment import VolAlignmentConfig
+from finetune.stage3_vol_alignment import VOL_METRIC_KEYS, VolAlignmentConfig
 from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
 from finetune.stage3_trainable_mask import (
     KNOWN_MASKS, apply_trainable_mask, assert_frozen_parameters_unchanged,
@@ -124,8 +124,7 @@ def evaluate(model, loader, device, world, rank=0, log_interval=50):
             'prediction_mean_hf', 'prediction_second_moment_hf',
             'target_mean_hf', 'target_second_moment_hf')
     if _vol_enabled(core):
-        keys = keys + ('vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
-                       'mixture_mean_path_vol', 'uniform_path_vol')
+        keys = keys + VOL_METRIC_KEYS
     sums = {k: torch.zeros((core.horizon, 6) if k.endswith('_hf') else
                           (core.horizon,) if k == 'horizon_mae' else (),
                           device=device, dtype=torch.float64) for k in keys}
@@ -383,10 +382,7 @@ def main(a):
                 scalar_keys = ('token_loss', 'raw_path_loss', 'normalized_path_loss', 'total_loss',
                                'top16_joint_mass', 's1_entropy', 's2_conditional_entropy_topk_s1', 'max_residual')
                 if a.lambda_vol:
-                    scalar_keys = scalar_keys + (
-                        'vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
-                        'mixture_mean_path_vol', 'uniform_path_vol',
-                    )
+                    scalar_keys = scalar_keys + VOL_METRIC_KEYS
                 if a.ce_rank:
                     scalar_keys = ('ce_objective', 'history_loss', 'weighted_forecast_loss', 'rank_loss',
                                    'total_loss', 's1_entropy')
