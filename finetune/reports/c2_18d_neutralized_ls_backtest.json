@@ -1,0 +1,136 @@
+{
+  "cost_per_side": 0.003,
+  "hold_sessions": 10,
+  "top_fraction": 0.1,
+  "signal_dates": 18,
+  "nav_days": 27,
+  "mean_two_way_turnover": 0.10623635608378998,
+  "total_return": 0.001245009233254546,
+  "annualized_return": 0.011680549635657123,
+  "daily_mean": 0.00011163254784936791,
+  "daily_std": 0.011652639181048429,
+  "sharpe": 0.15207814568409486,
+  "max_drawdown": -0.03376567016847709,
+  "calmar": 0.34592974394928,
+  "mean_overlapping_10d_ls": 0.013199020367329038,
+  "positive_overlapping_10d_ls_ratio": 0.8333333333333334,
+  "layers": [
+    {
+      "asof_date": "2026-08-11",
+      "n_long": 517,
+      "n_short": 517,
+      "holding_10d": 0.015295324927097561
+    },
+    {
+      "asof_date": "2026-08-12",
+      "n_long": 517,
+      "n_short": 517,
+      "holding_10d": 0.021033689419391193
+    },
+    {
+      "asof_date": "2026-08-13",
+      "n_long": 517,
+      "n_short": 517,
+      "holding_10d": 0.00808776964542369
+    },
+    {
+      "asof_date": "2026-08-14",
+      "n_long": 517,
+      "n_short": 517,
+      "holding_10d": 0.020980731585177114
+    },
+    {
+      "asof_date": "2026-08-17",
+      "n_long": 517,
+      "n_short": 517,
+      "holding_10d": 0.03191955624871934
+    },
+    {
+      "asof_date": "2026-08-18",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.05697463041629057
+    },
+    {
+      "asof_date": "2026-08-19",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.01990421419058014
+    },
+    {
+      "asof_date": "2026-08-20",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.006158991350964023
+    },
+    {
+      "asof_date": "2026-08-21",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.03564991504401448
+    },
+    {
+      "asof_date": "2026-08-24",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.0065087097223743146
+    },
+    {
+      "asof_date": "2026-08-25",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.011814330645490818
+    },
+    {
+      "asof_date": "2026-08-26",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.0040951201625052305
+    },
+    {
+      "asof_date": "2026-08-27",
+      "n_long": 516,
+      "n_short": 516,
+      "holding_10d": 0.034481738477322346
+    },
+    {
+      "asof_date": "2026-08-28",
+      "n_long": 515,
+      "n_short": 515,
+      "holding_10d": 0.015341380546781896
+    },
+    {
+      "asof_date": "2026-08-31",
+      "n_long": 514,
+      "n_short": 514,
+      "holding_10d": 0.019553311110112048
+    },
+    {
+      "asof_date": "2026-09-01",
+      "n_long": 514,
+      "n_short": 514,
+      "holding_10d": -0.009378133012310833
+    },
+    {
+      "asof_date": "2026-09-02",
+      "n_long": 514,
+      "n_short": 514,
+      "holding_10d": -0.0358660357858522
+    },
+    {
+      "asof_date": "2026-09-03",
+      "n_long": 514,
+      "n_short": 514,
+      "holding_10d": -0.024972878082159082
+    }
+  ],
+  "nav_end": 1.0012450092332545,
+  "gross_zero_cost": {
+    "total_return": 0.018619618980022956,
+    "annualized_return": 0.18789760893109997,
+    "sharpe": 1.0201153564826808,
+    "max_drawdown": -0.02867537378275309,
+    "calmar": 6.552577495750437,
+    "nav_end": 1.018619618980023
+  }
+}

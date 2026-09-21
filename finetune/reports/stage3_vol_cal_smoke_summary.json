@@ -1,0 +1,46 @@
+{
+  "name": "stage3_vol_cal_smoke_from_c2_best",
+  "kernel": "luckfu/kronos-small-0-1-s3-vol-cal-smoke",
+  "source_commit": "aeb9d95f81af4182064fefaa7380563ecc772bc2",
+  "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_vol_cal_from_c2_best_v1",
+  "status": "complete_nogo",
+  "completed_segments": 8,
+  "completed_at": "2026-09-21T14:26:32Z",
+  "metric_note": "val vol_calibration_ratio is teacher-forced Top-K=16 E[vol(path)] on causal val, not production decode T=0.65/N=5. C2 baseline on this proxy is already 0.90 (over-vol), while 18d production decode was 2.10 (under-vol).",
+  "baseline": {
+    "token_loss": 2.3384811465155457,
+    "total_loss": 2.3435040445744235,
+    "vol_calibration_ratio": 0.8982355610807335,
+    "pred_path_vol": 0.028298550228964284,
+    "realized_path_vol": 0.024226123399041243,
+    "mixture_mean_path_vol": 0.02338746353536132
+  },
+  "last_segment": {
+    "segment": 8,
+    "step": 2504,
+    "token_loss": 2.3291303267285337,
+    "total_loss": 2.3341282804197356,
+    "vol_calibration_ratio": 0.8953282028343285,
+    "pred_path_vol": 0.03255681370149536,
+    "realized_path_vol": 0.024226123399041243,
+    "mixture_mean_path_vol": 0.023489936177576595
+  },
+  "train_vol_vs_ce_grad_norm_ratio": {
+    "n": 251,
+    "first": 0.13478107750415802,
+    "last": 0.11537777632474899,
+    "min": 0.04976246505975723,
+    "median": 0.08908608555793762,
+    "max": 0.4946231245994568
+  },
+  "smoke_go": {
+    "no_nan": true,
+    "token_ce_increase": -0.009350819787012021,
+    "token_ce_increase_lt_0.03": true,
+    "val_vol_ratio_baseline": 0.8982355610807335,
+    "val_vol_ratio_last": 0.8953282028343285,
+    "val_vol_ratio_moves_toward_1": false,
+    "passed": false
+  },
+  "next": "do_not_start_40_60_segments; 18d production OOS not justified by smoke_go"
+}

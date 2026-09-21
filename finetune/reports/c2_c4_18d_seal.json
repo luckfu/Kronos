@@ -1,0 +1,77 @@
+{
+  "sealed_at": "2026-09-21",
+  "status": "sealed",
+  "paper_main_model": "cosine_c2_best",
+  "no_new_stage2_variants": true,
+  "production_decode": {
+    "temperature": 0.65,
+    "top_p": 0.8,
+    "sample_count": 5,
+    "seed": 20260906
+  },
+  "sealed_window": {
+    "evaluation_name": "kronos_beta_v2_time_oos_through_20260903",
+    "signal_start": "2026-08-11",
+    "signal_end": "2026-09-03",
+    "signal_dates": 18,
+    "samples": 92751
+  },
+  "candidates": {
+    "c2_best": {
+      "role": "paper_main_and_production",
+      "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+      "segment": 179,
+      "val_forecast_ce": 2.2944018841,
+      "kernel_18d": "luckfu/kronos-small-0-1-c2-18d-alpha-oos",
+      "prod_raw_pooled_rank_ic": 0.2372795397036252,
+      "prod_double_residual_rank_ic": 0.12081574991357688,
+      "prod_daily_double_residual_mean": 0.11823847953089922,
+      "prod_residual_newey_west_t": 3.8718447408026466,
+      "prod_vol_calibration_ratio": 2.10,
+      "clears_residual_bar_0_15": false,
+      "rank_n16_double_residual_rank_ic": 0.120
+    },
+    "c4_best": {
+      "role": "sealed_runner_up_not_production",
+      "sha256": "9c5605d08e4f63e223d7b5edf9c6c8d2acad88ddfe022e5b27c098588d743075",
+      "segment": 21,
+      "global_segment": 528,
+      "val_forecast_ce": 2.2728769779205322,
+      "kernel_18d": "luckfu/kronos-small-0-1-c4-18d-alpha-oos",
+      "prod_raw_pooled_rank_ic": 0.2176732353012132,
+      "prod_double_residual_rank_ic": 0.1138260829065082,
+      "prod_daily_double_residual_mean": 0.11033042636482047,
+      "prod_residual_newey_west_t": 4.239127999317128,
+      "prod_vol_calibration_ratio": 2.018,
+      "clears_residual_bar_0_15": false,
+      "rank_n16_double_residual_rank_ic": 0.1128
+    }
+  },
+  "selection_rule": {
+    "chose": "c2_best",
+    "reason": "Neither clears residual Rank IC 0.15. Absolute residual Alpha 0.121 vs 0.114 favors C2. C4 Newey-West t 4.24 vs 3.87 is not enough on an 18-day window to offset the mean gap. Production N=5 locked because N=16 does not lift residual IC on either model."
+  },
+  "structural_defect": {
+    "vol_underprediction": "about_2x_on_both_models",
+    "interpretation": "Token CE mean-reversion of the decoded path; not a C2-only bug",
+    "stage3_mission": "cut vol calibration ratio from ~2.1x toward 1.0-1.3x; not to hunt residual IC 0.25"
+  },
+  "low_cost_postprocess_on_frozen_c2": {
+    "status": "complete",
+    "report": "finetune/reports/c2_18d_rule_sweep.json",
+    "baseline_net_sharpe": 0.152,
+    "five_day_overlay_net_sharpe": 0.767,
+    "five_day_hysteresis_10_15_net_sharpe": 0.511,
+    "clears_advisor_0_5_bar": true,
+    "clears_prior_0_8_bar": false,
+    "note": "Alpha survives after lowering rebalance frequency; 18-day NAV is still a short sample"
+  },
+  "do_not": [
+    "train C5 or C6 or any new Stage2 continuation",
+    "retune T, top_p, or sample_count",
+    "rerank C2 vs C4 on this 18-day window",
+    "treat residual IC 0.12 as having cleared 0.15",
+    "continue Stage3 C3 by adding 40-60 more segments",
+    "start Stage3 training whose primary metric is still token CE or Rank IC 0.25"
+  ]
+}

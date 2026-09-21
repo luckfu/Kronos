@@ -1,6 +1,6 @@
 {
   "name": "stage3_vol_calibration_from_c2_best",
-  "status": "smoke_submitted",
+  "status": "smoke_complete_nogo",
   "designed_at": "2026-09-21",
   "parent": {
     "label": "cosine_c2_best",
