@@ -21,6 +21,17 @@ from finetune.stage3_path_alignment import DetachedLossEMA
 CLOSE = 3
 EPS = 1e-5
 
+# evaluate() and train logging require every key on this tuple. The vol
+# loss already computes them; Stage3TrainingModel must copy them into
+# the metrics dict or baseline evaluate KeyErrors (uniform_path_vol).
+VOL_METRIC_KEYS = (
+    'vol_calibration_ratio',
+    'pred_path_vol',
+    'realized_path_vol',
+    'mixture_mean_path_vol',
+    'uniform_path_vol',
+)
+
 
 @dataclass
 class VolAlignmentConfig:

@@ -1,9 +1,12 @@
 import torch
 
+from finetune.stage3_path_alignment import PathAlignmentConfig
+from finetune.stage3_training_model import Stage3TrainingModel
 from finetune.stage3_vol_alignment import (
-    apply_temperature_nucleus, daily_returns_from_close, expected_path_vol,
-    mixture_mean_path_vol,
+    VOL_METRIC_KEYS, VolAlignmentConfig, apply_temperature_nucleus,
+    daily_returns_from_close, expected_path_vol, mixture_mean_path_vol,
 )
+from model import Kronos, KronosTokenizer
 
 
 def test_lower_temperature_peaks_the_distribution():
@@ -53,6 +56,33 @@ def test_detached_decode_weights_have_no_vol_gradient():
     assert not pred_dead.requires_grad
     pred_live.mean().backward()
     assert logits.grad.abs().sum() > 0
+
+
+def test_production_decode_vol_metrics_include_evaluate_keys():
+    """evaluate() and train logging both index these keys on the vol path."""
+    torch.manual_seed(21)
+    predictor = Kronos(4, 4, 2, 32, 4, 64, 0.0, 0.0, 0.0, 0.0, False)
+    tokenizer = KronosTokenizer(6, 32, 4, 64, 2, 2, 0.0, 0.0, 0.0, 4, 4, 0.25, 1., 1., 1., 4)
+    core = Stage3TrainingModel(
+        predictor, tokenizer, lookback=7, horizon=10, synchronize_ema=False,
+        config=PathAlignmentConfig(weight=0.0),
+        vol_config=VolAlignmentConfig(
+            weight=0.15, temperature=0.65, top_p=0.8, candidates=5,
+        ),
+    )
+    generator = torch.Generator().manual_seed(617)
+    x = torch.randn(2, 18, 6, generator=generator)
+    stamps = torch.zeros(2, 18, 5)
+    means = torch.zeros(2, 6)
+    stds = torch.ones(2, 6)
+    assert 'uniform_path_vol' in VOL_METRIC_KEYS
+    for training in (False, True):
+        core.train(training)
+        _, metrics = core(x, stamps, feature_means=means, feature_stds=stds)
+        missing = [key for key in VOL_METRIC_KEYS if key not in metrics]
+        assert missing == [], missing
+        stacked = torch.stack([metrics[key].double() * len(x) for key in VOL_METRIC_KEYS])
+        assert torch.isfinite(stacked).all()
 
 
 def test_expected_vol_has_weight_gradient():

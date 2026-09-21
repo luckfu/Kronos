@@ -7,7 +7,9 @@ from finetune.stage3_ce_rank import Stage3CERankConfig, compute_rank_terms, comp
 from finetune.stage3_path_alignment import (
     DetachedLossEMA, PathAlignmentConfig, compute_path_alignment_loss,
 )
-from finetune.stage3_vol_alignment import VolAlignmentConfig, compute_vol_alignment_loss, CLOSE
+from finetune.stage3_vol_alignment import (
+    CLOSE, VOL_METRIC_KEYS, VolAlignmentConfig, compute_vol_alignment_loss,
+)
 
 
 class Stage3TrainingModel(nn.Module):
@@ -124,7 +126,7 @@ class Stage3TrainingModel(nn.Module):
             with torch.no_grad():
                 logp1 = logits1.float().log_softmax(-1)
                 s1_entropy = -(logp1.exp() * logp1).sum(-1).mean()
-            return total, {
+            metrics = {
                 'token_loss': token_loss.detach(),
                 'raw_path_loss': details['vol_align_loss'],
                 'normalized_path_loss': details['vol_align_normalized'],
@@ -139,11 +141,9 @@ class Stage3TrainingModel(nn.Module):
                 'prediction_second_moment_hf': zeros_hf.square(),
                 'target_mean_hf': x[:, target_slice].detach().mean(0),
                 'target_second_moment_hf': x[:, target_slice].detach().square().mean(0),
-                'vol_calibration_ratio': details['vol_calibration_ratio'],
-                'pred_path_vol': details['pred_path_vol'],
-                'realized_path_vol': details['realized_path_vol'],
-                'mixture_mean_path_vol': details['mixture_mean_path_vol'],
             }
+            metrics.update({key: details[key] for key in VOL_METRIC_KEYS})
+            return total, metrics
         if self.config.weight == 0:
             zeros_h = token_loss.new_zeros((self.horizon,))
             zeros_hf = token_loss.new_zeros((self.horizon, 6))

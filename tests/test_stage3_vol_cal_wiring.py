@@ -49,6 +49,21 @@ def test_vol_loss_softmaxes_live_joint_logp_not_detached_decode_weights():
     assert 'vol alignment mixture weights are detached' in source
 
 
+def test_vol_metrics_contract_forwards_uniform_path_vol():
+    from finetune.stage3_vol_alignment import VOL_METRIC_KEYS
+    assert VOL_METRIC_KEYS == (
+        'vol_calibration_ratio', 'pred_path_vol', 'realized_path_vol',
+        'mixture_mean_path_vol', 'uniform_path_vol',
+    )
+    vol = (ROOT / 'finetune/stage3_vol_alignment.py').read_text()
+    model = MODEL.read_text()
+    trainer = TRAINER.read_text()
+    assert '"uniform_path_vol": uniform_vol.detach().mean()' in vol
+    assert '{key: details[key] for key in VOL_METRIC_KEYS}' in model
+    assert 'keys = keys + VOL_METRIC_KEYS' in trainer
+    assert 'scalar_keys = scalar_keys + VOL_METRIC_KEYS' in trainer
+
+
 def test_checkpoint_schema_splits_vol_from_c3_path():
     source = MODEL.read_text()
     assert "schema': 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'" in source
