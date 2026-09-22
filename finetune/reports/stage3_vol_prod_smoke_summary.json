@@ -1,0 +1,124 @@
+{
+  "name": "stage3_vol_prod_decode_from_c2_best",
+  "kernel": "luckfu/kronos-small-0-1-s3-vol-prod-smoke",
+  "source_commit": "8ba0e3077b1ed57da79c7f95760982acad0a391b",
+  "pin": "8ba0e30",
+  "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_vol_prod_decode_from_c2_v1",
+  "status": "complete_nogo",
+  "completed_segments": 8,
+  "completed_at": "2026-09-21T17:04:40Z",
+  "decode": "production T=0.65 / top_p=0.8 / N=5",
+  "metric_note": "val vol_calibration_ratio uses production decode T=0.65/top_p=0.8/N=5 on causal val. C2 baseline on this surface is 0.9258 (still over-vol, <1), while 18d production decode was ~2.10 (under-vol). smoke_go requires baseline_vol_ratio_above_1; that gate fails, so this proxy still does not match the 18d under-vol problem.",
+  "baseline": {
+    "token_loss": 2.3384811465155457,
+    "total_loss": 2.3437875909065067,
+    "vol_calibration_ratio": 0.9257831806050141,
+    "pred_path_vol": 0.028404483402043743,
+    "realized_path_vol": 0.024226123399041243,
+    "mixture_mean_path_vol": 0.024374521646426395,
+    "uniform_path_vol": 0.034244898875978605
+  },
+  "last_segment": {
+    "segment": 8,
+    "step": 2504,
+    "token_loss": 2.329396760834523,
+    "total_loss": 2.3347768195358767,
+    "vol_calibration_ratio": 0.9156643747417011,
+    "pred_path_vol": 0.0287720255146767,
+    "realized_path_vol": 0.024226123399041243,
+    "mixture_mean_path_vol": 0.024589105787694795,
+    "uniform_path_vol": 0.03496310219391033
+  },
+  "best_toward_1_segment": {
+    "segment": 6,
+    "vol_calibration_ratio": 0.9210598417770308,
+    "token_loss": 2.332438529232775,
+    "dist_to_1": 0.07894015822296918
+  },
+  "vol_trajectory": [
+    {
+      "segment": 1,
+      "vol_calibration_ratio": 0.9202731266887795,
+      "token_loss": 2.3385319555370634,
+      "pred_path_vol": 0.028606653739101547,
+      "mixture_mean_path_vol": 0.024548272261004797,
+      "uniform_path_vol": 0.034488990851098716
+    },
+    {
+      "segment": 2,
+      "vol_calibration_ratio": 0.9174141604396169,
+      "token_loss": 2.3389821863131313,
+      "pred_path_vol": 0.02868405402554058,
+      "mixture_mean_path_vol": 0.02459223290194869,
+      "uniform_path_vol": 0.034623256690032245
+    },
+    {
+      "segment": 3,
+      "vol_calibration_ratio": 0.9158799541258774,
+      "token_loss": 2.338022101903101,
+      "pred_path_vol": 0.028744175815009314,
+      "mixture_mean_path_vol": 0.024639447635740188,
+      "uniform_path_vol": 0.034695545788475925
+    },
+    {
+      "segment": 4,
+      "vol_calibration_ratio": 0.9179459812480653,
+      "token_loss": 2.336387137051504,
+      "pred_path_vol": 0.02868729313128143,
+      "mixture_mean_path_vol": 0.02454033427405155,
+      "uniform_path_vol": 0.034736448362360894
+    },
+    {
+      "segment": 5,
+      "vol_calibration_ratio": 0.9174999655315382,
+      "token_loss": 2.334722219467194,
+      "pred_path_vol": 0.028692533383817668,
+      "mixture_mean_path_vol": 0.02454677597810346,
+      "uniform_path_vol": 0.03474144407243365
+    },
+    {
+      "segment": 6,
+      "vol_calibration_ratio": 0.9210598417770308,
+      "token_loss": 2.332438529232775,
+      "pred_path_vol": 0.02859382420788382,
+      "mixture_mean_path_vol": 0.02444891048018749,
+      "uniform_path_vol": 0.03467204147087832
+    },
+    {
+      "segment": 7,
+      "vol_calibration_ratio": 0.9193119729155121,
+      "token_loss": 2.3304640528821428,
+      "pred_path_vol": 0.02866679691168726,
+      "mixture_mean_path_vol": 0.024500494167694082,
+      "uniform_path_vol": 0.034801230877214304
+    },
+    {
+      "segment": 8,
+      "vol_calibration_ratio": 0.9156643747417011,
+      "token_loss": 2.329396760834523,
+      "pred_path_vol": 0.0287720255146767,
+      "mixture_mean_path_vol": 0.024589105787694795,
+      "uniform_path_vol": 0.03496310219391033
+    }
+  ],
+  "smoke_go": {
+    "no_nan": true,
+    "baseline_vol_ratio": 0.9257831806050141,
+    "baseline_vol_ratio_above_1": false,
+    "val_vol_ratio_baseline": 0.9257831806050141,
+    "val_vol_ratio_last": 0.9156643747417011,
+    "dist_to_1_baseline": 0.07421681939498592,
+    "dist_to_1_last": 0.08433562525829885,
+    "val_vol_ratio_moves_toward_1": false,
+    "token_ce_increase": -0.009084385681022766,
+    "token_ce_increase_lt_0.03": true,
+    "passed": false
+  },
+  "next": "do_not_start_40_60_segments; smoke_go nogo. Next single-GPU step: diagnose causal-val vs 18d production vol mismatch (baseline still over-vol 0.93 on prod decode while 18d was under-vol 2.10) before any longer train; do not launch a second GPU job until that diagnosis lands and user confirms direction.",
+  "freeze_audit": {
+    "trainable_parameters": 24819392,
+    "frozen_tensors": 0,
+    "trainable_fraction": 1.0,
+    "note": "predictor all trainable; tokenizer separate/frozen per contract"
+  }
+}

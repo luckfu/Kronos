@@ -1,0 +1,46 @@
+{
+  "kernel": "luckfu/kronos-small-0-1-s3-ar-vol-smoke",
+  "status": "COMPLETE",
+  "checked_at": "2026-09-22T13:19:17+08:00",
+  "source_commit": "c13bb2699718de32716af3defeaab121058293fc",
+  "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_ar_vol_from_c2_v1",
+  "training_reached": true,
+  "phase": "ar_probe_decision",
+  "completed_segments": 1,
+  "validation_token_ce": 2.3401181512402798,
+  "baseline_token_ce": 2.3384799865093138,
+  "elapsed_sec_seg1": 5090.68417596817,
+  "gate": {
+    "baseline_ar_ratio": 1.3533238272873447,
+    "ar_calibration_ratio": 1.2964573262003098,
+    "closer_to_one": true,
+    "baseline_distance_to_one": 0.3533238272873447,
+    "distance_to_one": 0.29645732620030985,
+    "token_ce": 2.3401181512402798,
+    "baseline_token_ce": 2.3384799865093138,
+    "ce_increase": 0.0016381647309660075,
+    "ce_increase_lt": 0.03,
+    "ce_ok": true,
+    "probe_dates": [
+      "2026-06-29",
+      "2026-06-30",
+      "2026-07-01",
+      "2026-07-02"
+    ],
+    "probe_windows": 2055,
+    "checkpoint": "last_model",
+    "evaluated": true,
+    "go": true
+  },
+  "decision": "GO",
+  "do_not_open_8_segments": false,
+  "output_dir": "/workspace/kaggle_ar_vol_smoke",
+  "last_state_sha256": "8507706ee7562136128b750bde3a3c44b5eeba7cbff73138c1d2a5d0e0c62bff",
+  "progress": {
+    "completed_segments": 1,
+    "next_epoch": 1,
+    "step": 1250,
+    "status": "completed"
+  },
+  "next": "push single-GPU 8-seg continuation luckfu/kronos-small-0-1-s3-ar-vol-c2 resuming smoke state"
+}

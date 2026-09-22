@@ -1,0 +1,11 @@
+{
+  "kernel": "luckfu/kronos-small-0-1-s3-ar-vol-smoke",
+  "status": "ERROR",
+  "phase": "cpu_preflight_pytest",
+  "training_reached": false,
+  "failure": "tests/test_stage3_ar_vol.py::test_go_requires_both_a_closer_ar_ratio_and_a_small_ce_increase",
+  "likely_cause": "float boundary: 2.30+0.03 then after-before slightly < 0.03 so ce_ok True while test expects nogo at equality",
+  "next": "fix decide+test via PR; merge; re-pin and repush same 1-seg AR vol smoke; do not open 8 segments",
+  "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_ar_vol_from_c2_v1",
+  "checked_at": "2026-09-22T11:07:25+08:00"
+}

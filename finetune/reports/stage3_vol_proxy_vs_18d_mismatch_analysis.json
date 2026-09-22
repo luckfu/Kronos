@@ -1,0 +1,239 @@
+{
+  "name": "stage3_vol_proxy_vs_18d_mismatch_analysis",
+  "analyzed_at_shanghai": "2026-09-22T08:49:00+08:00",
+  "scope": "local_read_only",
+  "constraints_honored": [
+    "no_kaggle_push",
+    "no_gpu_jobs_launched",
+    "no_git_push",
+    "no_40_60_segments"
+  ],
+  "question": "Why Stage3 causal-val vol_calibration_ratio ~0.93 (over-vol) under production decode T=0.65/top_p=0.8/N=5, while sealed 18d production OOS reports ~2.10 (under-vol) with the same decode lock on C2 best?",
+  "artifacts_cited": {
+    "vol_prod_smoke": "finetune/reports/stage3_vol_prod_smoke_summary.json",
+    "vol_cal_smoke": "finetune/reports/stage3_vol_cal_smoke_summary.json",
+    "prod_prereg": "finetune/reports/stage3_vol_prod_decode_preregistration.json",
+    "decode_lock": "finetune/reports/c2_best_production_decode_lock.json",
+    "oos_summary": "finetune/reports/c2_18d_alpha_oos_summary.json",
+    "stage3_vol_code": "finetune/stage3_vol_alignment.py",
+    "stage3_train_model": "finetune/stage3_training_model.py",
+    "stage3_train_loop": "finetune/train_stage3_path_alignment.py",
+    "oos_eval_code": "finetune/kaggle_c2_18d_alpha_oos/c2_18d_alpha_oos.py",
+    "ar_decode": "model/kronos.py::auto_regressive_inference"
+  },
+  "cited_numbers": {
+    "stage3_prod_smoke_baseline": {
+      "vol_calibration_ratio": 0.9257831806050141,
+      "pred_path_vol": 0.028404483402043743,
+      "realized_path_vol": 0.024226123399041243,
+      "mixture_mean_path_vol": 0.024374521646426395,
+      "uniform_path_vol": 0.034244898875978605,
+      "interpretation": "ratio<1 => predicted path vol HIGHER than realized (over-vol)"
+    },
+    "stage3_vol_cal_topk16_baseline": {
+      "vol_calibration_ratio": 0.8982355610807335,
+      "pred_path_vol": 0.028298550228964284,
+      "realized_path_vol": 0.024226123399041243,
+      "note": "T=1 top-16 teacher-forced mixture; also over-vol; same realized"
+    },
+    "c2_18d_prod_t065_p80_n5": {
+      "calibration_ratio_realized_over_predicted": 2.1023280803306337,
+      "mean_predicted_path_vol": 0.013898331466599734,
+      "mean_realized_path_vol": 0.02485530848961257,
+      "samples": 92746,
+      "interpretation": "ratio>1 => predicted path vol LOWER than realized (under-vol)"
+    },
+    "c2_18d_rank_t060_p90_n16_diagnostic": {
+      "calibration_ratio_realized_over_predicted": 1.9268762740798024,
+      "mean_predicted_path_vol": 0.01465845002414119,
+      "note": "still under-vol; N=16 does not flip direction"
+    },
+    "derived": {
+      "stage3_ratio_of_means_realized_over_pred": 0.8528978702460098,
+      "stage3_if_uniform_aggregator_r_over_u": 0.7074374343103953,
+      "stage3_if_mixture_mean_vol_of_E_r_over_m": 0.9939117472934321,
+      "oos_ratio_of_means_realized_over_pred": 1.7883663624906687,
+      "pred_vol_stage3_over_oos": 2.0437333409629046,
+      "realized_vol_stage3_over_oos": 0.9746860880509983,
+      "jensen_gap_stage3_E_R_over_P_minus_ratio_of_means": 0.07288531035900425
+    }
+  },
+  "formulas": {
+    "direction": "BOTH surfaces use realized/predicted (ratio<1 over-vol, ratio>1 under-vol). Neither flips by inverting the ratio.",
+    "stage3_causal_val": {
+      "vol_calibration_ratio": "mean_i( realized_path_vol_i / pred_path_vol_i )  [batch-size-weighted average of per-batch means in evaluate(); equivalent to pooled E[R/P]]",
+      "pred_path_vol": "expected_path_vol = sum_n w_n * std_H(daily_returns(candidate_n)); w_n = softmax(joint_logp) averaged over horizons then renorm",
+      "uniform_path_vol": "mean_n std_H(daily_returns(candidate_n))  [logged only; NOT the training target]",
+      "mixture_mean_path_vol": "std_H(daily_returns(sum_n w_n * candidate_n)) = vol(E[path]); explicitly NOT trained",
+      "realized_path_vol": "std_H(daily_returns(denorm target close path))",
+      "daily_returns": "from cumulative close/last_close-1 via (1+c_t)/(1+c_{t-1})-1; std unbiased=False (ddof=0)",
+      "denormalize": "close_px = close_z * std_close + mean_close (window feature mean/std)",
+      "code": [
+        "finetune/stage3_vol_alignment.py::compute_vol_alignment_loss ratio=(realized_vol/pred_vol).mean()",
+        "finetune/stage3_vol_alignment.py::expected_path_vol",
+        "finetune/stage3_training_model.py forward: teacher-forced logits1=predict_s1(context[:,start:end]) then compute_vol_alignment_loss",
+        "finetune/train_stage3_path_alignment.py::evaluate aggregates metrics[key]*batch_size / N"
+      ]
+    },
+    "oos_18d_production": {
+      "calibration_ratio_realized_over_predicted": "np.mean(realized / predicted) over sealed samples with both >0  [= E[R/P]]",
+      "predicted_path_vol_per_sample": "mean_n std_H(daily_returns of free-AR sample path n)  [= uniform E_n[std(path_n)]]",
+      "realized_path_vol_per_sample": "std_H(actual daily returns)",
+      "daily_returns": "to_daily(cumulative) identical algebra to Stage3 daily_returns_from_close",
+      "denormalize": "paths = z * std + mean; last_close from lookback-1 denorm; same close feature",
+      "aggregation_note": "summary also reports mean_predicted_path_vol and mean_realized_path_vol; calibration uses mean of ratios NOT ratio of means (E[R/P]=2.10 vs E[R]/E[P]=1.79; direction unchanged)",
+      "code": [
+        "finetune/kaggle_c2_18d_alpha_oos/c2_18d_alpha_oos.py::decode_date predicted_path_vol=predicted_daily.std(axis=1).mean()",
+        "finetune/kaggle_c2_18d_alpha_oos/c2_18d_alpha_oos.py::volatility_summary calibration_ratio_realized_over_predicted=np.mean(realized/predicted)",
+        "model/kronos.py::auto_regressive_inference free decode T/top_p/N"
+      ]
+    }
+  },
+  "comparison_matrix": {
+    "ratio_direction": {"stage3": "realized/pred", "oos18d": "realized/pred", "match": true},
+    "path_vol_definition": {"stage3": "E_n[std(daily close returns of path n)] after denorm", "oos18d": "same", "match": true},
+    "std_ddof": {"stage3": 0, "oos18d": 0, "match": true},
+    "horizon_H": {"stage3": 10, "oos18d": 10, "match": true},
+    "lookback": {"stage3": 120, "oos18d": 120, "match": true},
+    "decode_T_top_p_N_lock": {"stage3_smoke": "0.65/0.8/5", "oos18d_prod": "0.65/0.8/5", "match_on_paper": true},
+    "decode_mechanism": {
+      "stage3": "TEACHER-FORCED parallel joint mixture: production_style_mixture_decode on causal teacher-forced s1 logits over all H; support_k=16 then top N=5 joint candidates PER HORIZON independently; stitch candidate-index n across H into a pseudo-path; mixture softmax weights",
+      "oos18d": "FREE autoregressive sampling: N=5 coherent trajectories via auto_regressive_inference; multinomial sample each step; uniform mean over samples",
+      "match": false,
+      "severity": "critical"
+    },
+    "path_coherence": {
+      "stage3": "pseudo-paths: horizon-t candidate n is independently ranked top-n at t (not a true AR trajectory) => artificially jumpy day-to-day returns => HIGH path vol",
+      "oos18d": "true AR trajectories under concentrated T/top_p => smoother / mode-seeking => LOW path vol",
+      "match": false,
+      "severity": "critical"
+    },
+    "aggregator_for_reported_pred": {
+      "stage3_pred_path_vol": "mixture-weighted E_n[w_n vol_n]",
+      "stage3_uniform_path_vol_logged": "uniform mean_n vol_n (~0.034, even higher)",
+      "oos18d": "uniform mean_n vol_n",
+      "match": false,
+      "severity": "secondary_not_direction_flipping"
+    },
+    "temperature_application": {
+      "stage3": "apply_temperature_nucleus on s1 and s2_cond at T; joint ranking then nucleus at T=1.0/top_p; deterministic top-N not multinomial",
+      "oos18d": "sample_from_logits divides by T then top_p filter then multinomial each AR step",
+      "match": false,
+      "severity": "high"
+    },
+    "stop_grad": {
+      "stage3_train": "tokenizer decode values stop-grad; grads through mixture weights only (eval is no_grad anyway)",
+      "oos18d": "inference only",
+      "affects_metric_gap": false
+    },
+    "population": {
+      "stage3_causal_val_windows": 123836,
+      "oos18d_sealed_signal_dates": "2026-08-11..2026-09-03 (18 dates), ~92746-92751 samples",
+      "realized_path_vol_stage3": 0.024226123399041243,
+      "realized_path_vol_oos": 0.02485530848961257,
+      "realized_ratio": 0.9746860880509983,
+      "can_population_alone_flip_over_to_under": false,
+      "note": "realized vols nearly identical; the ~2.04x gap is almost entirely on the PREDICTED side (0.0284 vs 0.0139)"
+    }
+  },
+  "answers": {
+    "q1_formula_and_direction": "Both Stage3 evaluate and 18d OOS use realized/predicted. Stage3 vol_calibration_ratio = E_i[realized_i/pred_i] from teacher-forced mixture expected_path_vol. 18d calibration_ratio_realized_over_predicted = E_i[realized_i/predicted_i] from free-AR uniform path vols. Same direction; opposite over/under only because pred magnitudes differ.",
+    "q2_shared_and_different": "Shared: denorm close, daily returns from cumulative, path vol = std over H=10 of daily returns, ddof=0, lookback=120, T/top_p/N lock values. Different: teacher-forced independent-horizon top-N stitching + mixture weights (Stage3) vs free AR coherent samples + uniform mean (18d); Stage3 also applies nucleus to joint logp at T=1 after T-scaled s1/s2; Stage3 selects top-N deterministically rather than multinomial sampling.",
+    "q3_population": "No. Realized path vol is ~0.0242 (causal val) vs ~0.0249 (18d); cannot flip 0.93->2.10. Predicted path vol is ~2.04x higher on Stage3 proxy.",
+    "q4_uniform_vs_mixture_smoking_gun": "NOT the smoking gun for the direction flip. Smoke: pred≈0.028, uniform≈0.034, mixture_mean≈0.024, realized≈0.024 → ratios ~0.93 / ~0.71 / ~0.99 all still <=1 (over-vol or calibrated). Switching Stage3 to uniform would make over-vol WORSE. 18d already uses the uniform aggregator and still gets pred≈0.014 (under-vol). The flip requires the free-AR vs teacher-forced-pseudo-path difference.",
+    "q5_smallest_next_experiment": "See recommended_next_step: paired dual-proxy diagnostic on SAME windows; design-only; no GPU launch now."
+  },
+  "root_cause_hypotheses_ranked": [
+    {
+      "rank": 1,
+      "id": "teacher_forced_pseudo_path_vs_free_ar",
+      "confidence": "high",
+      "claim": "Stage3 'production decode' proxy is NOT free AR. It builds pseudo-paths by stitching independently ranked top-N joint tokens across horizons under teacher forcing, which inflates day-to-day return std (~0.028). Sealed 18d uses true auto_regressive_inference samples whose concentrated T/top_p paths are under-dispersed (~0.014). Same nominal T/top_p/N; different generative object.",
+      "evidence": [
+        "stage3_vol_alignment.py docstring and production_style_mixture_decode",
+        "stage3_vol_prod_decode_preregistration.json objective.decode: 'teacher-forced joint mixture'",
+        "c2_18d_alpha_oos.py decode_date calls auto_regressive_inference",
+        "pred 0.0284 vs 0.0139 (~2.04x) while realized ~equal"
+      ]
+    },
+    {
+      "rank": 2,
+      "id": "deterministic_topk_vs_multinomial_sampling",
+      "confidence": "medium-high",
+      "claim": "Even at same T/top_p, Stage3 takes deterministic top-N from the nucleus; 18d multinomial-samples. Top-N extremes stretch path diversity further on the teacher-forced surface.",
+      "evidence": [
+        "torch.topk in production_style_mixture_decode",
+        "sample_from_logits multinomial in kronos.py"
+      ]
+    },
+    {
+      "rank": 3,
+      "id": "mixture_weights_vs_uniform_secondary",
+      "confidence": "medium_as_bias_source_low_as_flip_cause",
+      "claim": "Mixture weighting pulls Stage3 pred (0.028) below uniform (0.034) toward realized, but cannot explain 18d under-vol. Ruling this out as primary.",
+      "evidence": [
+        "smoke baseline uniform_path_vol 0.034 > pred 0.028 > realized 0.024",
+        "18d uses uniform and is under-vol"
+      ]
+    },
+    {
+      "rank": 4,
+      "id": "population_shift_causal_val_vs_sealed_18d",
+      "confidence": "low",
+      "claim": "Different windows could change absolute vols, but realized match (~0.975x) falsifies population-alone flip.",
+      "evidence": [
+        "realized_path_vol 0.02423 vs 0.02486"
+      ]
+    },
+    {
+      "rank": 5,
+      "id": "ratio_of_means_vs_mean_of_ratios_jensen",
+      "confidence": "ruled_out_for_direction",
+      "claim": "Both report E[R/P]. Jensen gap exists (Stage3 0.93 vs 0.85; 18d 2.10 vs 1.79) but does not change over vs under.",
+      "evidence": [
+        "derived jensen gaps above"
+      ]
+    }
+  ],
+  "recommended_next_step": {
+    "title": "paired_dual_proxy_vol_diagnostic_design_only",
+    "do_not_launch_now": true,
+    "compute": "future_single_GPU_preferred; CPU acceptable for tiny N if overnight OK",
+    "goal": "On the SAME fixed windows and C2-best checkpoint, compute Stage3 teacher-forced mixture metrics and free-AR OOS-style metrics side-by-side to confirm proxy mismatch without training.",
+    "protocol": {
+      "checkpoint": "cosine_c2_best sha256 4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+      "decode_lock": "T=0.65 top_p=0.8 N=5 seed=20260906",
+      "window_sets": [
+        "A: stratified sample of causal val (e.g. 512-2048 windows)",
+        "B: optional 1-2 sealed signal dates from 18d panel (small; do not re-seal or retune)"
+      ],
+      "metrics_per_window": [
+        "realized_path_vol",
+        "stage3_pred_path_vol (mixture expected_path_vol)",
+        "stage3_uniform_path_vol",
+        "stage3_mixture_mean_path_vol",
+        "free_ar_predicted_path_vol (uniform E_n[std])",
+        "ratios realized/each_pred"
+      ],
+      "success_criterion": "If on set A, stage3 ratio stays <1 (~0.9) while free_ar ratio stays >1 (~2), proxy mismatch is confirmed and population is ruled out. Then fix the TRAINING PROXY (replace teacher-forced stitch with a differentiable or stop-grad free-AR / teacher-forced-but-coherent path estimator) before any 40-60 segment vol train.",
+      "out_of_scope": [
+        "no vol training segments",
+        "no decode grid search on 18d",
+        "no second GPU",
+        "no Kaggle push"
+      ]
+    },
+    "alternative_even_smaller": "Pure offline algebra check already done (this report). Next empirical step must compare both proxies on identical tensors; reading more JSON will not resolve remaining uncertainty about magnitude on sealed dates."
+  },
+  "do_not": [
+    "start_40_60_segment_vol_train",
+    "launch_second_GPU",
+    "treat_causal_val_vol_ratio_as_proxy_for_18d_under_vol_until_dual_proxy_diagnostic",
+    "retune_T_top_p_N_on_sealed_18d",
+    "assume_switching_to_uniform_path_vol_fixes_18d_under_vol",
+    "assume_population_shift_explains_0.93_vs_2.10",
+    "kaggle_push_or_git_push_from_this_analysis",
+    "resume_vol_cal_topk16_smoke_as_production_proxy"
+  ],
+  "verdict_zh_facts": "Stage3因果验证与18天OOS的vol_calibration_ratio方向定义相同，均为realized/pred（<1过波动、>1欠波动）。两边都是denorm后对路径日收益做std（H=10、ddof=0），realized几乎一样（~0.0242 vs ~0.0249），但预测波动差约2.04倍（Stage3 pred≈0.0284，18d pred≈0.0139），因此分别得到~0.93与~2.10。根因不是聚合器（uniform反而更过波动）也不是样本总体，而是Stage3所谓production decode仍是teacher-forced、按horizon独立top-N拼出的伪路径+混合权重，而18d是真正的自回归自由采样路径；名义T/top_p/N相同，生成对象不同。下一步应做同窗口双代理诊断（设计已就绪，勿现在开GPU/加长训）。"
+}
