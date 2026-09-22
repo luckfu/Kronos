@@ -476,6 +476,57 @@ class Kronos(nn.Module, PyTorchModelHubMixin):
         return self.head.cond_forward(x2)
 
 
+def nucleus_remove_mask(logits, top_p):
+    """Boolean mask, True where the token falls outside the nucleus.
+
+    `logits` is [batch, vocab], already temperature-scaled. The nucleus is the
+    smallest set of highest-probability tokens whose mass is at least `top_p`
+    (Holtzman et al.). Tied logits keep the lower original index, because an
+    unstable sort can swap those tokens between the sampling forward and the
+    log-prob replay. A prefix whose mass lands exactly on `top_p` does not
+    pull in the following token.
+    """
+    if logits.ndim != 2:
+        raise ValueError(f'nucleus mask expects [batch, vocab] logits, got {tuple(logits.shape)}')
+    # Probability math is float32 even when the caller still holds fp16/bf16 logits.
+    scaled = logits.float()
+    sorted_logits, sorted_indices = torch.sort(scaled, dim=-1, descending=True, stable=True)
+    probabilities = torch.softmax(sorted_logits, dim=-1)
+    preceding_mass = torch.cumsum(probabilities, dim=-1) - probabilities
+    remove_sorted = preceding_mass >= float(top_p)
+    remove_sorted = remove_sorted.clone()
+    remove_sorted[..., 0] = False
+    remove = torch.zeros_like(remove_sorted)
+    remove.scatter_(1, sorted_indices, remove_sorted)
+    return remove
+
+
+def temperature_nucleus_logits(logits, temperature, top_p):
+    """Float logits divided by temperature, then the production nucleus.
+
+    Sampling and filtered log-prob both call this so a token drawn at
+    (T, top_p) is in support for that same pair. Temperature is applied in
+    float32 before the mask; scaling in fp16/bf16 and masking in float32
+    drops boundary tokens that the sampler just drew.
+    """
+    scaled = logits.float() / float(temperature)
+    if float(top_p) >= 1.0:
+        return scaled
+    return scaled.masked_fill(nucleus_remove_mask(scaled, top_p), float('-inf'))
+
+
+def repair_out_of_support_sample(logits, draws):
+    """Map a multinomial index that landed on a masked logit back into the nucleus.
+
+    `torch.multinomial` can return a zero-mass index when the CDF undershoots 1
+    (PyTorch issue 4858; the CUDA kernel's fallback is the same failure).
+    The replacement is the in-support mode, which the nucleus always keeps.
+    """
+    chosen = logits.gather(-1, draws)
+    fallback = torch.argmax(logits, dim=-1, keepdim=True)
+    return torch.where(torch.isfinite(chosen), draws, fallback)
+
+
 def top_k_top_p_filtering(
         logits,
         top_k: int = 0,
@@ -500,29 +551,31 @@ def top_k_top_p_filtering(
         return logits
 
     if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
-        sorted_indices_to_remove = cumulative_probs > top_p
+        remove = nucleus_remove_mask(logits, top_p)
         if min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-        logits[indices_to_remove] = filter_value
+            keep = min(min_tokens_to_keep, logits.size(-1))
+            top_idx = torch.topk(logits, keep, dim=-1).indices
+            remove = remove.scatter(1, top_idx, torch.zeros_like(top_idx, dtype=torch.bool))
+        logits[remove] = filter_value
         return logits
 
 
 def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_logits=True):
-    logits = logits / temperature
-    if top_k is not None or top_p is not None:
-        if top_k > 0 or top_p < 1.0:
-            logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
+    # top_k > 0 still wins and ignores top_p, matching the historical filter.
+    use_nucleus = (
+        top_p is not None and float(top_p) < 1.0
+        and not (top_k is not None and top_k > 0)
+    )
+    if use_nucleus:
+        logits = temperature_nucleus_logits(logits, temperature, top_p)
+    else:
+        logits = logits / temperature
+        if top_k is not None or top_p is not None:
+            if (top_k is not None and top_k > 0) or (top_p is not None and top_p < 1.0):
+                logits = top_k_top_p_filtering(
+                    logits, top_k=0 if top_k is None else top_k,
+                    top_p=1.0 if top_p is None else top_p,
+                )
 
     probs = F.softmax(logits, dim=-1)
 
@@ -530,6 +583,8 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
         _, x = torch.topk(probs, k=1, dim=-1)
     else:
         x = torch.multinomial(probs, num_samples=1)
+        if use_nucleus:
+            x = repair_out_of_support_sample(logits, x)
 
     return x
 
