@@ -192,9 +192,10 @@ AVAILABLE_MODELS = {
         'use_size_percentile': True,
         'default_lookback': 120,
         'default_pred_len': 10,
-        'default_temperature': 0.65,
-        'default_top_p': 0.8,
-        'default_sample_count': 5,
+        'default_temperature': 0.60,
+        'default_top_p': 0.90,
+        'default_top_k': 0,
+        'default_sample_count': 16,
         'model_kwargs': {
             'num_sectors': KRONOS_NUM_SECTORS,
             'num_size_buckets': 0,
@@ -1426,7 +1427,7 @@ def portfolio_ranking_batch(symbols, lookback, pred_len):
 
 
 def local_inference(
-    context, future_dates, pred_len, temperature, top_p, sample_count,
+    context, future_dates, pred_len, temperature, top_p, top_k, sample_count,
     sector_id, size_percentile,
 ):
     """Run Beta V1.2 locally with both required conditioning inputs."""
@@ -1439,7 +1440,8 @@ def local_inference(
         _seed_inference(KRONOS_INFERENCE_SEED)
         prediction_samples = predictor.predict(
             df=x_df, x_timestamp=x_timestamp, y_timestamp=y_timestamp,
-            pred_len=pred_len, T=temperature, top_p=top_p, sample_count=sample_count,
+            pred_len=pred_len, T=temperature, top_k=top_k, top_p=top_p,
+            sample_count=sample_count,
             verbose=False, sector_id=sector_id, size_bucket=None,
             size_percentile=size_percentile, return_samples=True,
         )
@@ -2293,6 +2295,85 @@ def daily_rankings():
         return jsonify({'error': str(exc)}), 400
 
 
+@app.route('/api/daily-rankings/consensus')
+def daily_ranking_consensus():
+    try:
+        try:
+            days = int(request.args.get('days', 3))
+            top_n = int(request.args.get('top', 10))
+        except (TypeError, ValueError):
+            raise ValueError('days 和 top 必须是整数')
+        if days not in (2, 3):
+            raise ValueError('days 只支持 2 或 3')
+        if top_n not in (10, 20, 50, 100):
+            raise ValueError('top 只支持 10、20、50、100')
+
+        published = _available_daily_prediction_dates()
+        if len(published) < days:
+            return jsonify({
+                'error': f'目前只有 {len(published)} 个已发布交易日，无法比较最近 {days} 天'
+            }), 404
+        selected = published[:days]
+
+        day_rows = {}
+        for item in selected:
+            asof = item['asof']
+            path, _ = _daily_prediction_dir(asof)
+            frame = pd.read_csv(path / 'ranking.csv')
+            if 'code' not in frame.columns or 'rank_d10' not in frame.columns:
+                raise ValueError(f'{asof} 的排名文件缺少 code 或 rank_d10')
+            frame = frame.copy()
+            frame['code'] = frame['code'].astype(str).str.strip().str.lower()
+            frame['rank_value'] = pd.to_numeric(frame['rank_d10'], errors='coerce')
+            frame = frame.dropna(subset=['rank_value'])
+            frame = frame.sort_values(
+                ['rank_value', 'code'], ascending=[True, True], kind='stable'
+            ).drop_duplicates('code', keep='first')
+            frame = frame[frame['rank_value'] <= top_n]
+            day_rows[asof] = frame.set_index('code', drop=False)
+
+        common_codes = set.intersection(*(
+            set(day_rows[item['asof']].index) for item in selected
+        ))
+        rows = []
+        for code in common_codes:
+            entries = []
+            for item in selected:
+                record = day_rows[item['asof']].loc[code]
+                entries.append({
+                    'asof': item['asof'],
+                    'rank': int(record['rank_value']),
+                })
+            latest = day_rows[selected[0]['asof']].loc[code].to_dict()
+            average_rank = sum(entry['rank'] for entry in entries) / len(entries)
+            rows.append({
+                'code': code,
+                'name': ranking_row_stock_name(latest),
+                'sector_label': (
+                    None if pd.isna(latest.get('sector_label')) else latest.get('sector_label')
+                ),
+                'latest_asof': selected[0]['asof'],
+                'latest_rank': int(latest['rank_value']),
+                'average_rank': round(average_rank, 2),
+                'ranks': entries,
+                'close_asof': _json_number(latest.get('close_asof')),
+                'predicted_return_d10': _json_number(latest.get('predicted_return_d10')),
+            })
+        rows.sort(key=lambda row: (
+            row['average_rank'], row['latest_rank'], row['code']
+        ))
+        return jsonify({
+            'days': days,
+            'top': top_n,
+            'dates': [item['asof'] for item in selected],
+            'latest': selected[0]['asof'],
+            'total': len(rows),
+            'rows': rows,
+        })
+    except (FileNotFoundError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+
+
 @app.route('/api/daily-rankings/<asof>/<symbol>')
 def daily_ranking_detail(asof, symbol):
     try:
@@ -2556,6 +2637,7 @@ def a_share_rankings():
         sample_count = int(data.get('sample_count', config['default_sample_count']))
         temperature = float(data.get('temperature', config['default_temperature']))
         top_p = float(data.get('top_p', config['default_top_p']))
+        top_k = int(data.get('top_k', config['default_top_k']))
         backend = selected_backend(data.get('backend'))
         if backend not in ('local', 'remote'):
             return jsonify({'error': 'backend must be local or remote'}), 400
@@ -2580,7 +2662,7 @@ def a_share_rankings():
                 })
             remote = call_remote_inference({
                 'items': items, 'pred_len': pred_len, 'sample_count': sample_count,
-                'temperature': temperature, 'top_p': top_p,
+                'temperature': temperature, 'top_p': top_p, 'top_k': top_k,
             }, endpoint='predict-batch', expected_key='results')
             inference_results = remote['results']
             model_device = remote.get('meta', {}).get('model_device', 'remote')
@@ -2589,7 +2671,8 @@ def a_share_rankings():
             for record in batch['records']:
                 predictions, _, _, close_samples, model_device = local_inference(
                     record['context'], record['future_dates'], pred_len, temperature,
-                    top_p, sample_count, record['sector_id'], record['size_percentile'],
+                    top_p, top_k, sample_count, record['sector_id'],
+                    record['size_percentile'],
                 )
                 inference_results.append({
                     'id': record['symbol'],
@@ -2900,6 +2983,7 @@ def predict_latest():
         pred_len = int(config['default_pred_len'])
         temperature = float(data.get('temperature', config['default_temperature']))
         top_p = float(data.get('top_p', config['default_top_p']))
+        top_k = int(data.get('top_k', config['default_top_k']))
         sample_count = int(data.get('sample_count', config['default_sample_count']))
         if not 5 <= sample_count <= 50:
             return jsonify({'error': 'sample_count 必须在 5 到 50 之间'}), 400
@@ -2927,6 +3011,7 @@ def predict_latest():
             'pred_len': pred_len,
             'temperature': temperature,
             'top_p': top_p,
+            'top_k': top_k,
             'sample_count': sample_count,
             'sector_id': sector_id,
             'size_percentile': size_percentile,
@@ -2944,8 +3029,8 @@ def predict_latest():
             model_device = remote_result.get('meta', {}).get('model_device', 'remote')
         elif backend == 'local':
             prediction_results, pred_df, interval_df, close_samples, model_device = local_inference(
-                context, future_dates, pred_len, temperature, top_p, sample_count,
-                sector_id, size_percentile,
+                context, future_dates, pred_len, temperature, top_p, top_k,
+                sample_count, sector_id, size_percentile,
             )
         else:
             raise RuntimeError('backend must be local or remote')
@@ -3008,7 +3093,7 @@ def predict_latest():
                 'prediction_type': prediction_type,
                 'prediction_params': {
                     'lookback': lookback, 'pred_len': pred_len,
-                    'temperature': temperature, 'top_p': top_p,
+                    'temperature': temperature, 'top_p': top_p, 'top_k': top_k,
                     'sample_count': sample_count, 'symbol': symbol,
                 },
                 'latest_close': latest_close,

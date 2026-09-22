@@ -310,25 +310,24 @@ def test_history_summary_uses_market_data_cutoff_as_signal_date():
     assert summary['timing_signal']['label'] == '偏多'
 
 
-def test_homepage_uses_one_sampling_contract_for_all_entry_points():
-    response = web_app.app.test_client().get('/')
-    page = response.get_data(as_text=True)
+def test_legacy_index_uses_one_sampling_contract_for_all_entry_points():
+    template = (Path(web_app.PROJECT_ROOT) / 'webui' / 'templates' / 'index.html').read_text(encoding='utf-8')
 
-    assert 'const PRODUCTION_SAMPLING = Object.freeze({' in page
-    assert page.count('...PRODUCTION_SAMPLING') == 2
-    assert 'temperature: 0.65' in page
-    assert 'top_p: 0.8' in page
-    assert 'top_p: 1.0' not in page
-    assert 'history-single-tab' not in page
-    assert 'history-ranking-tab' not in page
-    assert '同一天分开提交或批量提交的股票进入同一个截面' in page
+    assert 'const PRODUCTION_SAMPLING = Object.freeze({' in template
+    assert template.count('...PRODUCTION_SAMPLING') == 2
+    assert 'sample_count: 16' in template
+    assert 'temperature: 0.60' in template
+    assert 'top_p: 0.90' in template
+    assert 'top_k: 0' in template
 
 
 def test_model_sampling_defaults_match_frontend_contract():
     config = web_app.AVAILABLE_MODELS[web_app.KRONOS_MODEL_KEY]
 
-    assert config['default_temperature'] == 0.65
-    assert config['default_top_p'] == 0.8
+    assert config['default_temperature'] == 0.60
+    assert config['default_top_p'] == 0.90
+    assert config['default_top_k'] == 0
+    assert config['default_sample_count'] == 16
 
 
 def test_prediction_history_can_delete_only_the_requested_record(monkeypatch, tmp_path):
@@ -745,6 +744,7 @@ def test_single_prediction_keeps_gateway_sampling_parameters_configurable(monkey
     assert response.status_code == 200
     assert captured['temperature'] == 9.0
     assert captured['top_p'] == 1.0
+    assert captured['top_k'] == 0
 
 
 def test_forecast_return_summary_uses_horizon_average_per_path():

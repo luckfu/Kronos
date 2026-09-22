@@ -39,6 +39,6 @@ printf '\n\nSingle-stock Modal prediction:\n'
 curl --fail --silent --show-error \
   -b "$cookie_jar" \
   -H 'Content-Type: application/json' \
-  -d '{"symbol":"600519","backend":"remote","sample_count":5,"temperature":0.65,"top_p":0.8}' \
+  -d '{"symbol":"600519","backend":"remote","sample_count":16,"temperature":0.60,"top_p":0.90,"top_k":0}' \
   "$BASE_URL/api/predict"
 printf '\n'

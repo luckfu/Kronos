@@ -28,7 +28,10 @@ MODEL_CHECKPOINT = os.getenv("KRONOS_MODEL_CHECKPOINT", "Segment@179")
 # Keep the production default inexpensive while averaging a small ensemble of paths.
 # The higher limit remains available for explicit evaluation runs.
 MAX_SAMPLE_COUNT = 50
-DEFAULT_SAMPLE_COUNT = 5
+DEFAULT_TEMPERATURE = 0.60
+DEFAULT_TOP_P = 0.90
+DEFAULT_TOP_K = 0
+DEFAULT_SAMPLE_COUNT = 16
 MAX_BATCH_SIZE = 12
 INFERENCE_SEED = int(os.getenv("KRONOS_INFERENCE_SEED", "20260817"))
 
@@ -45,6 +48,7 @@ class InferenceRequest:
     pred_len: int
     temperature: float
     top_p: float
+    top_k: int
     sample_count: int
     sector_id: int
     size_percentile: float
@@ -175,8 +179,11 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
     if not future_timestamps.is_monotonic_increasing:
         raise RequestError("future_timestamps must be increasing")
 
-    temperature = _number(payload.get("temperature", 0.65), "temperature")
-    top_p = _number(payload.get("top_p", 0.8), "top_p")
+    temperature = _number(
+        payload.get("temperature", DEFAULT_TEMPERATURE), "temperature"
+    )
+    top_p = _number(payload.get("top_p", DEFAULT_TOP_P), "top_p")
+    top_k = _integer(payload.get("top_k", DEFAULT_TOP_K), "top_k")
     sample_count = _integer(
         payload.get("sample_count", DEFAULT_SAMPLE_COUNT), "sample_count"
     )
@@ -184,6 +191,8 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
         raise RequestError("temperature must be positive")
     if not 0 < top_p <= 1:
         raise RequestError("top_p must be in (0, 1]")
+    if top_k < 0:
+        raise RequestError("top_k cannot be negative")
     if not 1 <= sample_count <= MAX_SAMPLE_COUNT:
         raise RequestError(
             f"sample_count must be between 1 and {MAX_SAMPLE_COUNT}"
@@ -211,6 +220,7 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
         pred_len=pred_len,
         temperature=temperature,
         top_p=top_p,
+        top_k=top_k,
         sample_count=sample_count,
         sector_id=sector_id,
         size_percentile=size_percentile,
@@ -228,6 +238,7 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             y_timestamp=request.future_timestamps,
             pred_len=request.pred_len,
             T=request.temperature,
+            top_k=request.top_k,
             top_p=request.top_p,
             sample_count=request.sample_count,
             verbose=False,
@@ -272,6 +283,9 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         "meta": {
             "context_rows": len(request.frame),
             "pred_len": request.pred_len,
+            "temperature": request.temperature,
+            "top_p": request.top_p,
+            "top_k": request.top_k,
             "sample_count": request.sample_count,
             "model_device": str(predictor.device),
             "model_release": MODEL_RELEASE,
@@ -297,9 +311,22 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         merged = {**payload, **item}
         merged.pop("items", None)
         requests.append(parse_request(merged))
-    signatures = {(len(req.frame), req.pred_len, req.sample_count) for req in requests}
+    signatures = {
+        (
+            len(req.frame),
+            req.pred_len,
+            req.temperature,
+            req.top_p,
+            req.top_k,
+            req.sample_count,
+        )
+        for req in requests
+    }
     if len(signatures) != 1:
-        raise RequestError("all batch items must use the same context, pred_len, and sample_count")
+        raise RequestError(
+            "all batch items must use the same context, pred_len, "
+            "temperature, top_p, top_k, and sample_count"
+        )
 
     predictor = get_predictor()
     sector_ids = [req.sector_id for req in requests]
@@ -312,6 +339,7 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             y_timestamp_list=[req.future_timestamps for req in requests],
             pred_len=requests[0].pred_len,
             T=requests[0].temperature,
+            top_k=requests[0].top_k,
             top_p=requests[0].top_p,
             sample_count=requests[0].sample_count,
             verbose=False,
@@ -348,6 +376,8 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         "results": results,
         "meta": {
             "batch_size": len(results), "pred_len": requests[0].pred_len,
+            "temperature": requests[0].temperature, "top_p": requests[0].top_p,
+            "top_k": requests[0].top_k,
             "sample_count": requests[0].sample_count, "model_device": str(predictor.device),
             "model_release": MODEL_RELEASE, "model_checkpoint": MODEL_CHECKPOINT,
         },

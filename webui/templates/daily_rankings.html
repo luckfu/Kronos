@@ -80,6 +80,24 @@
     .stat small { margin-left: 6px; color: var(--muted); font-size: 11px; }
     .ready { color: var(--down); }
     .toolbar { margin: 15px 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .consensus-panel { margin-top: 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .consensus-head { padding: 14px 15px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+    .consensus-title h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .consensus-title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .consensus-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+    .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
+    .segmented button { height: 32px; border: 0; border-right: 1px solid var(--line); background: var(--surface); padding: 0 10px; cursor: pointer; white-space: nowrap; }
+    .segmented button:last-child { border-right: 0; }
+    .segmented button:hover { background: var(--surface-2); }
+    .segmented button.active { color: #fff; background: var(--accent); }
+    .consensus-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .consensus-table { min-width: 960px; }
+    .consensus-table th:first-child,
+    .consensus-table td:first-child,
+    .consensus-table th:nth-child(4),
+    .consensus-table td:nth-child(4) { text-align: left; }
+    .consensus-rank-day { color: var(--muted); }
+    .consensus-rank-day strong { color: var(--text); font-weight: 600; }
     .filters { display: flex; flex-wrap: wrap; gap: 8px; }
     .filter { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
     input.filter { width: 170px; }
@@ -212,6 +230,17 @@
       .summary { grid-template-columns: 1fr 1fr; }
       .stat:nth-child(2) { border-right: 0; }
       .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .consensus-head { align-items: stretch; flex-direction: column; }
+      .consensus-controls { justify-content: flex-start; width: 100%; }
+      .segmented { flex: 1 1 auto; }
+      .segmented button { flex: 1 1 0; min-height: 44px; }
+      .consensus-meta { align-self: flex-start; white-space: normal; }
+      .consensus-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .consensus-table { display: table; min-width: 720px; }
+      .consensus-table thead { display: table-header-group; }
+      .consensus-table tbody { display: table-row-group; }
+      .consensus-table tbody tr { display: table-row; min-height: 0; padding: 0; border-bottom: 0; }
+      .consensus-table tbody tr td { display: table-cell; padding: 10px 11px; border-bottom: 1px solid var(--line-soft); }
       .toolbar { align-items: stretch; flex-direction: column; gap: 8px; }
       .filters { width: 100%; }
       .pool-controls { width: 100%; }
@@ -326,6 +355,37 @@
           <div class="stat"><span>发布状态</span><strong class="ready" id="metric-status">读取中</strong><small id="metric-batches">—</small></div>
         </div>
 
+        <section class="consensus-panel" aria-labelledby="consensus-title">
+          <div class="consensus-head">
+            <div class="consensus-title">
+              <h2 id="consensus-title">连续上榜股票</h2>
+              <p id="consensus-description">严格交集：同时进入最近 3 个已发布交易日 Top 10 的股票</p>
+            </div>
+            <div class="consensus-controls">
+              <div class="segmented" id="consensus-days" role="group" aria-label="连续天数">
+                <button type="button" data-days="2">最近 2 天</button>
+                <button class="active" type="button" data-days="3">最近 3 天</button>
+              </div>
+              <div class="segmented" id="consensus-top" role="group" aria-label="排名范围">
+                <button class="active" type="button" data-top="10">Top 10</button>
+                <button type="button" data-top="20">Top 20</button>
+                <button type="button" data-top="50">Top 50</button>
+                <button type="button" data-top="100">Top 100</button>
+              </div>
+              <span class="consensus-meta" id="consensus-meta">正在读取…</span>
+            </div>
+          </div>
+          <div class="table-wrap consensus-wrap">
+            <table class="consensus-table" aria-label="连续上榜股票">
+              <colgroup><col style="width:70px"><col style="width:130px"><col style="width:110px"><col style="width:190px"><col style="width:90px"><col style="width:80px"><col style="width:90px"><col style="width:200px"></colgroup>
+              <thead>
+                <tr><th>交集排名</th><th>股票名称</th><th>代码</th><th>行业</th><th>平均排名</th><th>最新排名</th><th>D10预测</th><th>逐日排名</th></tr>
+              </thead>
+              <tbody id="consensus-body"><tr><td colspan="8" class="loading">正在计算共同上榜股票…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
         <div class="toolbar">
           <div class="filters">
             <div class="pool-controls"><select id="pool-select" class="filter" aria-label="自定义股池"><option value="">全市场</option></select><button id="pool-manage" class="pool-button" type="button"><i data-lucide="settings-2"></i>管理股池</button></div>
@@ -417,7 +477,7 @@
   <script>
     const base = location.pathname.replace(/\/+$/, '');
     const api = path => `${base}${path}`;
-    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '' };
+    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '', consensusDays: 3, consensusTop: 10, consensusRequest: 0 };
     const $ = id => document.getElementById(id);
     const rankingPage = $('ranking-page');
     const statusPage = $('status-page');
@@ -584,6 +644,55 @@
       body.querySelectorAll('tr[data-code]').forEach(row => row.addEventListener('click', () => openDetail(row.dataset.code)));
     }
 
+    async function loadConsensus() {
+      const requestId = ++state.consensusRequest;
+      $('consensus-body').innerHTML = '<tr><td colspan="8" class="loading">正在计算共同上榜股票…</td></tr>';
+      try {
+        const params = new URLSearchParams({days: state.consensusDays, top: state.consensusTop});
+        const result = await getJson(api(`/api/daily-rankings/consensus?${params}`));
+        if (requestId !== state.consensusRequest) return;
+        renderConsensus(result);
+      } catch (error) {
+        if (requestId !== state.consensusRequest) return;
+        $('consensus-body').innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(error.message)}</td></tr>`;
+        $('consensus-meta').textContent = '暂不可用';
+      }
+    }
+
+    function renderConsensus(result) {
+      const dates = result.dates || [];
+      const rows = result.rows || [];
+      $('consensus-description').textContent = `严格交集：同时进入最近 ${result.days} 个已发布交易日 Top ${result.top} 的股票`;
+      $('consensus-meta').textContent = `交集 ${rows.length} 只 · ${dates.join(' / ')}`;
+      const body = $('consensus-body');
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="8" class="empty">这批交易日没有股票同时进入该排名范围，可尝试缩短天数或扩大 Top 范围</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.map((row, index) => {
+        const dailyRanks = (row.ranks || []).map(entry => `<span class="consensus-rank-day">${escapeHtml(shortDate(entry.asof))} <strong>#${entry.rank}</strong></span>`).join(' · ');
+        return `<tr data-consensus-code="${escapeHtml(row.code)}" data-consensus-asof="${escapeHtml(row.latest_asof)}">
+          <td class="rank">${index + 1}</td>
+          <td><span class="row-name">${escapeHtml(row.name || '—')}</span></td>
+          <td class="code">${escapeHtml(row.code)}</td>
+          <td class="sector">${escapeHtml(stripSector(row.sector_label))}</td>
+          <td>${Number(row.average_rank).toFixed(2)}</td>
+          <td>#${row.latest_rank}</td>
+          <td class="${directionClass(row.predicted_return_d10)}">${percent(row.predicted_return_d10, true)}</td>
+          <td>${dailyRanks}</td>
+        </tr>`;
+      }).join('');
+      body.querySelectorAll('tr[data-consensus-code]').forEach(row => row.addEventListener('click', async () => {
+        const asof = row.dataset.consensusAsof;
+        if (state.date !== asof) {
+          state.date = asof;
+          $('date-select').value = asof;
+          await loadRankings(true);
+        }
+        openDetail(row.dataset.consensusCode);
+      }));
+    }
+
     async function openDetail(code) {
       state.selected = code;
       $('workspace').classList.add('detail-open');
@@ -740,6 +849,16 @@
       if (view === 'history') setTimeout(() => $('date-select').focus(), 0);
     }));
     $('date-select').addEventListener('change', event => { state.date = event.target.value; closeDetail(); loadRankings(true); });
+    $('consensus-days').querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+      state.consensusDays = Number(button.dataset.days);
+      $('consensus-days').querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+      loadConsensus();
+    }));
+    $('consensus-top').querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+      state.consensusTop = Number(button.dataset.top);
+      $('consensus-top').querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+      loadConsensus();
+    }));
     $('pool-select').addEventListener('change', event => { state.pool = event.target.value; closeDetail(); loadRankings(true); });
     $('pool-manage').addEventListener('click', () => { renderPoolList(); $('pool-dialog').showModal(); });
     $('pool-dialog-close').addEventListener('click', () => $('pool-dialog').close());
@@ -751,7 +870,7 @@
       if (!symbols.length) return toast('请至少填写一个有效的 A 股代码');
       state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
     });
-    $('refresh-button').addEventListener('click', async () => { await loadDates(); await loadRankings(true); });
+    $('refresh-button').addEventListener('click', async () => { await loadDates(); await Promise.all([loadRankings(true), loadConsensus()]); });
     $('search-form').addEventListener('submit', event => {
       event.preventDefault();
       applySearch();
@@ -779,7 +898,7 @@
     $('close-detail').addEventListener('click', closeDetail);
 
     (async () => {
-      try { loadPools(); await loadDates(); await loadRankings(); }
+      try { loadPools(); await loadDates(); await Promise.all([loadRankings(), loadConsensus()]); }
       catch (error) { $('ranking-body').innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(error.message)}</td></tr>`; toast(error.message); }
       if (window.lucide) lucide.createIcons();
     })();

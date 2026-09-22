@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import sys
 from pathlib import Path
@@ -14,7 +15,7 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(prediction_drill)
 
 
-def test_command_line_defaults_to_five_paths(monkeypatch, tmp_path):
+def test_command_line_defaults_to_production_sampling(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "argv", [
         "prediction_drill.py",
         "--asof", "2026-09-18",
@@ -24,7 +25,7 @@ def test_command_line_defaults_to_five_paths(monkeypatch, tmp_path):
 
     args = prediction_drill.parse_args()
 
-    assert args.sample_count == 5
+    assert args.sample_count == 16
 
 
 def test_explicit_future_trading_dates_are_strict():
@@ -63,6 +64,38 @@ def test_payload_uses_latest_normalized_forward_adjustment():
     assert payload["items"][0]["data"][0]["close"] == pytest.approx(5.0)
     assert payload["items"][0]["data"][-1]["close"] == pytest.approx(10.0)
     assert payload["future_timestamps"] == future
+    assert payload["temperature"] == 0.60
+    assert payload["top_p"] == 0.90
+    assert payload["top_k"] == 0
+    assert payload["sample_count"] == 50
+
+
+def test_fingerprint_includes_sampling_parameters(monkeypatch, tmp_path):
+    sector_map = tmp_path / "sectors.json"
+    sector_map.write_text("{}")
+    args = argparse.Namespace(
+        asof=pd.Timestamp("2026-09-18").date(),
+        sector_map=sector_map,
+        inference_url="https://example.test",
+        sample_count=16,
+        batch_size=12,
+    )
+    dates = list(pd.date_range("2026-04-01", periods=120).date)
+    baseline = prediction_drill.run_fingerprint(
+        args, dates, ["2026-09-21"], ["sh.600000"]
+    )
+    original = prediction_drill.DEFAULT_TOP_P
+    monkeypatch.setattr(prediction_drill, "DEFAULT_TOP_P", 0.8)
+    changed = prediction_drill.run_fingerprint(
+        args, dates, ["2026-09-21"], ["sh.600000"]
+    )
+    assert changed != baseline
+    assert prediction_drill.DEFAULT_TOP_P != original
+
+
+def test_daily_scheduler_pins_production_sampling():
+    scheduler = SCRIPT.with_name("daily_prediction_scheduler.sh").read_text()
+    assert "--sample-count 16" in scheduler
 
 
 def test_response_validation_rejects_wrong_model():

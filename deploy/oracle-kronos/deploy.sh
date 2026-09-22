@@ -35,6 +35,7 @@ cp "$PROJECT_DIR/webui/update_sector_mapping.py" "$release_dir/webui/update_sect
 cp "$SCRIPT_DIR/requirements.txt" "$release_dir/deploy/requirements.txt"
 cp "$SCRIPT_DIR/prediction-requirements.txt" "$release_dir/deploy/prediction-requirements.txt"
 cp "$SCRIPT_DIR/prediction_drill.py" "$release_dir/deploy/prediction_drill.py"
+cp "$SCRIPT_DIR/daily_prediction_scheduler.sh" "$release_dir/deploy/daily_prediction_scheduler.sh"
 cp "$SCRIPT_DIR/kronos-web.service" "$release_dir/deploy/kronos-web.service"
 cp "$SCRIPT_DIR/nginx-kronos-location.conf" "$release_dir/deploy/nginx-kronos-location.conf"
 
@@ -81,6 +82,7 @@ fi
 sudo install -o opc -g opc -m 0644 "$stage/deploy/requirements.txt" "$root/deploy/requirements.txt"
 sudo install -o opc -g opc -m 0644 "$stage/deploy/prediction-requirements.txt" "$root/deploy/prediction-requirements.txt"
 sudo install -o opc -g opc -m 0755 "$stage/deploy/prediction_drill.py" "$root/deploy/prediction_drill.py"
+sudo install -o opc -g opc -m 0755 "$stage/deploy/daily_prediction_scheduler.sh" "$root/deploy/daily_prediction_scheduler.sh"
 if [[ ! -x "$root/.venv/bin/python" ]]; then python3 -m venv "$root/.venv"; fi
 "$root/.venv/bin/python" -m pip install --no-cache-dir --upgrade pip
 "$root/.venv/bin/python" -m pip install --no-cache-dir -r "$root/deploy/requirements.txt"

@@ -42,9 +42,10 @@ payload = {
     "data": rows,
     "future_timestamps": future_timestamps,
     "pred_len": 10,
-    "sample_count": 50,
-    "temperature": 0.65,
-    "top_p": 0.8,
+    "sample_count": 16,
+    "temperature": 0.60,
+    "top_p": 0.90,
+    "top_k": 0,
     "sector_id": 42,
     "size_percentile": 0.5,
 }

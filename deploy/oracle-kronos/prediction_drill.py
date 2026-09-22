@@ -29,6 +29,10 @@ HORIZON = 10
 MAX_BATCH_SIZE = 12
 DEFAULT_INFERENCE_URL = "https://luckfu--kronos-beta-v1-2-inference-web.modal.run"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
+DEFAULT_TEMPERATURE = 0.60
+DEFAULT_TOP_P = 0.90
+DEFAULT_TOP_K = 0
+DEFAULT_SAMPLE_COUNT = 16
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,7 +46,7 @@ def parse_args() -> argparse.Namespace:
         "--inference-url",
         default=os.getenv("KRONOS_INFERENCE_URL", DEFAULT_INFERENCE_URL),
     )
-    parser.add_argument("--sample-count", type=int, default=5)
+    parser.add_argument("--sample-count", type=int, default=DEFAULT_SAMPLE_COUNT)
     parser.add_argument("--batch-size", type=int, default=MAX_BATCH_SIZE)
     parser.add_argument(
         "--limit", type=int, default=0,
@@ -285,8 +289,9 @@ def make_payload(
         "items": items,
         "future_timestamps": future_dates,
         "pred_len": HORIZON,
-        "temperature": 0.65,
-        "top_p": 0.8,
+        "temperature": DEFAULT_TEMPERATURE,
+        "top_p": DEFAULT_TOP_P,
+        "top_k": DEFAULT_TOP_K,
         "sample_count": sample_count,
     }
 
@@ -355,6 +360,9 @@ def run_fingerprint(
         "codes": codes,
         "sector_map_sha256": hashlib.sha256(args.sector_map.read_bytes()).hexdigest(),
         "inference_url": args.inference_url.rstrip("/"),
+        "temperature": DEFAULT_TEMPERATURE,
+        "top_p": DEFAULT_TOP_P,
+        "top_k": DEFAULT_TOP_K,
         "sample_count": args.sample_count,
         "batch_size": args.batch_size,
     }

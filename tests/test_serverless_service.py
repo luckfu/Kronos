@@ -41,13 +41,33 @@ def test_parse_request_accepts_only_caller_supplied_data():
     assert parsed.size_percentile == 0.55
 
 
-def test_parse_request_uses_five_production_paths_by_default():
+def test_parse_request_uses_production_sampling_by_default():
     payload = valid_payload()
     payload.pop("sample_count")
 
     parsed = service.parse_request(payload)
 
-    assert parsed.sample_count == 5
+    assert parsed.temperature == 0.60
+    assert parsed.top_p == 0.90
+    assert parsed.top_k == 0
+    assert parsed.sample_count == 16
+
+
+def test_parse_request_accepts_explicit_top_k():
+    payload = valid_payload()
+    payload["top_k"] = 20
+
+    parsed = service.parse_request(payload)
+
+    assert parsed.top_k == 20
+
+
+def test_parse_request_rejects_negative_top_k():
+    payload = valid_payload()
+    payload["top_k"] = -1
+
+    with pytest.raises(service.RequestError, match="top_k cannot be negative"):
+        service.parse_request(payload)
 
 
 def test_parse_request_rejects_symbol_only_requests():
@@ -90,26 +110,34 @@ def test_predict_returns_mean_and_close_intervals(monkeypatch):
         device = "cpu"
 
         def predict(self, **kwargs):
-            samples = np.ones((3, 10, 6), dtype=np.float32)
-            samples[1] *= 2
-            samples[2] *= 3
+            assert kwargs["T"] == 0.60
+            assert kwargs["top_p"] == 0.90
+            assert kwargs["top_k"] == 0
+            assert kwargs["sample_count"] == 16
+            samples = np.ones((16, 10, 6), dtype=np.float32)
+            samples[8:] *= 3
             return samples
 
     monkeypatch.setattr(service, "get_predictor", lambda: FakePredictor())
 
-    result = service.predict(valid_payload())
+    payload = valid_payload()
+    payload.pop("sample_count")
+    result = service.predict(payload)
 
     assert result["meta"] == {
         "context_rows": 120,
         "pred_len": 10,
-        "sample_count": 3,
+        "temperature": 0.60,
+        "top_p": 0.90,
+        "top_k": 0,
+        "sample_count": 16,
         "model_device": "cpu",
         "model_release": "small-0.1-cosine-c2",
         "model_checkpoint": "Segment@179",
     }
     assert result["predictions"][0]["close"] == pytest.approx(2.0)
     assert result["predictions"][0]["close_p50"] == pytest.approx(2.0)
-    assert np.asarray(result["samples"]["close"]).shape == (3, 10)
+    assert np.asarray(result["samples"]["close"]).shape == (16, 10)
 
 
 def test_predict_batch_runs_one_predictor_batch(monkeypatch):

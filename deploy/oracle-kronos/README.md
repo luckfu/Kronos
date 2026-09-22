@@ -141,7 +141,7 @@ python /opt/kronos-web/deploy/prediction_drill.py \
   --output-dir /opt/kronos-web/data/prediction_shadow/2026-09-18/full_market
 ```
 
-The default is the complete eligible universe, 12 symbols per request and 5
+The default is the complete eligible universe, 12 symbols per request and 16
 samples per symbol. `--limit 12` is available for a billable smoke test. Future
 timestamps come from the A-share exchange calendar exposed by AkShare; a run
 fails rather than silently substituting weekdays when the calendar is absent.

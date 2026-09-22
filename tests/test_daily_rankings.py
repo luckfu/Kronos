@@ -163,6 +163,60 @@ def test_daily_rankings_only_lists_complete_runs(monkeypatch, tmp_path):
     assert len(response.get_json()["dates"]) == 1
 
 
+def test_daily_ranking_consensus_intersects_recent_published_top_ranges(
+    monkeypatch, tmp_path
+):
+    published_run(tmp_path, names={
+        "sh.600000": "浦发银行",
+        "sz.000001": "平安银行",
+        "sz.000063": "中兴通讯",
+    })
+    for asof, ranks in (
+        ("2026-09-21", {"sh.600000": 1, "sz.000001": 22, "sz.000063": 8}),
+        ("2026-09-22", {"sh.600000": 2, "sz.000001": 9, "sz.000063": 15}),
+    ):
+        run = tmp_path / asof / "full_market"
+        run.mkdir(parents=True)
+        (run / "summary.json").write_text(json.dumps({
+            "status": "complete",
+            "prediction_count": 3,
+            "batch_count": 1,
+            "model": {"sample_count": 16, "model_release": "small-0.1-cosine-c2"},
+        }))
+        frame = pd.read_csv(tmp_path / "2026-09-18" / "full_market" / "ranking.csv")
+        frame["asof"] = asof
+        frame["rank_d10"] = frame["code"].map(ranks)
+        frame.to_csv(run / "ranking.csv", index=False)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+
+    response = web_app.app.test_client().get(
+        "/api/daily-rankings/consensus?days=3&top=10"
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["dates"] == ["2026-09-22", "2026-09-21", "2026-09-18"]
+    assert payload["total"] == 1
+    assert payload["rows"][0]["code"] == "sh.600000"
+    assert payload["rows"][0]["average_rank"] == 1.33
+    assert payload["rows"][0]["latest_rank"] == 2
+    assert [entry["rank"] for entry in payload["rows"][0]["ranks"]] == [2, 1, 1]
+
+
+def test_daily_ranking_consensus_requires_enough_published_days(monkeypatch, tmp_path):
+    published_run(tmp_path)
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+
+    response = web_app.app.test_client().get(
+        "/api/daily-rankings/consensus?days=3&top=10"
+    )
+
+    assert response.status_code == 404
+    assert "无法比较最近 3 天" in response.get_json()["error"]
+
+
 def test_daily_rankings_supports_filters_and_detail(monkeypatch, tmp_path):
     published_run(tmp_path)
     monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
@@ -324,6 +378,24 @@ def test_daily_rankings_page_has_explicit_search_submit():
     assert 'body[data-view="stock"] .search-row { order: -1; }' in page
     assert ".search-button { min-height: 48px;" in page
     assert ".search-row input.filter { flex: 1 1 auto; width: auto; min-width: 0; }" in page
+
+
+def test_daily_rankings_page_has_consensus_controls_and_renderer():
+    page = web_app.app.test_client().get("/").get_data(as_text=True)
+
+    assert "连续上榜股票" in page
+    assert "严格交集" in page
+    assert 'id="consensus-days"' in page
+    assert 'data-days="2"' in page
+    assert 'data-days="3"' in page
+    assert 'id="consensus-top"' in page
+    for top in (10, 20, 50, 100):
+        assert f'data-top="{top}"' in page
+    assert "/api/daily-rankings/consensus?" in page
+    assert "function loadConsensus()" in page
+    assert "function renderConsensus(result)" in page
+    assert "state.consensusRequest" in page
+    assert "缩短天数或扩大 Top 范围" in page
 
 
 def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
@@ -569,4 +641,3 @@ def test_deploy_no_longer_wires_hermes_analysis():
     assert "KRONOS_HERMES" not in readme
     assert "hermes-analysis" not in root_readme
     assert "Hermes 分析" not in root_readme
-

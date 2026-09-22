@@ -123,7 +123,7 @@ exec "$PYTHON" "$PREDICTOR" \
   --asof "$target_date" \
   --sector-map "$SECTOR_MAP" \
   --output-dir "$output_dir" \
-  --sample-count 5 \
+  --sample-count 16 \
   --batch-size 12 \
   --max-retries 4 \
   --request-timeout 240
