@@ -1,0 +1,16 @@
+{
+  "kernel": "luckfu/kronos-small-0-1-s3-ar-vol-c2",
+  "status": "repushing_after_nucleus_fix",
+  "parent_smoke_go": true,
+  "failed_during": "segment_2_train",
+  "last_metrics_step": 2360,
+  "error": "RuntimeError: sampled token fell outside the nucleus used for log-prob",
+  "file": "finetune/stage3_ar_vol.py::filtered_log_prob",
+  "next": "fix nucleus/logp consistency via PR; merge; resume C2 from last_state or smoke state; one GPU",
+  "do_not": [
+    "40-60 segments",
+    "second GPU"
+  ],
+  "fix_pr": "https://github.com/luckfu/Kronos/pull/19",
+  "source_commit": "83168d0e0d98818549cb1b58e20328a9e9132d81"
+}
