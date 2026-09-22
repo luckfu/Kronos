@@ -1,6 +1,7 @@
 {
   "name": "stage3_ar_vol_from_c2_v1",
-  "status": "submitting",
+  "status": "running",
+  "kernel": "https://www.kaggle.com/code/luckfu/kronos-small-0-1-s3-ar-vol-smoke",
   "source_commit": "be16fed0a56a3ad53af89e2c6c92d4fbfe0cbecc",
   "parent": "C2 best 4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
   "optimizer": "fresh AdamW",
