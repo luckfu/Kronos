@@ -36,6 +36,7 @@ def test_ar_vol_smoke_is_one_fresh_segment_at_the_production_decode():
     assert 'joint_path_alignment_from_c2_best' not in source
     commit = re.search(r"COMMIT = '([0-9a-f]{40})'", source)
     assert commit
+    assert commit.group(1) == 'be16fed0a56a3ad53af89e2c6c92d4fbfe0cbecc'
     metadata = json.loads(META.read_text())
     assert metadata['id'] == 'luckfu/kronos-small-0-1-s3-ar-vol-smoke'
     assert len(metadata['id'].split('/')[1]) <= 50
