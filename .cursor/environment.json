@@ -1,19 +1,5 @@
 {
   "name": "Kronos A-share workbench",
   "user": "ubuntu",
-  "install": "bash .cursor/install.sh",
-  "terminals": [
-    {
-      "name": "webui",
-      "command": "source .venv/bin/activate && export PYTHONPATH=. KRONOS_INFERENCE_BACKEND=local KRONOS_DEVICE=cpu && python webui/app.py"
-    },
-    {
-      "name": "serverless-api",
-      "command": "source .venv/bin/activate && export PYTHONPATH=. KRONOS_DEVICE=cpu KRONOS_MODEL_ID=models/a_share_v1_beta/releases/beta_v1.2/best_model KRONOS_TOKENIZER_ID=models/a_share_v1_beta/releases/beta_v1.2/tokenizer && flask --app api.index run --host 0.0.0.0 --port 8080"
-    }
-  ],
-  "ports": [
-    { "name": "Kronos Web UI", "port": 7070 },
-    { "name": "Serverless inference API", "port": 8080 }
-  ]
+  "install": "bash .cursor/install.sh"
 }
