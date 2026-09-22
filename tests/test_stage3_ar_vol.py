@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import nn
 
@@ -37,8 +39,23 @@ def test_go_requires_both_a_closer_ar_ratio_and_a_small_ce_increase():
     assert moved['closer_to_one'] and moved['ce_ok'] and moved['go']
     farther = decide(1.50, 2.30, 2.31)
     assert not farther['closer_to_one'] and not farther['go']
-    ce_break = decide(1.20, 2.30, 2.30 + CE_INCREASE_LIMIT)
-    assert ce_break['closer_to_one'] and not ce_break['ce_ok'] and not ce_break['go']
+    # Equality at the limit is not a go. The increase has to be the limit
+    # float itself: (2.30 + 0.03) - 2.30 is slightly under 0.03, so that sum
+    # still has ce_ok and does not exercise the boundary.
+    limit = float(CE_INCREASE_LIMIT)
+    at_limit = decide(1.20, 0.0, limit)
+    assert at_limit['ce_increase'] == limit
+    assert at_limit['closer_to_one']
+    assert not at_limit['ce_ok']
+    assert not at_limit['go']
+    above = decide(1.20, 0.0, math.nextafter(limit, math.inf))
+    assert above['ce_increase'] > limit
+    assert above['closer_to_one']
+    assert not above['ce_ok']
+    assert not above['go']
+    under = decide(1.20, 0.0, math.nextafter(limit, 0.0))
+    assert under['ce_increase'] < limit
+    assert under['closer_to_one'] and under['ce_ok'] and under['go']
     unchanged = decide(BASELINE_AR_RATIO, 2.30, 2.30)
     assert not unchanged['closer_to_one'] and not unchanged['go']
 
