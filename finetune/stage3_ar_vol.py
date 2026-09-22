@@ -4,7 +4,9 @@ Sample N full paths at the production decode (T, top_p), score each path's
 close-vol against the realized path, and push probability toward the paths
 whose vol is closer to realized. Prices are stop-grad. The score is the
 within-window advantage of per-path log-vol Huber, times the token log-prob
-under the same temperature and nucleus used to sample.
+under the same temperature and nucleus used to sample. Both sides call
+`temperature_nucleus_logits`, so a drawn token stays in support at the
+production (T, top_p), including ties and fp16/bf16 logits.
 
 One horizon step is differentiated at a time so the graph is a single decode.
 """
@@ -18,7 +20,7 @@ import torch.nn.functional as F
 from finetune.stage3_vol_alignment import (
     EPS, denorm_close, daily_returns_from_close,
 )
-from model.kronos import auto_regressive_inference, top_k_top_p_filtering
+from model.kronos import auto_regressive_inference, temperature_nucleus_logits
 
 CLOSE = 3
 MAX_CONTEXT = 512
@@ -73,14 +75,29 @@ def decide(
     }
 
 
-def filtered_log_prob(logits, token, temperature, top_p):
-    """Log-prob of `token` under the same temperature and nucleus used by sample_from_logits."""
-    scaled = logits.float() / float(temperature)
-    if top_p < 1.0:
-        scaled = top_k_top_p_filtering(scaled.clone(), top_k=0, top_p=float(top_p))
-    else:
-        scaled = scaled.clone()
-    gathered = scaled.log_softmax(-1).gather(-1, token.long().view(-1, 1)).squeeze(-1)
+def filtered_log_prob(logits, token, temperature, top_p, include_sampled_token=False):
+    """Log-prob of `token` under the same temperature and nucleus used by sample_from_logits.
+
+    `include_sampled_token` puts a drawn index back into the support when the
+    replay forward is not bitwise-identical to the sampling forward (attention
+    kernels) and the rebuilt nucleus drops a boundary token. The restored value
+    is that token's temperature-scaled logit, so the gradient still flows only
+    through the path probability. Without this flag a token outside the
+    nucleus still raises.
+    """
+    filtered = temperature_nucleus_logits(logits, temperature, top_p)
+    index = token.long().view(-1, 1)
+    if include_sampled_token:
+        chosen = filtered.gather(-1, index)
+        missing = ~torch.isfinite(chosen)
+        if bool(missing.any()):
+            raw = logits.float() / float(temperature)
+            positions = torch.zeros(
+                filtered.shape, dtype=torch.bool, device=filtered.device,
+            )
+            positions.scatter_(1, index, missing)
+            filtered = torch.where(positions, raw, filtered)
+    gathered = filtered.log_softmax(-1).gather(-1, index).squeeze(-1)
     if not torch.isfinite(gathered).all():
         raise RuntimeError('sampled token fell outside the nucleus used for log-prob')
     return gathered
@@ -114,9 +131,13 @@ def _step_logp(model, s1_prefix, s2_prefix, stamp_prefix, sector, percentile, to
         s1_prefix, s2_prefix, stamp_prefix,
         sector_id=sector, size_percentile=percentile,
     )
-    logp1 = filtered_log_prob(s1_logits[:, -1, :], token_s1, temperature, top_p)
+    logp1 = filtered_log_prob(
+        s1_logits[:, -1, :], token_s1, temperature, top_p, include_sampled_token=True,
+    )
     s2_logits = model.decode_s2(context, token_s1.view(-1, 1))
-    logp2 = filtered_log_prob(s2_logits[:, -1, :], token_s2, temperature, top_p)
+    logp2 = filtered_log_prob(
+        s2_logits[:, -1, :], token_s2, temperature, top_p, include_sampled_token=True,
+    )
     return logp1 + logp2
 
 
