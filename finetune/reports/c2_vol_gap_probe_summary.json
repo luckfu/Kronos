@@ -1,0 +1,35 @@
+{
+  "name": "c2_vol_gap_probe",
+  "kernel": "luckfu/kronos-small-0-1-vol-gap-probe",
+  "source_commit": "ea8766fa37d3bb2162bc6806555551a9b8564286",
+  "checkpoint_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+  "status": "complete_gap_confirmed",
+  "training_performed": false,
+  "precision": "fp32",
+  "dates": ["2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02"],
+  "samples": 2055,
+  "mean_realized_path_vol": 0.03357976773513567,
+  "ar_t065_n5": {
+    "mean_predicted_path_vol": 0.026056892940334957,
+    "calibration_ratio": 1.3533238272873447
+  },
+  "tf_t065_n5_weighted": {
+    "mean_predicted_path_vol": 0.04281723907085956,
+    "calibration_ratio": 0.8353637574342342
+  },
+  "tf_t065_n5_uniform": {
+    "mean_predicted_path_vol": 0.05491123757939197,
+    "calibration_ratio": 0.6788873647699791
+  },
+  "tf_t1_n16_weighted": {
+    "mean_predicted_path_vol": 0.04359811028225433,
+    "calibration_ratio": 0.8010207466371448
+  },
+  "decision": {
+    "ar_under_vol": true,
+    "teacher_forced_not_under_vol": true,
+    "gap_ar_minus_tf5": 0.5179600698531105,
+    "confirmed_exposure_gap": true
+  },
+  "note": "Same C2 weights and same 2055 windows. Autoregressive T=0.65/N=5 under-predicts vol (1.35). Teacher-forced mixtures over-predict (0.68-0.84). This slice is causal validation, not the sealed 18-day window whose production ratio was 2.10."
+}

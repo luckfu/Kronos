@@ -1,0 +1,48 @@
+{
+  "name": "stage3_vol_prod_decode_smoke_from_c2_best",
+  "kernel": "luckfu/kronos-small-0-1-s3-vol-prod-smoke",
+  "source_commit": "8ba0e3077b1ed57da79c7f95760982acad0a391b",
+  "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/small_0.1_stage3_vol_prod_decode_from_c2_v1",
+  "status": "complete_nogo",
+  "completed_segments": 8,
+  "completed_at": "2026-09-21T17:04:39Z",
+  "metric_note": "val vol_calibration_ratio is teacher-forced joint mixture at T=0.65/top_p=0.8/N=5, not autoregressive production sampling. C2 baseline on this proxy is already 0.926 (over-vol). Production 18d decode remains 2.10 (under-vol).",
+  "baseline": {
+    "token_loss": 2.3384811465155457,
+    "total_loss": 2.3437875909065067,
+    "vol_calibration_ratio": 0.9257831806050141,
+    "pred_path_vol": 0.028404483402043743,
+    "realized_path_vol": 0.024226123399041243,
+    "mixture_mean_path_vol": 0.024374521646426395,
+    "uniform_path_vol": 0.034244898875978605
+  },
+  "last_segment": {
+    "segment": 8,
+    "token_loss": 2.329396760834523,
+    "total_loss": 2.334777205225484,
+    "vol_calibration_ratio": 0.9156643747417011,
+    "pred_path_vol": 0.0287720255146767,
+    "realized_path_vol": 0.024226123399041243,
+    "mixture_mean_path_vol": 0.024589105787694795,
+    "uniform_path_vol": 0.03496310219391033
+  },
+  "train_vol_vs_ce_grad_norm_ratio": {
+    "n": 251,
+    "first": 0.10777851939201355,
+    "last": 0.35041654109954834,
+    "min": 0.09116712957620621,
+    "median": 0.14932426810264587,
+    "max": 0.42964425683021545
+  },
+  "smoke_go": {
+    "no_nan": true,
+    "baseline_vol_ratio_above_1": false,
+    "token_ce_increase": -0.009084385681022766,
+    "token_ce_increase_lt_0.03": true,
+    "val_vol_ratio_baseline": 0.9257831806050141,
+    "val_vol_ratio_last": 0.9156643747417011,
+    "val_vol_ratio_moves_toward_1": false,
+    "passed": false
+  },
+  "next": "do_not_start_40_60_segments; teacher-forced mixture still over-vol; production 2.10x under-vol is the autoregressive sample gap, not this proxy"
+}
