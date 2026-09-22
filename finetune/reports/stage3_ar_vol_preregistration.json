@@ -1,22 +1,32 @@
 {
   "name": "stage3_ar_vol_from_c2_v1",
-  "status": "running",
+  "status": "repushing_after_ce_boundary_fix",
   "kernel": "https://www.kaggle.com/code/luckfu/kronos-small-0-1-s3-ar-vol-smoke",
-  "source_commit": "be16fed0a56a3ad53af89e2c6c92d4fbfe0cbecc",
+  "source_commit": "c13bb2699718de32716af3defeaab121058293fc",
   "parent": "C2 best 4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
   "optimizer": "fresh AdamW",
-  "lr": 2e-6,
+  "lr": 2e-06,
   "segments": 1,
   "windows_per_segment": 20000,
   "batch_per_gpu": 8,
   "global_batch": 16,
   "seed": 20260922,
-  "decode": {"T": 0.65, "top_k": 0, "top_p": 0.8, "N": 5},
+  "decode": {
+    "T": 0.65,
+    "top_k": 0,
+    "top_p": 0.8,
+    "N": 5
+  },
   "loss": "token CE + 0.15 * within-window advantage * log pi(path)",
   "prices": "stop-grad",
   "swanlab": "small_0.1_stage3_ar_vol_from_c2_v1",
   "probe": {
-    "dates": ["2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02"],
+    "dates": [
+      "2026-06-29",
+      "2026-06-30",
+      "2026-07-01",
+      "2026-07-02"
+    ],
     "windows": 2055,
     "baseline_ar_calibration_ratio": 1.3533238272873447,
     "checkpoint": "last_model"
@@ -32,5 +42,6 @@
     "C3 path Huber resume",
     "T/top_p/N search",
     "sealed 18-day window"
-  ]
+  ],
+  "fix_pr": "https://github.com/luckfu/Kronos/pull/17"
 }
