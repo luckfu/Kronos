@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from finetune.stage3_ar_vol import (
-    AR_METRIC_KEYS, ARVolConfig, BASELINE_AR_RATIO, CE_INCREASE_LIMIT,
+    AR_METRIC_KEYS, ARVolConfig, BASELINE_AR_RATIO, CE_INCREASE_ABS_TOL, CE_INCREASE_LIMIT,
     decide, filtered_log_prob, reinforce_backward_from_tokens, within_window_advantage,
 )
 
@@ -39,22 +39,26 @@ def test_go_requires_both_a_closer_ar_ratio_and_a_small_ce_increase():
     assert moved['closer_to_one'] and moved['ce_ok'] and moved['go']
     farther = decide(1.50, 2.30, 2.31)
     assert not farther['closer_to_one'] and not farther['go']
-    # Equality at the limit is not a go. The increase has to be the limit
-    # float itself: (2.30 + 0.03) - 2.30 is slightly under 0.03, so that sum
-    # still has ce_ok and does not exercise the boundary.
+    # At-limit and over-limit use the limit float itself, not 2.30 + 0.03.
     limit = float(CE_INCREASE_LIMIT)
     at_limit = decide(1.20, 0.0, limit)
     assert at_limit['ce_increase'] == limit
-    assert at_limit['closer_to_one']
-    assert not at_limit['ce_ok']
-    assert not at_limit['go']
+    assert at_limit['closer_to_one'] and not at_limit['ce_ok'] and not at_limit['go']
     above = decide(1.20, 0.0, math.nextafter(limit, math.inf))
     assert above['ce_increase'] > limit
-    assert above['closer_to_one']
-    assert not above['ce_ok']
-    assert not above['go']
-    under = decide(1.20, 0.0, math.nextafter(limit, 0.0))
-    assert under['ce_increase'] < limit
+    assert above['closer_to_one'] and not above['ce_ok'] and not above['go']
+    # One ulp under the limit, and the old (2.30 + 0.03) - 2.30 fixture, both
+    # sit inside the equality band and stay no-go.
+    near = decide(1.20, 0.0, math.nextafter(limit, 0.0))
+    assert near['ce_increase'] < limit
+    assert limit - near['ce_increase'] <= CE_INCREASE_ABS_TOL
+    assert near['closer_to_one'] and not near['ce_ok'] and not near['go']
+    float_eq = decide(1.20, 2.30, 2.30 + CE_INCREASE_LIMIT)
+    assert float_eq['ce_increase'] < limit
+    assert limit - float_eq['ce_increase'] <= CE_INCREASE_ABS_TOL
+    assert float_eq['closer_to_one'] and not float_eq['ce_ok'] and not float_eq['go']
+    under = decide(1.20, 0.0, limit - 1e-6)
+    assert limit - under['ce_increase'] > CE_INCREASE_ABS_TOL
     assert under['closer_to_one'] and under['ce_ok'] and under['go']
     unchanged = decide(BASELINE_AR_RATIO, 2.30, 2.30)
     assert not unchanged['closer_to_one'] and not unchanged['go']

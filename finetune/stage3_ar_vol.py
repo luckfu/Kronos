@@ -24,6 +24,10 @@ CLOSE = 3
 MAX_CONTEXT = 512
 BASELINE_AR_RATIO = 1.3533238272873447
 CE_INCREASE_LIMIT = 0.03
+# Prereg token_ce_increase_lt is strict. An increase at the limit, or within
+# this absolute band, is not ce_ok. (2.30 + 0.03) - 2.30 is
+# 0.029999999999999805, which a raw `< 0.03` would accept.
+CE_INCREASE_ABS_TOL = 1e-9
 
 AR_METRIC_KEYS = (
     'ar_calibration_ratio',
@@ -52,12 +56,17 @@ def decide(
     baseline_ar_ratio=BASELINE_AR_RATIO,
     ce_increase_limit=CE_INCREASE_LIMIT,
 ):
-    """Both bars are required: AR ratio moves toward 1, and token CE rises by less than the limit."""
+    """Both bars are required: AR ratio moves toward 1, and token CE rises by less than the limit.
+
+    Equality is a no-go. An increase within CE_INCREASE_ABS_TOL of the limit is
+    treated as the limit, so float-constructed equality is not ce_ok.
+    """
     ce_increase = float(token_ce) - float(baseline_token_ce)
     distance = abs(float(ar_ratio) - 1.0)
     baseline_distance = abs(float(baseline_ar_ratio) - 1.0)
     closer = distance < baseline_distance
-    ce_ok = ce_increase < float(ce_increase_limit)
+    limit = float(ce_increase_limit)
+    ce_ok = limit - ce_increase > CE_INCREASE_ABS_TOL
     return {
         'ar_calibration_ratio': float(ar_ratio),
         'baseline_ar_calibration_ratio': float(baseline_ar_ratio),
@@ -67,7 +76,7 @@ def decide(
         'baseline_token_ce': float(baseline_token_ce),
         'token_ce': float(token_ce),
         'ce_increase': ce_increase,
-        'ce_increase_limit': float(ce_increase_limit),
+        'ce_increase_limit': limit,
         'ce_ok': bool(ce_ok),
         'go': bool(closer and ce_ok),
     }
