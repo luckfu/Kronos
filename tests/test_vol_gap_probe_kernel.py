@@ -9,7 +9,7 @@ META = ROOT / "finetune/kaggle_vol_gap_probe/kernel-metadata.json"
 def test_vol_gap_kernel_is_eval_only_and_pinned():
     source = KERNEL.read_text()
     for token in (
-        'SOURCE_COMMIT = "3b3c1c5e5357054232e896bb83032c8af2daf1ec"',
+        'SOURCE_COMMIT = "ea8766fa37d3bb2162bc6806555551a9b8564286"',
         "PARENT_BEST_SHA = \"4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a\"",
         '"training": False',
         "training_performed=False",
