@@ -1,4 +1,5 @@
 import argparse, json, os, time
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 import torch
@@ -10,6 +11,7 @@ from model.kronos import Kronos, KronosTokenizer
 from finetune.dataset import QlibDataset
 from finetune.stage3_ce_rank import DEFAULT_FORECAST_HORIZON_WEIGHTS, Stage3CERankConfig
 from finetune.stage3_path_alignment import PathAlignmentConfig
+from finetune.stage3_ar_vol import AR_METRIC_KEYS, ARVolConfig
 from finetune.stage3_vol_alignment import VOL_METRIC_KEYS, VolAlignmentConfig
 from finetune.stage3_training_model import Stage3TrainingModel, gradient_metrics
 from finetune.stage3_trainable_mask import (
@@ -173,7 +175,8 @@ def main(a):
         print('optimizer_state=' + ('resume' if a.resume_state else 'reset'), flush=True)
         print(f'lambda_path={a.lambda_path}', flush=True)
         print(f'lambda_vol={a.lambda_vol}', flush=True)
-        if a.lambda_vol:
+        print(f'ar_vol={a.ar_vol}', flush=True)
+        if a.lambda_vol or a.ar_vol:
             print(f'vol_temperature={a.vol_temperature}', flush=True)
             print(f'vol_top_p={a.vol_top_p}', flush=True)
             print(f'vol_samples={a.vol_samples}', flush=True)
@@ -199,17 +202,26 @@ def main(a):
     )
     if a.ce_rank and a.lambda_path != 0:
         raise ValueError('P1 CE+rank requires lambda_path=0')
-    if a.lambda_vol and (a.lambda_path != 0 or a.ce_rank):
+    if a.ar_vol and (a.lambda_vol <= 0 or a.lambda_path != 0 or a.ce_rank):
+        raise ValueError('autoregressive vol requires lambda_vol>0, lambda_path=0, and ce_rank disabled')
+    if a.lambda_vol and not a.ar_vol and (a.lambda_path != 0 or a.ce_rank):
         raise ValueError('vol alignment requires lambda_path=0 and ce_rank disabled')
     model = Stage3TrainingModel(
         predictor, tok,
-        config=PathAlignmentConfig(weight=a.lambda_path),
+        config=PathAlignmentConfig(weight=0.0 if a.ar_vol else a.lambda_path),
         ce_rank_config=ce_rank_config,
         vol_config=VolAlignmentConfig(
-            weight=a.lambda_vol,
+            weight=0.0 if a.ar_vol else a.lambda_vol,
             temperature=a.vol_temperature,
             top_p=a.vol_top_p,
             candidates=a.vol_samples,
+        ),
+        ar_vol=a.ar_vol,
+        ar_config=ARVolConfig(
+            weight=a.lambda_vol,
+            temperature=a.vol_temperature,
+            top_p=a.vol_top_p,
+            samples=a.vol_samples,
         ),
     ).to(device)
     freeze_audit = apply_trainable_mask(model.predictor, a.trainable_mask)
@@ -236,6 +248,16 @@ def main(a):
             raise RuntimeError('Refusing to reuse Stage3 C3 path-alignment dashboard for vol calibration')
         if a.lambda_vol and run_id == 'small_0.1_stage3_vol_cal_from_c2_best_v1':
             raise RuntimeError('Refusing to reuse the T=1 top-16 vol-cal dashboard')
+        if a.ar_vol and 'ar_vol_from_c2' not in run_id:
+            raise RuntimeError('Autoregressive vol requires its own SwanLab run id')
+        if a.ar_vol and (
+            'joint_path_alignment_from_c2_best' in run_id
+            or run_id == 'small_0.1_stage3_vol_cal_from_c2_best_v1'
+            or run_id == 'small_0.1_stage3_vol_prod_decode_from_c2_v1'
+        ):
+            raise RuntimeError('Refusing to reuse a teacher-forced vol or C3 dashboard for autoregressive vol')
+        if (not a.ar_vol) and 'ar_vol_from_c2' in run_id:
+            raise RuntimeError('Refusing to reuse the autoregressive vol dashboard')
         # Match C2: fixed run id + resume=allow so multi-chunk handoffs stay on one dashboard.
         run = swanlab.init(
             id=run_id,
@@ -246,7 +268,7 @@ def main(a):
             config={'lr': a.lr, 'batch_per_gpu': a.batch, 'global_batch': a.batch * world,
                     'segments': a.segments, 'max_runtime_seconds': a.max_runtime_seconds,
                     'top_k': 16, 'candidates': a.vol_samples if a.lambda_vol else 16, 'parent': str(a.model_dir),
-                    'lambda_path': a.lambda_path, 'lambda_vol': a.lambda_vol,
+                    'lambda_path': a.lambda_path, 'lambda_vol': a.lambda_vol, 'ar_vol': a.ar_vol,
                     'vol_temperature': a.vol_temperature, 'vol_top_p': a.vol_top_p,
                     'vol_samples': a.vol_samples,
                     'milestone_segments': sorted(milestones),
@@ -254,6 +276,8 @@ def main(a):
                     'validation_objective': (
                         f'weighted_ce+{a.history_weight:g}*history+{a.lambda_rank:g}*rank'
                         if a.ce_rank else
+                        f'token_ce+{a.lambda_vol:g}*ar_log_vol_reinforce'
+                        if a.ar_vol else
                         f'token_ce+{a.lambda_vol:g}*log_vol_huber'
                         if a.lambda_vol else
                         f'token_ce+{a.lambda_path:g}*raw_path_huber'
@@ -276,7 +300,7 @@ def main(a):
     os.environ['KRONOS_COVERAGE_SEED'] = str(a.seed)
     os.environ['KRONOS_TRAIN_SAMPLES_PER_SEGMENT'] = '20000'
     os.environ['KRONOS_STAGE3_RANK_LOSS'] = '1' if a.ce_rank else '0'
-    os.environ['KRONOS_STAGE3_VOL_LOSS'] = '1' if a.lambda_vol else '0'
+    os.environ['KRONOS_STAGE3_VOL_LOSS'] = '1' if (a.lambda_vol or a.ar_vol) else '0'
     print(json.dumps({'phase': 'load_training_dataset', 'rank': rank}), flush=True)
     ds = QlibDataset('train')
     train_sampler = DistributedSampler(ds, num_replicas=world, rank=rank, shuffle=False) if world > 1 else None
@@ -359,29 +383,41 @@ def main(a):
                 date_ids = batch[-3].to(device)
                 means = batch[-2].to(device)
                 stds = batch[-1].to(device)
-            elif a.lambda_vol:
+            elif a.lambda_vol or a.ar_vol:
                 means = batch[-2].to(device)
                 stds = batch[-1].to(device)
             opt.zero_grad(set_to_none=True)
-            loss, metrics = model(
-                x, stamp, sector_id=sec, size_percentile=pct,
-                date_ids=date_ids, feature_means=means, feature_stds=stds,
-            )
-            if not torch.isfinite(loss): raise FloatingPointError('Nonfinite Stage3 loss')
-            will_log = step + 1 == 1 or (step + 1) % a.log_interval == 0
-            vol_ce_ratio = None
-            if a.lambda_vol and will_log:
-                vol_ce_ratio = vol_vs_ce_grad_norm_ratio(
-                    core, core._live_token_loss, core._live_vol_loss,
+            # AR sampling writes .grad inside the forward. Keep DDP from
+            # reducing that partial graph; all-reduce the summed grads after.
+            sync_off = model.no_sync() if a.ar_vol and isinstance(model, DDP) else nullcontext()
+            with sync_off:
+                loss, metrics = model(
+                    x, stamp, sector_id=sec, size_percentile=pct,
+                    date_ids=date_ids, feature_means=means, feature_stds=stds,
                 )
-            loss.backward()
+                if not torch.isfinite(loss): raise FloatingPointError('Nonfinite Stage3 loss')
+                will_log = step + 1 == 1 or (step + 1) % a.log_interval == 0
+                vol_ce_ratio = None
+                if a.lambda_vol and not a.ar_vol and will_log:
+                    vol_ce_ratio = vol_vs_ce_grad_norm_ratio(
+                        core, core._live_token_loss, core._live_vol_loss,
+                    )
+                loss.backward()
+            if a.ar_vol and world > 1:
+                for parameter in trainable_params:
+                    if parameter.grad is None:
+                        raise RuntimeError('AR vol left a trainable parameter without a gradient')
+                    dist.all_reduce(parameter.grad)
+                    parameter.grad.div_(world)
             group_grads = gradient_metrics(raw)
             grad = torch.nn.utils.clip_grad_norm_(raw.parameters(), 1.0, error_if_nonfinite=True)
             opt.step(); step += 1; seen += len(x)
             if will_log:
                 scalar_keys = ('token_loss', 'raw_path_loss', 'normalized_path_loss', 'total_loss',
                                'top16_joint_mass', 's1_entropy', 's2_conditional_entropy_topk_s1', 'max_residual')
-                if a.lambda_vol:
+                if a.ar_vol:
+                    scalar_keys = scalar_keys + AR_METRIC_KEYS
+                elif a.lambda_vol:
                     scalar_keys = scalar_keys + VOL_METRIC_KEYS
                 if a.ce_rank:
                     scalar_keys = ('ce_objective', 'history_loss', 'weighted_forecast_loss', 'rank_loss',
@@ -427,6 +463,8 @@ def main(a):
                              'definition': (
                                  f'weighted_ce+{a.history_weight:g}*history+{a.lambda_rank:g}*rank'
                                  if a.ce_rank else
+                                 f'causal_token_ce+{a.lambda_vol:g}*ar_log_vol_reinforce'
+                                 if a.ar_vol else
                                  f'causal_token_ce+{a.lambda_vol:g}*log_vol_huber'
                                  if a.lambda_vol else
                                  f'causal_token_ce+{a.lambda_path:g}*raw_path_huber'
@@ -486,6 +524,7 @@ if __name__ == '__main__':
     p.add_argument('--vol-temperature', type=float, default=0.65)
     p.add_argument('--vol-top-p', type=float, default=0.8)
     p.add_argument('--vol-samples', type=int, default=5)
+    p.add_argument('--ar-vol', action='store_true')
     p.add_argument('--ce-rank', action='store_true')
     p.add_argument('--lambda-rank', type=float, default=0.05)
     p.add_argument('--history-weight', type=float, default=0.02)

@@ -7,6 +7,7 @@ from finetune.stage3_ce_rank import Stage3CERankConfig, compute_rank_terms, comp
 from finetune.stage3_path_alignment import (
     DetachedLossEMA, PathAlignmentConfig, compute_path_alignment_loss,
 )
+from finetune.stage3_ar_vol import ARVolConfig, AR_METRIC_KEYS, compute_ar_vol_loss
 from finetune.stage3_vol_alignment import (
     CLOSE, VOL_METRIC_KEYS, VolAlignmentConfig, compute_vol_alignment_loss,
 )
@@ -14,17 +15,22 @@ from finetune.stage3_vol_alignment import (
 
 class Stage3TrainingModel(nn.Module):
     def __init__(self, predictor, tokenizer, config=None, lookback=120, horizon=10,
-                 synchronize_ema=True, ce_rank_config=None, vol_config=None):
+                 synchronize_ema=True, ce_rank_config=None, vol_config=None,
+                 ar_vol=False, ar_config=None):
         super().__init__()
         self.predictor = predictor
         self.tokenizer = tokenizer.requires_grad_(False).eval()
         self.config = config or PathAlignmentConfig()
         self.vol_config = vol_config or VolAlignmentConfig(weight=0.0)
+        self.ar_vol = bool(ar_vol)
+        self.ar_config = ar_config or ARVolConfig()
         self.ce_rank_config = ce_rank_config or Stage3CERankConfig()
         self.lookback, self.horizon = int(lookback), int(horizon)
         self.synchronize_ema = bool(synchronize_ema)
         self.path_ema = DetachedLossEMA(self.config.ema_decay)
         self.vol_ema = DetachedLossEMA(self.vol_config.ema_decay)
+        if self.ar_vol and (self.config.weight != 0 or self.vol_config.weight != 0 or self.ce_rank_config.enabled):
+            raise ValueError('autoregressive vol requires lambda_path=0, teacher-forced vol weight=0, and ce_rank disabled')
 
     def train(self, mode=True):
         super().train(mode)
@@ -106,6 +112,43 @@ class Stage3TrainingModel(nn.Module):
         token_loss = self.predictor.head.compute_loss(
             logits1, logits2, s1[:, target_slice], s2[:, target_slice],
         )[0]
+        if self.ar_vol and self.training:
+            if feature_means is None or feature_stds is None:
+                raise ValueError('autoregressive vol requires feature_means and feature_stds')
+            was_training = self.training
+            self.eval()
+            try:
+                ar_loss, ar_details = compute_ar_vol_loss(
+                    self.predictor, self.tokenizer, x, stamp, sector_id, size_percentile,
+                    feature_means, feature_stds, self.ar_config,
+                    lookback=self.lookback, horizon=self.horizon,
+                )
+            finally:
+                self.train(was_training)
+            zeros_h = token_loss.new_zeros((self.horizon,))
+            zeros_hf = token_loss.new_zeros((self.horizon, 6))
+            with torch.no_grad():
+                logp1 = logits1.float().log_softmax(-1)
+                s1_entropy = -(logp1.exp() * logp1).sum(-1).mean()
+            metrics = {
+                'token_loss': token_loss.detach(),
+                'raw_path_loss': ar_details['ar_mean_huber'],
+                'normalized_path_loss': ar_loss.detach(),
+                'weighted_path_loss': ar_loss.detach(),
+                'total_loss': (token_loss.detach() + ar_loss),
+                'top16_joint_mass': token_loss.new_zeros(()),
+                's1_entropy': s1_entropy,
+                's2_conditional_entropy_topk_s1': token_loss.new_zeros(()),
+                'horizon_mae': zeros_h,
+                'max_residual': token_loss.new_zeros(()),
+                'prediction_mean_hf': zeros_hf,
+                'prediction_second_moment_hf': zeros_hf.square(),
+                'target_mean_hf': x[:, target_slice].detach().mean(0),
+                'target_second_moment_hf': x[:, target_slice].detach().square().mean(0),
+            }
+            metrics.update({key: ar_details[key] for key in AR_METRIC_KEYS})
+            # Score-function grads are already in .grad. Backward token CE only.
+            return token_loss, metrics
         if self.vol_config.weight != 0:
             if self.config.weight != 0:
                 raise ValueError('vol alignment requires lambda_path=0')
@@ -198,14 +241,21 @@ class Stage3TrainingModel(nn.Module):
             }
         return total, metrics
 
+    def _checkpoint_schema(self):
+        if self.ar_vol:
+            return 'stage3_ar_vol_calibration_v1'
+        return 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'
+
     def checkpoint_state(self, optimizer, step, segment):
         payload = {
-            'schema': 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2',
+            'schema': self._checkpoint_schema(),
             'model': self.predictor.state_dict(), 'optimizer': optimizer.state_dict(),
             'path_ema': self.path_ema.state_dict(), 'vol_ema': self.vol_ema.state_dict(),
             'step': int(step), 'segment': int(segment),
             'path_config': asdict(self.config), 'vol_config': asdict(self.vol_config),
             'ce_rank_config': asdict(self.ce_rank_config),
+            'ar_vol': self.ar_vol,
+            'ar_config': asdict(self.ar_config) if self.ar_vol else None,
             'lookback': self.lookback, 'horizon': self.horizon,
             'torch_rng_state': torch.get_rng_state(),
             'cuda_rng_state': torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
@@ -213,9 +263,13 @@ class Stage3TrainingModel(nn.Module):
         return payload
 
     def load_checkpoint_state(self, state, optimizer):
-        expected = 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'
+        expected = self._checkpoint_schema()
         if state.get('schema') != expected:
             raise ValueError('Not a compatible Stage3 training checkpoint')
+        if bool(state.get('ar_vol', False)) != self.ar_vol:
+            raise ValueError('Stage3 autoregressive vol flag changed on resume')
+        if self.ar_vol and state.get('ar_config') != asdict(self.ar_config):
+            raise ValueError('Stage3 autoregressive vol configuration changed on resume')
         if (state['path_config'] != asdict(self.config) or
                 state.get('vol_config', asdict(VolAlignmentConfig(weight=0.0))) != asdict(self.vol_config) or
                 state.get('ce_rank_config', asdict(Stage3CERankConfig())) != asdict(self.ce_rank_config) or

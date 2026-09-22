@@ -1,0 +1,34 @@
+{
+  "name": "stage3_ar_vol_from_c2_v1",
+  "status": "launching",
+  "parent": "C2 best 4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+  "optimizer": "fresh AdamW",
+  "lr": 2e-6,
+  "segments": 1,
+  "windows_per_segment": 20000,
+  "batch_per_gpu": 8,
+  "global_batch": 16,
+  "seed": 20260922,
+  "decode": {"T": 0.65, "top_k": 0, "top_p": 0.8, "N": 5},
+  "loss": "token CE + 0.15 * within-window advantage * log pi(path)",
+  "prices": "stop-grad",
+  "swanlab": "small_0.1_stage3_ar_vol_from_c2_v1",
+  "probe": {
+    "dates": ["2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02"],
+    "windows": 2055,
+    "baseline_ar_calibration_ratio": 1.3533238272873447,
+    "checkpoint": "last_model"
+  },
+  "go": {
+    "ar_ratio_closer_to_one": true,
+    "token_ce_increase_lt": 0.03,
+    "both_required": true
+  },
+  "stop_if_nogo": "do not open an 8-segment run",
+  "not_this_run": [
+    "teacher-forced vol smoke",
+    "C3 path Huber resume",
+    "T/top_p/N search",
+    "sealed 18-day window"
+  ]
+}

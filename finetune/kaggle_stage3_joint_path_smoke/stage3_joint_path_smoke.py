@@ -33,6 +33,8 @@ LAMBDA_VOL = float(os.environ.get('STAGE3_LAMBDA_VOL', '0'))
 VOL_TEMPERATURE = float(os.environ.get('STAGE3_VOL_TEMPERATURE', '0.65'))
 VOL_TOP_P = float(os.environ.get('STAGE3_VOL_TOP_P', '0.8'))
 VOL_SAMPLES = int(os.environ.get('STAGE3_VOL_SAMPLES', '5'))
+AR_VOL = os.environ.get('STAGE3_AR_VOL', '0') == '1'
+BATCH = int(os.environ.get('STAGE3_BATCH', '32'))
 LAMBDA_RANK = float(os.environ.get('STAGE3_LAMBDA_RANK', '0.05'))
 CE_RANK = os.environ.get('STAGE3_CE_RANK', '0') == '1'
 HISTORY_WEIGHT = float(os.environ.get('STAGE3_HISTORY_LOSS_WEIGHT', '0.02'))
@@ -124,7 +126,8 @@ def verify_hashes(inputs):
 def main():
     global _log
     os.environ['PYTHONUNBUFFERED'] = '1'
-    phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=32, global_batch=64,
+    phase('started', run_id=RUN_ID, segments=TARGET_SEGMENTS, batch_per_gpu=BATCH, global_batch=BATCH * 2,
+          ar_vol=AR_VOL,
           lr=LR, amp=False, lambda_path=LAMBDA_PATH, lambda_vol=LAMBDA_VOL,
           vol_temperature=VOL_TEMPERATURE, vol_top_p=VOL_TOP_P, vol_samples=VOL_SAMPLES,
           ce_rank=CE_RANK, lambda_rank=LAMBDA_RANK,
@@ -245,10 +248,12 @@ def main():
                    KRONOS_COVERAGE_SEED=str(SEED), KRONOS_TRAIN_SAMPLES_PER_SEGMENT='20000')
         manifest = {'source_commit': SOURCE_COMMIT, 'parent_kernel': PARENT, 'parent_checkpoint': 'best_model',
                     'initialization': 'model_weights_only', 'optimizer': 'fresh_AdamW', 'scheduler': 'fixed',
-                    'lr': LR, 'amp': False, 'seed': SEED, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': 32,
-                    'global_batch': 64, 'train_samples': 20000, 'validation_samples': 123836,
+                    'lr': LR, 'amp': False, 'seed': SEED, 'segments': TARGET_SEGMENTS, 'batch_per_gpu': BATCH,
+                    'global_batch': BATCH * 2, 'train_samples': 20000, 'validation_samples': 123836,
                     'lookback': 120, 'horizon': 10,
                     'loss': (
+                        f'CE+{LAMBDA_VOL:g}*ar_reinforce_E_vol_T{VOL_TEMPERATURE:g}_p{VOL_TOP_P:g}_N{VOL_SAMPLES}'
+                        if AR_VOL else
                         f'CE+{LAMBDA_VOL:g}*log_vol_huber_T{VOL_TEMPERATURE:g}_p{VOL_TOP_P:g}_N{VOL_SAMPLES}'
                         if LAMBDA_VOL else
                         f'weighted_CE+{HISTORY_WEIGHT:g}*history+{LAMBDA_RANK:g}*pairwise_rank'
@@ -256,10 +261,11 @@ def main():
                         else f'weighted_CE+{HISTORY_WEIGHT:g}*history'
                         if CE_RANK else f'CE+{LAMBDA_PATH:g}*EMA_normalized_six_feature_Huber'
                     ),
-                    'lambda_path': 0.0 if LAMBDA_VOL else LAMBDA_PATH,
+                    'lambda_path': 0.0 if (LAMBDA_VOL or AR_VOL) else LAMBDA_PATH,
+                    'ar_vol': AR_VOL,
                     'lambda_vol': LAMBDA_VOL, 'ce_rank': CE_RANK, 'lambda_rank': LAMBDA_RANK,
                     'vol_temperature': VOL_TEMPERATURE, 'vol_top_p': VOL_TOP_P, 'vol_samples': VOL_SAMPLES,
-                    'top_k': 16, 'candidates': VOL_SAMPLES if LAMBDA_VOL else 16,
+                    'top_k': 0 if AR_VOL else 16, 'candidates': VOL_SAMPLES if (LAMBDA_VOL or AR_VOL) else 16,
                     'history_weight': HISTORY_WEIGHT,
                     'forecast_horizon_weights': FORECAST_HORIZON_WEIGHTS,
                     'trainable_mask': TRAINABLE_MASK,
@@ -280,7 +286,7 @@ def main():
         phase('cpu_preflight')
         run([sys.executable, '-u', '-m', 'pytest', 'tests/test_stage3_conditional_joint.py',
              'tests/test_stage3_ce_rank.py', 'tests/test_stage3_trainable_mask.py',
-             'tests/test_stage3_vol_alignment.py', '-q'], cwd=repo,
+             'tests/test_stage3_vol_alignment.py', 'tests/test_stage3_ar_vol.py', '-q'], cwd=repo,
             env={**env, 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1', 'CUDA_VISIBLE_DEVICES': ''})
         torchrun = [sys.executable, '-u', '-m', 'torch.distributed.run', '--standalone', '--nproc_per_node=2', '-m']
         common = ['--model-dir', str(inputs['best'].parent), '--tokenizer-dir', str(inputs['tokenizer'].parent)]
@@ -300,15 +306,17 @@ def main():
             resume_args.append('--baseline-before-resume')
         if MILESTONE_SEGMENTS:
             resume_args += ['--milestone-segments', MILESTONE_SEGMENTS]
-        train_args = ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', '32',
+        train_args = ['--output-dir', str(OUTPUT), '--segments', str(TARGET_SEGMENTS), '--batch', str(BATCH),
                       '--lr', str(LR), '--seed', str(SEED), '--log-interval', '10',
-                      '--lambda-path', '0' if LAMBDA_VOL else str(LAMBDA_PATH),
+                      '--lambda-path', '0' if (LAMBDA_VOL or AR_VOL) else str(LAMBDA_PATH),
                       '--lambda-vol', str(LAMBDA_VOL),
                       '--vol-temperature', str(VOL_TEMPERATURE),
                       '--vol-top-p', str(VOL_TOP_P),
                       '--vol-samples', str(VOL_SAMPLES),
                       '--trainable-mask', TRAINABLE_MASK,
                       '--max-runtime-seconds', str(MAX_RUNTIME_SECONDS)]
+        if AR_VOL:
+            train_args.append('--ar-vol')
         if CE_RANK:
             train_args += ['--ce-rank', '--lambda-rank', str(LAMBDA_RANK),
                            '--history-weight', str(HISTORY_WEIGHT),
@@ -332,6 +340,21 @@ def main():
             assert (OUTPUT / name).is_file(), name
         audit = json.loads((OUTPUT / 'freeze_audit.json').read_text())
         assert audit['mask'] == TRAINABLE_MASK
+        if AR_VOL:
+            phase('ar_probe', checkpoint='last_model')
+            probe_env = {
+                **env,
+                'STAGE3_OUTPUT': str(OUTPUT),
+                'KRONOS_AR_PROBE_MODEL': str(OUTPUT / 'checkpoints/last_model'),
+                'KRONOS_AR_PROBE_TOKENIZER': str(inputs['tokenizer'].parent),
+                'KRONOS_AR_PROBE_REPO': str(repo),
+                'PYTHONPATH': str(repo),
+            }
+            run([sys.executable, '-u', '-m', 'finetune.stage3_ar_probe'], cwd=repo, env=probe_env)
+            decision = json.loads((OUTPUT / 'ar_probe_summary.json').read_text())
+            phase('ar_probe_decision', go=decision['go'], ar_calibration_ratio=decision['ar_calibration_ratio'],
+                  ce_increase=decision['ce_increase'], closer_to_one=decision['closer_to_one'],
+                  ce_ok=decision['ce_ok'])
         phase('completed', completed_segments=TARGET_SEGMENTS, validation_samples=123836, output=str(OUTPUT))
     except Exception as exc:
         phase('failed', error_type=type(exc).__name__, message=str(exc))

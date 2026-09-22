@@ -15,7 +15,7 @@ def test_smoke_wires_lambda_vol_and_vol_alignment_tests():
         "'--vol-temperature', str(VOL_TEMPERATURE)",
         "'--vol-top-p', str(VOL_TOP_P)",
         "'--vol-samples', str(VOL_SAMPLES)",
-        "'--lambda-path', '0' if LAMBDA_VOL else str(LAMBDA_PATH)",
+        "'--lambda-path', '0' if (LAMBDA_VOL or AR_VOL) else str(LAMBDA_PATH)",
         'tests/test_stage3_vol_alignment.py',
         "f'CE+{LAMBDA_VOL:g}*log_vol_huber_T{VOL_TEMPERATURE:g}_p{VOL_TOP_P:g}_N{VOL_SAMPLES}'",
     ):
@@ -32,7 +32,7 @@ def test_trainer_refuses_c3_dashboard_and_requires_vol_exclusive():
         "Refusing to reuse the T=1 top-16 vol-cal dashboard",
         "vol alignment requires lambda_path=0 and ce_rank disabled",
         "Refusing to reuse Stage3 C3 path-alignment dashboard for vol calibration",
-        "os.environ['KRONOS_STAGE3_VOL_LOSS'] = '1' if a.lambda_vol else '0'",
+        "os.environ['KRONOS_STAGE3_VOL_LOSS'] = '1' if (a.lambda_vol or a.ar_vol) else '0'",
         'vol_vs_ce_grad_norm_ratio',
         "f'token_ce+{a.lambda_vol:g}*log_vol_huber'",
     ):
@@ -66,6 +66,7 @@ def test_vol_metrics_contract_forwards_uniform_path_vol():
 
 def test_checkpoint_schema_splits_vol_from_c3_path():
     source = MODEL.read_text()
-    assert "schema': 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'" in source
+    assert "return 'stage3_ar_vol_calibration_v1'" in source
+    assert "return 'stage3_vol_calibration_v2' if self.vol_config.weight else 'stage3_conditional_joint_causal_v2'" in source
     assert 'compute_vol_alignment_loss' in source
     assert "raise ValueError('vol alignment requires lambda_path=0')" in source
