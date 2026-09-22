@@ -37,4 +37,10 @@ pip install \
   bcrypt \
   scipy
 
+echo "==> Installing Kaggle CLI (training/eval runs on Kaggle)"
+# The kaggle CLI/API is used to push kernels, check status, and pull outputs
+# (see finetune/KAGGLE_*.md). Authenticate with KAGGLE_USERNAME + KAGGLE_KEY
+# env vars or ~/.kaggle/kaggle.json; no credentials are baked in here.
+pip install kaggle
+
 echo "==> Install complete. Run the suite with: PYTHONPATH=. python -m pytest tests"
