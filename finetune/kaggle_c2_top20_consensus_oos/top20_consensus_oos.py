@@ -21,6 +21,7 @@ EXPECTED_DATES = 18
 
 def find_predictions():
     matches = list(INPUT.glob("**/predictions_prod_t065_p80_n5.csv.gz"))
+    matches += list(Path(__file__).parent.glob("predictions_prod_t065_p80_n5.csv.gz"))
     if len(matches) != 1:
         raise RuntimeError(f"Expected one C2 prediction file, found {matches}")
     return matches[0]

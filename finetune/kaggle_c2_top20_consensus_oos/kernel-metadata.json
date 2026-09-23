@@ -1,5 +1,5 @@
 {
-  "id": "luckfu/kronos-c2-top20-consensus-oos",
+  "id": "smmt315/kronos-c2-top20-consensus-oos",
   "title": "Kronos C2 Top20 Consensus OOS",
   "code_file": "top20_consensus_oos.py",
   "language": "python",
@@ -7,6 +7,6 @@
   "is_private": true,
   "enable_gpu": false,
   "enable_internet": false,
-  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "dataset_sources": [],
   "kernel_sources": ["luckfu/kronos-small-0-1-c2-18d-alpha-oos"]
 }
