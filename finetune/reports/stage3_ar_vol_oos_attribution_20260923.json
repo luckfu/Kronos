@@ -1,0 +1,1504 @@
+{
+  "status": "complete",
+  "window": {
+    "signal_dates": 18,
+    "samples": 92751,
+    "start": "2026-08-11",
+    "end": "2026-09-03"
+  },
+  "horizons": {
+    "baseline": [
+      {
+        "horizon": 1,
+        "pooled_rank_ic": 0.1622433624354024,
+        "daily_rank_ic_mean": 0.10016599099345126,
+        "direction_accuracy": 0.5404362217118953,
+        "mae": 0.023832640925103964
+      },
+      {
+        "horizon": 2,
+        "pooled_rank_ic": 0.1647109314384218,
+        "daily_rank_ic_mean": 0.10494799306011939,
+        "direction_accuracy": 0.5438971008398831,
+        "mae": 0.032077763708468286
+      },
+      {
+        "horizon": 3,
+        "pooled_rank_ic": 0.12284318535752053,
+        "daily_rank_ic_mean": 0.11432977411410009,
+        "direction_accuracy": 0.5217841317074748,
+        "mae": 0.03894024158269563
+      },
+      {
+        "horizon": 4,
+        "pooled_rank_ic": 0.12262689025274555,
+        "daily_rank_ic_mean": 0.12243950700345992,
+        "direction_accuracy": 0.5081454647389246,
+        "mae": 0.04517688983318289
+      },
+      {
+        "horizon": 5,
+        "pooled_rank_ic": 0.12697386276236985,
+        "daily_rank_ic_mean": 0.1411552737754294,
+        "direction_accuracy": 0.5084257851667368,
+        "mae": 0.050304327074744186
+      },
+      {
+        "horizon": 6,
+        "pooled_rank_ic": 0.147654474367964,
+        "daily_rank_ic_mean": 0.15832265183795294,
+        "direction_accuracy": 0.5187868594408686,
+        "mae": 0.05448543533025496
+      },
+      {
+        "horizon": 7,
+        "pooled_rank_ic": 0.19639423760012972,
+        "daily_rank_ic_mean": 0.17351211109919096,
+        "direction_accuracy": 0.5289323026166833,
+        "mae": 0.05837863039511111
+      },
+      {
+        "horizon": 8,
+        "pooled_rank_ic": 0.21992845522548085,
+        "daily_rank_ic_mean": 0.18117528955363682,
+        "direction_accuracy": 0.5405224741512221,
+        "mae": 0.06247304378517012
+      },
+      {
+        "horizon": 9,
+        "pooled_rank_ic": 0.2287625028971705,
+        "daily_rank_ic_mean": 0.1793483894769129,
+        "direction_accuracy": 0.5457191836206617,
+        "mae": 0.06655028781371097
+      },
+      {
+        "horizon": 10,
+        "pooled_rank_ic": 0.2372795397036252,
+        "daily_rank_ic_mean": 0.1768718542617823,
+        "direction_accuracy": 0.5453202660887754,
+        "mae": 0.07042461323818269
+      }
+    ],
+    "candidate": [
+      {
+        "horizon": 1,
+        "pooled_rank_ic": 0.10815879684767206,
+        "daily_rank_ic_mean": 0.051084010789329365,
+        "direction_accuracy": 0.5234660542743474,
+        "mae": 0.025261411318729287
+      },
+      {
+        "horizon": 2,
+        "pooled_rank_ic": 0.08601119912498996,
+        "daily_rank_ic_mean": 0.04645638459274645,
+        "direction_accuracy": 0.5201453353602656,
+        "mae": 0.03562089188570444
+      },
+      {
+        "horizon": 3,
+        "pooled_rank_ic": 0.05277627887353802,
+        "daily_rank_ic_mean": 0.051954262480242513,
+        "direction_accuracy": 0.5089217366928659,
+        "mae": 0.043630071789246785
+      },
+      {
+        "horizon": 4,
+        "pooled_rank_ic": 0.041081922123895484,
+        "daily_rank_ic_mean": 0.05537495041862803,
+        "direction_accuracy": 0.505827430432017,
+        "mae": 0.050850487729228955
+      },
+      {
+        "horizon": 5,
+        "pooled_rank_ic": 0.03520349222447684,
+        "daily_rank_ic_mean": 0.06893473137127724,
+        "direction_accuracy": 0.5041994156397236,
+        "mae": 0.05684426645327439
+      },
+      {
+        "horizon": 6,
+        "pooled_rank_ic": 0.04635837504550458,
+        "daily_rank_ic_mean": 0.08196267169366543,
+        "direction_accuracy": 0.5058489935418486,
+        "mae": 0.061867461872400914
+      },
+      {
+        "horizon": 7,
+        "pooled_rank_ic": 0.07777289577160189,
+        "daily_rank_ic_mean": 0.0905563535597391,
+        "direction_accuracy": 0.518247781695076,
+        "mae": 0.0654901496651788
+      },
+      {
+        "horizon": 8,
+        "pooled_rank_ic": 0.08613665830458679,
+        "daily_rank_ic_mean": 0.09010866142279228,
+        "direction_accuracy": 0.523573869823506,
+        "mae": 0.07030319771207404
+      },
+      {
+        "horizon": 9,
+        "pooled_rank_ic": 0.08968843823283004,
+        "daily_rank_ic_mean": 0.08860574403996345,
+        "direction_accuracy": 0.5276492975816972,
+        "mae": 0.07461786977827822
+      },
+      {
+        "horizon": 10,
+        "pooled_rank_ic": 0.09762086128813742,
+        "daily_rank_ic_mean": 0.08852581309227865,
+        "direction_accuracy": 0.5302476523164171,
+        "mae": 0.07837328848589994
+      }
+    ]
+  },
+  "dates": [
+    {
+      "asof_date": "2026-08-11",
+      "samples": 5165,
+      "baseline_d10_rank_ic": 0.19124519017489877,
+      "candidate_d10_rank_ic": 0.008146751510400958,
+      "delta_d10_rank_ic": -0.18309843866449782,
+      "baseline_pred_std": 0.04884294371525691,
+      "candidate_pred_std": 0.07871153742068235,
+      "baseline_pred_mean": -0.041526517408799056,
+      "candidate_pred_mean": 0.006375122608162461,
+      "baseline_vol_ratio": 2.1344849648028057,
+      "candidate_vol_ratio": 1.6563467806046182
+    },
+    {
+      "asof_date": "2026-08-12",
+      "samples": 5165,
+      "baseline_d10_rank_ic": 0.2634178049997343,
+      "candidate_d10_rank_ic": 0.08855249322230067,
+      "delta_d10_rank_ic": -0.17486531177743359,
+      "baseline_pred_std": 0.05552515752509796,
+      "candidate_pred_std": 0.0813197057858062,
+      "baseline_pred_mean": -0.058812298262250255,
+      "candidate_pred_mean": -0.00694934024218767,
+      "baseline_vol_ratio": 2.067887811114918,
+      "candidate_vol_ratio": 1.5872467945972037
+    },
+    {
+      "asof_date": "2026-08-13",
+      "samples": 5166,
+      "baseline_d10_rank_ic": 0.18108507238056293,
+      "candidate_d10_rank_ic": 0.06347755503728006,
+      "delta_d10_rank_ic": -0.11760751734328287,
+      "baseline_pred_std": 0.05768190167839016,
+      "candidate_pred_std": 0.08602765944909384,
+      "baseline_pred_mean": -0.04668494132022899,
+      "candidate_pred_mean": 0.007351668112920276,
+      "baseline_vol_ratio": 2.0390019415136633,
+      "candidate_vol_ratio": 1.541600179516568
+    },
+    {
+      "asof_date": "2026-08-14",
+      "samples": 5164,
+      "baseline_d10_rank_ic": 0.24228326141781528,
+      "candidate_d10_rank_ic": 0.08711993508791174,
+      "delta_d10_rank_ic": -0.15516332632990354,
+      "baseline_pred_std": 0.05193339106477909,
+      "candidate_pred_std": 0.0854006989942238,
+      "baseline_pred_mean": -0.03300215398079666,
+      "candidate_pred_mean": 0.029616637331409977,
+      "baseline_vol_ratio": 2.046517068858857,
+      "candidate_vol_ratio": 1.542695911699717
+    },
+    {
+      "asof_date": "2026-08-17",
+      "samples": 5161,
+      "baseline_d10_rank_ic": 0.28811013930379137,
+      "candidate_d10_rank_ic": 0.12804478118004717,
+      "delta_d10_rank_ic": -0.1600653581237442,
+      "baseline_pred_std": 0.056742112693373335,
+      "candidate_pred_std": 0.08652222326700232,
+      "baseline_pred_mean": -0.05157515144690853,
+      "candidate_pred_mean": 0.0038000514315372816,
+      "baseline_vol_ratio": 2.2534030181329356,
+      "candidate_vol_ratio": 1.6663963828866724
+    },
+    {
+      "asof_date": "2026-08-18",
+      "samples": 5156,
+      "baseline_d10_rank_ic": 0.3530073779749047,
+      "candidate_d10_rank_ic": 0.11348882518642008,
+      "delta_d10_rank_ic": -0.23951855278848466,
+      "baseline_pred_std": 0.05443201535931124,
+      "candidate_pred_std": 0.08085060230817649,
+      "baseline_pred_mean": -0.05087975538282924,
+      "candidate_pred_mean": -0.005836759268126116,
+      "baseline_vol_ratio": 2.3654995711380593,
+      "candidate_vol_ratio": 1.7541579548710413
+    },
+    {
+      "asof_date": "2026-08-19",
+      "samples": 5156,
+      "baseline_d10_rank_ic": 0.17430481304007012,
+      "candidate_d10_rank_ic": 0.025965471835574683,
+      "delta_d10_rank_ic": -0.14833934120449543,
+      "baseline_pred_std": 0.06000645151681948,
+      "candidate_pred_std": 0.08973593779122896,
+      "baseline_pred_mean": -0.04585435968071513,
+      "candidate_pred_mean": -0.026022434096556794,
+      "baseline_vol_ratio": 2.026640624848482,
+      "candidate_vol_ratio": 1.5292342105783714
+    },
+    {
+      "asof_date": "2026-08-20",
+      "samples": 5155,
+      "baseline_d10_rank_ic": 0.1268510208872156,
+      "candidate_d10_rank_ic": 0.04125986801932908,
+      "delta_d10_rank_ic": -0.08559115286788652,
+      "baseline_pred_std": 0.05958858163033178,
+      "candidate_pred_std": 0.08619387747394325,
+      "baseline_pred_mean": -0.05073621308423794,
+      "candidate_pred_mean": -0.017884528061097468,
+      "baseline_vol_ratio": 1.963386230323399,
+      "candidate_vol_ratio": 1.4512269059034864
+    },
+    {
+      "asof_date": "2026-08-21",
+      "samples": 5151,
+      "baseline_d10_rank_ic": 0.2643941066163511,
+      "candidate_d10_rank_ic": 0.14424685139564222,
+      "delta_d10_rank_ic": -0.12014725522070888,
+      "baseline_pred_std": 0.05482054179497065,
+      "candidate_pred_std": 0.07736305448881316,
+      "baseline_pred_mean": -0.05545566465757694,
+      "candidate_pred_mean": -0.031237629264057404,
+      "baseline_vol_ratio": 1.9789862411527874,
+      "candidate_vol_ratio": 1.4802083252244285
+    },
+    {
+      "asof_date": "2026-08-24",
+      "samples": 5153,
+      "baseline_d10_rank_ic": 0.1326209752927005,
+      "candidate_d10_rank_ic": 0.04554461449813268,
+      "delta_d10_rank_ic": -0.08707636079456782,
+      "baseline_pred_std": 0.04580100613997288,
+      "candidate_pred_std": 0.07050596461413226,
+      "baseline_pred_mean": -0.037649099256101014,
+      "candidate_pred_mean": -0.008863639699550556,
+      "baseline_vol_ratio": 2.094372767192734,
+      "candidate_vol_ratio": 1.5385948981294146
+    },
+    {
+      "asof_date": "2026-08-25",
+      "samples": 5152,
+      "baseline_d10_rank_ic": 0.13008025915416696,
+      "candidate_d10_rank_ic": 0.14923650853144638,
+      "delta_d10_rank_ic": 0.019156249377279416,
+      "baseline_pred_std": 0.04399441354168233,
+      "candidate_pred_std": 0.06820395705101999,
+      "baseline_pred_mean": -0.042858385782070935,
+      "candidate_pred_mean": -0.007003602423831665,
+      "baseline_vol_ratio": 1.9513469871854365,
+      "candidate_vol_ratio": 1.46240766767918
+    },
+    {
+      "asof_date": "2026-08-26",
+      "samples": 5153,
+      "baseline_d10_rank_ic": 0.0800020498235653,
+      "candidate_d10_rank_ic": 0.1332569283948818,
+      "delta_d10_rank_ic": 0.053254878571316486,
+      "baseline_pred_std": 0.04425178579259863,
+      "candidate_pred_std": 0.06751457512464124,
+      "baseline_pred_mean": -0.04145652127272218,
+      "candidate_pred_mean": 0.000987198594505911,
+      "baseline_vol_ratio": 2.2375435665842534,
+      "candidate_vol_ratio": 1.5930888448343148
+    },
+    {
+      "asof_date": "2026-08-27",
+      "samples": 5152,
+      "baseline_d10_rank_ic": 0.2641158447724487,
+      "candidate_d10_rank_ic": 0.22978597696737812,
+      "delta_d10_rank_ic": -0.03432986780507058,
+      "baseline_pred_std": 0.05040139971620026,
+      "candidate_pred_std": 0.06990070500996005,
+      "baseline_pred_mean": -0.06032491882149349,
+      "candidate_pred_mean": -0.014982161635453036,
+      "baseline_vol_ratio": 2.108275144211373,
+      "candidate_vol_ratio": 1.4623552651483307
+    },
+    {
+      "asof_date": "2026-08-28",
+      "samples": 5142,
+      "baseline_d10_rank_ic": 0.18693680776554544,
+      "candidate_d10_rank_ic": 0.12153039991916437,
+      "delta_d10_rank_ic": -0.06540640784638108,
+      "baseline_pred_std": 0.046424983434665196,
+      "candidate_pred_std": 0.06550267385900278,
+      "baseline_pred_mean": -0.061509076258015695,
+      "candidate_pred_mean": -0.023019778889026572,
+      "baseline_vol_ratio": 2.183798892130776,
+      "candidate_vol_ratio": 1.5819651289669336
+    },
+    {
+      "asof_date": "2026-08-31",
+      "samples": 5140,
+      "baseline_d10_rank_ic": 0.2667451723982275,
+      "candidate_d10_rank_ic": 0.16742064866364323,
+      "delta_d10_rank_ic": -0.09932452373458425,
+      "baseline_pred_std": 0.052976036606728484,
+      "candidate_pred_std": 0.07265924742797875,
+      "baseline_pred_mean": -0.06653147962778329,
+      "candidate_pred_mean": -0.02360590517608539,
+      "baseline_vol_ratio": 2.064592551401985,
+      "candidate_vol_ratio": 1.4984788666839755
+    },
+    {
+      "asof_date": "2026-09-01",
+      "samples": 5140,
+      "baseline_d10_rank_ic": 0.0971715478976392,
+      "candidate_d10_rank_ic": 0.048863313270626596,
+      "delta_d10_rank_ic": -0.0483082346270126,
+      "baseline_pred_std": 0.04788449314371036,
+      "candidate_pred_std": 0.07136810291071903,
+      "baseline_pred_mean": -0.06558202960240761,
+      "candidate_pred_mean": -0.023978791745439293,
+      "baseline_vol_ratio": 1.9574945841991729,
+      "candidate_vol_ratio": 1.4715354557311713
+    },
+    {
+      "asof_date": "2026-09-02",
+      "samples": 5140,
+      "baseline_d10_rank_ic": -0.0340547721554692,
+      "candidate_d10_rank_ic": -0.020275032705381512,
+      "delta_d10_rank_ic": 0.013779739450087685,
+      "baseline_pred_std": 0.048330610303350036,
+      "candidate_pred_std": 0.0737153079510343,
+      "baseline_pred_mean": -0.06283816971018892,
+      "candidate_pred_mean": -0.02491990658753548,
+      "baseline_vol_ratio": 2.128903432763276,
+      "candidate_vol_ratio": 1.5745312300248162
+    },
+    {
+      "asof_date": "2026-09-03",
+      "samples": 5140,
+      "baseline_d10_rank_ic": -0.024623295032086927,
+      "candidate_d10_rank_ic": 0.01779874564621789,
+      "delta_d10_rank_ic": 0.042422040678304816,
+      "baseline_pred_std": 0.04518082088961362,
+      "candidate_pred_std": 0.07052970430168834,
+      "baseline_pred_mean": -0.05478235471597806,
+      "candidate_pred_mean": -0.015564710853428454,
+      "baseline_vol_ratio": 2.2377706402837565,
+      "candidate_vol_ratio": 1.59786087070591
+    }
+  ],
+  "sectors": [
+    {
+      "group": "A01农业",
+      "samples": 144,
+      "baseline_daily_d10_rank_ic": 0.10052910052910054,
+      "candidate_daily_d10_rank_ic": -0.001322751322751325,
+      "delta_daily_d10_rank_ic": -0.10185185185185186,
+      "baseline_pred_std": 0.05241396246758876,
+      "candidate_pred_std": 0.08089953325832504,
+      "baseline_mae": 0.1654368925476606,
+      "candidate_mae": 0.13218547691124713
+    },
+    {
+      "group": "A02林业",
+      "samples": 36,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.03539795855942054,
+      "candidate_pred_std": 0.058109462142796046,
+      "baseline_mae": 0.13645685266051136,
+      "candidate_mae": 0.08179244043308834
+    },
+    {
+      "group": "A03畜牧业",
+      "samples": 324,
+      "baseline_daily_d10_rank_ic": 0.10572182089209953,
+      "candidate_daily_d10_rank_ic": 0.15227611512441236,
+      "delta_daily_d10_rank_ic": 0.04655429423231283,
+      "baseline_pred_std": 0.04631104465597619,
+      "candidate_pred_std": 0.05981359871603001,
+      "baseline_mae": 0.08964695176438718,
+      "candidate_mae": 0.06481737685839925
+    },
+    {
+      "group": "A04渔业",
+      "samples": 108,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.018213211167024602,
+      "candidate_pred_std": 0.04121862074798069,
+      "baseline_mae": 0.1045932840378829,
+      "candidate_mae": 0.06336781354373534
+    },
+    {
+      "group": "A05农、林、牧、渔专业及辅助性活动",
+      "samples": 126,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.07161560260600877,
+      "candidate_pred_std": 0.09634325881855446,
+      "baseline_mae": 0.2213998126637547,
+      "candidate_mae": 0.17307119256682318
+    },
+    {
+      "group": "B06煤炭开采和洗选业",
+      "samples": 450,
+      "baseline_daily_d10_rank_ic": -0.040982905982905965,
+      "candidate_daily_d10_rank_ic": -0.027692307692307697,
+      "delta_daily_d10_rank_ic": 0.013290598290598268,
+      "baseline_pred_std": 0.04173258283717368,
+      "candidate_pred_std": 0.05067975466018706,
+      "baseline_mae": 0.08387554558983466,
+      "candidate_mae": 0.07570364260875592
+    },
+    {
+      "group": "B07石油和天然气开采业",
+      "samples": 180,
+      "baseline_daily_d10_rank_ic": 0.027609427609427598,
+      "candidate_daily_d10_rank_ic": 0.02020202020202021,
+      "delta_daily_d10_rank_ic": -0.007407407407407387,
+      "baseline_pred_std": 0.0322423643054905,
+      "candidate_pred_std": 0.09485599921047562,
+      "baseline_mae": 0.06962572884251007,
+      "candidate_mae": 0.08110198304519924
+    },
+    {
+      "group": "B08黑色金属矿采选业",
+      "samples": 108,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.02590401453792065,
+      "candidate_pred_std": 0.08032729722726896,
+      "baseline_mae": 0.06492777325662341,
+      "candidate_mae": 0.0685865992539114
+    },
+    {
+      "group": "B09有色金属矿采选业",
+      "samples": 476,
+      "baseline_daily_d10_rank_ic": 0.2973517840184507,
+      "candidate_daily_d10_rank_ic": 0.26455704789038115,
+      "delta_daily_d10_rank_ic": -0.032794736128069546,
+      "baseline_pred_std": 0.04994959659762418,
+      "candidate_pred_std": 0.09681708182369336,
+      "baseline_mae": 0.08266882152964718,
+      "candidate_mae": 0.07576095530182585
+    },
+    {
+      "group": "B10非金属矿采选业",
+      "samples": 36,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.01928897003959324,
+      "candidate_pred_std": 0.04684430781878522,
+      "baseline_mae": 0.0525028156029061,
+      "candidate_mae": 0.07389905734448715
+    },
+    {
+      "group": "B11开采专业及辅助性活动",
+      "samples": 252,
+      "baseline_daily_d10_rank_ic": 0.031990231990231995,
+      "candidate_daily_d10_rank_ic": -0.03125763125763126,
+      "delta_daily_d10_rank_ic": -0.06324786324786325,
+      "baseline_pred_std": 0.03437203089067832,
+      "candidate_pred_std": 0.0908403748499644,
+      "baseline_mae": 0.0489597864064017,
+      "candidate_mae": 0.09638268596039333
+    },
+    {
+      "group": "C13农副食品加工业",
+      "samples": 1134,
+      "baseline_daily_d10_rank_ic": 0.052226120491509084,
+      "candidate_daily_d10_rank_ic": 0.13268723310369054,
+      "delta_daily_d10_rank_ic": 0.08046111261218146,
+      "baseline_pred_std": 0.04008804419437961,
+      "candidate_pred_std": 0.05841356758468522,
+      "baseline_mae": 0.08670861917390968,
+      "candidate_mae": 0.07110363270939547
+    },
+    {
+      "group": "C14食品制造业",
+      "samples": 1286,
+      "baseline_daily_d10_rank_ic": 0.15820142348660615,
+      "candidate_daily_d10_rank_ic": 0.0926175931512194,
+      "delta_daily_d10_rank_ic": -0.06558383033538676,
+      "baseline_pred_std": 0.04789048570713459,
+      "candidate_pred_std": 0.06381371467368109,
+      "baseline_mae": 0.05900472809707665,
+      "candidate_mae": 0.0631271892133037
+    },
+    {
+      "group": "C15酒、饮料和精制茶制造业",
+      "samples": 846,
+      "baseline_daily_d10_rank_ic": 0.06122261693180363,
+      "candidate_daily_d10_rank_ic": 0.13811592739623166,
+      "delta_daily_d10_rank_ic": 0.07689331046442803,
+      "baseline_pred_std": 0.028650723593423424,
+      "candidate_pred_std": 0.03613619540211093,
+      "baseline_mae": 0.05094281736016303,
+      "candidate_mae": 0.05054312233286298
+    },
+    {
+      "group": "C17纺织业",
+      "samples": 792,
+      "baseline_daily_d10_rank_ic": 0.06705057828836852,
+      "candidate_daily_d10_rank_ic": 0.03743375590349941,
+      "delta_daily_d10_rank_ic": -0.02961682238486911,
+      "baseline_pred_std": 0.03188294834868133,
+      "candidate_pred_std": 0.06215596061665426,
+      "baseline_mae": 0.05127750390811502,
+      "candidate_mae": 0.05949039824228011
+    },
+    {
+      "group": "C18纺织服装、服饰业",
+      "samples": 738,
+      "baseline_daily_d10_rank_ic": 0.23663083443134048,
+      "candidate_daily_d10_rank_ic": 0.16805749837161463,
+      "delta_daily_d10_rank_ic": -0.06857333605972585,
+      "baseline_pred_std": 0.028945408718393958,
+      "candidate_pred_std": 0.05388727943200506,
+      "baseline_mae": 0.05639390567736863,
+      "candidate_mae": 0.060056303280500406
+    },
+    {
+      "group": "C19皮革、毛皮、羽毛及其制品和制鞋业",
+      "samples": 234,
+      "baseline_daily_d10_rank_ic": 0.36446886446886445,
+      "candidate_daily_d10_rank_ic": 0.38186813186813184,
+      "delta_daily_d10_rank_ic": 0.017399267399267393,
+      "baseline_pred_std": 0.0641263781769654,
+      "candidate_pred_std": 0.08072326579415402,
+      "baseline_mae": 0.08586722695211851,
+      "candidate_mae": 0.0833557252937234
+    },
+    {
+      "group": "C20木材加工和木、竹、藤、棕、草制品业",
+      "samples": 234,
+      "baseline_daily_d10_rank_ic": -0.09615384615384615,
+      "candidate_daily_d10_rank_ic": 0.1746031746031746,
+      "delta_daily_d10_rank_ic": 0.27075702075702074,
+      "baseline_pred_std": 0.04143538236626958,
+      "candidate_pred_std": 0.0637554251332823,
+      "baseline_mae": 0.10012522591232116,
+      "candidate_mae": 0.09208542749079485
+    },
+    {
+      "group": "C21家具制造业",
+      "samples": 450,
+      "baseline_daily_d10_rank_ic": 0.17709401709401706,
+      "candidate_daily_d10_rank_ic": 0.06897435897435897,
+      "delta_daily_d10_rank_ic": -0.1081196581196581,
+      "baseline_pred_std": 0.029807220347545568,
+      "candidate_pred_std": 0.05780728839959052,
+      "baseline_mae": 0.05560363085807404,
+      "candidate_mae": 0.0602471882370937
+    },
+    {
+      "group": "C22造纸和纸制品业",
+      "samples": 738,
+      "baseline_daily_d10_rank_ic": 0.08842583920556507,
+      "candidate_daily_d10_rank_ic": 0.14755291778326354,
+      "delta_daily_d10_rank_ic": 0.05912707857769847,
+      "baseline_pred_std": 0.03943386249436685,
+      "candidate_pred_std": 0.06590904897780749,
+      "baseline_mae": 0.06169382571532309,
+      "candidate_mae": 0.06577136736801799
+    },
+    {
+      "group": "C23印刷和记录媒介复制业",
+      "samples": 270,
+      "baseline_daily_d10_rank_ic": 0.10326857646545248,
+      "candidate_daily_d10_rank_ic": 0.015975149187065947,
+      "delta_daily_d10_rank_ic": -0.08729342727838654,
+      "baseline_pred_std": 0.04451524410877725,
+      "candidate_pred_std": 0.0609407012135494,
+      "baseline_mae": 0.06578418300577044,
+      "candidate_mae": 0.06799591187885456
+    },
+    {
+      "group": "C24文教、工美、体育和娱乐用品制造业",
+      "samples": 418,
+      "baseline_daily_d10_rank_ic": 0.1527777777777778,
+      "candidate_daily_d10_rank_ic": 0.0698199385155907,
+      "delta_daily_d10_rank_ic": -0.0829578392621871,
+      "baseline_pred_std": 0.04424689420917033,
+      "candidate_pred_std": 0.05929057330420859,
+      "baseline_mae": 0.08536552341025035,
+      "candidate_mae": 0.08704712463872925
+    },
+    {
+      "group": "C25石油、煤炭及其他燃料加工业",
+      "samples": 306,
+      "baseline_daily_d10_rank_ic": 0.17008049344057763,
+      "candidate_daily_d10_rank_ic": 0.11008682110929463,
+      "delta_daily_d10_rank_ic": -0.059993672331283,
+      "baseline_pred_std": 0.031352294149608134,
+      "candidate_pred_std": 0.06242359986827274,
+      "baseline_mae": 0.08727639659824031,
+      "candidate_mae": 0.07548296469656911
+    },
+    {
+      "group": "C26化学原料和化学制品制造业",
+      "samples": 6292,
+      "baseline_daily_d10_rank_ic": 0.22772210741586146,
+      "candidate_daily_d10_rank_ic": 0.1458639799920678,
+      "delta_daily_d10_rank_ic": -0.08185812742379367,
+      "baseline_pred_std": 0.05111672388442868,
+      "candidate_pred_std": 0.08122522262456372,
+      "baseline_mae": 0.07080062265760012,
+      "candidate_mae": 0.07905822125174125
+    },
+    {
+      "group": "C27医药制造业",
+      "samples": 5526,
+      "baseline_daily_d10_rank_ic": 0.2581616987226108,
+      "candidate_daily_d10_rank_ic": 0.18927227558714319,
+      "delta_daily_d10_rank_ic": -0.06888942313546761,
+      "baseline_pred_std": 0.04066222090374971,
+      "candidate_pred_std": 0.05732608679187444,
+      "baseline_mae": 0.04985878630689321,
+      "candidate_mae": 0.059696614438290045
+    },
+    {
+      "group": "C28化学纤维制造业",
+      "samples": 445,
+      "baseline_daily_d10_rank_ic": -0.12544035674470458,
+      "candidate_daily_d10_rank_ic": 0.06382385730211818,
+      "delta_daily_d10_rank_ic": 0.18926421404682275,
+      "baseline_pred_std": 0.031176270695198408,
+      "candidate_pred_std": 0.055381167445727845,
+      "baseline_mae": 0.06758737328878879,
+      "candidate_mae": 0.0711670076030577
+    },
+    {
+      "group": "C29橡胶和塑料制品业",
+      "samples": 2209,
+      "baseline_daily_d10_rank_ic": 0.06320864669392873,
+      "candidate_daily_d10_rank_ic": 0.024095399718379873,
+      "delta_daily_d10_rank_ic": -0.039113246975548854,
+      "baseline_pred_std": 0.059656130625327326,
+      "candidate_pred_std": 0.07998571211790204,
+      "baseline_mae": 0.0781115493154383,
+      "candidate_mae": 0.08514784176621405
+    },
+    {
+      "group": "C30非金属矿物制品业",
+      "samples": 1872,
+      "baseline_daily_d10_rank_ic": 0.21521149967616207,
+      "candidate_daily_d10_rank_ic": 0.12127309156491152,
+      "delta_daily_d10_rank_ic": -0.09393840811125055,
+      "baseline_pred_std": 0.059969158242277804,
+      "candidate_pred_std": 0.07966455520686568,
+      "baseline_mae": 0.07249294434354862,
+      "candidate_mae": 0.07703783124689152
+    },
+    {
+      "group": "C31黑色金属冶炼和压延加工业",
+      "samples": 558,
+      "baseline_daily_d10_rank_ic": 0.18777904364219122,
+      "candidate_daily_d10_rank_ic": 0.06964567907036671,
+      "delta_daily_d10_rank_ic": -0.11813336457182451,
+      "baseline_pred_std": 0.02353190541926933,
+      "candidate_pred_std": 0.05725953455929557,
+      "baseline_mae": 0.035603804933570175,
+      "candidate_mae": 0.061758424171897267
+    },
+    {
+      "group": "C32有色金属冶炼和压延加工业",
+      "samples": 1548,
+      "baseline_daily_d10_rank_ic": 0.2157151170195905,
+      "candidate_daily_d10_rank_ic": 0.2047202956109372,
+      "delta_daily_d10_rank_ic": -0.010994821408653321,
+      "baseline_pred_std": 0.051187511935486416,
+      "candidate_pred_std": 0.08592998295820532,
+      "baseline_mae": 0.07164199066024914,
+      "candidate_mae": 0.07562359894356138
+    },
+    {
+      "group": "C33金属制品业",
+      "samples": 1753,
+      "baseline_daily_d10_rank_ic": 0.14795534158946874,
+      "candidate_daily_d10_rank_ic": 0.05519630281753765,
+      "delta_daily_d10_rank_ic": -0.09275903877193109,
+      "baseline_pred_std": 0.058532251089109075,
+      "candidate_pred_std": 0.08607284519459642,
+      "baseline_mae": 0.07465019720901774,
+      "candidate_mae": 0.08756785997057978
+    },
+    {
+      "group": "C34通用设备制造业",
+      "samples": 4136,
+      "baseline_daily_d10_rank_ic": 0.10974848558095052,
+      "candidate_daily_d10_rank_ic": 0.10568538725074655,
+      "delta_daily_d10_rank_ic": -0.0040630983302039625,
+      "baseline_pred_std": 0.04904457583271401,
+      "candidate_pred_std": 0.0777100042609458,
+      "baseline_mae": 0.07385831014068335,
+      "candidate_mae": 0.08145788426314343
+    },
+    {
+      "group": "C35专用设备制造业",
+      "samples": 6370,
+      "baseline_daily_d10_rank_ic": 0.13247645940252306,
+      "candidate_daily_d10_rank_ic": 0.04308087132364588,
+      "delta_daily_d10_rank_ic": -0.08939558807887718,
+      "baseline_pred_std": 0.057621283297470204,
+      "candidate_pred_std": 0.08397442151289268,
+      "baseline_mae": 0.06834885218524184,
+      "candidate_mae": 0.07987761786311501
+    },
+    {
+      "group": "C36汽车制造业",
+      "samples": 3459,
+      "baseline_daily_d10_rank_ic": 0.1104138602876648,
+      "candidate_daily_d10_rank_ic": 0.0002431445140184614,
+      "delta_daily_d10_rank_ic": -0.11017071577364633,
+      "baseline_pred_std": 0.042756967818258655,
+      "candidate_pred_std": 0.07342752237174785,
+      "baseline_mae": 0.06133752337867492,
+      "candidate_mae": 0.07700277709563864
+    },
+    {
+      "group": "C37铁路、船舶、航空航天和其他运输设备制造业",
+      "samples": 1458,
+      "baseline_daily_d10_rank_ic": 0.0930009907374489,
+      "candidate_daily_d10_rank_ic": 0.11566177752823448,
+      "delta_daily_d10_rank_ic": 0.022660786790785578,
+      "baseline_pred_std": 0.032533095129094025,
+      "candidate_pred_std": 0.07414896808713116,
+      "baseline_mae": 0.06746838102636753,
+      "candidate_mae": 0.07373496452122125
+    },
+    {
+      "group": "C38电气机械和器材制造业",
+      "samples": 5898,
+      "baseline_daily_d10_rank_ic": 0.04841863784097882,
+      "candidate_daily_d10_rank_ic": -0.011078091755438084,
+      "delta_daily_d10_rank_ic": -0.05949672959641691,
+      "baseline_pred_std": 0.053675572247865386,
+      "candidate_pred_std": 0.0907894699677441,
+      "baseline_mae": 0.06753627787045763,
+      "candidate_mae": 0.08789004610685652
+    },
+    {
+      "group": "C39计算机、通信和其他电子设备制造业",
+      "samples": 11557,
+      "baseline_daily_d10_rank_ic": 0.07654199626037225,
+      "candidate_daily_d10_rank_ic": 0.018767317476474234,
+      "delta_daily_d10_rank_ic": -0.05777467878389802,
+      "baseline_pred_std": 0.06985299497934894,
+      "candidate_pred_std": 0.0984546579661471,
+      "baseline_mae": 0.0970841508500202,
+      "candidate_mae": 0.10132637850007443
+    },
+    {
+      "group": "C40仪器仪表制造业",
+      "samples": 1442,
+      "baseline_daily_d10_rank_ic": 0.14049105106616,
+      "candidate_daily_d10_rank_ic": 0.003154138667500127,
+      "delta_daily_d10_rank_ic": -0.13733691239865986,
+      "baseline_pred_std": 0.05396706102779551,
+      "candidate_pred_std": 0.07636597303623573,
+      "baseline_mae": 0.07022519339355986,
+      "candidate_mae": 0.07993304226411194
+    },
+    {
+      "group": "C41其他制造业",
+      "samples": 270,
+      "baseline_daily_d10_rank_ic": 0.03611111111111111,
+      "candidate_daily_d10_rank_ic": 0.10039682539682539,
+      "delta_daily_d10_rank_ic": 0.06428571428571428,
+      "baseline_pred_std": 0.03976440847260097,
+      "candidate_pred_std": 0.06790489126824123,
+      "baseline_mae": 0.07402567832639226,
+      "candidate_mae": 0.07628406770572622
+    },
+    {
+      "group": "C42废弃资源综合利用业",
+      "samples": 359,
+      "baseline_daily_d10_rank_ic": 0.19997215260373155,
+      "candidate_daily_d10_rank_ic": 0.13912559175717068,
+      "delta_daily_d10_rank_ic": -0.06084656084656087,
+      "baseline_pred_std": 0.06072453687030503,
+      "candidate_pred_std": 0.09733252480283854,
+      "baseline_mae": 0.06176266880084084,
+      "candidate_mae": 0.08512215735053916
+    },
+    {
+      "group": "C43金属制品、机械和设备修理业",
+      "samples": 54,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.038334864573319624,
+      "candidate_pred_std": 0.055437767792224465,
+      "baseline_mae": 0.04962205843887006,
+      "candidate_mae": 0.0526592675562966
+    },
+    {
+      "group": "D44电力、热力生产和供应业",
+      "samples": 1656,
+      "baseline_daily_d10_rank_ic": 0.25660622789988063,
+      "candidate_daily_d10_rank_ic": 0.06286803893155644,
+      "delta_daily_d10_rank_ic": -0.19373818896832418,
+      "baseline_pred_std": 0.049820697467385454,
+      "candidate_pred_std": 0.06946962140538689,
+      "baseline_mae": 0.0590955592603327,
+      "candidate_mae": 0.06752027756234052
+    },
+    {
+      "group": "D45燃气生产和供应业",
+      "samples": 558,
+      "baseline_daily_d10_rank_ic": 0.14254032258064517,
+      "candidate_daily_d10_rank_ic": 0.07531362007168459,
+      "delta_daily_d10_rank_ic": -0.06722670250896058,
+      "baseline_pred_std": 0.04351406336145241,
+      "candidate_pred_std": 0.06079730633124391,
+      "baseline_mae": 0.0584513276252519,
+      "candidate_mae": 0.058971736314147906
+    },
+    {
+      "group": "D46水的生产和供应业",
+      "samples": 378,
+      "baseline_daily_d10_rank_ic": 0.10166476892186435,
+      "candidate_daily_d10_rank_ic": 0.16156786485169736,
+      "delta_daily_d10_rank_ic": 0.059903095929833006,
+      "baseline_pred_std": 0.029571786027162334,
+      "candidate_pred_std": 0.04660467670533332,
+      "baseline_mae": 0.037801623394879975,
+      "candidate_mae": 0.04727035183848016
+    },
+    {
+      "group": "E47房屋建筑业",
+      "samples": 54,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.0280108543417897,
+      "candidate_pred_std": 0.06722831504831041,
+      "baseline_mae": 0.11893122411484673,
+      "candidate_mae": 0.09075400699048787
+    },
+    {
+      "group": "E48土木工程建筑业",
+      "samples": 1199,
+      "baseline_daily_d10_rank_ic": 0.08638976913952327,
+      "candidate_daily_d10_rank_ic": -0.013635496910251128,
+      "delta_daily_d10_rank_ic": -0.10002526604977441,
+      "baseline_pred_std": 0.048967168884688474,
+      "candidate_pred_std": 0.0736501814859912,
+      "baseline_mae": 0.05864204605722405,
+      "candidate_mae": 0.07491641785218082
+    },
+    {
+      "group": "E49建筑安装业",
+      "samples": 90,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.060448448690369534,
+      "candidate_pred_std": 0.1139028166175552,
+      "baseline_mae": 0.09997298672684299,
+      "candidate_mae": 0.11059048312169413
+    },
+    {
+      "group": "E50建筑装饰、装修和其他建筑业",
+      "samples": 450,
+      "baseline_daily_d10_rank_ic": 0.18676069363527723,
+      "candidate_daily_d10_rank_ic": 0.005563190928204004,
+      "delta_daily_d10_rank_ic": -0.18119750270707322,
+      "baseline_pred_std": 0.05964427567531376,
+      "candidate_pred_std": 0.08931211543158829,
+      "baseline_mae": 0.09824927887183978,
+      "candidate_mae": 0.10254074605864541
+    },
+    {
+      "group": "F51批发业",
+      "samples": 1656,
+      "baseline_daily_d10_rank_ic": 0.2590228849970538,
+      "candidate_daily_d10_rank_ic": 0.15002845274994092,
+      "delta_daily_d10_rank_ic": -0.10899443224711286,
+      "baseline_pred_std": 0.047447481613904816,
+      "candidate_pred_std": 0.06940280426255378,
+      "baseline_mae": 0.06020913331068063,
+      "candidate_mae": 0.066157581350182
+    },
+    {
+      "group": "F52零售业",
+      "samples": 1656,
+      "baseline_daily_d10_rank_ic": 0.14668769526641345,
+      "candidate_daily_d10_rank_ic": 0.04617379703318211,
+      "delta_daily_d10_rank_ic": -0.10051389823323134,
+      "baseline_pred_std": 0.03762181648109586,
+      "candidate_pred_std": 0.05573782248365374,
+      "baseline_mae": 0.07606152095154112,
+      "candidate_mae": 0.0739375669155779
+    },
+    {
+      "group": "G53铁路运输业",
+      "samples": 126,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.013997910402162389,
+      "candidate_pred_std": 0.04660872824802472,
+      "baseline_mae": 0.030150485724487554,
+      "candidate_mae": 0.03759182453805912
+    },
+    {
+      "group": "G54道路运输业",
+      "samples": 558,
+      "baseline_daily_d10_rank_ic": 0.08931451612903225,
+      "candidate_daily_d10_rank_ic": 0.1512992831541219,
+      "delta_daily_d10_rank_ic": 0.061984767025089635,
+      "baseline_pred_std": 0.033290894166624715,
+      "candidate_pred_std": 0.06114193425955137,
+      "baseline_mae": 0.051547859242241985,
+      "candidate_mae": 0.05018611446040432
+    },
+    {
+      "group": "G55水上运输业",
+      "samples": 630,
+      "baseline_daily_d10_rank_ic": -0.05497712971012961,
+      "candidate_daily_d10_rank_ic": 0.12384167158370168,
+      "delta_daily_d10_rank_ic": 0.1788188012938313,
+      "baseline_pred_std": 0.025709119108845283,
+      "candidate_pred_std": 0.047751647885215714,
+      "baseline_mae": 0.06261497618422292,
+      "candidate_mae": 0.05174435189075557
+    },
+    {
+      "group": "G56航空运输业",
+      "samples": 252,
+      "baseline_daily_d10_rank_ic": 0.23580194648694222,
+      "candidate_daily_d10_rank_ic": 0.1405574001672455,
+      "delta_daily_d10_rank_ic": -0.09524454631969673,
+      "baseline_pred_std": 0.014099662421830356,
+      "candidate_pred_std": 0.041028533617874695,
+      "baseline_mae": 0.02203642993111496,
+      "candidate_mae": 0.03471181756285951
+    },
+    {
+      "group": "G58多式联运和运输代理业",
+      "samples": 216,
+      "baseline_daily_d10_rank_ic": 0.30341880341880345,
+      "candidate_daily_d10_rank_ic": 0.08741258741258742,
+      "delta_daily_d10_rank_ic": -0.21600621600621603,
+      "baseline_pred_std": 0.03257554885177129,
+      "candidate_pred_std": 0.04606777179873198,
+      "baseline_mae": 0.049941256598107345,
+      "candidate_mae": 0.05283501237553301
+    },
+    {
+      "group": "G59装卸搬运和仓储业",
+      "samples": 126,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.022683892908474734,
+      "candidate_pred_std": 0.04678952982974015,
+      "baseline_mae": 0.04911073350919966,
+      "candidate_mae": 0.05394362031834557
+    },
+    {
+      "group": "G60邮政业",
+      "samples": 72,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.014972416700019614,
+      "candidate_pred_std": 0.03476175390509018,
+      "baseline_mae": 0.033761447278063704,
+      "candidate_mae": 0.04343205011190147
+    },
+    {
+      "group": "H61住宿业",
+      "samples": 90,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.03721377337385657,
+      "candidate_pred_std": 0.05460700948468543,
+      "baseline_mae": 0.07359498018520234,
+      "candidate_mae": 0.06863818886901263
+    },
+    {
+      "group": "H62餐饮业",
+      "samples": 72,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.028665152307123156,
+      "candidate_pred_std": 0.04104144655178974,
+      "baseline_mae": 0.09082990209269154,
+      "candidate_mae": 0.06882921218972621
+    },
+    {
+      "group": "I63电信、广播电视和卫星传输服务",
+      "samples": 378,
+      "baseline_daily_d10_rank_ic": 0.1632034632034632,
+      "candidate_daily_d10_rank_ic": -0.0886002886002886,
+      "delta_daily_d10_rank_ic": -0.2518037518037518,
+      "baseline_pred_std": 0.03168662846168501,
+      "candidate_pred_std": 0.05463762123622207,
+      "baseline_mae": 0.05600674907850525,
+      "candidate_mae": 0.06389580442371276
+    },
+    {
+      "group": "I64互联网和相关服务",
+      "samples": 1080,
+      "baseline_daily_d10_rank_ic": 0.10453212312061994,
+      "candidate_daily_d10_rank_ic": -0.053264795776604625,
+      "delta_daily_d10_rank_ic": -0.15779691889722455,
+      "baseline_pred_std": 0.035468379735811885,
+      "candidate_pred_std": 0.06920710250159784,
+      "baseline_mae": 0.06845363740659909,
+      "candidate_mae": 0.08891640534286652
+    },
+    {
+      "group": "I65软件和信息技术服务业",
+      "samples": 5976,
+      "baseline_daily_d10_rank_ic": 0.2488314931387892,
+      "candidate_daily_d10_rank_ic": 0.08878535325945117,
+      "delta_daily_d10_rank_ic": -0.16004613987933802,
+      "baseline_pred_std": 0.04817014988113912,
+      "candidate_pred_std": 0.08583667727508888,
+      "baseline_mae": 0.06622898437254549,
+      "candidate_mae": 0.08368629078790939
+    },
+    {
+      "group": "J66货币金融服务",
+      "samples": 810,
+      "baseline_daily_d10_rank_ic": 0.08990795044702443,
+      "candidate_daily_d10_rank_ic": 0.03669928571382132,
+      "delta_daily_d10_rank_ic": -0.05320866473320311,
+      "baseline_pred_std": 0.01600450817707828,
+      "candidate_pred_std": 0.02813906680149015,
+      "baseline_mae": 0.04896616714087675,
+      "candidate_mae": 0.042761210102074836
+    },
+    {
+      "group": "J67资本市场服务",
+      "samples": 996,
+      "baseline_daily_d10_rank_ic": 0.1325318418531404,
+      "candidate_daily_d10_rank_ic": 0.09023243311780321,
+      "delta_daily_d10_rank_ic": -0.04229940873533719,
+      "baseline_pred_std": 0.02729233286219298,
+      "candidate_pred_std": 0.03812290088339635,
+      "baseline_mae": 0.04533933034515648,
+      "candidate_mae": 0.04667407749749212
+    },
+    {
+      "group": "J68保险业",
+      "samples": 108,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.01617341299853776,
+      "candidate_pred_std": 0.022808841271882742,
+      "baseline_mae": 0.07135732663529654,
+      "candidate_mae": 0.06572963122781807
+    },
+    {
+      "group": "J69其他金融业",
+      "samples": 252,
+      "baseline_daily_d10_rank_ic": 0.4898656898656899,
+      "candidate_daily_d10_rank_ic": 0.2989010989010989,
+      "delta_daily_d10_rank_ic": -0.190964590964591,
+      "baseline_pred_std": 0.026805396761988013,
+      "candidate_pred_std": 0.047644758417172625,
+      "baseline_mae": 0.04787610842933588,
+      "candidate_mae": 0.05900145693029953
+    },
+    {
+      "group": "K70房地产业",
+      "samples": 1584,
+      "baseline_daily_d10_rank_ic": 0.22261847095967863,
+      "candidate_daily_d10_rank_ic": 0.11862140538995941,
+      "delta_daily_d10_rank_ic": -0.10399706556971922,
+      "baseline_pred_std": 0.042285793146410476,
+      "candidate_pred_std": 0.06196564940607806,
+      "baseline_mae": 0.059521331058368196,
+      "candidate_mae": 0.06425676928190205
+    },
+    {
+      "group": "L71租赁业",
+      "samples": 36,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.015919943601039144,
+      "candidate_pred_std": 0.054393922916833724,
+      "baseline_mae": 0.028895849695609464,
+      "candidate_mae": 0.05891949107299867
+    },
+    {
+      "group": "L72商务服务业",
+      "samples": 1314,
+      "baseline_daily_d10_rank_ic": 0.2005621110075219,
+      "candidate_daily_d10_rank_ic": 0.05035496117801683,
+      "delta_daily_d10_rank_ic": -0.15020714982950506,
+      "baseline_pred_std": 0.039336775693016135,
+      "candidate_pred_std": 0.060076595597028964,
+      "baseline_mae": 0.06821574135000619,
+      "candidate_mae": 0.07235380182383462
+    },
+    {
+      "group": "M73研究和试验发展",
+      "samples": 558,
+      "baseline_daily_d10_rank_ic": 0.19177867383512545,
+      "candidate_daily_d10_rank_ic": 0.19061379928315414,
+      "delta_daily_d10_rank_ic": -0.0011648745519713122,
+      "baseline_pred_std": 0.06808258937186047,
+      "candidate_pred_std": 0.07620896881068043,
+      "baseline_mae": 0.0873640448974641,
+      "candidate_mae": 0.09025917487829199
+    },
+    {
+      "group": "M74专业技术服务业",
+      "samples": 1345,
+      "baseline_daily_d10_rank_ic": 0.08831473942573409,
+      "candidate_daily_d10_rank_ic": 0.02703717053309894,
+      "delta_daily_d10_rank_ic": -0.06127756889263515,
+      "baseline_pred_std": 0.04170375284977426,
+      "candidate_pred_std": 0.07080259140933773,
+      "baseline_mae": 0.06919049766964581,
+      "candidate_mae": 0.07608743301323284
+    },
+    {
+      "group": "M75科技推广和应用服务业",
+      "samples": 36,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.048821547159530715,
+      "candidate_pred_std": 0.10554985623568154,
+      "baseline_mae": 0.05640351144916581,
+      "candidate_mae": 0.07910671316396023
+    },
+    {
+      "group": "N76水利管理业",
+      "samples": 18,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.019375806963514795,
+      "candidate_pred_std": 0.02977054564671127,
+      "baseline_mae": 0.05281394340617092,
+      "candidate_mae": 0.039510614176457105
+    },
+    {
+      "group": "N77生态保护和环境治理业",
+      "samples": 1206,
+      "baseline_daily_d10_rank_ic": 0.06403150322715222,
+      "candidate_daily_d10_rank_ic": 0.036138505203607334,
+      "delta_daily_d10_rank_ic": -0.027892998023544884,
+      "baseline_pred_std": 0.04009475303171954,
+      "candidate_pred_std": 0.06778011057873691,
+      "baseline_mae": 0.06421003395865685,
+      "candidate_mae": 0.07288419974458127
+    },
+    {
+      "group": "N78公共设施管理业",
+      "samples": 432,
+      "baseline_daily_d10_rank_ic": 0.05106280193236714,
+      "candidate_daily_d10_rank_ic": -0.05777777777777777,
+      "delta_daily_d10_rank_ic": -0.10884057971014491,
+      "baseline_pred_std": 0.026897601074045555,
+      "candidate_pred_std": 0.050812144084040334,
+      "baseline_mae": 0.08223061033496333,
+      "candidate_mae": 0.08006389665299504
+    },
+    {
+      "group": "O81机动车、电子产品和日用产品修理业",
+      "samples": 18,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.016473228380795242,
+      "candidate_pred_std": 0.09582963669135187,
+      "baseline_mae": 0.17146843711020318,
+      "candidate_mae": 0.08658188602444793
+    },
+    {
+      "group": "P83教育",
+      "samples": 234,
+      "baseline_daily_d10_rank_ic": 0.27963490972274685,
+      "candidate_daily_d10_rank_ic": 0.1834629964397353,
+      "delta_daily_d10_rank_ic": -0.09617191328301156,
+      "baseline_pred_std": 0.04558969897808841,
+      "candidate_pred_std": 0.05536350463572155,
+      "baseline_mae": 0.06980237424998191,
+      "candidate_mae": 0.0729448452757473
+    },
+    {
+      "group": "Q84卫生",
+      "samples": 342,
+      "baseline_daily_d10_rank_ic": 0.08888888888888889,
+      "candidate_daily_d10_rank_ic": -0.19999999999999998,
+      "delta_daily_d10_rank_ic": -0.28888888888888886,
+      "baseline_pred_std": 0.03595219396129387,
+      "candidate_pred_std": 0.049455029772963996,
+      "baseline_mae": 0.04714898960203505,
+      "candidate_mae": 0.06355932457625277
+    },
+    {
+      "group": "R86新闻和出版业",
+      "samples": 509,
+      "baseline_daily_d10_rank_ic": 0.0996767825429376,
+      "candidate_daily_d10_rank_ic": 0.16058825225681286,
+      "delta_daily_d10_rank_ic": 0.06091146971387526,
+      "baseline_pred_std": 0.028702351869244105,
+      "candidate_pred_std": 0.05649054147568989,
+      "baseline_mae": 0.0815011405504895,
+      "candidate_mae": 0.08462766271692543
+    },
+    {
+      "group": "R87广播、电视、电影和录音制作业",
+      "samples": 378,
+      "baseline_daily_d10_rank_ic": 0.1383838383838384,
+      "candidate_daily_d10_rank_ic": 0.0019480519480519502,
+      "delta_daily_d10_rank_ic": -0.13643578643578644,
+      "baseline_pred_std": 0.042568225239239144,
+      "candidate_pred_std": 0.0717240707594765,
+      "baseline_mae": 0.09891606936355453,
+      "candidate_mae": 0.11395015063344197
+    },
+    {
+      "group": "R88文化艺术业",
+      "samples": 54,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.045946594765949485,
+      "candidate_pred_std": 0.051721825505250375,
+      "baseline_mae": 0.08312875411656317,
+      "candidate_mae": 0.07565418506691704
+    },
+    {
+      "group": "R89体育",
+      "samples": 36,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.026375515726176586,
+      "candidate_pred_std": 0.029876641114047524,
+      "baseline_mae": 0.04251983390172633,
+      "candidate_mae": 0.06009796725249182
+    },
+    {
+      "group": "S91综合",
+      "samples": 126,
+      "baseline_daily_d10_rank_ic": null,
+      "candidate_daily_d10_rank_ic": null,
+      "delta_daily_d10_rank_ic": null,
+      "baseline_pred_std": 0.03618497985045406,
+      "candidate_pred_std": 0.06870278286999427,
+      "baseline_mae": 0.05461822625807308,
+      "candidate_mae": 0.06845282484635568
+    },
+    {
+      "group": "unknown",
+      "samples": 194,
+      "baseline_daily_d10_rank_ic": 0.07515632515632517,
+      "candidate_daily_d10_rank_ic": 0.07436637436637435,
+      "delta_daily_d10_rank_ic": -0.0007899507899508246,
+      "baseline_pred_std": 0.06232373553829943,
+      "candidate_pred_std": 0.09570585039479942,
+      "baseline_mae": 0.08013860302132259,
+      "candidate_mae": 0.09737255289020617
+    }
+  ],
+  "size_deciles": [
+    {
+      "group": "0",
+      "samples": 9134,
+      "baseline_daily_d10_rank_ic": 0.09708664910055947,
+      "candidate_daily_d10_rank_ic": 0.017112603416220024,
+      "delta_daily_d10_rank_ic": -0.07997404568433945,
+      "baseline_pred_std": 0.03609266662475606,
+      "candidate_pred_std": 0.0649961570237567,
+      "baseline_mae": 0.06582349067946085,
+      "candidate_mae": 0.07360666744564316
+    },
+    {
+      "group": "1",
+      "samples": 9259,
+      "baseline_daily_d10_rank_ic": 0.13094829220488227,
+      "candidate_daily_d10_rank_ic": 0.055234630743874,
+      "delta_daily_d10_rank_ic": -0.07571366146100827,
+      "baseline_pred_std": 0.036884158843638055,
+      "candidate_pred_std": 0.0639534921276236,
+      "baseline_mae": 0.07018933738965477,
+      "candidate_mae": 0.07346155402782943
+    },
+    {
+      "group": "2",
+      "samples": 9296,
+      "baseline_daily_d10_rank_ic": 0.17176365809108726,
+      "candidate_daily_d10_rank_ic": 0.09754260495262707,
+      "delta_daily_d10_rank_ic": -0.0742210531384602,
+      "baseline_pred_std": 0.04012255023790067,
+      "candidate_pred_std": 0.06899218729264409,
+      "baseline_mae": 0.06891212591289257,
+      "candidate_mae": 0.07521461879935676
+    },
+    {
+      "group": "3",
+      "samples": 9275,
+      "baseline_daily_d10_rank_ic": 0.13263208107044133,
+      "candidate_daily_d10_rank_ic": 0.05797271557901053,
+      "delta_daily_d10_rank_ic": -0.0746593654914308,
+      "baseline_pred_std": 0.04489914489831794,
+      "candidate_pred_std": 0.07487686297564358,
+      "baseline_mae": 0.07130707711534334,
+      "candidate_mae": 0.0801386605679972
+    },
+    {
+      "group": "4",
+      "samples": 9302,
+      "baseline_daily_d10_rank_ic": 0.15101702098867434,
+      "candidate_daily_d10_rank_ic": 0.06004609969237821,
+      "delta_daily_d10_rank_ic": -0.09097092129629614,
+      "baseline_pred_std": 0.047363918437074166,
+      "candidate_pred_std": 0.07642622328617588,
+      "baseline_mae": 0.07191012264704491,
+      "candidate_mae": 0.08032003992726952
+    },
+    {
+      "group": "5",
+      "samples": 9291,
+      "baseline_daily_d10_rank_ic": 0.17811240498026779,
+      "candidate_daily_d10_rank_ic": 0.09425804092267347,
+      "delta_daily_d10_rank_ic": -0.08385436405759432,
+      "baseline_pred_std": 0.05356676804162344,
+      "candidate_pred_std": 0.08299717740548385,
+      "baseline_mae": 0.07095335416471926,
+      "candidate_mae": 0.08211583170521002
+    },
+    {
+      "group": "6",
+      "samples": 9294,
+      "baseline_daily_d10_rank_ic": 0.16582184406576234,
+      "candidate_daily_d10_rank_ic": 0.11020034097328185,
+      "delta_daily_d10_rank_ic": -0.055621503092480484,
+      "baseline_pred_std": 0.05405771790771064,
+      "candidate_pred_std": 0.08488464288138915,
+      "baseline_mae": 0.07273290472101061,
+      "candidate_mae": 0.08424663447773471
+    },
+    {
+      "group": "7",
+      "samples": 9293,
+      "baseline_daily_d10_rank_ic": 0.2041437003976683,
+      "candidate_daily_d10_rank_ic": 0.14356778040930593,
+      "delta_daily_d10_rank_ic": -0.06057591998836237,
+      "baseline_pred_std": 0.06024065995443577,
+      "candidate_pred_std": 0.0874841088098719,
+      "baseline_mae": 0.07041441566620693,
+      "candidate_mae": 0.0802753666148149
+    },
+    {
+      "group": "8",
+      "samples": 9320,
+      "baseline_daily_d10_rank_ic": 0.1297247043669743,
+      "candidate_daily_d10_rank_ic": 0.066728630038564,
+      "delta_daily_d10_rank_ic": -0.06299607432841031,
+      "baseline_pred_std": 0.06476334681965311,
+      "candidate_pred_std": 0.08868807839897849,
+      "baseline_mae": 0.0733240303319629,
+      "candidate_mae": 0.08192953453597858
+    },
+    {
+      "group": "9",
+      "samples": 9287,
+      "baseline_daily_d10_rank_ic": 0.21633595944319506,
+      "candidate_daily_d10_rank_ic": 0.1184711420420041,
+      "delta_daily_d10_rank_ic": -0.09786481740119096,
+      "baseline_pred_std": 0.06738360949390788,
+      "candidate_pred_std": 0.08368023234946564,
+      "baseline_mae": 0.06859070556717654,
+      "candidate_mae": 0.07231293308895288
+    }
+  ],
+  "distribution": {
+    "prediction_rank_spearman": 0.4701915439145662,
+    "prediction_pearson": 0.5677510987237292,
+    "baseline": {
+      "mean": -0.05154801053313331,
+      "std": 0.052530708736453484,
+      "q01": -0.2391785147684202,
+      "q50": -0.0393102644517151,
+      "q99": 0.0296450086248977,
+      "positive_rate": 0.06876475725329106
+    },
+    "candidate": {
+      "mean": -0.01007754572771773,
+      "std": 0.07860756869953636,
+      "q01": -0.23412639079493824,
+      "q50": -0.0119121011545037,
+      "q99": 0.19902886074948695,
+      "positive_rate": 0.4194779571109745
+    },
+    "top_overlap": {
+      "top_1pct": {
+        "n": 927,
+        "overlap": 0.13700107874865156
+      },
+      "top_5pct": {
+        "n": 4637,
+        "overlap": 0.19322838041837395
+      },
+      "top_10pct": {
+        "n": 9275,
+        "overlap": 0.24075471698113207
+      }
+    }
+  },
+  "weight_drift": {
+    "dep_layer": {
+      "tensors": 10,
+      "relative_l2": 0.09481488434462514
+    },
+    "size_mlp": {
+      "tensors": 4,
+      "relative_l2": 0.013476079761208045
+    },
+    "embedding": {
+      "tensors": 4,
+      "relative_l2": 0.004958165722699526
+    },
+    "transformer": {
+      "tensors": 112,
+      "relative_l2": 0.0034102678040332057
+    },
+    "sector_emb": {
+      "tensors": 1,
+      "relative_l2": 0.0031454152668103173
+    },
+    "head": {
+      "tensors": 4,
+      "relative_l2": 0.0020585427819285974
+    },
+    "norm": {
+      "tensors": 1,
+      "relative_l2": 0.0019728529986131047
+    },
+    "time_emb": {
+      "tensors": 5,
+      "relative_l2": 0.0003074595066942376
+    }
+  },
+  "volatility": {
+    "baseline_mean_predicted": 0.013900381707878974,
+    "candidate_mean_predicted": 0.01866281992386124,
+    "realized_mean": 0.024853968595245406,
+    "baseline_ratio": 2.102214748502387,
+    "candidate_ratio": 1.5550344170645418
+  }
+}
