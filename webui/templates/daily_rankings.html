@@ -80,7 +80,7 @@
     .stat small { margin-left: 6px; color: var(--muted); font-size: 11px; }
     .ready { color: var(--down); }
     .toolbar { margin: 15px 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .consensus-panel { margin-top: 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .consensus-panel { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
     .consensus-head { padding: 14px 15px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
     .consensus-title h2 { margin: 0; font-size: 15px; font-weight: 600; }
     .consensus-title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
@@ -98,6 +98,55 @@
     .consensus-table td:nth-child(4) { text-align: left; }
     .consensus-rank-day { color: var(--muted); }
     .consensus-rank-day strong { color: var(--text); font-weight: 600; }
+    .consensus-cards { display: none; }
+    .consensus-card {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      padding: 13px;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+    }
+    .consensus-card:active { background: var(--accent-soft); }
+    .consensus-card-head { display: grid; grid-template-columns: 34px minmax(0, 1fr) 18px; gap: 9px; align-items: center; }
+    .consensus-card-index {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .consensus-card-name { display: block; font-size: 14px; font-weight: 600; }
+    .consensus-card-sub { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .consensus-card-arrow { width: 16px; height: 16px; color: var(--muted); }
+    .consensus-card-stats {
+      margin-top: 11px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .consensus-card-stat { padding: 8px 9px; border-right: 1px solid var(--line-soft); }
+    .consensus-card-stat:last-child { border-right: 0; }
+    .consensus-card-stat span { display: block; color: var(--muted); font-size: 10px; margin-bottom: 3px; }
+    .consensus-card-stat strong { display: block; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .consensus-card-days { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .consensus-card-day {
+      padding: 4px 7px;
+      border-radius: 99px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+    .consensus-card-day strong { color: var(--text); }
     .filters { display: flex; flex-wrap: wrap; gap: 8px; }
     .filter { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
     input.filter { width: 170px; }
@@ -191,8 +240,8 @@
     .fact { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
     .fact span { color: var(--muted); }
     .detail-note { margin: 0; padding: 0 16px 16px; color: var(--muted); font-size: 11px; line-height: 1.55; }
-    .status-page { display: none; }
-    .status-page.active { display: block; }
+    #ranking-page, .sheet-page, .status-page { display: none; }
+    #ranking-page.active, .sheet-page.active, .status-page.active { display: block; }
     .status-table { margin-top: 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
     .status-row { display: grid; grid-template-columns: 160px 1fr 120px 120px; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); align-items: center; }
     .status-row:last-child { border-bottom: 0; }
@@ -214,11 +263,11 @@
       .detail { position: fixed; right: 14px; top: 78px; bottom: 14px; width: min(360px, calc(100vw - 28px)); overflow-y: auto; z-index: 10; }
     }
     @media (max-width: 760px) {
-      .app { grid-template-columns: 1fr; }
+      .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; align-content: start; }
       .sidebar { padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--line); }
       .brand { padding: 2px 4px 8px; }
       .nav-label, .sidebar-status { display: none; }
-      .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .nav { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
       .nav button { min-height: 52px; flex-direction: column; justify-content: center; gap: 4px; padding: 6px 2px; font-size: 11px; }
       .nav svg { display: block; width: 16px; height: 16px; }
       .topbar { height: auto; min-height: 56px; padding: 10px 12px; gap: 10px; }
@@ -235,12 +284,8 @@
       .segmented { flex: 1 1 auto; }
       .segmented button { flex: 1 1 0; min-height: 44px; }
       .consensus-meta { align-self: flex-start; white-space: normal; }
-      .consensus-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-      .consensus-table { display: table; min-width: 720px; }
-      .consensus-table thead { display: table-header-group; }
-      .consensus-table tbody { display: table-row-group; }
-      .consensus-table tbody tr { display: table-row; min-height: 0; padding: 0; border-bottom: 0; }
-      .consensus-table tbody tr td { display: table-cell; padding: 10px 11px; border-bottom: 1px solid var(--line-soft); }
+      .consensus-wrap { display: none; }
+      .consensus-cards { display: grid; gap: 9px; padding: 12px; }
       .toolbar { align-items: stretch; flex-direction: column; gap: 8px; }
       .filters { width: 100%; }
       .pool-controls { width: 100%; }
@@ -325,6 +370,7 @@
       <div class="nav-label">研究工作台</div>
       <nav class="nav" aria-label="主导航">
         <button class="active" type="button" data-view="ranking"><i data-lucide="list-filter"></i>每日排名</button>
+        <button type="button" data-view="consensus"><i data-lucide="layers-3"></i>连续上榜</button>
         <button type="button" data-view="stock"><i data-lucide="search"></i>个股查询</button>
         <button type="button" data-view="history"><i data-lucide="calendar-days"></i>历史预测</button>
         <button type="button" data-view="status"><i data-lucide="activity"></i>运行状态</button>
@@ -347,44 +393,13 @@
         </div>
       </header>
 
-      <section class="content" id="ranking-page">
+      <section class="content active" id="ranking-page">
         <div class="summary">
           <div class="stat"><span>信号日</span><strong id="metric-date">—</strong><small>收盘后</small></div>
           <div class="stat"><span>严格合格股票</span><strong id="metric-count">—</strong><small>只</small></div>
           <div class="stat"><span>预测方案</span><strong>未来10日</strong><small id="metric-paths">—条路径</small></div>
           <div class="stat"><span>发布状态</span><strong class="ready" id="metric-status">读取中</strong><small id="metric-batches">—</small></div>
         </div>
-
-        <section class="consensus-panel" aria-labelledby="consensus-title">
-          <div class="consensus-head">
-            <div class="consensus-title">
-              <h2 id="consensus-title">连续上榜股票</h2>
-              <p id="consensus-description">严格交集：同时进入最近 3 个已发布交易日 Top 10 的股票</p>
-            </div>
-            <div class="consensus-controls">
-              <div class="segmented" id="consensus-days" role="group" aria-label="连续天数">
-                <button type="button" data-days="2">最近 2 天</button>
-                <button class="active" type="button" data-days="3">最近 3 天</button>
-              </div>
-              <div class="segmented" id="consensus-top" role="group" aria-label="排名范围">
-                <button class="active" type="button" data-top="10">Top 10</button>
-                <button type="button" data-top="20">Top 20</button>
-                <button type="button" data-top="50">Top 50</button>
-                <button type="button" data-top="100">Top 100</button>
-              </div>
-              <span class="consensus-meta" id="consensus-meta">正在读取…</span>
-            </div>
-          </div>
-          <div class="table-wrap consensus-wrap">
-            <table class="consensus-table" aria-label="连续上榜股票">
-              <colgroup><col style="width:70px"><col style="width:130px"><col style="width:110px"><col style="width:190px"><col style="width:90px"><col style="width:80px"><col style="width:90px"><col style="width:200px"></colgroup>
-              <thead>
-                <tr><th>交集排名</th><th>股票名称</th><th>代码</th><th>行业</th><th>平均排名</th><th>最新排名</th><th>D10预测</th><th>逐日排名</th></tr>
-              </thead>
-              <tbody id="consensus-body"><tr><td colspan="8" class="loading">正在计算共同上榜股票…</td></tr></tbody>
-            </table>
-          </div>
-        </section>
 
         <div class="toolbar">
           <div class="filters">
@@ -450,6 +465,40 @@
         </div>
       </section>
 
+      <section class="content sheet-page" id="consensus-page">
+        <section class="consensus-panel" aria-labelledby="consensus-title">
+          <div class="consensus-head">
+            <div class="consensus-title">
+              <h2 id="consensus-title">连续上榜股票</h2>
+              <p id="consensus-description">严格交集：同时进入最近 3 个已发布交易日 Top 10 的股票</p>
+            </div>
+            <div class="consensus-controls">
+              <div class="segmented" id="consensus-days" role="group" aria-label="连续天数">
+                <button type="button" data-days="2">最近 2 天</button>
+                <button class="active" type="button" data-days="3">最近 3 天</button>
+              </div>
+              <div class="segmented" id="consensus-top" role="group" aria-label="排名范围">
+                <button class="active" type="button" data-top="10">Top 10</button>
+                <button type="button" data-top="20">Top 20</button>
+                <button type="button" data-top="50">Top 50</button>
+                <button type="button" data-top="100">Top 100</button>
+              </div>
+              <span class="consensus-meta" id="consensus-meta">正在读取…</span>
+            </div>
+          </div>
+          <div class="table-wrap consensus-wrap">
+            <table class="consensus-table" aria-label="连续上榜股票">
+              <colgroup><col style="width:70px"><col style="width:130px"><col style="width:110px"><col style="width:190px"><col style="width:90px"><col style="width:80px"><col style="width:90px"><col style="width:200px"></colgroup>
+              <thead>
+                <tr><th>交集排名</th><th>股票名称</th><th>代码</th><th>行业</th><th>平均排名</th><th>最新排名</th><th>D10预测</th><th>逐日排名</th></tr>
+              </thead>
+              <tbody id="consensus-body"><tr><td colspan="8" class="loading">正在计算共同上榜股票…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="consensus-cards" id="consensus-cards" aria-live="polite"></div>
+        </section>
+      </section>
+
       <section class="content status-page" id="status-page">
         <div class="summary">
           <div class="stat"><span>最新发布日</span><strong id="status-latest">—</strong></div>
@@ -480,6 +529,7 @@
     const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '', consensusDays: 3, consensusTop: 10, consensusRequest: 0 };
     const $ = id => document.getElementById(id);
     const rankingPage = $('ranking-page');
+    const consensusPage = $('consensus-page');
     const statusPage = $('status-page');
     let searchTimer;
     let lastSearchApply = 0;
@@ -665,8 +715,10 @@
       $('consensus-description').textContent = `严格交集：同时进入最近 ${result.days} 个已发布交易日 Top ${result.top} 的股票`;
       $('consensus-meta').textContent = `交集 ${rows.length} 只 · ${dates.join(' / ')}`;
       const body = $('consensus-body');
+      const cards = $('consensus-cards');
       if (!rows.length) {
         body.innerHTML = '<tr><td colspan="8" class="empty">这批交易日没有股票同时进入该排名范围，可尝试缩短天数或扩大 Top 范围</td></tr>';
+        cards.innerHTML = '<div class="empty">这批交易日没有股票同时进入该排名范围，可尝试缩短天数或扩大 Top 范围</div>';
         return;
       }
       body.innerHTML = rows.map((row, index) => {
@@ -682,6 +734,26 @@
           <td>${dailyRanks}</td>
         </tr>`;
       }).join('');
+      cards.innerHTML = rows.map((row, index) => {
+        const dailyRanks = (row.ranks || []).map(entry => `<span class="consensus-card-day">${escapeHtml(shortDate(entry.asof))} <strong>#${entry.rank}</strong></span>`).join('');
+        return `<button class="consensus-card" type="button" data-consensus-code="${escapeHtml(row.code)}" data-consensus-asof="${escapeHtml(row.latest_asof)}">
+          <span class="consensus-card-head">
+            <span class="consensus-card-index">${index + 1}</span>
+            <span>
+              <strong class="consensus-card-name">${escapeHtml(row.name || row.code)}</strong>
+              <small class="consensus-card-sub">${escapeHtml(row.code)} · ${escapeHtml(stripSector(row.sector_label))}</small>
+            </span>
+            <i class="consensus-card-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
+          </span>
+          <span class="consensus-card-stats">
+            <span class="consensus-card-stat"><span>平均排名</span><strong>${Number(row.average_rank).toFixed(2)}</strong></span>
+            <span class="consensus-card-stat"><span>最新排名</span><strong>#${row.latest_rank}</strong></span>
+            <span class="consensus-card-stat"><span>D10预测</span><strong class="${directionClass(row.predicted_return_d10)}">${percent(row.predicted_return_d10, true)}</strong></span>
+          </span>
+          <span class="consensus-card-days">${dailyRanks}</span>
+        </button>`;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
       body.querySelectorAll('tr[data-consensus-code]').forEach(row => row.addEventListener('click', async () => {
         const asof = row.dataset.consensusAsof;
         if (state.date !== asof) {
@@ -691,6 +763,18 @@
         }
         openDetail(row.dataset.consensusCode);
       }));
+      cards.querySelectorAll('[data-consensus-code]').forEach(card => card.addEventListener('click', () => openConsensusDetail(card.dataset.consensusCode, card.dataset.consensusAsof)));
+    }
+
+    async function openConsensusDetail(code, asof) {
+      const rankingButton = document.querySelector('.nav button[data-view="ranking"]');
+      if (rankingButton) rankingButton.click();
+      if (state.date !== asof) {
+        state.date = asof;
+        $('date-select').value = asof;
+        await loadRankings(true);
+      }
+      openDetail(code);
     }
 
     async function openDetail(code) {
@@ -829,11 +913,15 @@
       const view = button.dataset.view;
       document.body.dataset.view = view;
       const titles = {ranking:['每日排名','完整截面统一预测，按未来10日中位路径收益排序'], stock:['个股查询','从每日完整预测结果中读取，不重复调用模型'], history:['历史预测','切换信号日查看当日完整截面'], status:['运行状态','仅展示已经完整发布的预测批次']};
+      titles.consensus = ['连续上榜', '查看最近 2 或 3 个交易日共同进入 Top 范围的股票'];
       $('page-title').textContent = titles[view][0];
       $('page-subtitle').textContent = titles[view][1];
       const status = view === 'status';
-      rankingPage.style.display = status ? 'none' : 'block';
+      const consensus = view === 'consensus';
+      rankingPage.classList.toggle('active', !status && !consensus);
+      consensusPage.classList.toggle('active', consensus);
       statusPage.classList.toggle('active', status);
+      $('date-select').hidden = consensus || status;
       const query = $('search-input').value.trim();
       if (view === 'stock') {
         if ($('top-select').value) {
@@ -847,6 +935,7 @@
         if (!status) { state.loading = false; loadRankings(true); }
       }
       if (view === 'history') setTimeout(() => $('date-select').focus(), 0);
+      if (consensus) loadConsensus();
     }));
     $('date-select').addEventListener('change', event => { state.date = event.target.value; closeDetail(); loadRankings(true); });
     $('consensus-days').querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
@@ -870,7 +959,14 @@
       if (!symbols.length) return toast('请至少填写一个有效的 A 股代码');
       state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
     });
-    $('refresh-button').addEventListener('click', async () => { await loadDates(); await Promise.all([loadRankings(true), loadConsensus()]); });
+    $('refresh-button').addEventListener('click', async () => {
+      if (document.body.dataset.view === 'consensus') {
+        await loadConsensus();
+        return;
+      }
+      await loadDates();
+      await loadRankings(true);
+    });
     $('search-form').addEventListener('submit', event => {
       event.preventDefault();
       applySearch();

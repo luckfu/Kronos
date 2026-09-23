@@ -385,6 +385,9 @@ def test_daily_rankings_page_has_consensus_controls_and_renderer():
 
     assert "连续上榜股票" in page
     assert "严格交集" in page
+    assert 'data-view="consensus"' in page
+    assert 'id="consensus-page"' in page
+    assert 'id="consensus-cards"' in page
     assert 'id="consensus-days"' in page
     assert 'data-days="2"' in page
     assert 'data-days="3"' in page
@@ -396,6 +399,10 @@ def test_daily_rankings_page_has_consensus_controls_and_renderer():
     assert "function renderConsensus(result)" in page
     assert "state.consensusRequest" in page
     assert "缩短天数或扩大 Top 范围" in page
+    assert "$('date-select').hidden = consensus || status;" in page
+    assert "consensusPage.classList.toggle('active', consensus);" in page
+    assert ".consensus-cards { display: grid; gap: 9px; padding: 12px; }" in page
+    assert "class=\"consensus-card\"" in page
 
 
 def test_daily_rankings_cold_start_uses_disk_cache_without_baostock(monkeypatch, tmp_path):
