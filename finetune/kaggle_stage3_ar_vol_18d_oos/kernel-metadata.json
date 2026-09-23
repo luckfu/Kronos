@@ -1,0 +1,17 @@
+{
+  "id": "luckfu/kronos-small-0-1-s3-ar-vol-18d-oos",
+  "title": "Kronos Small 0 1 S3 AR Vol 18d OOS",
+  "code_file": "stage3_ar_vol_18d_oos.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+  "kernel_sources": [
+    "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+    "luckfu/kronos-small-0-1-s3-ar-vol-c2",
+    "luckfu/kronos-small-0-1-c2-18d-alpha-oos"
+  ]
+}
