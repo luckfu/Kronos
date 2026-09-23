@@ -1,0 +1,12 @@
+{
+  "id": "smmt315/kronos-c2-3d-topn-consensus-oos",
+  "title": "Kronos C2 3d TopN Consensus OOS",
+  "code_file": "three_day_topn_oos.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "kernel_sources": ["luckfu/kronos-small-0-1-c2-18d-alpha-oos"]
+}
