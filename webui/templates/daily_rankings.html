@@ -192,6 +192,11 @@
     .pool-list-row button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
     .workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
     .workspace.detail-open { grid-template-columns: minmax(560px, 1fr) 310px; }
+    .consensus-layout { display: block; }
+    .consensus-layout.detail-open { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 14px; align-items: start; }
+    .consensus-detail-slot { display: none; min-width: 0; }
+    .consensus-layout.detail-open .consensus-detail-slot { display: block; }
+    .consensus-layout.detail-open .detail { display: block; }
     .table-panel { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
     .table-wrap { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; min-width: 780px; table-layout: fixed; }
@@ -226,7 +231,7 @@
     .chart-block { padding: 0 12px 14px; }
     .chart-caption { padding: 0 4px 8px; display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
     .chart-caption span:last-child { text-align: right; }
-    #path-chart { width: 100%; height: 188px; display: block; background: var(--surface-2); border-radius: 6px; }
+    #path-chart { width: 100%; height: clamp(188px, 28vw, 280px); display: block; background: var(--surface-2); border-radius: 6px; }
     .chart-legend { padding: 7px 4px 0; display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--muted); font-size: 10px; }
     .chart-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 1px; vertical-align: -1px; }
     .legend-hist i { background: var(--up); }
@@ -260,6 +265,7 @@
     body[data-view="stock"] #search-input { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,107,88,.12); }
     @media (max-width: 1050px) {
       .workspace.detail-open { grid-template-columns: minmax(0, 1fr); }
+      .consensus-layout.detail-open { grid-template-columns: minmax(0, 1fr); }
       .detail { position: fixed; right: 14px; top: 78px; bottom: 14px; width: min(360px, calc(100vw - 28px)); overflow-y: auto; z-index: 10; }
     }
     @media (max-width: 760px) {
@@ -466,7 +472,8 @@
       </section>
 
       <section class="content sheet-page" id="consensus-page">
-        <section class="consensus-panel" aria-labelledby="consensus-title">
+        <div class="consensus-layout" id="consensus-layout">
+          <section class="consensus-panel" aria-labelledby="consensus-title">
           <div class="consensus-head">
             <div class="consensus-title">
               <h2 id="consensus-title">连续上榜股票</h2>
@@ -496,7 +503,9 @@
             </table>
           </div>
           <div class="consensus-cards" id="consensus-cards" aria-live="polite"></div>
-        </section>
+          </section>
+          <div class="consensus-detail-slot" id="consensus-detail-slot"></div>
+        </div>
       </section>
 
       <section class="content status-page" id="status-page">
@@ -526,11 +535,22 @@
   <script>
     const base = location.pathname.replace(/\/+$/, '');
     const api = path => `${base}${path}`;
-    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '', consensusDays: 3, consensusTop: 10, consensusRequest: 0 };
+    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '', consensusDays: 3, consensusTop: 10, consensusRequest: 0, chartResult: null, detailContext: null };
     const $ = id => document.getElementById(id);
     const rankingPage = $('ranking-page');
     const consensusPage = $('consensus-page');
     const statusPage = $('status-page');
+    const consensusLayout = $('consensus-layout');
+    const consensusDetailSlot = $('consensus-detail-slot');
+    const detailPanel = $('detail-panel');
+    const chartResizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      if (state.chartResult && (state.detailContext === 'consensus'
+        ? consensusLayout.classList.contains('detail-open')
+        : $('workspace').classList.contains('detail-open'))) {
+        drawChart(state.chartResult);
+      }
+    });
+    if (chartResizeObserver) chartResizeObserver.observe($('path-chart'));
     let searchTimer;
     let lastSearchApply = 0;
     let lastTop = $('top-select').value;
@@ -754,21 +774,16 @@
         </button>`;
       }).join('');
       if (window.lucide) lucide.createIcons();
-      body.querySelectorAll('tr[data-consensus-code]').forEach(row => row.addEventListener('click', async () => {
-        const asof = row.dataset.consensusAsof;
-        if (state.date !== asof) {
-          state.date = asof;
-          $('date-select').value = asof;
-          await loadRankings(true);
-        }
-        openDetail(row.dataset.consensusCode);
+      body.querySelectorAll('tr[data-consensus-code]').forEach(row => row.addEventListener('click', () => {
+        openConsensusDetail(row.dataset.consensusCode, row.dataset.consensusAsof);
       }));
       cards.querySelectorAll('[data-consensus-code]').forEach(card => card.addEventListener('click', () => openConsensusDetail(card.dataset.consensusCode, card.dataset.consensusAsof)));
     }
 
     async function openConsensusDetail(code, asof) {
-      const rankingButton = document.querySelector('.nav button[data-view="ranking"]');
-      if (rankingButton) rankingButton.click();
+      state.detailContext = 'consensus';
+      consensusDetailSlot.appendChild(detailPanel);
+      consensusLayout.classList.add('detail-open');
       if (state.date !== asof) {
         state.date = asof;
         $('date-select').value = asof;
@@ -779,7 +794,8 @@
 
     async function openDetail(code) {
       state.selected = code;
-      $('workspace').classList.add('detail-open');
+      const detailHost = state.detailContext === 'consensus' ? consensusLayout : $('workspace');
+      detailHost.classList.add('detail-open');
       $('detail-code').textContent = code;
       $('detail-sector').textContent = '正在读取预测详情…';
       try {
@@ -808,6 +824,7 @@
         } else {
           $('detail-range').textContent = final ? `${price(result.close_asof)} → ${price(final.close_p50)}` : '—';
         }
+        state.chartResult = result;
         drawChart(result);
         document.querySelectorAll('#ranking-body tr').forEach(row => row.classList.toggle('selected', row.dataset.code === code));
       } catch (error) { toast(error.message); closeDetail(); }
@@ -831,7 +848,10 @@
         anchor,
       ].map(Number).filter(Number.isFinite);
       if (!values.length) { svg.innerHTML = ''; return; }
-      const width = 286, height = 188, left = 8, right = 10, top = 16, bottom = 28;
+      const width = Math.max(286, Math.round(svg.clientWidth || 286));
+      const height = Math.max(188, Math.round(svg.clientHeight || 188));
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      const left = 8, right = 10, top = 16, bottom = 28;
       const plotW = width - left - right;
       const min = Math.min(...values), max = Math.max(...values);
       const pad = Math.max((max - min) * .12, Math.abs(max) * .01, .01);
@@ -899,7 +919,11 @@
 
     function closeDetail() {
       state.selected = null;
+      state.chartResult = null;
+      state.detailContext = null;
+      consensusLayout.classList.remove('detail-open');
       $('workspace').classList.remove('detail-open');
+      $('workspace').appendChild(detailPanel);
     }
     function renderStatus() {
       $('status-latest').textContent = state.dates[0]?.asof || '—';
@@ -908,6 +932,7 @@
     }
 
     document.querySelectorAll('.nav button').forEach(button => button.addEventListener('click', () => {
+      closeDetail();
       document.querySelectorAll('.nav button').forEach(item => item.classList.remove('active'));
       button.classList.add('active');
       const view = button.dataset.view;

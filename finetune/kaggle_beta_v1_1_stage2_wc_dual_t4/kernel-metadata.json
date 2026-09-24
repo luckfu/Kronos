@@ -1,0 +1,14 @@
+{
+  "id": "smmt315/kronos-beta-v1-1-stage2-wc-dual-t4",
+  "title": "Kronos Beta V1 1 Stage2 Wc Dual T4",
+  "code_file": "kaggle_beta_v1_1_stage2_wc_dual_t4.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout"
+  ]
+}
