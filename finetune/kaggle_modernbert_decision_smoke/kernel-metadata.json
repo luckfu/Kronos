@@ -1,0 +1,17 @@
+{
+  "id": "luckfu/modernbert-decision-smoke",
+  "title": "ModernBERT Decision Data and GPU Smoke",
+  "code_file": "kaggle_modernbert_decision_smoke.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -1,0 +1,18 @@
+{
+  "title": "A-share 120D Decision Targets",
+  "id": "luckfu/ashare120d-modernbert-targets",
+  "subtitle": "Future 10-day event labels paired to the temporal-symbol-holdout panels",
+  "description": "Compact decision-label sidecar for the A-share 120D Temporal Symbol Holdout dataset. Contains no OHLCVA panel data. Join labels to panel windows using symbol, start_index, and asof_date. Training signals end on 2024-12-31; validation signals cover 2025-07-01 through 2026-07-02. The manifest records source panel SHA-256 values and the 120+10+1 window contract.",
+  "licenses": [
+    {
+      "name": "CC0-1.0"
+    }
+  ],
+  "keywords": [
+    "finance",
+    "time-series",
+    "a-share",
+    "decision-model",
+    "labels"
+  ]
+}

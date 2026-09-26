@@ -1,0 +1,17 @@
+{
+  "id": "smmt315/modernbert-decision-e1-a-b-c-gpu-experiment",
+  "title": "ModernBERT Decision E1 A B C GPU Experiment",
+  "code_file": "kaggle_modernbert_decision_e1.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

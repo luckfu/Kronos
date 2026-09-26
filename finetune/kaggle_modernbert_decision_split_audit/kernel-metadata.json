@@ -1,0 +1,17 @@
+{
+  "id": "smmt315/modernbert-decision-split-audit",
+  "title": "ModernBERT Decision Split Audit",
+  "code_file": "kaggle_modernbert_decision_split_audit.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "machine_shape": "None",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

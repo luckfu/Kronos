@@ -1,0 +1,17 @@
+{
+  "id": "smmt315/modernbert-decision-full-chunk-1",
+  "title": "ModernBERT Decision Full Chunk 1",
+  "code_file": "kaggle_modernbert_decision_full_chunk1.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
