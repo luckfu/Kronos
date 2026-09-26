@@ -224,9 +224,15 @@ def main() -> None:
             return ordinal(self.up0(pooled), self.upd(pooled)), ordinal(self.dn0(pooled), self.dnd(pooled))
 
     model = FullModel().to(device)
-    if torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
-        log("multi_gpu_enabled", devices=torch.cuda.device_count(), mode="DataParallel")
+    # ModernBERT 5.x currently fails inside PyTorch DataParallel replicas:
+    # its replica-side dtype lookup can see no floating-point parameters.
+    # Keep chunk handoff reliable on one T4 until a DDP launcher is added.
+    log(
+        "multi_gpu_detected",
+        devices=torch.cuda.device_count(),
+        mode="single_gpu_stable",
+        active_device=str(device),
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scaler = torch.amp.GradScaler("cuda")
     checkpoint = OUTPUT / "last_checkpoint.pt"
