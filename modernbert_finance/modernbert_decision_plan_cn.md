@@ -348,3 +348,136 @@ MLM 是否有效只看下游验证概率指标，不以 MLM loss 单独决定。
 ```
 
 如果 E1 没有稳定增益，停止扩大模型；如果有增益，再进入 MLM、大模型和全量训练阶段。
+
+## 10. 全量训练两轮执行计划
+
+本节是当前 Kaggle 全量训练的实际执行合同，优先级高于前文中尚未更新的
+“E2 方案稿”描述。当前日期为 2026-09-27。
+
+### 10.1 第一轮：随机初始化基线
+
+当前运行中的 `modernbert-decision-full-chunk-1` V8 属于第一轮 Chunk 1，
+不是第二轮，也不是最终模型结论。
+
+第一轮固定配置：
+
+```text
+模型：ModernBERT-base 风格，hidden=768，layers=22，heads=12
+初始化：模型参数随机初始化
+训练数据：全量 9,010,965 条
+训练方式：8 个 Kaggle chunk 串行接力
+batch size：16
+数据顺序 seed：20260925
+看板：modernbert-decision-full-gated-v1
+```
+
+第一轮的目标是取得一个完整的全量训练 warm-start 和基线，不在训练过程中
+选择 `best_model`。每个 chunk 只保存：
+
+- `last_checkpoint.pt`：供下一个 chunk 接力；
+- `chunk_report.json`：记录覆盖范围、样本数和顺序 hash；
+- SwanLab 训练进度；
+- 最后一个 chunk 的完整验证报告。
+
+第一轮结束时必须确认：
+
+1. 8 个 chunk 均完成，且没有重复或跳过 row group；
+2. 每个 checkpoint 的 `shuffle_seed` 和 `group_order_hash` 一致；
+3. 最后一个 chunk 完成 `123,836` 条验证集评估；
+4. 产出第一轮的 `final_model.pt` 和完整验证指标；
+5. 第一轮模型只作为 baseline/warm-start，不称为验证集 best。
+
+### 10.2 第一轮结束后的接力操作
+
+第一轮第 8 个 chunk 完成后，按以下顺序进入第二轮：
+
+1. 下载或挂载第一轮第 8 个 chunk 的最终 checkpoint；
+2. 校验第一轮输出中的模型文件、训练报告和数据 manifest；
+3. 以第一轮最终模型作为第二轮初始化，不重新随机初始化；
+4. 新建第二轮 Chunk 1 任务，仍然只提交一个 Kaggle 训练任务；
+5. 第二轮 Chunk 1 完成后，将输出发布为第二轮 Chunk 2 的输入；
+6. 依次接力到第二轮 Chunk 8；
+7. 每次提交前确认前一个 chunk 已停止或完成，不能并行占用 Kaggle GPU；
+8. 第二轮所有 chunk 使用同一个新的 SwanLab run。
+
+第一轮和第二轮不共用看板，避免把“无中途验证的 warm-start 基线”和
+“带分层验证的正式训练”混在同一组曲线中：
+
+```text
+第一轮：modernbert-decision-full-gated-v1
+第二轮：modernbert-decision-full-gated-round2-v1
+```
+
+同一轮内部的 8 个 chunk 必须复用同一个 run id，并使用
+`resume="allow"`。
+
+### 10.3 第二轮：换顺序并加入分层验证
+
+第二轮不是重复第一轮的数据顺序。固定使用新的数据顺序 seed：
+
+```text
+第一轮：SHUFFLE_SEED = 20260925
+第二轮：SHUFFLE_SEED = 20260927
+```
+
+第二轮只改变数据访问顺序和验证策略，不改变第一轮已经确定的输入契约。
+第二轮 checkpoint 必须记录新的 `shuffle_seed` 和
+`group_order_hash`，8 个 chunk 之间严格校验，不能混用第一轮 checkpoint。
+
+第二轮每个 chunk 完成后执行固定验证子集：
+
+```text
+验证子集：固定 16,384 条
+抽样规则：预先固定，不随 chunk 改变
+指标：macro log loss、macro Brier、ECE、8 个阈值的明细
+```
+
+如果当前 chunk 的验证指标优于历史最佳：
+
+```text
+保存 best_model.pt
+更新 best_metric.json
+```
+
+训练接力仍然使用：
+
+```text
+last_checkpoint.pt
+```
+
+不能用 `best_model.pt` 替代接力 checkpoint，否则会改变优化器状态和训练轨迹。
+第二轮最后一个 chunk 额外执行完整验证集，并同时保存：
+
+- `best_model.pt`：第二轮固定验证子集上表现最佳；
+- `final_model.pt`：第二轮最后训练状态；
+- 完整验证报告：覆盖全部 `123,836` 条验证样本；
+- 按 `2025H2`、`2026H1` 和 8 个阈值拆分的指标。
+
+### 10.4 对照实验安排
+
+C 对照不与主模型并行运行，也不插入当前第一轮。待第二轮主模型完成并确认
+训练链路稳定后，再单独安排 C 对照：
+
+```text
+C：金融 token 路径置零
+保留：同一 ModernBERT 主干、行业、市值、数据顺序和验证契约
+看板：单独的 C-control run，不能混入主模型看板
+```
+
+这样可以回答两个独立问题：
+
+1. 第二轮训练和分层验证后，模型是否比第一轮基线更稳定；
+2. 金融 token 是否在相同主干、行业和市值条件下提供增量信息。
+
+### 10.5 当前状态记录
+
+截至 2026-09-27：
+
+```text
+当前阶段：第一轮
+当前位置：Chunk 1 / 8
+当前 Kernel：modernbert-decision-full-chunk-1 V8
+当前看板：modernbert-decision-full-gated-v1
+第二轮：尚未开始
+C 对照：尚未开始，禁止并行提交
+```
