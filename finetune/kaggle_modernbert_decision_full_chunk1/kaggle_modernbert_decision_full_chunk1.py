@@ -327,9 +327,23 @@ def main() -> None:
         model.load_state_dict(saved["model"])
         optimizer.load_state_dict(saved["optimizer"])
         scaler.load_state_dict(saved["scaler"])
-        start_pos = int(saved.get("order_pos", 0))
+        saved_chunk = int(saved.get("chunk_index", CHUNK_INDEX))
+        if saved_chunk == CHUNK_INDEX:
+            start_pos = int(saved.get("chunk_pos", 0))
+        elif saved_chunk == CHUNK_INDEX - 1:
+            # A previous chunk's checkpoint is the handoff input for this chunk.
+            start_pos = 0
+        else:
+            raise RuntimeError(
+                f"checkpoint chunk mismatch: saved={saved_chunk}, current={CHUNK_INDEX}"
+            )
         processed = int(saved["processed_samples"])
-        log("checkpoint_resumed", order_pos=start_pos, processed_samples=processed)
+        log(
+            "checkpoint_resumed",
+            chunk_index=saved_chunk,
+            chunk_pos=start_pos,
+            processed_samples=processed,
+        )
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10", *TARGET_COLUMNS]
     started = time.monotonic()
@@ -383,7 +397,8 @@ def main() -> None:
         torch.save({
             "model": model.state_dict(), "optimizer": optimizer.state_dict(),
             "scaler": scaler.state_dict(), "row_group": group_id,
-            "order_pos": order_pos + 1, "shuffle_seed": SHUFFLE_SEED,
+            "chunk_index": CHUNK_INDEX, "chunk_pos": order_pos + 1,
+            "shuffle_seed": SHUFFLE_SEED,
             "group_order_hash": group_order_hash(group_order),
             "processed_samples": processed,
         }, checkpoint)
