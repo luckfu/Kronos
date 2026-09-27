@@ -23,6 +23,7 @@ CHUNK_INDEX = 0
 CHUNK_COUNT = 8
 SHUFFLE_SEED = 20260925
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_RUN_ID = "modernbert-decision-full-gated-v1"
 OUTPUT = Path("/kaggle/working/modernbert_decision_full")
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
@@ -117,11 +118,11 @@ def start_swanlab() -> tuple[Any, Any]:
         raise RuntimeError("SWANLAB_API_KEY is empty")
     swanlab.login(api_key=api_key)
     run = swanlab.init(
-        id="modernbert-decision-full",
+        id=SWANLAB_RUN_ID,
         resume="allow",
         project="finance",
         workspace="roc_fu",
-        experiment_name="modernbert-decision-full",
+        experiment_name=SWANLAB_RUN_ID,
         config={
             "model": "ModernBERT-base-style",
             "hidden_size": 768,
