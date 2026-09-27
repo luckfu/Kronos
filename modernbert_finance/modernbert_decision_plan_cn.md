@@ -485,3 +485,43 @@ C：金融 token 路径置零
 第二轮：尚未开始
 C 对照：尚未开始，禁止并行提交
 ```
+
+### 10.6 第二轮日志与看板进度契约
+
+第一轮当前日志主要记录累计样本和 row group，阅读长时间运行进度不够直观。
+从第二轮 Kairos 训练开始，所有 chunk 必须同时记录全局进度和 segment 进度。
+这里的一个 `segment` 定义为一个逻辑训练 chunk；第二轮共 8 个 segment。
+
+训练日志和 SwanLab 指标必须包含：
+
+```text
+segment_total                 = 8
+segment_index                 = 1..8
+segment_samples               = 当前 segment 的样本数
+segment_processed_samples     = 当前 segment 已处理样本数
+segment_progress              = 当前 segment 完成比例
+global_processed_samples      = 全局累计已处理样本数
+global_total_samples          = 9,010,965
+```
+
+每个 segment 结束时还必须记录：
+
+```text
+segment_complete = 1
+validation_samples = 16,384
+validation_macro_log_loss
+validation_macro_brier
+validation_ece
+best_updated = 0/1
+```
+
+其中 `last_checkpoint.pt` 用于下一 segment 接力，`best_model.pt` 只在固定验证
+子集指标改善时更新。看板曲线必须能同时回答：
+
+1. 当前做到第几个 segment；
+2. 当前 segment 已完成多少；
+3. 全局 8 个 segment 完成了多少；
+4. 最近一次验证是否刷新 best。
+
+第一轮剩余 chunk 不强行回溯修改；从第一轮后续新脚本和第二轮脚本开始，
+必须遵守上述字段命名。

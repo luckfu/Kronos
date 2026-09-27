@@ -24,6 +24,7 @@ CHUNK_COUNT = 8
 SHUFFLE_SEED = 20260925
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_RUN_ID = "modernbert-decision-full-gated-v1"
+SEGMENT_TOTAL = CHUNK_COUNT
 OUTPUT = Path("/kaggle/working/modernbert_decision_full")
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
@@ -350,6 +351,8 @@ def main() -> None:
         group_id = chunk_groups[order_pos]
         rows = train_pq.read_row_group(group_id, columns=columns).to_pylist()
         rows = shuffle_group_rows(rows, group_id)
+        segment_samples = len(rows)
+        segment_processed = 0
         for offset in range(0, len(rows), BATCH_SIZE):
             batch = rows[offset:offset + BATCH_SIZE]
             history, sectors, sizes, labels, _ = make_batch(
@@ -372,11 +375,17 @@ def main() -> None:
             scaler.step(optimizer)
             scaler.update()
             processed += len(batch)
+            segment_processed += len(batch)
             if processed % 25_000 < len(batch):
                 rate = processed / max(time.monotonic() - started, 1e-6)
                 state = {"phase": "training", "processed_samples": processed,
                          "total_samples": train_total, "row_group": group_id,
                          "order_pos": order_pos,
+                         "segment_total": SEGMENT_TOTAL,
+                         "segment_index": CHUNK_INDEX + 1,
+                         "segment_samples": segment_samples,
+                         "segment_processed_samples": segment_processed,
+                         "segment_progress": segment_processed / max(segment_samples, 1),
                          "loss": float(loss.detach().cpu()), "samples_per_second": rate,
                          "eta_seconds": (train_total - processed) / max(rate, 1e-6)}
                 log("training_progress", **{
@@ -387,6 +396,11 @@ def main() -> None:
                     {
                         "train/loss": float(loss.detach().cpu()),
                         "train/processed_samples": processed,
+                        "train/segment_total": SEGMENT_TOTAL,
+                        "train/segment_index": CHUNK_INDEX + 1,
+                        "train/segment_samples": segment_samples,
+                        "train/segment_processed_samples": segment_processed,
+                        "train/segment_progress": segment_processed / max(segment_samples, 1),
                         "train/samples_per_second": rate,
                         "train/eta_seconds": state["eta_seconds"],
                     },
