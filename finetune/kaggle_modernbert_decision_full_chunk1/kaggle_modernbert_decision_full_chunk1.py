@@ -415,7 +415,7 @@ def main() -> None:
         log("chunk_complete", **report)
         swanlab_run.log(
             {
-                "chunk/status": "CHUNK_COMPLETE",
+                "chunk/completed": 1,
                 "chunk/index": CHUNK_INDEX,
                 "chunk/processed_samples": processed,
             },
