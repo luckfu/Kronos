@@ -1,4 +1,4 @@
-"""Full one-epoch ModernBERT decision training with checkpointing and dashboard."""
+"""Full one-epoch ModernBERT decision training, chunk 3."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import numpy as np
 
 SEED = 20260925
 BATCH_SIZE = 16
-CHUNK_INDEX = 0
+CHUNK_INDEX = 2
 CHUNK_COUNT = 8
 SHUFFLE_SEED = 20260925
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"

@@ -321,7 +321,11 @@ def main() -> None:
         model.load_state_dict(saved["model"])
         optimizer.load_state_dict(saved["optimizer"])
         scaler.load_state_dict(saved["scaler"])
-        saved_chunk = int(saved.get("chunk_index", CHUNK_INDEX))
+        saved_chunk = int(
+            saved["chunk_index"]
+            if "chunk_index" in saved
+            else CHUNK_INDEX - 1
+        )
         if saved_chunk == CHUNK_INDEX:
             start_pos = int(saved.get("chunk_pos", 0))
         elif saved_chunk == CHUNK_INDEX - 1:
