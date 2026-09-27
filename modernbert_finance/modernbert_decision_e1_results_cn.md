@@ -1,4 +1,6 @@
-# ModernBERT 决策模型 E1 结果
+# Kairos 决策模型 E1 结果
+
+> Kairos 是原 “ModernBERT Decision” 模型的正式名称。历史 Kernel 名称保留原样。
 
 日期：2026-09-26
 Kaggle Kernel：`smmt315/modernbert-decision-e1-a-b-c-gpu-experiment`

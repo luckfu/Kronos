@@ -1,8 +1,12 @@
-# Kronos ModernBERT 金融决策模型方案
+# Kronos Kairos 金融决策模型方案
 
 版本：v1.0
 日期：2026-09-25
 状态：方案稿，不启动 GPU 训练
+
+> 命名约定：从 2026-09-27 起，本方案中的 ModernBERT Decision
+> 决策模型正式称为 **Kairos 模型**。代码目录和历史 Kaggle Kernel 名称暂不改动，
+> 以避免破坏正在运行的 chunk 接力；后续新任务、报告和看板说明统一使用 Kairos。
 
 ## 1. 定位
 
