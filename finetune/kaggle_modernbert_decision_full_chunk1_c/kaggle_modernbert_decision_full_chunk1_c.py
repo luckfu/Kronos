@@ -1,4 +1,4 @@
-"""Full one-epoch ModernBERT decision training with checkpointing and dashboard."""
+"""Full one-epoch ModernBERT C-control training with checkpointing and dashboard."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ BATCH_SIZE = 16
 CHUNK_INDEX = 0
 CHUNK_COUNT = 8
 SHUFFLE_SEED = 20260925
+MODEL_VARIANT = "C_control_gate_zero"
 OUTPUT = Path("/kaggle/working/modernbert_decision_full")
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
@@ -245,7 +246,13 @@ def main() -> None:
 
         def forward(self, s1: Any, s2: Any, size: Any, sector: Any) -> tuple[Any, Any]:
             condition = self.cond + self.sector(sector).unsqueeze(1) + self.size(size).unsqueeze(1)
-            market = self.fusion(torch.cat([self.s1(s1), self.s2(s2)], -1)) * self.gate
+            # C control: keep the same backbone and optimizer, but remove all
+            # financial token information from the forward path.
+            market = torch.zeros(
+                (s1.shape[0], s1.shape[1], self.fusion.out_features),
+                device=s1.device,
+                dtype=self.cond.dtype,
+            )
             sequence = torch.cat([condition, market], 1)
             mask = torch.ones(sequence.shape[:2], dtype=torch.long, device=sequence.device)
             pooled = self.backbone(inputs_embeds=sequence, attention_mask=mask).last_hidden_state[:, 0]
@@ -262,6 +269,7 @@ def main() -> None:
         devices=torch.cuda.device_count(),
         mode="single_gpu_stable",
         active_device=str(device),
+        model_variant=MODEL_VARIANT,
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     scaler = torch.amp.GradScaler("cuda")

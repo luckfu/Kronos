@@ -20,6 +20,7 @@ SEED = 20260925
 BATCH_SIZE = 16
 CHUNK_INDEX = 0
 CHUNK_COUNT = 8
+SHUFFLE_SEED = 20260925
 OUTPUT = Path("/kaggle/working/modernbert_decision_full")
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
@@ -71,6 +72,35 @@ main{{max-width:900px;margin:auto}}.grid{{display:grid;grid-template-columns:rep
 <div class="card"><div class="label">Samples</div><div class="value">{processed:,}/{total:,}</div></div>
 </div><pre>{json.dumps(state, ensure_ascii=False, indent=2, default=str)}</pre></main>"""
     (OUTPUT / "dashboard.html").write_text(html, encoding="utf-8")
+
+
+def shuffled_group_order(num_groups: int) -> list[int]:
+    return np.random.default_rng(SHUFFLE_SEED).permutation(num_groups).tolist()
+
+
+def shuffle_group_rows(rows: list[dict[str, Any]], group_id: int) -> list[dict[str, Any]]:
+    order = np.random.default_rng(SHUFFLE_SEED + group_id + 1).permutation(len(rows))
+    return [rows[int(index)] for index in order]
+
+
+def group_order_hash(order: list[int]) -> str:
+    return hashlib.sha256(",".join(map(str, order)).encode("ascii")).hexdigest()
+
+
+def calibration_error(probabilities: np.ndarray, labels: np.ndarray, bins: int = 10) -> float:
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    total = len(labels)
+    if total == 0:
+        return float("nan")
+    error = 0.0
+    for index in range(bins):
+        mask = (
+            (probabilities >= edges[index])
+            & ((probabilities < edges[index + 1]) if index + 1 < bins else (probabilities <= edges[index + 1]))
+        )
+        if mask.any():
+            error += float(mask.mean()) * abs(float(probabilities[mask].mean()) - float(labels[mask].mean()))
+    return error
 
 
 def load_arrays(path: Path) -> tuple[dict[str, dict[str, Any]], set[str]]:
@@ -236,28 +266,36 @@ def main() -> None:
             raise RuntimeError(f"expected at most one previous checkpoint, found {previous}")
         if previous:
             shutil.copy2(previous[0], checkpoint)
+    group_order = shuffled_group_order(train_pq.num_row_groups)
     chunk_start = train_pq.num_row_groups * CHUNK_INDEX // CHUNK_COUNT
     chunk_end = train_pq.num_row_groups * (CHUNK_INDEX + 1) // CHUNK_COUNT
-    start_group, processed = chunk_start, 0
+    chunk_groups = group_order[chunk_start:chunk_end]
+    start_pos, processed = 0, 0
     if checkpoint.exists():
         saved = torch.load(checkpoint, map_location=device)
+        if saved.get("shuffle_seed") != SHUFFLE_SEED:
+            raise RuntimeError("checkpoint shuffle seed mismatch")
+        if saved.get("group_order_hash") != group_order_hash(group_order):
+            raise RuntimeError("checkpoint row-group order mismatch")
         model.load_state_dict(saved["model"])
         optimizer.load_state_dict(saved["optimizer"])
         scaler.load_state_dict(saved["scaler"])
-        start_group = max(chunk_start, int(saved["row_group"]) + 1)
+        start_pos = int(saved.get("order_pos", 0))
         processed = int(saved["processed_samples"])
-        log("checkpoint_resumed", row_group=start_group, processed_samples=processed)
+        log("checkpoint_resumed", order_pos=start_pos, processed_samples=processed)
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10", *TARGET_COLUMNS]
     started = time.monotonic()
     model.train()
-    for group_id in range(start_group, chunk_end):
+    for order_pos in range(start_pos, len(chunk_groups)):
+        group_id = chunk_groups[order_pos]
         rows = train_pq.read_row_group(group_id, columns=columns).to_pylist()
+        rows = shuffle_group_rows(rows, group_id)
         for offset in range(0, len(rows), BATCH_SIZE):
             batch = rows[offset:offset + BATCH_SIZE]
             history, sectors, sizes, labels, _ = make_batch(
                 batch, train_arrays, sector_ids,
-                check_labels=(processed == 0 and group_id == start_group and offset == 0),
+                check_labels=(processed == 0 and order_pos == start_pos and offset == 0),
             )
             with torch.no_grad():
                 s1, s2 = tokenizer.encode(torch.from_numpy(history).to(device), half=True)
@@ -279,6 +317,7 @@ def main() -> None:
                 rate = processed / max(time.monotonic() - started, 1e-6)
                 state = {"phase": "training", "processed_samples": processed,
                          "total_samples": train_total, "row_group": group_id,
+                         "order_pos": order_pos,
                          "loss": float(loss.detach().cpu()), "samples_per_second": rate,
                          "eta_seconds": (train_total - processed) / max(rate, 1e-6)}
                 log("training_progress", **{
@@ -288,6 +327,8 @@ def main() -> None:
         torch.save({
             "model": model.state_dict(), "optimizer": optimizer.state_dict(),
             "scaler": scaler.state_dict(), "row_group": group_id,
+            "order_pos": order_pos + 1, "shuffle_seed": SHUFFLE_SEED,
+            "group_order_hash": group_order_hash(group_order),
             "processed_samples": processed,
         }, checkpoint)
         log("checkpoint_saved", row_group=group_id, processed_samples=processed)
@@ -297,6 +338,8 @@ def main() -> None:
             "status": "CHUNK_COMPLETE", "chunk_index": CHUNK_INDEX,
             "chunk_count": CHUNK_COUNT, "row_group_start": chunk_start,
             "row_group_end": chunk_end, "processed_samples": processed,
+            "shuffle_seed": SHUFFLE_SEED,
+            "group_order_hash": group_order_hash(group_order),
             "checkpoint": str(checkpoint), "elapsed_seconds": time.monotonic() - started,
         }
         (OUTPUT / "chunk_report.json").write_text(
@@ -341,18 +384,23 @@ def main() -> None:
             values.append({
                 "log_loss": float(-(y * np.log(p) + (1 - y) * np.log(1 - p)).mean()),
                 "brier": float(np.square(p - y).mean()),
+                "ece_10bin": calibration_error(p, y),
+                "positive_rate": float(y.mean()),
+                "mean_probability": float(p.mean()),
             })
         metrics[name] = {
             "samples": int(mask.sum()),
             "macro_log_loss": float(np.mean([v["log_loss"] for v in values])),
             "macro_brier": float(np.mean([v["brier"] for v in values])),
+            "per_threshold": dict(zip(TARGET_COLUMNS, values)),
         }
-    torch.save({"model": model.state_dict(), "metrics": metrics}, OUTPUT / "best_model.pt")
+    torch.save({"model": model.state_dict(), "metrics": metrics}, OUTPUT / "final_model.pt")
     report = {
         "status": "PASS", "purpose": "full temporal training",
         "train_samples": train_total, "validation_samples": validation_total,
         "epochs": 1, "batch_size": BATCH_SIZE, "metrics": metrics,
-        "checkpoint": str(OUTPUT / "best_model.pt"),
+        "checkpoint": str(OUTPUT / "final_model.pt"),
+        "model_selection": "single_final_checkpoint; no intermediate validation selection",
         "elapsed_seconds": time.monotonic() - started,
     }
     (OUTPUT / "full_training_report.json").write_text(
