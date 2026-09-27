@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import os
 import pickle
 import random
 import shutil
@@ -21,6 +22,7 @@ BATCH_SIZE = 16
 CHUNK_INDEX = 0
 CHUNK_COUNT = 8
 SHUFFLE_SEED = 20260925
+SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
 OUTPUT = Path("/kaggle/working/modernbert_decision_full")
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
@@ -103,6 +105,43 @@ def calibration_error(probabilities: np.ndarray, labels: np.ndarray, bins: int =
     return error
 
 
+def start_swanlab() -> tuple[Any, Any]:
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--progress-bar", "off", "swanlab"],
+        check=True,
+    )
+    import swanlab
+
+    api_key = os.environ.get("SWANLAB_API_KEY", "").strip() or SWANLAB_API_KEY_FALLBACK
+    if not api_key:
+        raise RuntimeError("SWANLAB_API_KEY is empty")
+    swanlab.login(api_key=api_key)
+    run = swanlab.init(
+        id="modernbert-decision-full",
+        resume="allow",
+        project="finance",
+        workspace="roc_fu",
+        experiment_name="modernbert-decision-full",
+        config={
+            "model": "ModernBERT-base-style",
+            "hidden_size": 768,
+            "layers": 22,
+            "heads": 12,
+            "batch_size": BATCH_SIZE,
+            "chunk_index": CHUNK_INDEX,
+            "chunk_count": CHUNK_COUNT,
+            "shuffle_seed": SHUFFLE_SEED,
+            "variant": "gated",
+        },
+        mode="cloud",
+    )
+    url = getattr(run, "url", getattr(run, "web_url", ""))
+    if not url:
+        raise RuntimeError("SwanLab did not return a run URL")
+    print(json.dumps({"phase": "swanlab_ready", "url": url}), flush=True)
+    return swanlab, run
+
+
 def load_arrays(path: Path) -> tuple[dict[str, dict[str, Any]], set[str]]:
     import pandas as pd
 
@@ -169,6 +208,7 @@ def main() -> None:
 
     if not torch.cuda.is_available():
         raise RuntimeError("full training requires Kaggle GPU")
+    swanlab, swanlab_run = start_swanlab()
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
@@ -324,6 +364,15 @@ def main() -> None:
                     key: value for key, value in state.items() if key != "phase"
                 })
                 dashboard(state)
+                swanlab_run.log(
+                    {
+                        "train/loss": float(loss.detach().cpu()),
+                        "train/processed_samples": processed,
+                        "train/samples_per_second": rate,
+                        "train/eta_seconds": state["eta_seconds"],
+                    },
+                    step=processed,
+                )
         torch.save({
             "model": model.state_dict(), "optimizer": optimizer.state_dict(),
             "scaler": scaler.state_dict(), "row_group": group_id,
@@ -332,6 +381,14 @@ def main() -> None:
             "processed_samples": processed,
         }, checkpoint)
         log("checkpoint_saved", row_group=group_id, processed_samples=processed)
+        swanlab_run.log(
+            {
+                "train/checkpoint_saved": 1,
+                "train/row_group": group_id,
+                "train/processed_samples": processed,
+            },
+            step=processed,
+        )
 
     if CHUNK_INDEX + 1 < CHUNK_COUNT:
         report = {
@@ -349,6 +406,15 @@ def main() -> None:
                    "total_samples": train_total, "chunk_index": CHUNK_INDEX,
                    "chunk_count": CHUNK_COUNT})
         log("chunk_complete", **report)
+        swanlab_run.log(
+            {
+                "chunk/status": "CHUNK_COMPLETE",
+                "chunk/index": CHUNK_INDEX,
+                "chunk/processed_samples": processed,
+            },
+            step=processed,
+        )
+        swanlab.finish()
         print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
         return
 
@@ -408,6 +474,17 @@ def main() -> None:
     )
     dashboard({"phase": "complete", "processed_samples": processed,
                "total_samples": train_total, "metrics": metrics})
+    swanlab_run.log(
+        {
+            "validation/macro_log_loss": metrics["all"]["macro_log_loss"],
+            "validation/macro_brier": metrics["all"]["macro_brier"],
+            "validation/early_2025H2_log_loss": metrics["early_2025H2"]["macro_log_loss"],
+            "validation/late_2026H1_log_loss": metrics["late_2026H1"]["macro_log_loss"],
+            "validation/completed": 1,
+        },
+        step=processed,
+    )
+    swanlab.finish()
     log("full_training_complete", **report)
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
 
