@@ -21,7 +21,15 @@ SEED = 20260927
 BATCH_SIZE = 16
 CHUNK_INDEX = 1
 SEGMENT_SAMPLES = 20_000
-MAX_SEGMENTS_THIS_RUN = 1
+# Chunk 1 V6 measured 546.4121s including encoding, validation and saving.
+GPU_BUDGET_SECONDS = 10 * 60 * 60
+RUNTIME_RESERVE_SECONDS = 30 * 60
+SEGMENT_ESTIMATE_SECONDS = 546.412109773
+SEGMENT_TIME_MARGIN = 1.10
+MAX_SEGMENTS_THIS_RUN = int(
+    (GPU_BUDGET_SECONDS - RUNTIME_RESERVE_SECONDS)
+    / (SEGMENT_ESTIMATE_SECONDS * SEGMENT_TIME_MARGIN)
+)
 TOTAL_SEGMENTS = None
 SHUFFLE_SEED = 20260927
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
@@ -239,6 +247,8 @@ def make_batch(
 
 
 def main() -> None:
+    # Preserve the parent's start time across the torchrun relaunch.
+    runtime_started = float(os.environ.setdefault("KAIROS_RUNTIME_STARTED", str(time.time())))
     OUTPUT.mkdir(parents=True, exist_ok=True)
     import pyarrow.parquet as pq
     import torch
@@ -362,7 +372,15 @@ def main() -> None:
             self.backbone = ModernBertModel(config)
             # Financial tokens enter through inputs_embeds, so the native
             # ModernBERT word embedding is structurally unused.
-            for parameter in self.backbone.embeddings.word_embeddings.parameters():
+            native_embeddings = getattr(self.backbone.embeddings, "tok_embeddings", None)
+            if native_embeddings is None:
+                native_embeddings = getattr(self.backbone.embeddings, "word_embeddings", None)
+            if native_embeddings is None:
+                raise RuntimeError(
+                    "Cannot locate ModernBERT native token embeddings; "
+                    f"available={list(self.backbone.embeddings._modules)}"
+                )
+            for parameter in native_embeddings.parameters():
                 parameter.requires_grad_(False)
             self.up0, self.upd = nn.Linear(hidden, 1), nn.Linear(hidden, 3)
             self.dn0, self.dnd = nn.Linear(hidden, 1), nn.Linear(hidden, 3)
@@ -486,6 +504,8 @@ def main() -> None:
             optimizer_reset=True,
             shuffle_seed=SHUFFLE_SEED,
         )
+    else:
+        raise RuntimeError("Relay requires the previous chunk's last_checkpoint.pt")
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10", *TARGET_COLUMNS]
 
@@ -694,6 +714,8 @@ def main() -> None:
     segment_processed = 0
     segment_global_start = processed
     segment_started = time.monotonic()
+    longest_segment_seconds = SEGMENT_ESTIMATE_SECONDS
+    stop_reason = "segment_limit"
     while group_order_pos < len(group_order) and segments_this_run < run_segment_limit:
         group_id = group_order[group_order_pos]
         rows = shuffle_group_rows(
@@ -878,18 +900,44 @@ def main() -> None:
                 }, checkpoint)
             if distributed:
                 dist.barrier()
+            segment_seconds = time.monotonic() - segment_started
+            longest_segment_seconds = max(longest_segment_seconds, segment_seconds)
             log(
                 "segment_complete",
                 segment_index=global_segment_index,
                 segment_samples=segment_samples,
                 processed_samples=processed,
-                segment_seconds=time.monotonic() - segment_started,
+                segment_seconds=segment_seconds,
             )
+            # Rank 0 decides only after validation and checkpoint publication.
+            budget_decision = [None]
+            if is_main_process():
+                remaining_seconds = (
+                    GPU_BUDGET_SECONDS - RUNTIME_RESERVE_SECONDS
+                    - (time.time() - runtime_started)
+                )
+                budget_decision[0] = (
+                    remaining_seconds < longest_segment_seconds * SEGMENT_TIME_MARGIN
+                )
+                log(
+                    "runtime_budget",
+                    remaining_seconds=remaining_seconds,
+                    estimated_next_segment_seconds=longest_segment_seconds * SEGMENT_TIME_MARGIN,
+                    stop_before_next_segment=budget_decision[0],
+                )
+            if distributed:
+                dist.broadcast_object_list(budget_decision, src=0)
+            if budget_decision[0]:
+                run_segment_limit = segments_this_run
+                stop_reason = "runtime_budget"
 
     if completed_segments < total_segments:
         report = {
-            "status": "SMOKE_COMPLETE" if run_segment_limit == 1 else "CHUNK_COMPLETE",
-            "purpose": RUN_PURPOSE if run_segment_limit == 1 else "segment-relay",
+            "status": "CHUNK_COMPLETE",
+            "purpose": RUN_PURPOSE,
+            "stop_reason": stop_reason,
+            "gpu_budget_seconds": GPU_BUDGET_SECONDS,
+            "runtime_elapsed_seconds": time.time() - runtime_started,
             "chunk_index": CHUNK_INDEX,
             "processed_samples": processed,
             "completed_segments": completed_segments,

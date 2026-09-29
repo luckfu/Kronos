@@ -362,7 +362,15 @@ def main() -> None:
             self.backbone = ModernBertModel(config)
             # Financial tokens enter through inputs_embeds, so the native
             # ModernBERT word embedding is structurally unused.
-            for parameter in self.backbone.embeddings.word_embeddings.parameters():
+            native_embeddings = getattr(self.backbone.embeddings, "tok_embeddings", None)
+            if native_embeddings is None:
+                native_embeddings = getattr(self.backbone.embeddings, "word_embeddings", None)
+            if native_embeddings is None:
+                raise RuntimeError(
+                    "Cannot locate ModernBERT native token embeddings; "
+                    f"available={list(self.backbone.embeddings._modules)}"
+                )
+            for parameter in native_embeddings.parameters():
                 parameter.requires_grad_(False)
             self.up0, self.upd = nn.Linear(hidden, 1), nn.Linear(hidden, 3)
             self.dn0, self.dnd = nn.Linear(hidden, 1), nn.Linear(hidden, 3)
