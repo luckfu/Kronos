@@ -13,5 +13,7 @@
     "luckfu/ashare120d-modernbert-targets"
   ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [
+    "wynstonliu/kairos-r2-modernbert-chunk-3"
+  ]
 }

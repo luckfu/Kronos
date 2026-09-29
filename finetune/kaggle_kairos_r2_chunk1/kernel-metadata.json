@@ -13,5 +13,7 @@
     "luckfu/ashare120d-modernbert-targets"
   ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [
+    "wynstonliu/modernbert-decision-full-chunk-8"
+  ]
 }
