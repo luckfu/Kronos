@@ -703,22 +703,23 @@ def main() -> None:
     segment_global_start = processed
     segment_started = time.monotonic()
     while group_order_pos < len(group_order) and segments_this_run < run_segment_limit:
+        loaded_group_order_pos = group_order_pos
         group_id = group_order[group_order_pos]
         rows = shuffle_group_rows(
             train_pq.read_row_group(group_id, columns=columns).to_pylist(),
             group_id,
         )
-        while row_offset < len(rows) and segments_this_run < run_segment_limit:
+        while (group_order_pos == loaded_group_order_pos
+               and row_offset < len(rows) and segments_this_run < run_segment_limit):
             remaining = SEGMENT_SAMPLES - len(segment_rows)
             take = min(remaining, len(rows) - row_offset)
             segment_rows.extend(rows[row_offset:row_offset + take])
             row_offset += take
             if len(segment_rows) < SEGMENT_SAMPLES:
-                if row_offset == len(rows):
+                if row_offset == len(rows) and group_order_pos + 1 < len(group_order):
                     group_order_pos += 1
                     row_offset = 0
-                if group_order_pos < len(group_order):
-                    continue
+                    break
                 # The final segment may contain fewer than SEGMENT_SAMPLES rows.
 
             global_segment_index = completed_segments + 1

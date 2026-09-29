@@ -607,13 +607,14 @@ C：金融 token 路径置零
 | R2 Chunk 1 V5 | ERROR；初始化访问不存在的 `word_embeddings`，实际为 `tok_embeddings` |
 | R2 Chunk 1 V6 | COMPLETE，报告 `SMOKE_COMPLETE`；累计 1/451 段、20,000 条训练样本 |
 | R2 Chunk 2 V1 | 已手工停止，API 返回 `CANCEL_ACKNOWLEDGED`；日志最后完整段是累计 12/240,000，最后进度为第 13 段中途/250,000；这些计数不是唯一覆盖量 |
-| 本次授权 | 09-30 冻结全部训练，只保全产出和审计；此前 10 小时接力授权不再有效 |
-| SwanLab | `modernbert-decision-full-gated-round2-v2`，`resume="allow"`，后续不新建 run |
+| 本次授权 | 09-30 停止审计后，用户重新授权后续 Kaggle 实验；当前仅执行三臂有限预算 LR 对照，未恢复全量接力 |
+| SwanLab | 历史 R2 run 保留不覆盖；LR 实验独立 run，有凭据用 cloud，否则 offline；每臂均有文件看板和 JSON 指标 |
 | C 对照 | 未运行；不与 R2 并行提交 |
 
-当前训练冻结：不提交 Chunk 3/4，不重跑 Chunk 2，不创建新训练 Kernel。
-R2 四份脚本的 row-group 游标重复读取缺陷和 E1 -> R1 差异表，见
-`kairos_e1_full_diff_audit_cn.md`。
+全量训练继续冻结：不提交 Chunk 3/4，不重跑 Chunk 2，不使用事故 last checkpoint。
+仅新建有限预算 LR 对照 Kernel，配置和停止条件见 `kairos_lr_probe_20260930_cn.md`。
+R2 四份脚本的 row-group 游标已修复，合成测试通过；真实数据身份和状态恢复门禁
+仍需在新实验运行时通过。原始缺陷和 E1 -> R1 差异表见 `kairos_e1_full_diff_audit_cn.md`。
 
 #### 10.5.1 Smoke 证据与历史预算
 

@@ -19,6 +19,11 @@ import numpy as np
 
 SEED = 20260927
 BATCH_SIZE = 16
+LR_PROBE = False
+LEARNING_RATE_OVERRIDE = None
+EARLY_STOP_PATIENCE = 2
+EARLY_STOP_MIN_DELTA = 0.001
+MAX_VALIDATION_DEGRADATION = 0.20
 CHUNK_INDEX = 1
 SEGMENT_SAMPLES = 20_000
 # Chunk 1 V6 measured 546.4121s including encoding, validation and saving.
@@ -109,6 +114,53 @@ def group_order_hash(order: list[int]) -> str:
     return hashlib.sha256(",".join(map(str, order)).encode("ascii")).hexdigest()
 
 
+def row_identity(row: dict[str, Any]) -> tuple[str, int, str]:
+    return str(row["symbol"]), int(row["start_index"]), str(row["asof_date"])
+
+
+def verify_segment_coverage(
+    rows: list[dict[str, Any]], expected: list[tuple[str, int, str]],
+    offset: int, seen: set[tuple[str, int, str]],
+) -> str:
+    identities = [row_identity(row) for row in rows]
+    if identities != expected[offset:offset + len(identities)]:
+        raise RuntimeError("segment sample identities differ from independent prefix")
+    if len(set(identities)) != len(identities) or seen.intersection(identities):
+        raise RuntimeError("duplicate sample identity in training prefix")
+    seen.update(identities)
+    return hashlib.sha256(json.dumps(identities, separators=(",", ":")).encode()).hexdigest()
+
+
+def probe_stop_reason(score: float, best: float, stale: int, initial: float) -> tuple[str, float, int]:
+    if not np.isfinite(score):
+        return "nonfinite_validation", best, stale
+    stale = 0 if score < best - EARLY_STOP_MIN_DELTA else stale + 1
+    best = min(best, score)
+    if score > initial + MAX_VALIDATION_DEGRADATION:
+        return "validation_degradation", best, stale
+    if stale >= EARLY_STOP_PATIENCE:
+        return "validation_patience", best, stale
+    return "", best, stale
+
+
+def assert_restored_state(expected: Any, actual: Any, torch: Any) -> None:
+    if isinstance(expected, torch.Tensor):
+        if not torch.equal(expected.detach().cpu(), actual.detach().cpu()):
+            raise RuntimeError("checkpoint tensor restoration mismatch")
+    elif isinstance(expected, dict):
+        if expected.keys() != actual.keys():
+            raise RuntimeError("checkpoint state keys mismatch")
+        for key in expected:
+            assert_restored_state(expected[key], actual[key], torch)
+    elif isinstance(expected, (list, tuple)):
+        if len(expected) != len(actual):
+            raise RuntimeError("checkpoint state length mismatch")
+        for left, right in zip(expected, actual):
+            assert_restored_state(left, right, torch)
+    elif expected != actual:
+        raise RuntimeError("checkpoint scalar restoration mismatch")
+
+
 def is_main_process() -> bool:
     return int(os.environ.get("RANK", "0")) == 0
 
@@ -156,9 +208,10 @@ def start_swanlab() -> tuple[Any, Any]:
     import swanlab
 
     api_key = os.environ.get("SWANLAB_API_KEY", "").strip() or SWANLAB_API_KEY_FALLBACK
-    if not api_key:
+    if not api_key and not LR_PROBE:
         raise RuntimeError("SWANLAB_API_KEY is empty")
-    swanlab.login(api_key=api_key)
+    if api_key:
+        swanlab.login(api_key=api_key)
     run = swanlab.init(
         id=SWANLAB_RUN_ID,
         resume="allow",
@@ -177,13 +230,15 @@ def start_swanlab() -> tuple[Any, Any]:
             "segment_total": "computed_after_data_load",
             "shuffle_seed": SHUFFLE_SEED,
             "variant": "kairos-r2",
+            "learning_rate_override": LEARNING_RATE_OVERRIDE,
+            "lr_probe": LR_PROBE,
             "validation_samples_per_segment": 123836,
             "validation_scope": "full_validation_after_every_segment",
         },
-        mode="cloud",
+        mode="cloud" if api_key else "offline",
     )
-    url = getattr(run, "url", getattr(run, "web_url", ""))
-    if not url:
+    url = (getattr(run, "url", "") or getattr(run, "web_url", "")) if api_key else ""
+    if not url and api_key:
         raise RuntimeError("SwanLab did not return a run URL")
     print(json.dumps({"phase": "swanlab_ready", "url": url}), flush=True)
     return swanlab, run
@@ -463,6 +518,24 @@ def main() -> None:
         raw_model.load_state_dict(saved["model"])
         optimizer.load_state_dict(saved["optimizer"])
         scaler.load_state_dict(saved["scaler"])
+        if LR_PROBE:
+            if (saved.get("chunk_index"), saved.get("completed_segments"),
+                    saved.get("processed_samples"), saved.get("group_order_pos"),
+                    saved.get("row_offset")) != (0, 1, 20000, 0, 20000):
+                raise RuntimeError("LR probe requires the unmodified Chunk 1 segment-1 checkpoint")
+            if abs(saved["last_validation"]["all"]["macro_log_loss"] - 0.6702645644545555) > 1e-8:
+                raise RuntimeError("unexpected source checkpoint metric")
+            assert_restored_state(saved["model"], raw_model.state_dict(), torch)
+            assert_restored_state(saved["optimizer"], optimizer.state_dict(), torch)
+            assert_restored_state(saved["scaler"], scaler.state_dict(), torch)
+            log("probe_restore_verified", checkpoint_sha256=sha256_file(checkpoint),
+                model_optimizer_scaler_exact=True,
+                source_learning_rates=[group["lr"] for group in optimizer.param_groups])
+        if LEARNING_RATE_OVERRIDE is not None:
+            for group in optimizer.param_groups:
+                group["lr"] = LEARNING_RATE_OVERRIDE
+            log("learning_rate_override", learning_rate=LEARNING_RATE_OVERRIDE,
+                optimizer_moments_preserved=True)
         saved_chunk = int(
             saved["chunk_index"]
             if "chunk_index" in saved
@@ -506,8 +579,30 @@ def main() -> None:
         )
     else:
         raise RuntimeError("Relay requires the previous chunk's last_checkpoint.pt")
+    if checkpoint.exists():
+        del saved
+        torch.cuda.empty_cache()
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10", *TARGET_COLUMNS]
+    expected_prefix: list[tuple[str, int, str]] = []
+    seen_identities: set[tuple[str, int, str]] = set()
+    if LR_PROBE:
+        prefix_limit = processed + run_segment_limit * SEGMENT_SAMPLES
+        for expected_group_id in group_order:
+            expected_rows = shuffle_group_rows(
+                train_pq.read_row_group(expected_group_id, columns=columns).to_pylist(),
+                expected_group_id,
+            )
+            expected_prefix.extend(row_identity(row) for row in expected_rows)
+            if len(expected_prefix) >= prefix_limit:
+                break
+        expected_prefix = expected_prefix[:prefix_limit]
+        if len(set(expected_prefix)) != len(expected_prefix):
+            raise RuntimeError("independent prefix itself contains duplicate identities")
+        seen_identities.update(expected_prefix[:processed])
+        log("probe_prefix_verified", samples=len(expected_prefix),
+            sha256=hashlib.sha256(json.dumps(expected_prefix, separators=(",", ":")).encode()).hexdigest(),
+            source_processed_samples=processed)
 
     local_batch_size = max(1, BATCH_SIZE // world_size)
     validation_token_cache: tuple[np.ndarray, ...] | None = None
@@ -667,7 +762,7 @@ def main() -> None:
                 dist.broadcast_object_list(result_holder, src=0)
             model.train()
             return result_holder[0]
-        probabilities = np.concatenate([item[0] for item in gathered])
+        probabilities = np.concatenate([item[0] for item in gathered]).astype(np.float32)
         labels = np.concatenate([item[1] for item in gathered])
         dates = np.concatenate([item[2] for item in gathered])
         result: dict[str, Any] = {}
@@ -716,27 +811,49 @@ def main() -> None:
     segment_started = time.monotonic()
     longest_segment_seconds = SEGMENT_ESTIMATE_SECONDS
     stop_reason = "segment_limit"
+    validation_history = []
+    probe_initial_score = best_score
+    probe_best_score = best_score
+    probe_stale_segments = 0
+    if LR_PROBE:
+        initial_validation = full_validation()
+        probe_initial_score = initial_validation["all"]["macro_log_loss"]
+        if not np.isfinite(probe_initial_score) or abs(probe_initial_score - best_score) > 0.002:
+            raise RuntimeError("initial validation does not reproduce Chunk 1 baseline")
+        probe_best_score = probe_initial_score
+        log("probe_initial_validation", learning_rate=LEARNING_RATE_OVERRIDE,
+            validation=initial_validation)
+        if time.time() - runtime_started > GPU_BUDGET_SECONDS - RUNTIME_RESERVE_SECONDS - longest_segment_seconds:
+            raise RuntimeError("initialization consumed the probe training budget")
     while group_order_pos < len(group_order) and segments_this_run < run_segment_limit:
+        loaded_group_order_pos = group_order_pos
         group_id = group_order[group_order_pos]
         rows = shuffle_group_rows(
             train_pq.read_row_group(group_id, columns=columns).to_pylist(),
             group_id,
         )
-        while row_offset < len(rows) and segments_this_run < run_segment_limit:
+        while (group_order_pos == loaded_group_order_pos
+               and row_offset < len(rows) and segments_this_run < run_segment_limit):
             remaining = SEGMENT_SAMPLES - len(segment_rows)
             take = min(remaining, len(rows) - row_offset)
             segment_rows.extend(rows[row_offset:row_offset + take])
             row_offset += take
             if len(segment_rows) < SEGMENT_SAMPLES:
-                if row_offset == len(rows):
+                if row_offset == len(rows) and group_order_pos + 1 < len(group_order):
                     group_order_pos += 1
                     row_offset = 0
-                if group_order_pos < len(group_order):
-                    continue
+                    break
                 # The final segment may contain fewer than SEGMENT_SAMPLES rows.
 
             global_segment_index = completed_segments + 1
             segment_samples = len(segment_rows)
+            if LR_PROBE:
+                identity_hash = verify_segment_coverage(
+                    segment_rows, expected_prefix, processed, seen_identities
+                )
+                log("segment_coverage_verified", segment_index=global_segment_index,
+                    samples=segment_samples, identity_sha256=identity_hash,
+                    group_order_pos=group_order_pos, row_offset=row_offset)
             segment_global_start = processed
             segment_processed = 0
             segment_started = time.monotonic()
@@ -840,6 +957,17 @@ def main() -> None:
                 row_offset = 0
             last_validation = full_validation()
             validation_score = last_validation["all"]["macro_log_loss"]
+            validation_history.append({
+                "segment_index": global_segment_index, "processed_samples": processed,
+                "learning_rate": optimizer.param_groups[0]["lr"],
+                "validation": last_validation,
+            })
+            if is_main_process():
+                history_temp = OUTPUT / "validation_history.json.tmp"
+                history_temp.write_text(json.dumps(validation_history, indent=2) + "\n")
+                history_temp.replace(OUTPUT / "validation_history.json")
+            log("segment_validation", segment_index=global_segment_index,
+                learning_rate=optimizer.param_groups[0]["lr"], validation=last_validation)
             last_best_updated = validation_score < best_score
             if last_best_updated:
                 best_score = validation_score
@@ -852,8 +980,9 @@ def main() -> None:
                             "segment_index": global_segment_index,
                             "processed_samples": processed,
                         },
-                        best_checkpoint,
+                        best_checkpoint.with_suffix(".pt.tmp"),
                     )
+                    best_checkpoint.with_suffix(".pt.tmp").replace(best_checkpoint)
                     best_meta.write_text(
                         json.dumps(
                             {
@@ -897,7 +1026,8 @@ def main() -> None:
                     "processed_samples": processed,
                     "last_validation": last_validation,
                     "last_best_updated": last_best_updated,
-                }, checkpoint)
+                }, checkpoint.with_suffix(".pt.tmp"))
+                checkpoint.with_suffix(".pt.tmp").replace(checkpoint)
             if distributed:
                 dist.barrier()
             segment_seconds = time.monotonic() - segment_started
@@ -930,11 +1060,22 @@ def main() -> None:
             if budget_decision[0]:
                 run_segment_limit = segments_this_run
                 stop_reason = "runtime_budget"
+            if LR_PROBE:
+                reason, probe_best_score, probe_stale_segments = probe_stop_reason(
+                    validation_score, probe_best_score, probe_stale_segments, probe_initial_score
+                )
+                if reason:
+                    run_segment_limit = segments_this_run
+                    stop_reason = reason
+                    log("probe_early_stop", reason=reason, stale_segments=probe_stale_segments)
 
     if completed_segments < total_segments:
         report = {
             "status": "CHUNK_COMPLETE",
             "purpose": RUN_PURPOSE,
+            "learning_rate": optimizer.param_groups[0]["lr"],
+            "initial_macro_log_loss": probe_initial_score if LR_PROBE else None,
+            "validation_history": validation_history,
             "stop_reason": stop_reason,
             "gpu_budget_seconds": GPU_BUDGET_SECONDS,
             "runtime_elapsed_seconds": time.time() - runtime_started,

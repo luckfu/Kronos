@@ -1,0 +1,10 @@
+{
+  "source": "finetune/kaggle_kairos_r2_chunk2/kaggle_kairos_r2_chunk2.py",
+  "source_sha256": "fab3d6a66d8120286b27a8c423305ed2a55e314abeb9c93fa843266174e8b61b",
+  "generated_sha256": "8dcfc45a0473e220dade26db7a052492732aad9caeb1f816d4845526d56eac75",
+  "learning_rate": 3e-05,
+  "max_additional_segments": 4,
+  "wall_time_budget_seconds": 5100,
+  "optimizer_moments": "preserved; LR changed only after exact restore check",
+  "selection_scope": "reused development validation; not independent test evidence"
+}

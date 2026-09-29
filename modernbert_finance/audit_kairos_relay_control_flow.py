@@ -17,7 +17,9 @@ def assigns(node: ast.AST, name: str) -> bool:
     )
 
 
-def run_r2_cursor(path: Path, sizes: list[int], limit: int, start: int = 0) -> dict:
+def run_r2_cursor(
+    path: Path, sizes: list[int], limit: int, start: int = 0, group_start: int = 0
+) -> dict:
     tree = ast.parse(path.read_text())
     main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
     outer = copy.deepcopy(next(n for n in main.body if isinstance(n, ast.While)))
@@ -51,7 +53,7 @@ def run_r2_cursor(path: Path, sizes: list[int], limit: int, start: int = 0) -> d
 
     scope = {
         "group_order": list(range(len(groups))),
-        "group_order_pos": 0,
+        "group_order_pos": group_start,
         "row_offset": start,
         "segments_this_run": 0,
         "completed_segments": 0,
@@ -67,13 +69,14 @@ def run_r2_cursor(path: Path, sizes: list[int], limit: int, start: int = 0) -> d
     }
     code = ast.fix_missing_locations(ast.Module(body=[outer], type_ignores=[]))
     exec(compile(code, str(path), "exec"), scope)
-    expected = [row for group in groups for row in group][start:][:limit * 4]
+    expected = [row for group in groups[group_start:] for row in group][start:][:limit * 4]
     seen = scope["seen"]
     return {
         "source": str(path.relative_to(ROOT)),
         "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "group_sizes": sizes,
         "initial_offset": start,
+        "initial_group": group_start,
         "expected": expected,
         "observed": seen,
         "duplicate_visits": len(seen) - len(set(seen)),
@@ -132,15 +135,15 @@ def main() -> None:
         path = ROOT / f"finetune/kaggle_kairos_r2_chunk{chunk}/kaggle_kairos_r2_chunk{chunk}.py"
         cases.append(run_r2_cursor(path, [5, 5, 3], 3))
         cases.append(run_r2_cursor(path, [5, 5, 3], 2, start=4))
-    assert all(not case["matches_contiguous_expected"] for case in cases)
+    assert all(case["matches_contiguous_expected"] for case in cases)
     print(json.dumps({
         "purpose": "synthetic control-flow audit only; no model execution",
         "r1_current_partition_and_resume_cases": run_r1_partition(),
-        "r2_current_loop_defect_reproduced": cases,
+        "r2_fixed_loop_coverage_cases": cases,
         "limits": [
             "Does not verify historical Kaggle versions or checkpoint tensor states.",
             "R2 synthetic group sizes preserve the non-divisible group/segment boundary.",
-            "A successful exit means the current known defect was reproduced, not relay PASS.",
+            "A successful exit verifies synthetic cursor coverage, not optimizer equivalence.",
         ],
     }, indent=2))
 
