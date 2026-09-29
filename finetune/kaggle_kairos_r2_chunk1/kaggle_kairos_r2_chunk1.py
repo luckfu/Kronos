@@ -21,6 +21,8 @@ SEED = 20260927
 BATCH_SIZE = 16
 CHUNK_INDEX = 0
 CHUNK_COUNT = 4
+SEGMENTS_PER_CHUNK = 4
+TOTAL_SEGMENTS = CHUNK_COUNT * SEGMENTS_PER_CHUNK
 SHUFFLE_SEED = 20260927
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-v1"
@@ -150,9 +152,12 @@ def start_swanlab() -> tuple[Any, Any]:
             "batch_size": BATCH_SIZE,
             "chunk_index": CHUNK_INDEX,
             "chunk_count": CHUNK_COUNT,
+            "segments_per_chunk": SEGMENTS_PER_CHUNK,
+            "segment_total": TOTAL_SEGMENTS,
             "shuffle_seed": SHUFFLE_SEED,
             "variant": "kairos-r2",
-            "validation_probe_samples": 16384,
+            "validation_samples_per_segment": 123836,
+            "validation_scope": "full_validation_per_segment",
         },
         mode="cloud",
     )
@@ -351,14 +356,19 @@ def main() -> None:
     chunk_start = train_pq.num_row_groups * CHUNK_INDEX // CHUNK_COUNT
     chunk_end = train_pq.num_row_groups * (CHUNK_INDEX + 1) // CHUNK_COUNT
     chunk_groups = group_order[chunk_start:chunk_end]
-    segment_samples = sum(
-        train_pq.metadata.row_group(group_id).num_rows for group_id in chunk_groups
-    )
-    segment_global_start = sum(
+    segment_groups = [
+        list(part)
+        for part in np.array_split(chunk_groups, SEGMENTS_PER_CHUNK)
+        if len(part)
+    ]
+    chunk_global_start = sum(
         train_pq.metadata.row_group(group_id).num_rows
         for group_id in group_order[:chunk_start]
     )
-    start_pos, processed = 0, 0
+    start_segment_pos, start_group_pos = 0, 0
+    processed = 0
+    last_validation = None
+    last_best_updated = False
     best_score = float("inf")
     if best_meta.exists():
         best_score = float(json.loads(best_meta.read_text(encoding="utf-8"))["macro_log_loss"])
@@ -377,19 +387,23 @@ def main() -> None:
             else CHUNK_INDEX - 1
         )
         if saved_chunk == CHUNK_INDEX:
-            start_pos = int(saved.get("chunk_pos", 0))
+            start_segment_pos = int(saved.get("segment_pos", 0))
+            start_group_pos = int(saved.get("segment_group_pos", 0))
         elif saved_chunk == CHUNK_INDEX - 1:
             # A previous chunk's checkpoint is the handoff input for this chunk.
-            start_pos = 0
+            start_segment_pos, start_group_pos = 0, 0
         else:
             raise RuntimeError(
                 f"checkpoint chunk mismatch: saved={saved_chunk}, current={CHUNK_INDEX}"
             )
         processed = int(saved["processed_samples"])
+        last_validation = saved.get("last_validation")
+        last_best_updated = bool(saved.get("last_best_updated", False))
         log(
             "checkpoint_resumed",
             chunk_index=saved_chunk,
-            chunk_pos=start_pos,
+            segment_pos=start_segment_pos,
+            segment_group_pos=start_group_pos,
             processed_samples=processed,
         )
     elif CHUNK_INDEX == 0:
@@ -412,23 +426,12 @@ def main() -> None:
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10", *TARGET_COLUMNS]
 
-    def validation_probe() -> dict[str, Any]:
+    def full_validation() -> dict[str, Any]:
         import sklearn.metrics
 
         rows: list[dict[str, Any]] = []
         for group_id in range(validation_pq.num_row_groups):
             rows.extend(validation_pq.read_row_group(group_id, columns=columns).to_pylist())
-        if len(rows) > 16_384:
-            rng = np.random.default_rng(20260929)
-            dates = np.asarray([str(row["asof_date"])[:10] for row in rows])
-            early = np.flatnonzero(dates < "2026-01-01")
-            late = np.flatnonzero(dates >= "2026-01-01")
-            selected = np.concatenate([
-                rng.choice(early, size=min(8192, len(early)), replace=False),
-                rng.choice(late, size=min(8192, len(late)), replace=False),
-            ])
-            rows = [rows[int(index)] for index in selected]
-
         model.eval()
         predictions, truth, dates = [], [], []
         for offset in range(0, len(rows), BATCH_SIZE):
@@ -482,131 +485,161 @@ def main() -> None:
 
     started = time.monotonic()
     model.train()
-    for order_pos in range(start_pos, len(chunk_groups)):
-        group_id = chunk_groups[order_pos]
-        rows = train_pq.read_row_group(group_id, columns=columns).to_pylist()
-        rows = shuffle_group_rows(rows, group_id)
-        for offset in range(0, len(rows), BATCH_SIZE):
-            batch = rows[offset:offset + BATCH_SIZE]
-            history, sectors, sizes, labels, _ = make_batch(
-                batch, train_arrays, sector_ids,
-                check_labels=(processed == 0 and order_pos == start_pos and offset == 0),
-            )
-            with torch.no_grad():
-                s1, s2 = tokenizer.encode(torch.from_numpy(history).to(device), half=True)
-            sector = torch.from_numpy(sectors).to(device)
-            size = torch.from_numpy(sizes[:, None]).to(device)
-            target = torch.from_numpy(labels).to(device)
-            optimizer.zero_grad(set_to_none=True)
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
-                up, down = model(s1.long(), s2.long(), size, sector)
-                loss = F.binary_cross_entropy_with_logits(up, target[:, :4])
-                loss = loss + F.binary_cross_entropy_with_logits(down, target[:, 4:])
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            scaler.step(optimizer)
-            scaler.update()
-            processed += len(batch)
-            if processed % 25_000 < len(batch):
-                rate = processed / max(time.monotonic() - started, 1e-6)
-                state = {"phase": "training", "processed_samples": processed,
-                         "total_samples": train_total, "row_group": group_id,
-                         "order_pos": order_pos,
-                         "segment_total": CHUNK_COUNT,
-                         "segment_index": CHUNK_INDEX + 1,
-                         "segment_samples": segment_samples,
-                         "segment_processed_samples": max(
-                             0, processed - segment_global_start
-                         ),
-                         "segment_progress": min(
-                             1.0,
-                             max(0, processed - segment_global_start)
-                             / max(segment_samples, 1),
-                         ),
-                         "loss": float(loss.detach().cpu()), "samples_per_second": rate,
-                         "eta_seconds": (
-                             segment_samples
-                             - max(0, processed - segment_global_start)
-                         ) / max(rate, 1e-6)}
-                log("training_progress", **{
-                    key: value for key, value in state.items() if key != "phase"
-                })
-                dashboard(state)
-                swanlab_run.log(
-                    {
-                        "train/loss": float(loss.detach().cpu()),
-                        "train/processed_samples": processed,
-                        "train/global_processed_samples": processed,
-                        "train/global_total_samples": train_total,
-                        "train/segment_total": CHUNK_COUNT,
-                        "train/segment_index": CHUNK_INDEX + 1,
-                        "train/segment_processed_samples": state["segment_processed_samples"],
-                        "train/segment_samples": segment_samples,
-                        "train/segment_progress": state["segment_progress"],
-                        "train/samples_per_second": rate,
-                        "train/eta_seconds": state["eta_seconds"],
-                    },
-                    step=processed,
+    for local_segment_pos in range(start_segment_pos, len(segment_groups)):
+        current_groups = segment_groups[local_segment_pos]
+        segment_samples = sum(
+            train_pq.metadata.row_group(group_id).num_rows
+            for group_id in current_groups
+        )
+        segment_global_start = chunk_global_start + sum(
+            train_pq.metadata.row_group(group_id).num_rows
+            for groups_before in segment_groups[:local_segment_pos]
+            for group_id in groups_before
+        )
+        group_begin = start_group_pos if local_segment_pos == start_segment_pos else 0
+        global_segment_index = CHUNK_INDEX * SEGMENTS_PER_CHUNK + local_segment_pos + 1
+        for order_pos in range(group_begin, len(current_groups)):
+            group_id = current_groups[order_pos]
+            rows = train_pq.read_row_group(group_id, columns=columns).to_pylist()
+            rows = shuffle_group_rows(rows, group_id)
+            for offset in range(0, len(rows), BATCH_SIZE):
+                batch = rows[offset:offset + BATCH_SIZE]
+                history, sectors, sizes, labels, _ = make_batch(
+                    batch, train_arrays, sector_ids,
+                    check_labels=(processed == 0 and local_segment_pos == start_segment_pos
+                                  and order_pos == group_begin and offset == 0),
                 )
-        torch.save({
-            "model": model.state_dict(), "optimizer": optimizer.state_dict(),
-            "scaler": scaler.state_dict(), "row_group": group_id,
-            "chunk_index": CHUNK_INDEX, "chunk_pos": order_pos + 1,
-            "shuffle_seed": SHUFFLE_SEED,
-            "group_order_hash": group_order_hash(group_order),
-            "processed_samples": processed,
-        }, checkpoint)
-        log("checkpoint_saved", row_group=group_id, processed_samples=processed)
+                with torch.no_grad():
+                    s1, s2 = tokenizer.encode(torch.from_numpy(history).to(device), half=True)
+                sector = torch.from_numpy(sectors).to(device)
+                size = torch.from_numpy(sizes[:, None]).to(device)
+                target = torch.from_numpy(labels).to(device)
+                optimizer.zero_grad(set_to_none=True)
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    up, down = model(s1.long(), s2.long(), size, sector)
+                    loss = F.binary_cross_entropy_with_logits(up, target[:, :4])
+                    loss = loss + F.binary_cross_entropy_with_logits(down, target[:, 4:])
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scaler.step(optimizer)
+                scaler.update()
+                processed += len(batch)
+                if processed % 25_000 < len(batch):
+                    rate = processed / max(time.monotonic() - started, 1e-6)
+                    segment_processed = max(0, processed - segment_global_start)
+                    state = {
+                        "phase": "training",
+                        "processed_samples": processed,
+                        "total_samples": train_total,
+                        "row_group": group_id,
+                        "order_pos": order_pos,
+                        "segment_total": TOTAL_SEGMENTS,
+                        "segment_index": global_segment_index,
+                        "segment_samples": segment_samples,
+                        "segment_processed_samples": segment_processed,
+                        "segment_progress": min(
+                            1.0, segment_processed / max(segment_samples, 1)
+                        ),
+                        "loss": float(loss.detach().cpu()),
+                        "samples_per_second": rate,
+                        "eta_seconds": (
+                            segment_samples - segment_processed
+                        ) / max(rate, 1e-6),
+                    }
+                    log("training_progress", **{
+                        key: value for key, value in state.items() if key != "phase"
+                    })
+                    dashboard(state)
+                    swanlab_run.log(
+                        {
+                            "train/loss": float(loss.detach().cpu()),
+                            "train/processed_samples": processed,
+                            "train/global_processed_samples": processed,
+                            "train/global_total_samples": train_total,
+                            "train/segment_total": TOTAL_SEGMENTS,
+                            "train/segment_index": global_segment_index,
+                            "train/segment_processed_samples": segment_processed,
+                            "train/segment_samples": segment_samples,
+                            "train/segment_progress": state["segment_progress"],
+                            "train/samples_per_second": rate,
+                            "train/eta_seconds": state["eta_seconds"],
+                        },
+                        step=processed,
+                    )
+            torch.save({
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict(),
+                "row_group": group_id,
+                "chunk_index": CHUNK_INDEX,
+                "segment_pos": local_segment_pos,
+                "segment_group_pos": order_pos + 1,
+                "shuffle_seed": SHUFFLE_SEED,
+                "group_order_hash": group_order_hash(group_order),
+                "processed_samples": processed,
+            }, checkpoint)
+            log("checkpoint_saved", row_group=group_id, processed_samples=processed,
+                segment_index=global_segment_index)
+
+        last_validation = full_validation()
+        validation_score = last_validation["all"]["macro_log_loss"]
+        last_best_updated = validation_score < best_score
+        if last_best_updated:
+            best_score = validation_score
+            torch.save(
+                {
+                    "model": model.state_dict(),
+                    "metrics": last_validation,
+                    "chunk_index": CHUNK_INDEX,
+                    "segment_index": global_segment_index,
+                    "processed_samples": processed,
+                },
+                best_checkpoint,
+            )
+            best_meta.write_text(
+                json.dumps(
+                    {
+                        "macro_log_loss": best_score,
+                        "chunk_index": CHUNK_INDEX,
+                        "segment_index": global_segment_index,
+                        "processed_samples": processed,
+                    },
+                    indent=2,
+                ) + "\n",
+                encoding="utf-8",
+            )
+            log("best_model_updated", macro_log_loss=best_score,
+                segment_index=global_segment_index, processed_samples=processed)
         swanlab_run.log(
             {
-                "train/checkpoint_saved": 1,
-                "train/row_group": group_id,
-                "train/processed_samples": processed,
+                "validation/macro_log_loss": last_validation["all"]["macro_log_loss"],
+                "validation/macro_brier": last_validation["all"]["macro_brier"],
+                "validation/macro_ece": last_validation["all"]["macro_ece_10bin"],
+                "validation/2025H2_log_loss": last_validation["2025H2"]["macro_log_loss"],
+                "validation/2026H1_log_loss": last_validation["2026H1"]["macro_log_loss"],
+                "validation/samples": last_validation["all"]["samples"],
+                "validation/segment_complete": 1,
+                "validation/best_updated": int(last_best_updated),
+                "train/segment_total": TOTAL_SEGMENTS,
+                "train/segment_index": global_segment_index,
             },
             step=processed,
         )
-
-    probe_metrics = validation_probe()
-    probe_score = probe_metrics["all"]["macro_log_loss"]
-    best_updated = probe_score < best_score
-    if best_updated:
-        best_score = probe_score
-        torch.save(
-            {
-                "model": model.state_dict(),
-                "metrics": probe_metrics,
-                "chunk_index": CHUNK_INDEX,
-                "processed_samples": processed,
-            },
-            best_checkpoint,
-        )
-        best_meta.write_text(
-            json.dumps(
-                {
-                    "macro_log_loss": best_score,
-                    "chunk_index": CHUNK_INDEX,
-                    "processed_samples": processed,
-                },
-                indent=2,
-            ) + "\n",
-            encoding="utf-8",
-        )
-        log("best_model_updated", macro_log_loss=best_score,
-            processed_samples=processed)
-    swanlab_run.log(
-        {
-            "validation_probe/macro_log_loss": probe_metrics["all"]["macro_log_loss"],
-            "validation_probe/macro_brier": probe_metrics["all"]["macro_brier"],
-            "validation_probe/macro_ece": probe_metrics["all"]["macro_ece_10bin"],
-            "validation_probe/2025H2_log_loss": probe_metrics["2025H2"]["macro_log_loss"],
-            "validation_probe/2026H1_log_loss": probe_metrics["2026H1"]["macro_log_loss"],
-            "validation_probe/samples": probe_metrics["all"]["samples"],
-            "validation_probe/best_updated": int(best_updated),
-            "validation_probe/completed": 1,
-        },
-        step=processed,
-    )
+        torch.save({
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "scaler": scaler.state_dict(),
+            "chunk_index": CHUNK_INDEX,
+            "segment_pos": local_segment_pos + 1,
+            "segment_group_pos": 0,
+            "shuffle_seed": SHUFFLE_SEED,
+            "group_order_hash": group_order_hash(group_order),
+            "processed_samples": processed,
+            "last_validation": last_validation,
+            "last_best_updated": last_best_updated,
+        }, checkpoint)
+        start_group_pos = 0
 
     if CHUNK_INDEX + 1 < CHUNK_COUNT:
         report = {
@@ -615,16 +648,16 @@ def main() -> None:
             "row_group_end": chunk_end, "processed_samples": processed,
             "shuffle_seed": SHUFFLE_SEED,
             "group_order_hash": group_order_hash(group_order),
-            "segment_total": CHUNK_COUNT,
-            "segment_index": CHUNK_INDEX + 1,
+            "segment_total": TOTAL_SEGMENTS,
+            "segment_index": CHUNK_INDEX * SEGMENTS_PER_CHUNK + len(segment_groups),
             "segment_samples": segment_samples,
             "segment_processed_samples": max(0, processed - segment_global_start),
             "checkpoint": str(checkpoint),
             "best_model": str(best_checkpoint),
             "best_macro_log_loss": best_score,
-            "validation_samples": probe_metrics["all"]["samples"],
-            "best_updated": int(best_updated),
-            "validation_probe": probe_metrics,
+            "validation_samples": last_validation["all"]["samples"],
+            "best_updated": int(last_best_updated),
+            "validation": last_validation,
             "elapsed_seconds": time.monotonic() - started,
         }
         (OUTPUT / "chunk_report.json").write_text(
@@ -639,11 +672,11 @@ def main() -> None:
                 "chunk/completed": 1,
                 "chunk/processed_samples": processed,
                 "segment_complete": 1,
-                "validation_samples": probe_metrics["all"]["samples"],
-                "validation_macro_log_loss": probe_metrics["all"]["macro_log_loss"],
-                "validation_macro_brier": probe_metrics["all"]["macro_brier"],
-                "validation_ece": probe_metrics["all"]["macro_ece_10bin"],
-                "best_updated": int(best_updated),
+                "validation_samples": last_validation["all"]["samples"],
+                "validation_macro_log_loss": last_validation["all"]["macro_log_loss"],
+                "validation_macro_brier": last_validation["all"]["macro_brier"],
+                "validation_ece": last_validation["all"]["macro_ece_10bin"],
+                "best_updated": int(last_best_updated),
             },
             step=processed,
         )
@@ -651,52 +684,9 @@ def main() -> None:
         print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
         return
 
-    model.eval()
-    predictions, truth, dates = [], [], []
-    for group_id in range(validation_pq.num_row_groups):
-        rows = validation_pq.read_row_group(group_id, columns=columns).to_pylist()
-        for offset in range(0, len(rows), BATCH_SIZE):
-            history, sectors, sizes, labels, batch_dates = make_batch(
-                rows[offset:offset + BATCH_SIZE], validation_arrays, sector_ids
-            )
-            with torch.no_grad():
-                s1, s2 = tokenizer.encode(torch.from_numpy(history).to(device), half=True)
-                up, down = model(
-                    s1.long(), s2.long(), torch.from_numpy(sizes[:, None]).to(device),
-                    torch.from_numpy(sectors).to(device),
-                )
-            predictions.append(torch.cat([up.sigmoid(), down.sigmoid()], 1).cpu().numpy())
-            truth.append(labels)
-            dates.append(batch_dates)
-
-    probabilities, labels, dates = np.concatenate(predictions), np.concatenate(truth), np.concatenate(dates)
-    from sklearn.metrics import average_precision_score, roc_auc_score
-    metrics: dict[str, Any] = {}
-    for name, mask in (
-        ("all", np.ones(len(labels), dtype=bool)),
-        ("early_2025H2", dates < np.datetime64("2026-01-01")),
-        ("late_2026H1", dates >= np.datetime64("2026-01-01")),
-    ):
-        values = []
-        for i in range(8):
-            p = np.clip(probabilities[mask, i], 1e-7, 1 - 1e-7)
-            y = labels[mask, i]
-            values.append({
-                "log_loss": float(-(y * np.log(p) + (1 - y) * np.log(1 - p)).mean()),
-                "brier": float(np.square(p - y).mean()),
-                "ece_10bin": calibration_error(p, y),
-                "positive_rate": float(y.mean()),
-                "mean_probability": float(p.mean()),
-                "roc_auc": float(roc_auc_score(y, p)) if np.unique(y).size == 2 else None,
-                "pr_auc": float(average_precision_score(y, p)) if np.any(y == 1) else None,
-                "reliability": reliability_bins(p, y),
-            })
-        metrics[name] = {
-            "samples": int(mask.sum()),
-            "macro_log_loss": float(np.mean([v["log_loss"] for v in values])),
-            "macro_brier": float(np.mean([v["brier"] for v in values])),
-            "per_threshold": dict(zip(TARGET_COLUMNS, values)),
-        }
+    if last_validation is None:
+        raise RuntimeError("no completed segment validation was produced")
+    metrics = last_validation
     torch.save({"model": model.state_dict(), "metrics": metrics}, OUTPUT / "final_model.pt")
     report = {
         "status": "COMPLETE", "purpose": "full temporal training",
@@ -705,8 +695,10 @@ def main() -> None:
         "checkpoint": str(OUTPUT / "final_model.pt"),
         "best_model": str(best_checkpoint),
         "best_macro_log_loss": best_score,
-        "validation_probe": probe_metrics,
-        "model_selection": "final_checkpoint; best_model_selected_on_fixed_probe",
+        "segment_total": TOTAL_SEGMENTS,
+        "validation_runs": TOTAL_SEGMENTS,
+        "last_segment_validation": last_validation,
+        "model_selection": "final_checkpoint; best_model_selected_on_full_segment_validation",
         "elapsed_seconds": time.monotonic() - started,
     }
     (OUTPUT / "full_training_report.json").write_text(
@@ -718,8 +710,8 @@ def main() -> None:
         {
             "validation/macro_log_loss": metrics["all"]["macro_log_loss"],
             "validation/macro_brier": metrics["all"]["macro_brier"],
-            "validation/early_2025H2_log_loss": metrics["early_2025H2"]["macro_log_loss"],
-            "validation/late_2026H1_log_loss": metrics["late_2026H1"]["macro_log_loss"],
+            "validation/2025H2_log_loss": metrics["2025H2"]["macro_log_loss"],
+            "validation/2026H1_log_loss": metrics["2026H1"]["macro_log_loss"],
             "validation/completed": 1,
         },
         step=processed,

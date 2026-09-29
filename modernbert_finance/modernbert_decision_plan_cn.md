@@ -1,6 +1,6 @@
 # Kronos Kairos 金融决策模型方案
 
-版本：v1.2
+版本：v1.3
 日期：2026-09-29
 状态：第一轮完成、验收未通过；第二轮冻结，等待审计结论和导师审核
 
@@ -435,8 +435,10 @@ macro Brier `0.2700`、8 头平均 ECE `0.2216`，暂不自动启动第二轮；
 第二轮：SHUFFLE_SEED = 20260927
 ```
 
-第二轮 chunk 数：`4`。按第一轮每个 chunk 约 4.83 小时估算，第二轮每个
-chunk 约接近 10 小时，提交前必须确认上一段已经完成或停止，不能并行提交。
+第二轮 chunk 数：`4`，每个 chunk 包含 `4` 个 segment。按第一轮每个 chunk
+约 4.83 小时估算，R2 每个 chunk 的训练量约翻倍，并且每个 segment 结束都要
+跑完整验证；提交前必须确认上一段已经完成或停止，不能并行提交。若实测单 chunk
+超出 Kaggle 上限，必须在 segment 边界增加 chunk 接力，不得取消 segment 验证。
 第二轮 Chunk 1 只加载第一轮 `final_model.pt` 中的模型权重，重置
 optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer 状态，也不重新
 训练或修改冻结的 Kronos tokenizer。Chunk 2 到 Chunk 4 才从上一段的
@@ -455,16 +457,18 @@ optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer
 forward。这部分约 0.79M 参数属于已知的显存浪费，暂不影响正确性，后续清理时
 应改为不创建或显式冻结，并在参数量报告中单独列出。
 
-第二轮每个 chunk 完成后执行固定验证子集：
+第二轮每个 segment 完成后执行完整验证集。chunk 只是 Kaggle 单次运行边界，
+不承担模型选择语义：
 
 ```text
-验证子集：固定 16,384 条
-抽样规则：预先固定，不随 chunk 改变
+每个 chunk：4 个 segment
+总 segment：16 个
+每个 segment 验证：完整 123,836 条
 指标：macro log loss、macro Brier、ECE、8 个阈值的明细、
       每阈值 reliability curve 所需的分桶统计
 ```
 
-如果当前 chunk 的验证指标优于历史最佳：
+如果当前 segment 的完整验证指标优于历史最佳：
 
 ```text
 保存 best_model.pt
@@ -480,7 +484,7 @@ last_checkpoint.pt
 不能用 `best_model.pt` 替代接力 checkpoint，否则会改变优化器状态和训练轨迹。
 第二轮最后一个 chunk 额外执行完整验证集，并同时保存：
 
-- `best_model.pt`：第二轮固定验证子集上表现最佳；
+- `best_model.pt`：第二轮 16 个 segment 的完整验证中表现最佳；
 - `final_model.pt`：第二轮最后训练状态；
 - 完整验证报告：覆盖全部 `123,836` 条验证样本；
 - 按 `2025H2`、`2026H1` 和 8 个阈值拆分的指标。
@@ -563,7 +567,7 @@ C：金融 token 路径置零
 当前阶段：第一轮已完成，质量验收未通过
 当前位置：Chunk 8 / 8 已完成
 最后 Kernel：wynstonliu/modernbert-decision-full-chunk-8
-当前看板：modernbert-decision-full-gated-v1
+当前看板：modernbert-decision-full-gated-round2-v1
 第一轮验收：FAIL（模型质量，不是脚本执行失败）
 第二轮：冻结，等待导师审核和 R2 门禁结论
 C 对照：尚未开始，禁止并行提交
@@ -573,13 +577,14 @@ C 对照：尚未开始，禁止并行提交
 
 第一轮当前日志主要记录累计样本和 row group，阅读长时间运行进度不够直观。
 从第二轮 Kairos 训练开始，所有 chunk 必须同时记录全局进度和 segment 进度。
-这里的一个 `segment` 定义为一个逻辑训练 chunk；第二轮共 4 个 segment。
+一个 `segment` 是一次训练覆盖单元；一个 chunk 包含 4 个 segment，第二轮共
+16 个 segment。每个 segment 完成后都必须执行完整验证。
 
 训练日志和 SwanLab 指标必须包含：
 
 ```text
-segment_total                 = 4
-segment_index                 = 1..4
+segment_total                 = 16
+segment_index                 = 1..16
 segment_samples               = 当前 segment 的样本数
 segment_processed_samples     = 当前 segment 已处理样本数
 segment_progress              = 当前 segment 完成比例
@@ -591,22 +596,22 @@ global_total_samples          = 9,010,965
 
 ```text
 segment_complete = 1
-validation_samples = 16,384
+validation_samples = 123,836
 validation_macro_log_loss
 validation_macro_brier
 validation_ece
 best_updated = 0/1
 ```
 
-其中 `last_checkpoint.pt` 用于下一 segment 接力，`best_model.pt` 只在固定验证
-子集指标改善时更新。看板曲线必须能同时回答：
+其中 `last_checkpoint.pt` 用于下一 segment 接力，`best_model.pt` 只在完整验证
+指标改善时更新。看板曲线必须能同时回答：
 
 1. 当前做到第几个 segment；
 2. 当前 segment 已完成多少；
-3. 全局 4 个 segment 完成了多少；
+3. 全局 16 个 segment 完成了多少；
 4. 最近一次验证是否刷新 best。
 
-第一轮剩余 chunk 不强行回溯修改；从第一轮后续新脚本和第二轮脚本开始，
+第一轮已完成，不强行回溯修改；从第二轮脚本开始，
 必须遵守上述字段命名。
 
 ### 10.7 导师评审锁定项
