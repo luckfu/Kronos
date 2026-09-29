@@ -74,7 +74,8 @@ Embedding(1024, d) for s2
 concat -> fusion projection -> inputs_embeds
 ```
 
-这些 embedding、融合层、ModernBERT 主干和决策头全部从随机初始化开始训练。
+R1 中这些 embedding、融合层、ModernBERT 主干和决策头全部从随机初始化开始训练；
+R2 Chunk 1 只从 R1 模型权重 warm-start，后续 chunk 从 R2 checkpoint 接力。
 模型只接收 token id 的嵌入，不接收未来数据。
 
 正式训练样本在内存或分片文件中保持为：
@@ -94,16 +95,17 @@ target:  int8 / float32
 只使用信号日 T 的市值百分位：
 
 - `size_percentile`：`float32`；
-- 缺失时使用固定 unknown 值。
+- 缺失时填充为 `0.5`。
 
-市值百分位经过固定的训练集标准化后进入条件 token。
+当前训练代码直接使用 `[0, 1]` 范围内的 `size_percentile`，不再额外做
+训练集 z-score。
 
 ### 3.3 行业标签
 
 只使用信号日 T 的行业标签：
 
 - `sector_id`：`int64`；
-- 使用固定的行业词表；
+- 训练运行时从 train/validation panel 收集行业名并排序生成运行内词表；
 - 未知行业使用固定 unknown id。
 
 原始中文行业名只用于审计，不进入 ModernBERT 文本输入。
@@ -500,11 +502,12 @@ down_003、down_005、down_008、down_012
 - per-threshold log loss；
 - 整体正例率和预测概率均值。
 
+R2 训练脚本只负责输出未校准概率和分桶统计，不在训练 chunk 内拟合温度。
 校准报告必须同时按时间和波动状态拆分，不能只在全体验证样本上汇总。
 至少要统计按月或季度的正例率，并记录对应窗口的波动率分位区间，以识别
 `3%/5%/8%/12%` 事件在高、低波动阶段的聚集和漂移。
 
-温度校准的执行约束：
+训练完成后单独运行校准阶段，温度校准的执行约束：
 
 1. 校准集必须覆盖高、低波动阶段和主要时间区间；
 2. 校准集与最终评估集严格分离，不能用最终测试集拟合温度；

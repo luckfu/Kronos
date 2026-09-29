@@ -106,6 +106,25 @@ def calibration_error(probabilities: np.ndarray, labels: np.ndarray, bins: int =
     return error
 
 
+def reliability_bins(
+    probabilities: np.ndarray, labels: np.ndarray, bins: int = 10
+) -> list[dict[str, Any]]:
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    result = []
+    for left, right in zip(edges[:-1], edges[1:]):
+        mask = (probabilities >= left) & (
+            probabilities <= right if right == 1.0 else probabilities < right
+        )
+        result.append({
+            "lower": float(left),
+            "upper": float(right),
+            "count": int(mask.sum()),
+            "mean_probability": float(probabilities[mask].mean()) if mask.any() else None,
+            "positive_rate": float(labels[mask].mean()) if mask.any() else None,
+        })
+    return result
+
+
 def start_swanlab() -> tuple[Any, Any]:
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--progress-bar", "off", "swanlab"],
@@ -321,6 +340,13 @@ def main() -> None:
             raise RuntimeError(f"expected at most one previous best model, found {previous_best}")
         if previous_best:
             shutil.copy2(previous_best[0], best_checkpoint)
+    best_meta = OUTPUT / "best_metric.json"
+    if not best_meta.exists():
+        previous_meta = sorted(Path("/kaggle/input").glob("**/best_metric.json"))
+        if len(previous_meta) > 1:
+            raise RuntimeError(f"expected at most one previous best metric, found {previous_meta}")
+        if previous_meta:
+            shutil.copy2(previous_meta[0], best_meta)
     group_order = shuffled_group_order(train_pq.num_row_groups)
     chunk_start = train_pq.num_row_groups * CHUNK_INDEX // CHUNK_COUNT
     chunk_end = train_pq.num_row_groups * (CHUNK_INDEX + 1) // CHUNK_COUNT
@@ -334,7 +360,6 @@ def main() -> None:
     )
     start_pos, processed = 0, 0
     best_score = float("inf")
-    best_meta = OUTPUT / "best_model_meta.json"
     if best_meta.exists():
         best_score = float(json.loads(best_meta.read_text(encoding="utf-8"))["macro_log_loss"])
     if checkpoint.exists():
@@ -443,6 +468,23 @@ def main() -> None:
                     if np.unique(y).size == 2 else None,
                     "pr_auc": float(sklearn.metrics.average_precision_score(y, p))
                     if np.any(y == 1) else None,
+                    "reliability": [
+                        {
+                            "count": int(((p >= edges) & (p < next_edge)).sum()),
+                            "mean_probability": float(
+                                p[(p >= edges) & (p < next_edge)].mean()
+                            )
+                            if ((p >= edges) & (p < next_edge)).any() else None,
+                            "positive_rate": float(
+                                y[(p >= edges) & (p < next_edge)].mean()
+                            )
+                            if ((p >= edges) & (p < next_edge)).any() else None,
+                        }
+                        for edges, next_edge in zip(
+                            np.linspace(0.0, 1.0, 11)[:-1],
+                            np.linspace(0.0, 1.0, 11)[1:],
+                        )
+                    ],
                 })
             result[name] = {
                 "samples": int(mask.sum()),
@@ -508,6 +550,13 @@ def main() -> None:
                     {
                         "train/loss": float(loss.detach().cpu()),
                         "train/processed_samples": processed,
+                        "train/global_processed_samples": processed,
+                        "train/global_total_samples": train_total,
+                        "train/segment_total": CHUNK_COUNT,
+                        "train/segment_index": CHUNK_INDEX + 1,
+                        "train/segment_processed_samples": state["segment_processed_samples"],
+                        "train/segment_samples": segment_samples,
+                        "train/segment_progress": state["segment_progress"],
                         "train/samples_per_second": rate,
                         "train/eta_seconds": state["eta_seconds"],
                     },
@@ -533,7 +582,8 @@ def main() -> None:
 
     probe_metrics = validation_probe()
     probe_score = probe_metrics["all"]["macro_log_loss"]
-    if probe_score < best_score:
+    best_updated = probe_score < best_score
+    if best_updated:
         best_score = probe_score
         torch.save(
             {
@@ -564,6 +614,8 @@ def main() -> None:
             "validation_probe/macro_ece": probe_metrics["all"]["macro_ece_10bin"],
             "validation_probe/2025H2_log_loss": probe_metrics["2025H2"]["macro_log_loss"],
             "validation_probe/2026H1_log_loss": probe_metrics["2026H1"]["macro_log_loss"],
+            "validation_probe/samples": probe_metrics["all"]["samples"],
+            "validation_probe/best_updated": int(best_updated),
             "validation_probe/completed": 1,
         },
         step=processed,
@@ -583,6 +635,8 @@ def main() -> None:
             "checkpoint": str(checkpoint),
             "best_model": str(best_checkpoint),
             "best_macro_log_loss": best_score,
+            "validation_samples": probe_metrics["all"]["samples"],
+            "best_updated": int(best_updated),
             "validation_probe": probe_metrics,
             "elapsed_seconds": time.monotonic() - started,
         }
@@ -596,8 +650,13 @@ def main() -> None:
         swanlab_run.log(
             {
                 "chunk/completed": 1,
-                "chunk/index": CHUNK_INDEX,
                 "chunk/processed_samples": processed,
+                "segment_complete": 1,
+                "validation_samples": probe_metrics["all"]["samples"],
+                "validation_macro_log_loss": probe_metrics["all"]["macro_log_loss"],
+                "validation_macro_brier": probe_metrics["all"]["macro_brier"],
+                "validation_ece": probe_metrics["all"]["macro_ece_10bin"],
+                "best_updated": int(best_updated),
             },
             step=processed,
         )
@@ -624,6 +683,7 @@ def main() -> None:
             dates.append(batch_dates)
 
     probabilities, labels, dates = np.concatenate(predictions), np.concatenate(truth), np.concatenate(dates)
+    from sklearn.metrics import average_precision_score, roc_auc_score
     metrics: dict[str, Any] = {}
     for name, mask in (
         ("all", np.ones(len(labels), dtype=bool)),
@@ -640,6 +700,9 @@ def main() -> None:
                 "ece_10bin": calibration_error(p, y),
                 "positive_rate": float(y.mean()),
                 "mean_probability": float(p.mean()),
+                "roc_auc": float(roc_auc_score(y, p)) if np.unique(y).size == 2 else None,
+                "pr_auc": float(average_precision_score(y, p)) if np.any(y == 1) else None,
+                "reliability": reliability_bins(p, y),
             })
         metrics[name] = {
             "samples": int(mask.sum()),
@@ -649,11 +712,14 @@ def main() -> None:
         }
     torch.save({"model": model.state_dict(), "metrics": metrics}, OUTPUT / "final_model.pt")
     report = {
-        "status": "PASS", "purpose": "full temporal training",
+        "status": "COMPLETE", "purpose": "full temporal training",
         "train_samples": train_total, "validation_samples": validation_total,
         "epochs": 1, "batch_size": BATCH_SIZE, "metrics": metrics,
         "checkpoint": str(OUTPUT / "final_model.pt"),
-        "model_selection": "single_final_checkpoint; no intermediate validation selection",
+        "best_model": str(best_checkpoint),
+        "best_macro_log_loss": best_score,
+        "validation_probe": probe_metrics,
+        "model_selection": "final_checkpoint; best_model_selected_on_fixed_probe",
         "elapsed_seconds": time.monotonic() - started,
     }
     (OUTPUT / "full_training_report.json").write_text(
