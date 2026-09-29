@@ -468,23 +468,7 @@ def main() -> None:
                     if np.unique(y).size == 2 else None,
                     "pr_auc": float(sklearn.metrics.average_precision_score(y, p))
                     if np.any(y == 1) else None,
-                    "reliability": [
-                        {
-                            "count": int(((p >= edges) & (p < next_edge)).sum()),
-                            "mean_probability": float(
-                                p[(p >= edges) & (p < next_edge)].mean()
-                            )
-                            if ((p >= edges) & (p < next_edge)).any() else None,
-                            "positive_rate": float(
-                                y[(p >= edges) & (p < next_edge)].mean()
-                            )
-                            if ((p >= edges) & (p < next_edge)).any() else None,
-                        }
-                        for edges, next_edge in zip(
-                            np.linspace(0.0, 1.0, 11)[:-1],
-                            np.linspace(0.0, 1.0, 11)[1:],
-                        )
-                    ],
+                    "reliability": reliability_bins(p, y),
                 })
             result[name] = {
                 "samples": int(mask.sum()),
@@ -541,7 +525,10 @@ def main() -> None:
                              / max(segment_samples, 1),
                          ),
                          "loss": float(loss.detach().cpu()), "samples_per_second": rate,
-                         "eta_seconds": (train_total - processed) / max(rate, 1e-6)}
+                         "eta_seconds": (
+                             segment_samples
+                             - max(0, processed - segment_global_start)
+                         ) / max(rate, 1e-6)}
                 log("training_progress", **{
                     key: value for key, value in state.items() if key != "phase"
                 })

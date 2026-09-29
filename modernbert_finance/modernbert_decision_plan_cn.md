@@ -75,7 +75,8 @@ concat -> fusion projection -> inputs_embeds
 ```
 
 R1 中这些 embedding、融合层、ModernBERT 主干和决策头全部从随机初始化开始训练；
-R2 Chunk 1 只从 R1 模型权重 warm-start，后续 chunk 从 R2 checkpoint 接力。
+若 R2 门禁确认 R1 仍有可复用信号，R2 Chunk 1 才从 R1 模型权重 warm-start，
+后续 chunk 从 R2 checkpoint 接力。
 模型只接收 token id 的嵌入，不接收未来数据。
 
 正式训练样本在内存或分片文件中保持为：
