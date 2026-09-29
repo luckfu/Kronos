@@ -818,11 +818,18 @@ def main() -> None:
     if LR_PROBE:
         initial_validation = full_validation()
         probe_initial_score = initial_validation["all"]["macro_log_loss"]
-        if not np.isfinite(probe_initial_score) or abs(probe_initial_score - best_score) > 0.002:
-            raise RuntimeError("initial validation does not reproduce Chunk 1 baseline")
-        probe_best_score = probe_initial_score
         log("probe_initial_validation", learning_rate=LEARNING_RATE_OVERRIDE,
-            validation=initial_validation)
+            expected_macro_log_loss=best_score, validation=initial_validation)
+        if is_main_process():
+            (OUTPUT / "initial_validation.json").write_text(
+                json.dumps(initial_validation, indent=2) + "\n", encoding="utf-8"
+            )
+        if not np.isfinite(probe_initial_score) or abs(probe_initial_score - best_score) > 0.002:
+            raise RuntimeError(
+                f"initial validation does not reproduce Chunk 1 baseline: "
+                f"observed={probe_initial_score}, expected={best_score}, tolerance=0.002"
+            )
+        probe_best_score = probe_initial_score
         if time.time() - runtime_started > GPU_BUDGET_SECONDS - RUNTIME_RESERVE_SECONDS - longest_segment_seconds:
             raise RuntimeError("initialization consumed the probe training budget")
     while group_order_pos < len(group_order) and segments_this_run < run_segment_limit:

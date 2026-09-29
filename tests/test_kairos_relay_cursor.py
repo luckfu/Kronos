@@ -80,3 +80,14 @@ def test_offline_dashboard_does_not_access_online_url(tmp_path, monkeypatch):
     monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: None)
     monkeypatch.setitem(sys.modules, "swanlab", SimpleNamespace(init=lambda **kwargs: run))
     assert module.start_swanlab()[1] is run
+
+
+def test_initial_validation_is_recorded_before_gate(tmp_path):
+    source = (builder.build("3e5", tmp_path) / "lr_probe.py").read_text()
+    assert source.index("log('probe_initial_validation'") < source.index(
+        "if not np.isfinite(probe_initial_score)"
+    )
+    assert source.index("'initial_validation.json'") < source.index(
+        "if not np.isfinite(probe_initial_score)"
+    )
+    assert "tolerance=0.002" in source
