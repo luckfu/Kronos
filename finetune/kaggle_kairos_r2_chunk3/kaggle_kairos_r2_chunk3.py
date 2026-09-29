@@ -25,7 +25,7 @@ MAX_SEGMENTS_THIS_RUN = 1
 TOTAL_SEGMENTS = None
 SHUFFLE_SEED = 20260927
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
-SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-v1"
+SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-v2"
 OUTPUT = Path("/kaggle/working/kairos_r2")
 RUN_PURPOSE = (
     "single-segment-smoke"

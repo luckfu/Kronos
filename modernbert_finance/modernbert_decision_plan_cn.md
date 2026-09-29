@@ -427,7 +427,7 @@ R2 曲线上，并在日志中标记 `purpose=single-segment-smoke`：
 
 ```text
 第一轮：modernbert-decision-full-gated-v1
-第二轮：modernbert-decision-full-gated-round2-v1
+第二轮：modernbert-decision-full-gated-round2-v2（v1 看板已删除，重建后复用）
 ```
 
 同一轮内部的正式接力必须复用同一个 run id，并使用
@@ -594,13 +594,13 @@ C：金融 token 路径置零
 截至 2026-09-29：
 
 ```text
-当前阶段：第一轮已完成，质量验收未通过；R2 单 segment smoke 首次运行因 dead embedding 触发 DDP 报错
+当前阶段：第一轮已完成，质量验收未通过；R2 单 segment smoke V4 在 DDP 启动后因 SwanLab v1 看板已删除而于训练前失败
 当前位置：Chunk 8 / 8 已完成
-最近 R2 Kernel：wynstonliu/kairos-r2-modernbert-chunk-1 V1（ERROR；冻结未使用 embedding 后待复跑）
+最近 R2 Kernel：wynstonliu/kairos-r2-modernbert-chunk-1 V4（ERROR；SwanLab `Disabled_Resource`，切换 v2 看板后待复跑）
 R1 最后 Kernel：wynstonliu/modernbert-decision-full-chunk-8
-当前看板：modernbert-decision-full-gated-round2-v1（已由 smoke 初始化并复用）
+当前看板：modernbert-decision-full-gated-round2-v2（待 smoke 重建并初始化）
 第一轮验收：FAIL（模型质量，不是脚本执行失败）
-第二轮：代码修复后等待 smoke 复跑
+第二轮：脚本改用新看板后等待 smoke 复跑
 C 对照：尚未开始，禁止并行提交
 ```
 
