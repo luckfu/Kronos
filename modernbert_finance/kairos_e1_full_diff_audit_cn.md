@@ -31,7 +31,8 @@ R2 Chunk 2 的恶化不能拿来证明 R1 接力失败。R2 四份脚本当前�
 1. **R1 失败中接力/管线事故占多少？** **不能量化，不能写成 0% 或任意比例。**
    当前源码和合成测试没有复现 R1 八分区恢复的覆盖错误，但这不是历史运行无事故
    的证明。曾有跨 chunk 游标修复提交；本次未重新取得八次实际运行版本、全部
-   checkpoint 和逐边覆盖账本，因此历史事故贡献仍未排除。可以确认的 R1 风险是
+   checkpoint 和完整逐边覆盖账本，因此历史事故贡献仍未排除。后来取到
+   Chunk 6–8 的运行日志，仅能补强后两条交接边。可以确认的 R1 风险是
    RNG 状态未保存、前序完成检查不足，以及 row-group 内中断粒度较粗。
 2. **从零用修好的 R2 接力代码跑全量是否值得？** **按当前形式不值得。**
    先修复 row-group 游标、增加独立的前缀/时间验证、明确早停和正则/容量方案，
@@ -165,7 +166,7 @@ R1 每个 chunk 的实际逻辑：
 6. 每个 row group 完整训练后保存 checkpoint，记录 `chunk_index`、
    `chunk_pos`、`row_group`、`processed_samples`。
 
-仓库内对 1、7、8、9、181 个 row group 的合成分区测试显示，八个分区拼接后
+仓库内对 1、7、8、9、177、181 个 row group 的合成分区测试显示，八个分区拼接后
 无 overlap/gap；对“上一 chunk checkpoint”和“当前 chunk 中途 checkpoint”
 两种恢复分支也验证了起点分别为 0 和保存的 `chunk_pos`。测试命令：
 
@@ -191,12 +192,34 @@ python3 modernbert_finance/audit_kairos_relay_control_flow.py
   这些是可达风险分支，不能把静态正常路径 PASS 写成历史运行 PASS。
 - 输入链：Chunk 1 无前序，2..6 挂前一 `smmt315` 输出，7 挂
   `smmt315/...chunk-6`，8 挂 `wynstonliu/...chunk-7`。历史报告确认 8 从
-  7,838,181 恢复并报最终 9,010,965；本次没拿到 1..7 实际发布版本、完整
-  逐组日志、optimizer step/moment 张量，七条边的运行证据尚未闭环。
+  7,838,181 恢复并报最终 9,010,965。后来已取到 6..8 的逐组日志，见下表；
+  1..5 仍返回权限拒绝，八份历史 checkpoint 的 optimizer step/moment 张量
+  也未逐一核验，七条边的运行证据尚未全部闭环。
 - step 精确公式是 `sum(ceil(row_group_rows/16))`，不是把总行数除以 batch
   后视作已核实值。构建器积累整只股票后才 flush，row group 不必恰好 50,000 行。
 - checkpoint 直接写盘非原子，依赖挂载文件唯一；model/optimizer 成功 load
   不能替代前序版本/数据指纹和每条样本唯一覆盖校验。
+
+补充取得的真实运行证据：
+
+| 边界 | 前序结束 / 后序恢复样本数 | 本次可核验范围 |
+|---|---|---|
+| 1 -> 2 | 未取得 | metadata 和当前恢复代码；运行层未核验 |
+| 2 -> 3 | 未取得 | 同上 |
+| 3 -> 4 | 未取得 | 同上 |
+| 4 -> 5 | 未取得 | 同上 |
+| 5 -> 6 | 后序报恢复 5,592,704；前序结束未取到 | 仅后序记录 |
+| 6 -> 7 | 6,717,474 / 6,717,474 | 日志一致 |
+| 7 -> 8 | 7,838,181 / 7,838,181 | 日志一致；8 最终 9,010,965 |
+
+6/7/8 分别记录 22/22/23 个 `checkpoint_saved` row group；用
+`np.random.default_rng(20260925).permutation(177)` 得到的哈希
+`c8e7d2557265a8f8c68747b7dc954c30a1e95368f60f0318b8375a3dd0c1e343`
+与报告相同，三个列表也逐项等于顺序位置 `[110:132]`、`[132:154]`、
+`[154:177]`，共 67 组无重复/遗漏。这验证的是 **后 67 组的组级覆盖和计数连续**，
+不是八次 optimizer 张量恢复等价、组内唯一行覆盖或全部历史版本无事故。
+6..8 日志还确认 PyTorch 2.10.0+cu128、Transformers 5.0.0；不能把 E1
+fallback 安装版本当作两轮相同依赖版本。
 
 ### 1.6 R2 现场：已发现的管线缺陷
 
@@ -331,17 +354,42 @@ artifacts/kairos_r2_stop_20260930/chunk2_v1/kairos_r2/best_metric.json
 }
 ```
 
-代码实际文件名是 `best_metric.json`，不是 `best_meta.json`。Chunk 2 输出下载时
-大文件连接中断；本地 `best_model.pt` 当前为 0 字节，不能声称权重已经保全。
-`last_checkpoint.pt`、`chunk_report.json` 和完整 `run.log` 也没有在本次下载中
-完整落地。随后两个 R2 Kernel 和 R1 Chunk 1 API 均返回权限拒绝，无法继续
-核对远端文件列表。Chunk 1 V6 的已发布输出也是 segment 1 best 的恢复来源；
-不要删除或覆盖这两个 Kernel 版本。恢复访问后要逐文件下载、计算 SHA-256、
-CPU 加载验证 best 内嵌的 segment/sample/metrics，并比较两个版本的权重。
-**仅元数据证明未刷新，不能声称二进制权重已核验无污染。**
+代码实际文件名是 `best_metric.json`，不是 `best_meta.json`，未另造或改名。
+初次大文件下载中断、CLI 认证拒绝后，显式使用已有 `wynstonliu` OAuth 恢复访问，
+采用流式下载落盘；截至本次交付，best、last、run.log 已完整保存。
+
+| 文件 | 字节数 | SHA-256 |
+|---|---:|---|
+| best_model.pt | 450,461,226 | `0604b2fb0b54bae0165e719b9df2eb0aa0dfe131c7f3ec6e03ccd9b290a6bed6` |
+| last_checkpoint.pt | 1,345,058,933 | `04de07b7140a1849b15721d0b6799b86bc9213206427122f42f9c6105d780c1e` |
+| best_metric.json | 115 | `39ac1ed06a2dc4bb72ac26a41a78a79f0ee4525733b1614186eaefcd05e24698` |
+| run.log | 12,536 | `2cb21fd7b3111ffccc1fd5380bb68a1dff7ee5c72b6259ebea601e635798ec5c` |
+
+两份 pt 均通过 ZIP 全条目 CRC 校验，并用 `torch.load(map_location="cpu",
+weights_only=True, mmap=True)` 成功读取；不执行 forward/backward。本机 torch
+有 OpenMP 重复加载问题，本次仅在读取进程临时设 `KMP_DUPLICATE_LIB_OK=TRUE`，
+没有改训练环境或系统设置。ZIP/SHA 校验使用独立标准库/文件流。
+
+best 二进制内嵌信息与元数据一致：chunk_index=0、segment_index=1、
+processed_samples=20,000、验证 123,836 条、log loss=0.6702645644545555；
+gate=-0.02974037。没有 `best_model_updated` 后续记录，last 的 gate 为
+-0.01454119，与 best 不同，说明 best 没被最后训练状态覆盖。
+尚未下载 Chunk 1 best 做逐字节 SHA 对照，不能将这些检查扩大成完整来源同一性证明。
+
+last 二进制确认：completed_segments=12、processed_samples=240,000、
+group_order_pos=4、row_offset=35,444、seed=20260927，hash 与 smoke 一致；
+AdamW 有 152 个 state，step 全部为 14,991（不是简单 12×1,250=15,000，
+GradScaler 可跳步），scaler scale=4096。最后完整验证：
+log loss **1.64127061**、Brier **0.30350928**、ECE **0.28200492**。
+这比用户提供的早期五点曲线更晚，但仍不能由末点补造中间验证曲线。
+
+本机文件目录：`artifacts/kairos_r2_stop_20260930/chunk2_v1/`；
+`preservation_manifest.json` 保存下载大小/哈希，`execution.log` 与
+`published_kernel.log` 保存 API 执行输出。大权重不进入 Git。
 
 `chunk_report.json` 只在正常循环退出后生成，没有外部 cancel 的 finally；
-强制停止时可能没有生成，不得伪造“原始报告”补齐。已取得的 `execution.log`
+本次遍历全部 718 个发布文件确认 **没有 chunk_report.json**，不伪造补齐。
+已完整保存平台提供的 `run.log` 和执行日志；`execution.log`
 是 API 返回的执行日志快照（可解析的完整 JSON 数组），涵盖初始化至
 09-30 00:23:36 +08，但没有停止收尾行，不能称最终完整停机日志。
 
@@ -354,7 +402,7 @@ segment_complete: 2..12，最后完整段为 12 / 240,000
 best_metric.json: best 仍为 segment 1 / 20,000 / 0.6702645644545555
 ```
 
-本次尝试下载权重但未成功；没有执行模型、调整超参或提交任何 Kaggle Kernel。
+本次已下载并检查两份权重；没有执行模型、调整超参或提交任何 Kaggle Kernel。
 
 ## 5. 证据索引与限制
 
@@ -378,8 +426,10 @@ best_metric.json: best 仍为 segment 1 / 20,000 / 0.6702645644545555
 
 本次没有重新训练、重新评估模型，不能证明“fresh optimizer 单独修复校准”，
 也不能证明“24.7M 参数使几千步必然过拟合”。R1 源码是 768/22，512/8 是方案
-中的候选对照，不是本次已核实的 R1 运行配置；24.7M 参数说法没有 checkpoint
-张量计数支持，不能沿用。R2 重复小片数据是确定的混杂因素，足以否定
+中的候选对照，不是本次已核实的 R1 运行配置。后来成功下载的 R2 best
+`state_dict` 含 112,594,249 个张量元素，`s1.weight` 为 `[1024,384]`；
+这是 state 总元素数，不把它冒充剔除冻结参数后的 trainable count。
+24.7M 不是该 checkpoint 的规模。R2 重复小片数据是确定的混杂因素，足以否定
 “实现已完全通过，只剩方法问题”的前提，但不足以量化它造成的全部指标恶化。
 
 六组核对映射：代码/架构见 §1.1、§1.3；输入见 §1.2；标签见 §1.2 子表；

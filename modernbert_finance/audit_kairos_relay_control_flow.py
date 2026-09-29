@@ -85,7 +85,7 @@ def run_r2_cursor(path: Path, sizes: list[int], limit: int, start: int = 0) -> d
 
 def run_r1_partition() -> list[dict]:
     results = []
-    for groups in (1, 7, 8, 9, 181):
+    for groups in (1, 7, 8, 9, 177, 181):
         for chunk in range(8):
             path = ROOT / (
                 f"finetune/kaggle_modernbert_decision_full_chunk{chunk + 1}/"

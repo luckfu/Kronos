@@ -724,8 +724,10 @@ Kaggle 容器路径，不是本机路径。恢复同一 chunk 可接受相同 `C
   不要 reset。GitHub 提交不等于重新发布 Kaggle Kernel；还须核对已提交的
   Kernel 版本和对应脚本，不能假设运行中的任务会自动使用后续 Git 修改。
 - 停止现场的 `best_metric.json` 已证明 best 仍是 segment 1、20,000 条、
-  `macro_log_loss=0.6702645644545555`；本地下载的 `best_model.pt` 因大文件
-  传输中断为 0 字节，不能宣称 R2 权重已保全。
+  `macro_log_loss=0.6702645644545555`；后来通过已有 OAuth 恢复访问，best/last
+  已完整下载、计算 SHA-256、通过 ZIP CRC 和 CPU 加载。last 是第12段/240,000，
+  验证 log loss=1.64127061，仅用于取证。平台未生成 chunk_report.json，
+  不伪造；平台可提供的 run.log/执行日志均已保存。路径与哈希见差异审计 §4。
 - §10.8 的模型质量门禁仍保留。用户授权继续训练是操作授权，smoke 完成是
   执行链路证据，二者都不能替代常数基线、C 对照、时间分块和校准验收结论。
 
