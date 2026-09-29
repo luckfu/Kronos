@@ -325,6 +325,13 @@ def main() -> None:
     chunk_start = train_pq.num_row_groups * CHUNK_INDEX // CHUNK_COUNT
     chunk_end = train_pq.num_row_groups * (CHUNK_INDEX + 1) // CHUNK_COUNT
     chunk_groups = group_order[chunk_start:chunk_end]
+    segment_samples = sum(
+        train_pq.metadata.row_group(group_id).num_rows for group_id in chunk_groups
+    )
+    segment_global_start = sum(
+        train_pq.metadata.row_group(group_id).num_rows
+        for group_id in group_order[:chunk_start]
+    )
     start_pos, processed = 0, 0
     best_score = float("inf")
     best_meta = OUTPUT / "best_model_meta.json"
@@ -480,6 +487,17 @@ def main() -> None:
                 state = {"phase": "training", "processed_samples": processed,
                          "total_samples": train_total, "row_group": group_id,
                          "order_pos": order_pos,
+                         "segment_total": CHUNK_COUNT,
+                         "segment_index": CHUNK_INDEX + 1,
+                         "segment_samples": segment_samples,
+                         "segment_processed_samples": max(
+                             0, processed - segment_global_start
+                         ),
+                         "segment_progress": min(
+                             1.0,
+                             max(0, processed - segment_global_start)
+                             / max(segment_samples, 1),
+                         ),
                          "loss": float(loss.detach().cpu()), "samples_per_second": rate,
                          "eta_seconds": (train_total - processed) / max(rate, 1e-6)}
                 log("training_progress", **{
@@ -558,6 +576,10 @@ def main() -> None:
             "row_group_end": chunk_end, "processed_samples": processed,
             "shuffle_seed": SHUFFLE_SEED,
             "group_order_hash": group_order_hash(group_order),
+            "segment_total": CHUNK_COUNT,
+            "segment_index": CHUNK_INDEX + 1,
+            "segment_samples": segment_samples,
+            "segment_processed_samples": max(0, processed - segment_global_start),
             "checkpoint": str(checkpoint),
             "best_model": str(best_checkpoint),
             "best_macro_log_loss": best_score,

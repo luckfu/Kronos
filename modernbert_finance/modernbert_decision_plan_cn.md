@@ -1,8 +1,8 @@
 # Kronos Kairos 金融决策模型方案
 
-版本：v1.1
-日期：2026-09-28
-状态：第一轮全量训练执行中；第二轮方案已锁定
+版本：v1.2
+日期：2026-09-29
+状态：第一轮完成、验收未通过；第二轮冻结，等待审计结论和导师审核
 
 > 命名约定：从 2026-09-27 起，本方案中的 ModernBERT Decision
 > 决策模型正式称为 **Kairos 模型**。代码目录和历史 Kaggle Kernel 名称暂不改动，
@@ -118,7 +118,7 @@ target:  int8 / float32
 [COND] + 120 个行情 token
 ```
 
-第一版采用小配置作为主实验：
+早期 E1 采用过小配置作为方法验证实验，但该配置已被全量执行方案替代：
 
 ```text
 hidden_size = 256
@@ -127,7 +127,8 @@ heads = 4
 intermediate_size = 512
 ```
 
-原因是第一阶段的目标是验证方法，不是追求参数规模。大配置只在小配置确认有效后再做。
+该小配置不代表当前全量 Kairos 训练配置；第一轮实际执行的是 §10.1
+所列的 ModernBERT-base 风格大配置。
 
 ### 4.2 条件注入
 
@@ -356,12 +357,12 @@ MLM 是否有效只看下游验证概率指标，不以 MLM loss 单独决定。
 ## 10. 全量训练两轮执行计划
 
 本节是当前 Kaggle 全量训练的实际执行合同，优先级高于前文中尚未更新的
-“E2 方案稿”描述。当前日期为 2026-09-27。
+“E2 方案稿”描述。当前日期为 2026-09-29。
 
 ### 10.1 第一轮：随机初始化基线
 
-当前运行中的 `modernbert-decision-full-chunk-1` V8 属于第一轮 Chunk 1，
-不是第二轮，也不是最终模型结论。
+第一轮 8 个 chunk 已于 2026-09-29 完成。Chunk 8 的训练脚本完成不等于
+模型质量通过；完整验收结果见 `kairos_round1_chunk8_review_cn.md`。
 
 第一轮固定配置：
 
@@ -401,7 +402,9 @@ macro Brier `0.2700`、8 头平均 ECE `0.2216`，暂不自动启动第二轮；
 
 1. 下载或挂载第一轮第 8 个 chunk 的最终 checkpoint；
 2. 校验第一轮输出中的模型文件、训练报告和数据 manifest；
-3. 以第一轮最终模型作为第二轮初始化，不重新随机初始化；
+3. 只有在审计确认 R1 仍有可复用的排序信号、且失败主要来自训练策略或
+   概率尺度时，才以第一轮最终模型作为第二轮初始化；若排序接近随机、
+   学到反信号或根因仍不明，则先做最小复现实验，不启动 R2；
 4. 新建第二轮 Chunk 1 任务，仍然只提交一个 Kaggle 训练任务；
 5. 第二轮 Chunk 1 完成后，将输出发布为第二轮 Chunk 2 的输入；
 6. 依次接力到第二轮 Chunk 4；
@@ -435,9 +438,19 @@ chunk 约接近 10 小时，提交前必须确认上一段已经完成或停止�
 optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer 状态，也不重新
 训练或修改冻结的 Kronos tokenizer。Chunk 2 到 Chunk 4 才从上一段的
 `last_checkpoint.pt` 恢复完整训练状态。
+若 Kaggle 在 10 小时上限前终止任务，下一次不得从头重跑该 chunk：必须挂载
+该任务最后成功写出的 `last_checkpoint.pt`，保持相同的 `CHUNK_INDEX`、
+`SHUFFLE_SEED` 和 `group_order_hash`，从已保存的 `chunk_pos` 继续。若任务没有
+成功写出 checkpoint，则该 chunk 必须拆分为临时更小的恢复段后再继续，不能把
+不完整结果发布为下一段输入。
 第二轮只改变数据访问顺序和验证策略，不改变第一轮已经确定的输入契约。
 第二轮 checkpoint 必须记录新的 `shuffle_seed` 和
 `group_order_hash`，4 个 chunk 之间严格校验，不能混用第一轮 checkpoint。
+
+当前实现中 `vocab_size=1024` 只满足 ModernBERT 配置接口；模型实际通过
+`inputs_embeds` 输入金融 token，因此 ModernBERT 自带的词表 embedding 不参与
+forward。这部分约 0.79M 参数属于已知的显存浪费，暂不影响正确性，后续清理时
+应改为不创建或显式冻结，并在参数量报告中单独列出。
 
 第二轮每个 chunk 完成后执行固定验证子集：
 
@@ -540,14 +553,15 @@ C：金融 token 路径置零
 
 ### 10.5 当前状态记录
 
-截至 2026-09-27：
+截至 2026-09-29：
 
 ```text
-当前阶段：第一轮
-当前位置：Chunk 1 / 8
-当前 Kernel：modernbert-decision-full-chunk-1 V8
+当前阶段：第一轮已完成，质量验收未通过
+当前位置：Chunk 8 / 8 已完成
+最后 Kernel：wynstonliu/modernbert-decision-full-chunk-8
 当前看板：modernbert-decision-full-gated-v1
-第二轮：尚未开始
+第一轮验收：FAIL（模型质量，不是脚本执行失败）
+第二轮：冻结，等待导师审核和 R2 门禁结论
 C 对照：尚未开始，禁止并行提交
 ```
 
@@ -560,8 +574,8 @@ C 对照：尚未开始，禁止并行提交
 训练日志和 SwanLab 指标必须包含：
 
 ```text
-segment_total                 = 8
-segment_index                 = 1..8
+segment_total                 = 4
+segment_index                 = 1..4
 segment_samples               = 当前 segment 的样本数
 segment_processed_samples     = 当前 segment 已处理样本数
 segment_progress              = 当前 segment 完成比例
