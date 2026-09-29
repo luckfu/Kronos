@@ -20,7 +20,6 @@ import numpy as np
 SEED = 20260927
 BATCH_SIZE = 16
 CHUNK_INDEX = 2
-CHUNK_COUNT = None
 SEGMENT_SAMPLES = 20_000
 MAX_SEGMENTS_THIS_RUN = 1
 TOTAL_SEGMENTS = None
@@ -28,7 +27,11 @@ SHUFFLE_SEED = 20260927
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-v1"
 OUTPUT = Path("/kaggle/working/kairos_r2")
-IS_SMOKE = False
+RUN_PURPOSE = (
+    "single-segment-smoke"
+    if CHUNK_INDEX == 0 and MAX_SEGMENTS_THIS_RUN == 1
+    else "segment-relay"
+)
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
     "up_003", "up_005", "up_008", "up_012",
@@ -161,7 +164,6 @@ def start_swanlab() -> tuple[Any, Any]:
             "heads": 12,
             "batch_size": BATCH_SIZE,
             "chunk_index": CHUNK_INDEX,
-            "chunk_count": None,
             "segment_samples": SEGMENT_SAMPLES,
             "max_segments_this_run": MAX_SEGMENTS_THIS_RUN,
             "segment_total": "computed_after_data_load",
@@ -273,6 +275,9 @@ def main() -> None:
         torch.cuda.set_device(local_rank)
         dist.init_process_group(backend="nccl")
     swanlab, swanlab_run = start_swanlab() if is_main_process() else (None, None)
+    log("run_started", purpose=RUN_PURPOSE, chunk_index=CHUNK_INDEX,
+        max_segments_this_run=MAX_SEGMENTS_THIS_RUN, world_size=world_size,
+        global_batch_size=BATCH_SIZE)
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
@@ -355,6 +360,10 @@ def main() -> None:
                 reference_compile=False,
             )
             self.backbone = ModernBertModel(config)
+            # Financial tokens enter through inputs_embeds, so the native
+            # ModernBERT word embedding is structurally unused.
+            for parameter in self.backbone.embeddings.word_embeddings.parameters():
+                parameter.requires_grad_(False)
             self.up0, self.upd = nn.Linear(hidden, 1), nn.Linear(hidden, 3)
             self.dn0, self.dnd = nn.Linear(hidden, 1), nn.Linear(hidden, 3)
 
@@ -880,9 +889,9 @@ def main() -> None:
     if completed_segments < total_segments:
         report = {
             "status": "SMOKE_COMPLETE" if run_segment_limit == 1 else "CHUNK_COMPLETE",
-            "purpose": "single-segment timing smoke" if run_segment_limit == 1 else "segment relay",
+            "purpose": RUN_PURPOSE if run_segment_limit == 1 else "segment-relay",
             "chunk_index": CHUNK_INDEX,
-            "chunk_count": CHUNK_COUNT, "processed_samples": processed,
+            "processed_samples": processed,
             "completed_segments": completed_segments,
             "segments_this_run": segments_this_run,
             "shuffle_seed": SHUFFLE_SEED,
@@ -905,7 +914,6 @@ def main() -> None:
             )
             dashboard({"phase": "chunk complete", "processed_samples": processed,
                        "total_samples": train_total, "chunk_index": CHUNK_INDEX,
-                       "chunk_count": CHUNK_COUNT,
                        "completed_segments": completed_segments,
                        "segment_total": total_segments})
             log("chunk_complete", **report)
@@ -932,7 +940,7 @@ def main() -> None:
     if is_main_process():
         torch.save({"model": raw_model.state_dict(), "metrics": metrics}, OUTPUT / "final_model.pt")
     report = {
-        "status": "COMPLETE", "purpose": "full temporal training",
+        "status": "COMPLETE", "purpose": "full-temporal-training",
         "train_samples": train_total, "validation_samples": validation_total,
         "epochs": 1, "batch_size": BATCH_SIZE, "metrics": metrics,
         "checkpoint": str(OUTPUT / "final_model.pt"),

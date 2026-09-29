@@ -1,8 +1,8 @@
 # Kronos Kairos 金融决策模型方案
 
-版本：v1.5
+版本：v1.6
 日期：2026-09-29
-状态：第一轮完成、验收未通过；第二轮代码已完成双 T4 DDP 与 tokenizer 固化改造，等待导师审核
+状态：第一轮完成、验收未通过；第二轮已完成双 T4 DDP、tokenizer 固化与 dead embedding 修复，等待 smoke 复跑
 
 > 命名约定：从 2026-09-27 起，本方案中的 ModernBERT Decision
 > 决策模型正式称为 **Kairos 模型**。代码目录和历史 Kaggle Kernel 名称暂不改动，
@@ -421,12 +421,13 @@ macro Brier `0.2700`、8 头平均 ECE `0.2216`，暂不自动启动第二轮；
 8. 第二轮所有正式接力使用同一个新的 SwanLab run。
 
 第一轮和第二轮不共用看板，避免把“无中途验证的 warm-start 基线”和
-“带分层验证的正式训练”混在同一组曲线中。单 segment smoke 另用独立看板：
+“带分层验证的正式训练”混在同一组曲线中。单 segment smoke 作为 R2 的
+首个正式 shakedown，沿用 R2 看板，不另建看板；其结果会保留在同一条
+R2 曲线上，并在日志中标记 `purpose=single-segment-smoke`：
 
 ```text
 第一轮：modernbert-decision-full-gated-v1
 第二轮：modernbert-decision-full-gated-round2-v1
-Smoke：modernbert-decision-full-gated-round2-segment-smoke-v1
 ```
 
 同一轮内部的正式接力必须复用同一个 run id，并使用
@@ -457,12 +458,13 @@ segment 固定覆盖 20,000 条训练样本；chunk 只决定本次 Kaggle 任�
 执行全量验证。最后不足 20,000 条的剩余训练样本仍作为一个真实的尾 segment
 训练和验证，不丢弃、不补造样本。提交前必须确认上一段已经完成或停止，不能并行提交。
 
-第二轮使用 Kaggle 双 T4，通过 `torch.distributed.run --nproc_per_node=2`
+第二轮优先使用 Kaggle 双 T4，通过 `torch.distributed.run --nproc_per_node=2`
 显式启动两个 DDP worker；全局 batch 为 16，每卡 local batch 为 8。rank 0
 独占看板、日志、JSON 报告、checkpoint 和 cache 发布，其他 rank 只负责计算并
-通过 barrier/collective 同步。若运行时不是两张 T4，脚本直接失败，不静默退回
-单卡。四个 chunk 脚本除 `CHUNK_INDEX` 外保持同一实现，`MAX_SEGMENTS_THIS_RUN`
-仍可按本次 GPU 时长预算调整。
+通过 barrier/collective 同步。若运行时只有一张 GPU，脚本支持单卡降级，保持
+全局 batch 语义不变但速度约减半；若检测到两张或更多 GPU 却无法建立恰好两个
+worker，则直接失败，不静默降级。四个 chunk 脚本除 `CHUNK_INDEX` 外保持同一
+实现，`MAX_SEGMENTS_THIS_RUN` 仍可按本次 GPU 时长预算调整。
 
 第二轮 Chunk 1 只加载第一轮 `final_model.pt` 中的模型权重，重置
 optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer 状态，也不重新
@@ -480,8 +482,8 @@ optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer
 
 当前实现中 `vocab_size=1024` 只满足 ModernBERT 配置接口；模型实际通过
 `inputs_embeds` 输入金融 token，因此 ModernBERT 自带的词表 embedding 不参与
-forward。这部分约 0.79M 参数属于已知的显存浪费，暂不影响正确性，后续清理时
-应改为不创建或显式冻结，并在参数量报告中单独列出。
+forward。该 embedding 已显式冻结，避免 DDP 将其识别为未参与反传的可训练参数；
+它仍占用约 0.79M 参数空间，但不影响优化动力学。
 
 第二轮每个 segment 完成后执行完整验证集。chunk 只是 Kaggle 单次运行边界，
 不承担模型选择语义：
@@ -592,12 +594,13 @@ C：金融 token 路径置零
 截至 2026-09-29：
 
 ```text
-当前阶段：第一轮已完成，质量验收未通过
+当前阶段：第一轮已完成，质量验收未通过；R2 单 segment smoke 首次运行因 dead embedding 触发 DDP 报错
 当前位置：Chunk 8 / 8 已完成
-最后 Kernel：wynstonliu/modernbert-decision-full-chunk-8
-当前看板：modernbert-decision-full-gated-round2-v1（R2 启动后启用）
+最近 R2 Kernel：wynstonliu/kairos-r2-modernbert-chunk-1 V1（ERROR；冻结未使用 embedding 后待复跑）
+R1 最后 Kernel：wynstonliu/modernbert-decision-full-chunk-8
+当前看板：modernbert-decision-full-gated-round2-v1（已由 smoke 初始化并复用）
 第一轮验收：FAIL（模型质量，不是脚本执行失败）
-第二轮：冻结，等待导师审核和 R2 门禁结论
+第二轮：代码修复后等待 smoke 复跑
 C 对照：尚未开始，禁止并行提交
 ```
 
