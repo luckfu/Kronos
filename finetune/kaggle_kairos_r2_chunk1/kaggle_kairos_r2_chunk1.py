@@ -22,13 +22,13 @@ BATCH_SIZE = 16
 CHUNK_INDEX = 0
 CHUNK_COUNT = 1
 SEGMENT_SAMPLES = 20_000
-MAX_SEGMENTS_THIS_RUN = 1
+MAX_SEGMENTS_THIS_RUN = 8
 TOTAL_SEGMENTS = None
 SHUFFLE_SEED = 20260927
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
-SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-segment-smoke-v1"
-OUTPUT = Path("/kaggle/working/kairos_r2_segment_smoke")
-IS_SMOKE = True
+SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-v1"
+OUTPUT = Path("/kaggle/working/kairos_r2")
+IS_SMOKE = False
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
     "up_003", "up_005", "up_008", "up_012",
