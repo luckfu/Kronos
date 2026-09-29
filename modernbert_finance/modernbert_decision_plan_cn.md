@@ -1,8 +1,8 @@
 # Kronos Kairos 金融决策模型方案
 
-版本：v1.4
+版本：v1.5
 日期：2026-09-29
-状态：第一轮完成、验收未通过；第二轮改为可配置 segment 接力，等待导师审核
+状态：第一轮完成、验收未通过；第二轮代码已完成双 T4 DDP 与 tokenizer 固化改造，等待导师审核
 
 > 命名约定：从 2026-09-27 起，本方案中的 ModernBERT Decision
 > 决策模型正式称为 **Kairos 模型**。代码目录和历史 Kaggle Kernel 名称暂不改动，
@@ -257,10 +257,16 @@ mae10 = min(low[T+1:T+10]) / close[T] - 1
 - 窗口身份按现有 Kronos 规则在线枚举；
 - 未来 10D 标签从配套 Parquet sidecar 读取，不在训练期间重复生成；
 - 归一化、行业/市值条件按面板和历史窗口在线读取/计算；
-- s1/s2 token 按 batch 在线编码；
+- Kronos tokenizer 权重固定、参数全部冻结，不参与 Kairos 反向传播；
+- 每个训练 segment 只执行一次 tokenizer 编码，生成 CPU `uint16` token cache，
+  该 segment 的所有训练 batch 直接复用；
+- 完整验证集首次使用时按 rank 分片编码并保存带 SHA-256 身份的 cache，
+  同一 Kaggle 任务内的每次 segment 验证直接复用；后续接力若挂载该 cache，
+  先校验 panel、标签和 tokenizer 指纹后再复用；
 - 训练样本保持数值张量，不生成 JSON；
-- 只保存小型 manifest、checkpoint、随机状态、标签统计和断点位置；
-- 如在线 tokenization 吞吐不足，只在 Kaggle 工作目录生成分片缓存，不上传为新的输入数据集。
+- 只保存 manifest、checkpoint、验证 token cache、随机状态、标签统计和断点位置；
+- 不上传全量训练 token 数据集；训练 token cache 只在当前 segment 生命周期内存在，
+  避免产生第二份 900 万行训练数据。
 
 这样不会复制现有数据，也不会产生第二份大规模训练集。
 
@@ -451,9 +457,17 @@ segment 固定覆盖 20,000 条训练样本；chunk 只决定本次 Kaggle 任�
 执行全量验证。最后不足 20,000 条的剩余训练样本仍作为一个真实的尾 segment
 训练和验证，不丢弃、不补造样本。提交前必须确认上一段已经完成或停止，不能并行提交。
 
+第二轮使用 Kaggle 双 T4，通过 `torch.distributed.run --nproc_per_node=2`
+显式启动两个 DDP worker；全局 batch 为 16，每卡 local batch 为 8。rank 0
+独占看板、日志、JSON 报告、checkpoint 和 cache 发布，其他 rank 只负责计算并
+通过 barrier/collective 同步。若运行时不是两张 T4，脚本直接失败，不静默退回
+单卡。四个 chunk 脚本除 `CHUNK_INDEX` 外保持同一实现，`MAX_SEGMENTS_THIS_RUN`
+仍可按本次 GPU 时长预算调整。
+
 第二轮 Chunk 1 只加载第一轮 `final_model.pt` 中的模型权重，重置
 optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer 状态，也不重新
-训练或修改冻结的 Kronos tokenizer。后续 chunk 才从上一段的
+训练或修改冻结的 Kronos tokenizer。tokenizer 只在 cache 构建阶段运行，后续 chunk
+优先加载带身份校验的验证 cache。后续 chunk 才从上一段的
 `last_checkpoint.pt` 恢复完整训练状态。
 若 Kaggle 在 10 小时上限前终止任务，下一次不得从头重跑该次接力：必须挂载
 该任务最后成功写出的 `last_checkpoint.pt`，保持相同的接力配置、
