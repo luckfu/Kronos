@@ -482,7 +482,8 @@ last_checkpoint.pt
 ```
 
 不能用 `best_model.pt` 替代接力 checkpoint，否则会改变优化器状态和训练轨迹。
-第二轮最后一个 chunk 额外执行完整验证集，并同时保存：
+第二轮最后一个 segment 的完整验证即为最终验证，不再单独执行；最后一个
+chunk 同时保存：
 
 - `best_model.pt`：第二轮 16 个 segment 的完整验证中表现最佳；
 - `final_model.pt`：第二轮最后训练状态；
@@ -567,7 +568,7 @@ C：金融 token 路径置零
 当前阶段：第一轮已完成，质量验收未通过
 当前位置：Chunk 8 / 8 已完成
 最后 Kernel：wynstonliu/modernbert-decision-full-chunk-8
-当前看板：modernbert-decision-full-gated-round2-v1
+当前看板：modernbert-decision-full-gated-round2-v1（R2 启动后启用）
 第一轮验收：FAIL（模型质量，不是脚本执行失败）
 第二轮：冻结，等待导师审核和 R2 门禁结论
 C 对照：尚未开始，禁止并行提交
