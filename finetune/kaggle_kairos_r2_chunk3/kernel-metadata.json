@@ -1,0 +1,17 @@
+{
+  "id": "wynstonliu/kairos-r2-modernbert-chunk-3",
+  "title": "Kairos R2 ModernBERT Chunk 3",
+  "code_file": "kaggle_kairos_r2_chunk3.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

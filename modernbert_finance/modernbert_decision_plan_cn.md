@@ -404,7 +404,7 @@ macro Brier `0.2700`、8 头平均 ECE `0.2216`，暂不自动启动第二轮；
 3. 以第一轮最终模型作为第二轮初始化，不重新随机初始化；
 4. 新建第二轮 Chunk 1 任务，仍然只提交一个 Kaggle 训练任务；
 5. 第二轮 Chunk 1 完成后，将输出发布为第二轮 Chunk 2 的输入；
-6. 依次接力到第二轮 Chunk 8；
+6. 依次接力到第二轮 Chunk 4；
 7. 每次提交前确认前一个 chunk 已停止或完成，不能并行占用 Kaggle GPU；
 8. 第二轮所有 chunk 使用同一个新的 SwanLab run。
 
@@ -416,21 +416,28 @@ macro Brier `0.2700`、8 头平均 ECE `0.2216`，暂不自动启动第二轮；
 第二轮：modernbert-decision-full-gated-round2-v1
 ```
 
-同一轮内部的 8 个 chunk 必须复用同一个 run id，并使用
+同一轮内部的 4 个 chunk 必须复用同一个 run id，并使用
 `resume="allow"`。
 
 ### 10.3 第二轮：换顺序并加入分层验证
 
-第二轮不是重复第一轮的数据顺序。固定使用新的数据顺序 seed：
+第二轮不是重复第一轮的数据顺序。固定使用新的数据顺序 seed，并将全量训练
+拆成 4 个较长 chunk，以匹配第一轮单 chunk 的实际耗时和 Kaggle 单任务上限：
 
 ```text
 第一轮：SHUFFLE_SEED = 20260925
 第二轮：SHUFFLE_SEED = 20260927
 ```
 
+第二轮 chunk 数：`4`。按第一轮每个 chunk 约 4.83 小时估算，第二轮每个
+chunk 约接近 10 小时，提交前必须确认上一段已经完成或停止，不能并行提交。
+第二轮 Chunk 1 只加载第一轮 `final_model.pt` 中的模型权重，重置
+optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer 状态，也不重新
+训练或修改冻结的 Kronos tokenizer。Chunk 2 到 Chunk 4 才从上一段的
+`last_checkpoint.pt` 恢复完整训练状态。
 第二轮只改变数据访问顺序和验证策略，不改变第一轮已经确定的输入契约。
 第二轮 checkpoint 必须记录新的 `shuffle_seed` 和
-`group_order_hash`，8 个 chunk 之间严格校验，不能混用第一轮 checkpoint。
+`group_order_hash`，4 个 chunk 之间严格校验，不能混用第一轮 checkpoint。
 
 第二轮每个 chunk 完成后执行固定验证子集：
 
@@ -548,7 +555,7 @@ C 对照：尚未开始，禁止并行提交
 
 第一轮当前日志主要记录累计样本和 row group，阅读长时间运行进度不够直观。
 从第二轮 Kairos 训练开始，所有 chunk 必须同时记录全局进度和 segment 进度。
-这里的一个 `segment` 定义为一个逻辑训练 chunk；第二轮共 8 个 segment。
+这里的一个 `segment` 定义为一个逻辑训练 chunk；第二轮共 4 个 segment。
 
 训练日志和 SwanLab 指标必须包含：
 
@@ -578,7 +585,7 @@ best_updated = 0/1
 
 1. 当前做到第几个 segment；
 2. 当前 segment 已完成多少；
-3. 全局 8 个 segment 完成了多少；
+3. 全局 4 个 segment 完成了多少；
 4. 最近一次验证是否刷新 best。
 
 第一轮剩余 chunk 不强行回溯修改；从第一轮后续新脚本和第二轮脚本开始，
@@ -617,4 +624,4 @@ R2 启动前必须完成以下审计：
 - 若排序指标有信号但概率尺度失真，再评估温度缩放；
 - 若排序和校准都失败，停止 R2，不继续扩大模型或训练预算；
 - 只有修复后模型在常数基线、C 对照、时间分块和校准指标上同时达到门槛，
-  才恢复第二轮八段接力。
+  才恢复第二轮四段接力。
