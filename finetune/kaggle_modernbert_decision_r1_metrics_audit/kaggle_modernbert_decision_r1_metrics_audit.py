@@ -242,6 +242,7 @@ def main() -> None:
     import pyarrow.parquet as pq
     import torch
     import torch.nn as nn
+    import torch.nn.functional as F
 
     if not torch.cuda.is_available():
         raise RuntimeError("R1 audit requires Kaggle GPU")
