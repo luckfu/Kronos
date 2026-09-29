@@ -1,8 +1,8 @@
 # Kronos Kairos 金融决策模型方案
 
-版本：v1.7
-日期：2026-09-29
-状态：第一轮质量验收未通过；R2 Chunk 1 V6 smoke 完成，Chunk 2 V1 已提交；最新交接快照见 §10.5
+版本：v1.8
+日期：2026-09-30
+状态：训练冻结；Chunk 2 V1 已手工停止，审计发现 R2 跨 row-group 重复读取；见 §10.5 和 `kairos_e1_full_diff_audit_cn.md`
 
 > 接手入口：先读 §10.5（运行状态、证据、操作步骤和风险），再读 §10.3
 >（训练契约）。本文中的运行状态是带时间的快照，不代替 Kaggle 实时查询。
@@ -597,7 +597,8 @@ C：金融 token 路径置零
 
 ### 10.5 当前状态记录
 
-最后状态查询：2026-09-29 22:59（Asia/Shanghai，UTC+8）。
+最后状态查询：Chunk 2 已于 2026-09-30 手工停止，API 返回取消确认；详细审计见
+`kairos_e1_full_diff_audit_cn.md`。
 以下是已查询或已下载报告证明的事实，不是预计完成量。
 
 | 项目 | 已确认状态 |
@@ -605,12 +606,16 @@ C：金融 token 路径置零
 | R1 | `wynstonliu/modernbert-decision-full-chunk-8` 完成；质量验收 FAIL |
 | R2 Chunk 1 V5 | ERROR；初始化访问不存在的 `word_embeddings`，实际为 `tok_embeddings` |
 | R2 Chunk 1 V6 | COMPLETE，报告 `SMOKE_COMPLETE`；累计 1/451 段、20,000 条训练样本 |
-| R2 Chunk 2 V1 | `wynstonliu/kairos-r2-modernbert-chunk-2`，查询为 RUNNING；尚未在本次交接中确认恢复日志或完成段数 |
-| 本次授权 | 用户确认 Chunk 1 完成后，授权按 10 小时预算提交 Chunk 2；不等于 R1/R2 模型质量验收通过 |
+| R2 Chunk 2 V1 | 已手工停止，API 返回 `CANCEL_ACKNOWLEDGED`；日志最后完整段是累计 12/240,000，最后进度为第 13 段中途/250,000；这些计数不是唯一覆盖量 |
+| 本次授权 | 09-30 冻结全部训练，只保全产出和审计；此前 10 小时接力授权不再有效 |
 | SwanLab | `modernbert-decision-full-gated-round2-v2`，`resume="allow"`，后续不新建 run |
 | C 对照 | 未运行；不与 R2 并行提交 |
 
-#### 10.5.1 Smoke 证据与本次预算
+当前训练冻结：不提交 Chunk 3/4，不重跑 Chunk 2，不创建新训练 Kernel。
+R2 四份脚本的 row-group 游标重复读取缺陷和 E1 -> R1 差异表，见
+`kairos_e1_full_diff_audit_cn.md`。
+
+#### 10.5.1 Smoke 证据与历史预算
 
 Chunk 1 V6 日志的时间为 UTC；换算北京时间后，启动记录为 22:26:36，
 segment 完成为 22:37:19。运行环境：双 Tesla T4、PyTorch `2.10.0+cu128`、
@@ -632,7 +637,7 @@ Transformers `5.0.0`，DDP 全局 batch 16、每卡 8。
 未下载大 checkpoint 做本地反序列化检查。成功报告和保存后的日志支持
 smoke 执行完成，不代表长期训练稳定或模型质量达标。
 
-Chunk 2 V1 的实际提交文件：
+Chunk 2 V1 的实际提交文件（已停止，不得继续作为下一段输入）：
 `finetune/kaggle_kairos_r2_chunk2/kaggle_kairos_r2_chunk2.py`；
 输入挂载关系见同目录 `kernel-metadata.json`：
 两个原数据集 + `wynstonliu/kairos-r2-modernbert-chunk-1` 输出。
@@ -646,7 +651,7 @@ MAX_SEGMENTS_THIS_RUN = floor((36000 - 1800) / (546.412109773 * 1.10)) = 56
 CHUNK_INDEX = 1（Kernel 标题 Chunk 2，代码编号从 0 开始）
 ```
 
-这 56 段是本次新增段数，上限目标为累计第 57/451 段、
+以下只记录已停止任务的原预算，不授权恢复：56 段是原计划新增段数，上限为第 57/451 段、
 1,140,000 条样本，不是已完成量。按 smoke 速度估计新增段约需 8.5 小时，
 不是必须用满 10 小时。首次验证缓存已在 smoke 构建，不能把这次估算当作
 稳定吞吐保证。
@@ -659,6 +664,9 @@ CHUNK_INDEX = 1（Kernel 标题 Chunk 2，代码编号从 0 开始）
 单段异常变慢或输出上传一定能在平台终止前完成。
 
 #### 10.5.2 接手操作顺序
+
+冻结期间只可查询、保全和离线审计。以下涉及训练准备/提交的历史流程全部暂停，
+直到用户重新明确授权；`COMPLETE` 本身不构成继续训练的许可。
 
 在仓库根目录查询状态，先看 Kaggle 日志；需要本地核对时只下载小报告，
 不要直接拉取全部 output：
@@ -686,7 +694,8 @@ kaggle kernels output wynstonliu/kairos-r2-modernbert-chunk-2 \
    最后一个已保存段之后的工作可能需要重做。
 5. 下一次根据当时实际可用 GPU 预算、初始化/收尾余量、最近完整段耗时重新
    计算新增段数，并限制在剩余全局段数内；不要机械复制 56。
-6. 准备下一脚本时以已验证的 Chunk 2 实现为基础，调整 `CHUNK_INDEX`、
+6. 当前不得准备或提交下一脚本。只有完成审计并修复、回归验证 R2 游标后，
+   才能以修复后的实现调整 `CHUNK_INDEX`、
    预算、Kernel 标题/id/code_file 和唯一前序输出挂载。Chunk 3/4 当前仍为
    `MAX_SEGMENTS_THIS_RUN=1` 的旧模板，没有 Chunk 2 的时间保护，不可直接 push。
 7. 核对前序任务已停止、输入唯一、语法与预算边界测试通过后才提交；
@@ -707,12 +716,16 @@ Kaggle 容器路径，不是本机路径。恢复同一 chunk 可接受相同 `C
 - 全量 token 固化是待实施项，不能写成已上线。缓存应按原 120 天窗口及相同
   归一化规则生成，绑定数据、权重、预处理身份；不能改成单根 K 线编码后拼接。
 - 本轮提交前做过语法、embedding 兼容分支和预算继续/停止分支的本地检查；
-  新增时间停止逻辑尚未通过完整 10 小时 GPU 运行验证。
+  这些检查没有覆盖跨 row-group 样本身份，因此漏掉了重复读取缺陷。
+  时间停止逻辑也没有通过完整 10 小时 GPU 运行验证。
 - 当前 checkpoint 直接写文件，不是临时文件原子替换；异常终止可能留下坏文件，
   接手时必须检查可恢复性。不要仅凭文件名存在就认定可接力。
 - 交接时用 `git status`、`git diff` 和 `git log -1` 核对工作树及提交版本，
   不要 reset。GitHub 提交不等于重新发布 Kaggle Kernel；还须核对已提交的
   Kernel 版本和对应脚本，不能假设运行中的任务会自动使用后续 Git 修改。
+- 停止现场的 `best_metric.json` 已证明 best 仍是 segment 1、20,000 条、
+  `macro_log_loss=0.6702645644545555`；本地下载的 `best_model.pt` 因大文件
+  传输中断为 0 字节，不能宣称 R2 权重已保全。
 - §10.8 的模型质量门禁仍保留。用户授权继续训练是操作授权，smoke 完成是
   执行链路证据，二者都不能替代常数基线、C 对照、时间分块和校准验收结论。
 
