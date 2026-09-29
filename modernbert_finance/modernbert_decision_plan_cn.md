@@ -1,8 +1,8 @@
 # Kronos Kairos 金融决策模型方案
 
-版本：v1.3
+版本：v1.4
 日期：2026-09-29
-状态：第一轮完成、验收未通过；第二轮冻结，等待审计结论和导师审核
+状态：第一轮完成、验收未通过；第二轮改为可配置 segment 接力，等待导师审核
 
 > 命名约定：从 2026-09-27 起，本方案中的 ModernBERT Decision
 > 决策模型正式称为 **Kairos 模型**。代码目录和历史 Kaggle Kernel 名称暂不改动，
@@ -408,49 +408,61 @@ macro Brier `0.2700`、8 头平均 ECE `0.2216`，暂不自动启动第二轮；
 3. 只有在审计确认 R1 仍有可复用的排序信号、且失败主要来自训练策略或
    概率尺度时，才以第一轮最终模型作为第二轮初始化；若排序接近随机、
    学到反信号或根因仍不明，则先做最小复现实验，不启动 R2；
-4. 新建第二轮 Chunk 1 任务，仍然只提交一个 Kaggle 训练任务；
-5. 第二轮 Chunk 1 完成后，将输出发布为第二轮 Chunk 2 的输入；
-6. 依次接力到第二轮 Chunk 4；
-7. 每次提交前确认前一个 chunk 已停止或完成，不能并行占用 Kaggle GPU；
-8. 第二轮所有 chunk 使用同一个新的 SwanLab run。
+4. 新建第二轮首个 segment smoke 任务，仍然只提交一个 Kaggle 训练任务；
+5. smoke 完成后，根据实测时长设置本次接力的 `MAX_SEGMENTS_THIS_RUN`；
+6. 每次接力完成后，将输出发布为下一次接力的输入，直到全部 segment 完成；
+7. 每次提交前确认前一个接力任务已停止或完成，不能并行占用 Kaggle GPU；
+8. 第二轮所有正式接力使用同一个新的 SwanLab run。
 
 第一轮和第二轮不共用看板，避免把“无中途验证的 warm-start 基线”和
-“带分层验证的正式训练”混在同一组曲线中：
+“带分层验证的正式训练”混在同一组曲线中。单 segment smoke 另用独立看板：
 
 ```text
 第一轮：modernbert-decision-full-gated-v1
 第二轮：modernbert-decision-full-gated-round2-v1
+Smoke：modernbert-decision-full-gated-round2-segment-smoke-v1
 ```
 
-同一轮内部的 4 个 chunk 必须复用同一个 run id，并使用
+同一轮内部的正式接力必须复用同一个 run id，并使用
 `resume="allow"`。
 
 ### 10.3 第二轮：换顺序并加入分层验证
 
-第二轮不是重复第一轮的数据顺序。固定使用新的数据顺序 seed，并将全量训练
-拆成 4 个较长 chunk，以匹配第一轮单 chunk 的实际耗时和 Kaggle 单任务上限：
+第二轮不是重复第一轮的数据顺序。固定使用新的数据顺序 seed。训练 segment
+和 Kaggle chunk 接力边界分开定义：
 
 ```text
 第一轮：SHUFFLE_SEED = 20260925
 第二轮：SHUFFLE_SEED = 20260927
 ```
 
-第二轮 chunk 数：`4`，每个 chunk 包含 `4` 个 segment。按第一轮每个 chunk
-约 4.83 小时估算，R2 每个 chunk 的训练量约翻倍，并且每个 segment 结束都要
-跑完整验证；提交前必须确认上一段已经完成或停止，不能并行提交。若实测单 chunk
-超出 Kaggle 上限，必须在 segment 边界增加 chunk 接力，不得取消 segment 验证。
+```text
+SEGMENT_SAMPLES = 20,000
+MAX_SEGMENTS_THIS_RUN = 按本次 GPU 时长预算设置
+TOTAL_SEGMENTS = ceil(9,010,965 / 20,000) = 451
+```
+
+segment 固定覆盖 20,000 条训练样本；chunk 只决定本次 Kaggle 任务最多连续
+完成多少个 segment。约 5 小时时设置较小的 `MAX_SEGMENTS_THIS_RUN`，接近
+10 小时时设置更大的值。不能按 row group 平均切 segment，也不能在 segment
+中间伪造 checkpoint。首个正式 R2 前先提交一个
+`MAX_SEGMENTS_THIS_RUN = 1` 的单 segment smoke，实测训练、完整验证、显存、
+输出大小和每段耗时，再决定后续每次接力的 segment 数。每个完整 segment 都要
+执行全量验证。最后不足 20,000 条的剩余训练样本仍作为一个真实的尾 segment
+训练和验证，不丢弃、不补造样本。提交前必须确认上一段已经完成或停止，不能并行提交。
+
 第二轮 Chunk 1 只加载第一轮 `final_model.pt` 中的模型权重，重置
 optimizer/scaler，并使用新的数据顺序；它不加载第一轮 optimizer 状态，也不重新
-训练或修改冻结的 Kronos tokenizer。Chunk 2 到 Chunk 4 才从上一段的
+训练或修改冻结的 Kronos tokenizer。后续 chunk 才从上一段的
 `last_checkpoint.pt` 恢复完整训练状态。
-若 Kaggle 在 10 小时上限前终止任务，下一次不得从头重跑该 chunk：必须挂载
-该任务最后成功写出的 `last_checkpoint.pt`，保持相同的 `CHUNK_INDEX`、
-`SHUFFLE_SEED` 和 `group_order_hash`，从已保存的 `chunk_pos` 继续。若任务没有
+若 Kaggle 在 10 小时上限前终止任务，下一次不得从头重跑该次接力：必须挂载
+该任务最后成功写出的 `last_checkpoint.pt`，保持相同的接力配置、
+`SHUFFLE_SEED` 和 `group_order_hash`，从已保存的 segment/row offset 继续。若任务没有
 成功写出 checkpoint，则该 chunk 必须拆分为临时更小的恢复段后再继续，不能把
 不完整结果发布为下一段输入。
 第二轮只改变数据访问顺序和验证策略，不改变第一轮已经确定的输入契约。
 第二轮 checkpoint 必须记录新的 `shuffle_seed` 和
-`group_order_hash`，4 个 chunk 之间严格校验，不能混用第一轮 checkpoint。
+`group_order_hash`，各次接力之间严格校验，不能混用第一轮 checkpoint。
 
 当前实现中 `vocab_size=1024` 只满足 ModernBERT 配置接口；模型实际通过
 `inputs_embeds` 输入金融 token，因此 ModernBERT 自带的词表 embedding 不参与
@@ -461,8 +473,9 @@ forward。这部分约 0.79M 参数属于已知的显存浪费，暂不影响正
 不承担模型选择语义：
 
 ```text
-每个 chunk：4 个 segment
-总 segment：16 个
+每个 chunk：由 `MAX_SEGMENTS_THIS_RUN` 决定
+每次接力可根据可用 GPU 时长修改 `MAX_SEGMENTS_THIS_RUN`，不固定 chunk 数
+总 segment：451
 每个 segment 验证：完整 123,836 条
 指标：macro log loss、macro Brier、ECE、8 个阈值的明细、
       每阈值 reliability curve 所需的分桶统计
@@ -485,7 +498,7 @@ last_checkpoint.pt
 第二轮最后一个 segment 的完整验证即为最终验证，不再单独执行；最后一个
 chunk 同时保存：
 
-- `best_model.pt`：第二轮 16 个 segment 的完整验证中表现最佳；
+- `best_model.pt`：第二轮全部 segment 的完整验证中表现最佳；
 - `final_model.pt`：第二轮最后训练状态；
 - 完整验证报告：覆盖全部 `123,836` 条验证样本；
 - 按 `2025H2`、`2026H1` 和 8 个阈值拆分的指标。
@@ -578,14 +591,15 @@ C 对照：尚未开始，禁止并行提交
 
 第一轮当前日志主要记录累计样本和 row group，阅读长时间运行进度不够直观。
 从第二轮 Kairos 训练开始，所有 chunk 必须同时记录全局进度和 segment 进度。
-一个 `segment` 是一次训练覆盖单元；一个 chunk 包含 4 个 segment，第二轮共
-16 个 segment。每个 segment 完成后都必须执行完整验证。
+一个 `segment` 是一次固定 20,000 条训练样本的覆盖单元；chunk 包含多少个
+segment 由 `MAX_SEGMENTS_THIS_RUN` 决定，第二轮总计 451 个 segment。每个
+segment 完成后都必须执行完整验证。
 
 训练日志和 SwanLab 指标必须包含：
 
 ```text
-segment_total                 = 16
-segment_index                 = 1..16
+segment_total                 = 451
+segment_index                 = 1..451
 segment_samples               = 当前 segment 的样本数
 segment_processed_samples     = 当前 segment 已处理样本数
 segment_progress              = 当前 segment 完成比例
@@ -609,7 +623,7 @@ best_updated = 0/1
 
 1. 当前做到第几个 segment；
 2. 当前 segment 已完成多少；
-3. 全局 16 个 segment 完成了多少；
+3. 全局 451 个 segment 完成了多少；
 4. 最近一次验证是否刷新 best。
 
 第一轮已完成，不强行回溯修改；从第二轮脚本开始，
@@ -648,4 +662,4 @@ R2 启动前必须完成以下审计：
 - 若排序指标有信号但概率尺度失真，再评估温度缩放；
 - 若排序和校准都失败，停止 R2，不继续扩大模型或训练预算；
 - 只有修复后模型在常数基线、C 对照、时间分块和校准指标上同时达到门槛，
-  才恢复第二轮四段接力。
+  才恢复第二轮动态 segment 接力。

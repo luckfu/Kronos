@@ -20,13 +20,16 @@ import numpy as np
 SEED = 20260927
 BATCH_SIZE = 16
 CHUNK_INDEX = 3
-CHUNK_COUNT = 4
-SEGMENTS_PER_CHUNK = 4
-TOTAL_SEGMENTS = CHUNK_COUNT * SEGMENTS_PER_CHUNK
+CHUNK_COUNT = None
+SEGMENT_SAMPLES = 20_000
+# Change this before each Kaggle handoff according to the available GPU budget.
+MAX_SEGMENTS_THIS_RUN = 1
+TOTAL_SEGMENTS = None
 SHUFFLE_SEED = 20260927
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_RUN_ID = "modernbert-decision-full-gated-round2-v1"
 OUTPUT = Path("/kaggle/working/kairos_r2")
+IS_SMOKE = False
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_COLUMNS = (
     "up_003", "up_005", "up_008", "up_012",
@@ -151,9 +154,10 @@ def start_swanlab() -> tuple[Any, Any]:
             "heads": 12,
             "batch_size": BATCH_SIZE,
             "chunk_index": CHUNK_INDEX,
-            "chunk_count": CHUNK_COUNT,
-            "segments_per_chunk": SEGMENTS_PER_CHUNK,
-            "segment_total": TOTAL_SEGMENTS,
+            "chunk_count": None,
+            "segment_samples": SEGMENT_SAMPLES,
+            "max_segments_this_run": MAX_SEGMENTS_THIS_RUN,
+            "segment_total": "computed_after_data_load",
             "shuffle_seed": SHUFFLE_SEED,
             "variant": "kairos-r2",
             "validation_samples_per_segment": 123836,
@@ -353,19 +357,15 @@ def main() -> None:
         if previous_meta:
             shutil.copy2(previous_meta[0], best_meta)
     group_order = shuffled_group_order(train_pq.num_row_groups)
-    chunk_start = train_pq.num_row_groups * CHUNK_INDEX // CHUNK_COUNT
-    chunk_end = train_pq.num_row_groups * (CHUNK_INDEX + 1) // CHUNK_COUNT
-    chunk_groups = group_order[chunk_start:chunk_end]
-    segment_groups = [
-        list(part)
-        for part in np.array_split(chunk_groups, SEGMENTS_PER_CHUNK)
-        if len(part)
-    ]
-    chunk_global_start = sum(
-        train_pq.metadata.row_group(group_id).num_rows
-        for group_id in group_order[:chunk_start]
-    )
-    start_segment_pos, start_group_pos = 0, 0
+    total_segments = (train_total + SEGMENT_SAMPLES - 1) // SEGMENT_SAMPLES
+    if TOTAL_SEGMENTS is not None and TOTAL_SEGMENTS != total_segments:
+        raise RuntimeError(
+            f"configured total segments {TOTAL_SEGMENTS} != computed {total_segments}"
+        )
+    run_segment_limit = min(MAX_SEGMENTS_THIS_RUN, total_segments)
+    start_segment_index = 0
+    start_group_order_pos = 0
+    start_row_offset = 0
     processed = 0
     last_validation = None
     last_best_updated = False
@@ -386,12 +386,10 @@ def main() -> None:
             if "chunk_index" in saved
             else CHUNK_INDEX - 1
         )
-        if saved_chunk == CHUNK_INDEX:
-            start_segment_pos = int(saved.get("segment_pos", 0))
-            start_group_pos = int(saved.get("segment_group_pos", 0))
-        elif saved_chunk == CHUNK_INDEX - 1:
-            # A previous chunk's checkpoint is the handoff input for this chunk.
-            start_segment_pos, start_group_pos = 0, 0
+        if saved_chunk in {CHUNK_INDEX, CHUNK_INDEX - 1}:
+            start_segment_index = int(saved.get("completed_segments", 0))
+            start_group_order_pos = int(saved.get("group_order_pos", 0))
+            start_row_offset = int(saved.get("row_offset", 0))
         else:
             raise RuntimeError(
                 f"checkpoint chunk mismatch: saved={saved_chunk}, current={CHUNK_INDEX}"
@@ -402,8 +400,9 @@ def main() -> None:
         log(
             "checkpoint_resumed",
             chunk_index=saved_chunk,
-            segment_pos=start_segment_pos,
-            segment_group_pos=start_group_pos,
+            completed_segments=start_segment_index,
+            group_order_pos=start_group_order_pos,
+            row_offset=start_row_offset,
             processed_samples=processed,
         )
     elif CHUNK_INDEX == 0:
@@ -485,29 +484,43 @@ def main() -> None:
 
     started = time.monotonic()
     model.train()
-    for local_segment_pos in range(start_segment_pos, len(segment_groups)):
-        current_groups = segment_groups[local_segment_pos]
-        segment_samples = sum(
-            train_pq.metadata.row_group(group_id).num_rows
-            for group_id in current_groups
+    completed_segments = start_segment_index
+    group_order_pos = start_group_order_pos
+    row_offset = start_row_offset
+    segments_this_run = 0
+    segment_rows: list[dict[str, Any]] = []
+    segment_processed = 0
+    segment_global_start = processed
+    segment_started = time.monotonic()
+    while group_order_pos < len(group_order) and segments_this_run < run_segment_limit:
+        group_id = group_order[group_order_pos]
+        rows = shuffle_group_rows(
+            train_pq.read_row_group(group_id, columns=columns).to_pylist(),
+            group_id,
         )
-        segment_global_start = chunk_global_start + sum(
-            train_pq.metadata.row_group(group_id).num_rows
-            for groups_before in segment_groups[:local_segment_pos]
-            for group_id in groups_before
-        )
-        group_begin = start_group_pos if local_segment_pos == start_segment_pos else 0
-        global_segment_index = CHUNK_INDEX * SEGMENTS_PER_CHUNK + local_segment_pos + 1
-        for order_pos in range(group_begin, len(current_groups)):
-            group_id = current_groups[order_pos]
-            rows = train_pq.read_row_group(group_id, columns=columns).to_pylist()
-            rows = shuffle_group_rows(rows, group_id)
-            for offset in range(0, len(rows), BATCH_SIZE):
-                batch = rows[offset:offset + BATCH_SIZE]
+        while row_offset < len(rows) and segments_this_run < run_segment_limit:
+            remaining = SEGMENT_SAMPLES - len(segment_rows)
+            take = min(remaining, len(rows) - row_offset)
+            segment_rows.extend(rows[row_offset:row_offset + take])
+            row_offset += take
+            if len(segment_rows) < SEGMENT_SAMPLES:
+                if row_offset == len(rows):
+                    group_order_pos += 1
+                    row_offset = 0
+                if group_order_pos < len(group_order):
+                    continue
+                # The final segment may contain fewer than SEGMENT_SAMPLES rows.
+
+            global_segment_index = completed_segments + 1
+            segment_samples = len(segment_rows)
+            segment_global_start = processed
+            segment_processed = 0
+            segment_started = time.monotonic()
+            for offset in range(0, segment_samples, BATCH_SIZE):
+                batch = segment_rows[offset:offset + BATCH_SIZE]
                 history, sectors, sizes, labels, _ = make_batch(
                     batch, train_arrays, sector_ids,
-                    check_labels=(processed == 0 and local_segment_pos == start_segment_pos
-                                  and order_pos == group_begin and offset == 0),
+                    check_labels=(processed == 0 and completed_segments == 0 and offset == 0),
                 )
                 with torch.no_grad():
                     s1, s2 = tokenizer.encode(torch.from_numpy(history).to(device), half=True)
@@ -525,6 +538,7 @@ def main() -> None:
                 scaler.step(optimizer)
                 scaler.update()
                 processed += len(batch)
+                segment_processed += len(batch)
                 if processed % 25_000 < len(batch):
                     rate = processed / max(time.monotonic() - started, 1e-6)
                     segment_processed = max(0, processed - segment_global_start)
@@ -533,8 +547,8 @@ def main() -> None:
                         "processed_samples": processed,
                         "total_samples": train_total,
                         "row_group": group_id,
-                        "order_pos": order_pos,
-                        "segment_total": TOTAL_SEGMENTS,
+                        "order_pos": group_order_pos,
+                        "segment_total": total_segments,
                         "segment_index": global_segment_index,
                         "segment_samples": segment_samples,
                         "segment_processed_samples": segment_processed,
@@ -557,7 +571,7 @@ def main() -> None:
                             "train/processed_samples": processed,
                             "train/global_processed_samples": processed,
                             "train/global_total_samples": train_total,
-                            "train/segment_total": TOTAL_SEGMENTS,
+                            "train/segment_total": total_segments,
                             "train/segment_index": global_segment_index,
                             "train/segment_processed_samples": segment_processed,
                             "train/segment_samples": segment_samples,
@@ -567,89 +581,90 @@ def main() -> None:
                         },
                         step=processed,
                     )
-            torch.save({
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "scaler": scaler.state_dict(),
-                "row_group": group_id,
-                "chunk_index": CHUNK_INDEX,
-                "segment_pos": local_segment_pos,
-                "segment_group_pos": order_pos + 1,
-                "shuffle_seed": SHUFFLE_SEED,
-                "group_order_hash": group_order_hash(group_order),
-                "processed_samples": processed,
-            }, checkpoint)
-            log("checkpoint_saved", row_group=group_id, processed_samples=processed,
-                segment_index=global_segment_index)
-
-        last_validation = full_validation()
-        validation_score = last_validation["all"]["macro_log_loss"]
-        last_best_updated = validation_score < best_score
-        if last_best_updated:
-            best_score = validation_score
-            torch.save(
-                {
-                    "model": model.state_dict(),
-                    "metrics": last_validation,
-                    "chunk_index": CHUNK_INDEX,
-                    "segment_index": global_segment_index,
-                    "processed_samples": processed,
-                },
-                best_checkpoint,
-            )
-            best_meta.write_text(
-                json.dumps(
+            segment_rows = []
+            completed_segments += 1
+            segments_this_run += 1
+            if row_offset == len(rows):
+                group_order_pos += 1
+                row_offset = 0
+            last_validation = full_validation()
+            validation_score = last_validation["all"]["macro_log_loss"]
+            last_best_updated = validation_score < best_score
+            if last_best_updated:
+                best_score = validation_score
+                torch.save(
                     {
-                        "macro_log_loss": best_score,
+                        "model": model.state_dict(),
+                        "metrics": last_validation,
                         "chunk_index": CHUNK_INDEX,
                         "segment_index": global_segment_index,
                         "processed_samples": processed,
                     },
-                    indent=2,
-                ) + "\n",
-                encoding="utf-8",
+                    best_checkpoint,
+                )
+                best_meta.write_text(
+                    json.dumps(
+                        {
+                            "macro_log_loss": best_score,
+                            "chunk_index": CHUNK_INDEX,
+                            "segment_index": global_segment_index,
+                            "processed_samples": processed,
+                        },
+                        indent=2,
+                    ) + "\n",
+                    encoding="utf-8",
+                )
+                log("best_model_updated", macro_log_loss=best_score,
+                    segment_index=global_segment_index, processed_samples=processed)
+            swanlab_run.log(
+                {
+                    "validation/macro_log_loss": last_validation["all"]["macro_log_loss"],
+                    "validation/macro_brier": last_validation["all"]["macro_brier"],
+                    "validation/macro_ece": last_validation["all"]["macro_ece_10bin"],
+                    "validation/2025H2_log_loss": last_validation["2025H2"]["macro_log_loss"],
+                    "validation/2026H1_log_loss": last_validation["2026H1"]["macro_log_loss"],
+                    "validation/samples": last_validation["all"]["samples"],
+                    "validation/segment_complete": 1,
+                    "validation/best_updated": int(last_best_updated),
+                    "train/segment_total": total_segments,
+                    "train/segment_index": global_segment_index,
+                },
+                step=processed,
             )
-            log("best_model_updated", macro_log_loss=best_score,
-                segment_index=global_segment_index, processed_samples=processed)
-        swanlab_run.log(
-            {
-                "validation/macro_log_loss": last_validation["all"]["macro_log_loss"],
-                "validation/macro_brier": last_validation["all"]["macro_brier"],
-                "validation/macro_ece": last_validation["all"]["macro_ece_10bin"],
-                "validation/2025H2_log_loss": last_validation["2025H2"]["macro_log_loss"],
-                "validation/2026H1_log_loss": last_validation["2026H1"]["macro_log_loss"],
-                "validation/samples": last_validation["all"]["samples"],
-                "validation/segment_complete": 1,
-                "validation/best_updated": int(last_best_updated),
-                "train/segment_total": TOTAL_SEGMENTS,
-                "train/segment_index": global_segment_index,
-            },
-            step=processed,
-        )
-        torch.save({
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scaler": scaler.state_dict(),
-            "chunk_index": CHUNK_INDEX,
-            "segment_pos": local_segment_pos + 1,
-            "segment_group_pos": 0,
-            "shuffle_seed": SHUFFLE_SEED,
-            "group_order_hash": group_order_hash(group_order),
-            "processed_samples": processed,
-            "last_validation": last_validation,
-            "last_best_updated": last_best_updated,
-        }, checkpoint)
-        start_group_pos = 0
+            torch.save({
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict(),
+                "chunk_index": CHUNK_INDEX,
+                "completed_segments": completed_segments,
+                "group_order_pos": group_order_pos,
+                "row_offset": row_offset,
+                "shuffle_seed": SHUFFLE_SEED,
+                "group_order_hash": group_order_hash(group_order),
+                "processed_samples": processed,
+                "last_validation": last_validation,
+                "last_best_updated": last_best_updated,
+            }, checkpoint)
+            log(
+                "segment_complete",
+                segment_index=global_segment_index,
+                segment_samples=segment_samples,
+                processed_samples=processed,
+                segment_seconds=time.monotonic() - segment_started,
+            )
 
-    if CHUNK_INDEX + 1 < CHUNK_COUNT:
+    if completed_segments < total_segments:
         report = {
-            "status": "CHUNK_COMPLETE", "chunk_index": CHUNK_INDEX,
-            "chunk_count": CHUNK_COUNT, "row_group_start": chunk_start,
-            "row_group_end": chunk_end, "processed_samples": processed,
+            "status": "SMOKE_COMPLETE" if IS_SMOKE else "SEGMENT_RELAY_COMPLETE",
+            "purpose": "single-segment timing smoke" if IS_SMOKE else "segment relay",
+            "chunk_index": CHUNK_INDEX,
+            "chunk_count": CHUNK_COUNT, "processed_samples": processed,
+            "completed_segments": completed_segments,
+            "segments_this_run": segments_this_run,
             "shuffle_seed": SHUFFLE_SEED,
             "group_order_hash": group_order_hash(group_order),
-            "segment_total": TOTAL_SEGMENTS,
-            "segment_index": CHUNK_INDEX * SEGMENTS_PER_CHUNK + len(segment_groups),
+            "segment_total": total_segments,
+            "segment_index": completed_segments,
             "segment_samples": segment_samples,
             "segment_processed_samples": max(0, processed - segment_global_start),
             "checkpoint": str(checkpoint),
@@ -665,13 +680,15 @@ def main() -> None:
         )
         dashboard({"phase": "chunk complete", "processed_samples": processed,
                    "total_samples": train_total, "chunk_index": CHUNK_INDEX,
-                   "chunk_count": CHUNK_COUNT})
+                   "chunk_count": CHUNK_COUNT,
+                   "completed_segments": completed_segments,
+                   "segment_total": total_segments})
         log("chunk_complete", **report)
         swanlab_run.log(
             {
                 "chunk/completed": 1,
                 "chunk/processed_samples": processed,
-                "segment_complete": 1,
+                "segment_complete": segments_this_run,
                 "validation_samples": last_validation["all"]["samples"],
                 "validation_macro_log_loss": last_validation["all"]["macro_log_loss"],
                 "validation_macro_brier": last_validation["all"]["macro_brier"],
@@ -695,8 +712,8 @@ def main() -> None:
         "checkpoint": str(OUTPUT / "final_model.pt"),
         "best_model": str(best_checkpoint),
         "best_macro_log_loss": best_score,
-        "segment_total": TOTAL_SEGMENTS,
-        "validation_runs": TOTAL_SEGMENTS,
+        "segment_total": total_segments,
+        "validation_runs": completed_segments,
         "last_segment_validation": last_validation,
         "model_selection": "final_checkpoint; best_model_selected_on_full_segment_validation",
         "elapsed_seconds": time.monotonic() - started,
