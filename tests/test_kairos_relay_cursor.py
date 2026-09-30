@@ -91,3 +91,21 @@ def test_initial_validation_is_recorded_before_gate(tmp_path):
         "if not np.isfinite(probe_initial_score)"
     )
     assert "tolerance=0.002" in source
+
+
+def test_diagnostic_exits_before_training():
+    import ast
+
+    tree = ast.parse(builder.SOURCE.read_text())
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+    preflight = next(node for node in main.body if isinstance(node, ast.If)
+                     and ast.unparse(node.test) == "LR_PROBE"
+                     and any(isinstance(child, ast.If) and ast.unparse(child.test) == "DIAGNOSTIC_ONLY"
+                             for child in node.body))
+    diagnostic = next(node for node in preflight.body if isinstance(node, ast.If)
+                      and ast.unparse(node.test) == "DIAGNOSTIC_ONLY")
+    assert isinstance(diagnostic.body[-1], ast.Return)
+    assert main.body.index(preflight) < next(i for i, node in enumerate(main.body) if isinstance(node, ast.While))
+    calls = [ast.unparse(node.func) for node in ast.walk(diagnostic) if isinstance(node, ast.Call)]
+    assert "full_validation" in calls
+    assert not any("optimizer" in name or "backward" in name for name in calls)

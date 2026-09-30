@@ -108,3 +108,108 @@ ECE=0.1445018642。还没有共同进度的跨 LR 结果，不宣布赢家。
 `artifacts/kairos_lr_probe_20260930/1e5_v2/`，仅下载 run.log、best_metric.json、
 progress.json 与执行日志，未下载全部 output。无新增训练，输出权重为复制的起点，
 不当作新 best。原 Chunk 1/停止现场保全权重不受影响。
+
+### 02:49 巡检
+
+1e-4 V2 仍运行；02:44 完成累计 segment 3（60,000 条），更新 best，随后
+segment 4 覆盖检查通过。当前同一臂轨迹如下，尚非最终结果：
+
+| 累计 segment | 处理数 | all log loss | 2025H2 | 2026H1 | all Brier | all ECE |
+|---|---:|---:|---:|---:|---:|---:|
+| 1，起点重算 | 20,000 | 0.67026456 | 0.62882376 | 0.71355267 | 0.22637036 | 0.11877311 |
+| 2 | 40,000 | 0.70944778 | 0.66069732 | 0.76037138 | 0.23405881 | 0.14450186 |
+| 3 | 60,000 | 0.62168036 | 0.59366650 | 0.65094305 | 0.21341609 | 0.08163642 |
+
+segment 3 的真实身份顺序哈希为
+`7c987ac6435bf5818565635ad6498f5f988256ca6d07ba1720de2d8090712ec8`，
+结束游标为 group_order_pos=1、row_offset=8861，跨越第一 row group 后未重复。
+这说明修复后曲线不再是旧事故轨迹的单调恶化，但不能将差异全部归因于单个修复，
+也不代表通过概率预测验收：all log loss 仍高于训练先验基线 0.5966。
+
+3e-5 V1 已 ERROR，02:44:53 左右退出，**没有训练**。初始验证为：
+
+| 范围 | log loss | Brier | ECE |
+|---|---:|---:|---:|
+| all，123,836 条 | 0.7002594993 | 0.2334600603 | 0.1386489632 |
+| 2025H2，63,268 条 | 0.6472727489 | 0.2188340565 | 0.1329147764 |
+| 2026H1，60,568 条 | 0.7556082234 | 0.2487380486 | 0.1571075514 |
+
+相对期望 0.6702645645 偏差约 0.029995，超过 0.002 门禁。
+checkpoint SHA、model/optimizer/scaler 精确恢复、训练前缀 SHA 与另两臂相同，
+rank0 验证缓存身份校验通过，tokenizer SHA 相同。由于尚未任何 optimizer step，
+不能称为 LR=3e-5 的训练结果，也不能认为 LR 数值导致初始预测变化。
+需要进一步定位初始推理/缓存/未持久化状态的复现问题；当前证据不支持指定根因。
+未放宽门禁，未重跑任一失败臂，未增加训练。
+
+3e-5 的 `initial_validation.json`、`run.log`、`best_metric.json`、`progress.json`
+及平台执行日志已选择性保全于 `artifacts/kairos_lr_probe_20260930/3e5_v1/`。
+1e-4 的新 best/last 待正常退出后下载验证，当前只确认日志中的指标与覆盖校验，
+不提前宣称新权重已在本机保全。两个低 LR 臂均缺训练结果，因此本轮无法完成
+有效的三臂 LR 比较；继续守候唯一运行臂的预算内完成与产出保全。
+
+## 6. 最终结果与后续授权
+
+09-30 后续查询确认 1e-4 V2 为 COMPLETE，新增四段全部完成，累计 100,000 条。
+完整轨迹为 0.67026456 -> 0.70944778 -> 0.62168036 -> 0.68731514 ->
+0.74707275。报告 stop_reason=validation_patience；此时也恰好达到四个新增段上限。
+总 runtime_elapsed_seconds=2413.1864（约 40.2 分钟）。
+segment 4/5 的时间块 log loss 分别为 0.64981671/0.72648522 和
+0.70157116/0.79460265。
+
+用户指出四段有升有降不应要求线性下降，代理接受此纠正：两段 patience 是预算保护，
+不是已证明适用于该数据分组的收敛准则。现有四段不能证明后续不会再改善。
+用户同意先定位初始验证复现差异，再设计更长的有上限观察窗口。
+不放宽初始复现门禁；目前不新开训练或据此断言方法无效。
+
+### 保全进度
+
+1e-4 完整小文件报告和日志位于 `artifacts/kairos_lr_probe_20260930/1e4_v2/`。
+新 best_model.pt 已完整下载，450,461,639 字节，SHA-256：
+`103c8e4ec901e62ad0b090e00a9d9eddd942fbb1cd3380c5c0fbac0e35d1a052`。
+ZIP CRC 和 torch CPU weights_only/mmap 读取通过，内嵌 chunk_index=1、
+segment_index=3、processed_samples=60,000、log loss=0.6216803565621376。
+与 best_metric.json 一致，没有覆盖原停止现场文件。
+last_checkpoint.pt 下载缓慢，本次中止下载并保留 .download 临时文件，
+尚未完整落盘或验证；不可把临时文件当可恢复 checkpoint。
+
+### 只推理诊断
+
+新建 `finetune/build_kairos_inference_diagnostic.py` 和生成目录
+`finetune/kaggle_kairos_inference_diagnostic/`。计划用 Chunk 1 同一 checkpoint、
+同一缓存，连续两次完整验证，保存每 rank 的模型/全部 buffer/cache 指纹、
+模型配置与 sector_ids，检查未持久化状态和重复推理。
+DIAGNOSTIC_ONLY 分支无 optimizer step，在训练循环之前返回；平台上限 1200 秒。
+本地 31 项测试通过，包括诊断分支在训练前退出的检查。
+
+**尚未提交成功**：CLI 认证失败；显式读取已有 OAuth 后 SaveKernel 返回 HTTP 401。
+不把准备好的脚本称作已运行诊断。需要恢复 Kaggle 登录后核对远端再提交，
+不进行重复训练。复现差异根因仍未知。
+
+Git 交付受当前权限阻塞：尝试先 pull，`.git/FETCH_HEAD` 返回 Operation not permitted，
+当前环境将 `.git` 设为只读。本节与诊断修改仅在本地，尚未 commit/push；
+不能将它们误记为上一提交 `24f6f1b` 已包含的内容。
+
+### CLI 恢复后的执行记录
+
+用户恢复 Kaggle CLI 后，已先确认原 LR 作业 COMPLETE，并查询本人诊断任务列表
+未发现已有提交，再成功提交 `wynstonliu/kairos-inference-diagnostic` **V1**。
+状态已核实为 RUNNING，timeout=1200 秒，仅推理、不训练；**不要重复提交**。
+31 项本地测试再次通过。诊断尚无最终报告，不能提前指定复现差异根因。
+
+权重保全脚本已增加 Range 续传、每轮180秒下载窗口及逐文件清单落盘，
+继续保留并核验 best，尝试补全 last；`.download` 不作完整 checkpoint 使用。
+
+本次再次执行 pull 仍返回 `.git/FETCH_HEAD: Operation not permitted`；
+尝试更新 `kairos-lr` 自动任务也被权限拒绝，**自动任务的旧提示尚未更新**。
+后续必须以本节和实际远端状态为准，不因旧提示而重新提交诊断或重开训练。
+所有未提交的文档、诊断代码及测试仍仅在本地工作区。
+
+### Git 状态更正
+
+以上权限描述是当次命令失败的记录，不是仓库持久权限问题的定论。
+后续用户确认 FETCH_HEAD 可写；代理重新执行 `git fetch --no-tags origin`
+也已成功，随后 `git add` 成功。`git rev-list --left-right --count
+HEAD...origin/master` 返回 `0 0`，表明 fetch 后双方提交一致，无需合并新提交。
+同轮 `pull` 写 FETCH_HEAD 和 `merge --ff-only` 创建 ORIG_HEAD.lock 仍被拒绝，
+原因未明，应按具体命令区分，不能说所有 Git 写入都受限。
+工作区的 M/?? 只代表未提交内容，不是权限证据，不需要清理或丢弃。

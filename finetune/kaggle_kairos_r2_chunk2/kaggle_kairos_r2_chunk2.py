@@ -20,6 +20,7 @@ import numpy as np
 SEED = 20260927
 BATCH_SIZE = 16
 LR_PROBE = False
+DIAGNOSTIC_ONLY = False
 LEARNING_RATE_OVERRIDE = None
 EARLY_STOP_PATIENCE = 2
 EARLY_STOP_MIN_DELTA = 0.001
@@ -824,6 +825,50 @@ def main() -> None:
             (OUTPUT / "initial_validation.json").write_text(
                 json.dumps(initial_validation, indent=2) + "\n", encoding="utf-8"
             )
+        if DIAGNOSTIC_ONLY:
+            def tensor_digest(value: Any) -> str:
+                array = value.detach().cpu().contiguous().reshape(-1).view(torch.uint8).numpy()
+                return hashlib.sha256(array.tobytes()).hexdigest()
+
+            fingerprints = {
+                "rank": rank,
+                "model": {key: tensor_digest(value) for key, value in raw_model.state_dict().items()},
+                "buffers": {key: tensor_digest(value) for key, value in raw_model.named_buffers()},
+                "cache": [
+                    {"shape": list(value.shape), "dtype": str(value.dtype),
+                     "sha256": hashlib.sha256(value.tobytes()).hexdigest()}
+                    for value in validation_token_cache
+                ],
+                "config": raw_model.backbone.config.to_dict(),
+                "sector_ids": sector_ids,
+                "torch": torch.__version__,
+                "transformers": importlib.metadata.version("transformers"),
+                "cuda_capability": torch.cuda.get_device_capability(device),
+            }
+            (OUTPUT / f"diagnostic_rank{rank}.json").write_text(
+                json.dumps(fingerprints, indent=2, default=str) + "\n"
+            )
+            repeated_validation = full_validation()
+            diagnostic = {
+                "purpose": "inference-only; zero optimizer steps",
+                "expected_macro_log_loss": best_score,
+                "first_validation": initial_validation,
+                "second_validation": repeated_validation,
+                "repeat_log_loss_delta": (
+                    repeated_validation["all"]["macro_log_loss"] - probe_initial_score
+                ),
+                "initial_log_loss_delta": probe_initial_score - best_score,
+            }
+            if is_main_process():
+                (OUTPUT / "inference_diagnostic.json").write_text(
+                    json.dumps(diagnostic, indent=2) + "\n"
+                )
+                log("inference_diagnostic_complete", **diagnostic)
+                swanlab.finish()
+            if distributed:
+                dist.barrier()
+                dist.destroy_process_group()
+            return
         if not np.isfinite(probe_initial_score) or abs(probe_initial_score - best_score) > 0.002:
             raise RuntimeError(
                 f"initial validation does not reproduce Chunk 1 baseline: "
