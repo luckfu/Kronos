@@ -213,3 +213,66 @@ HEAD...origin/master` 返回 `0 0`，表明 fetch 后双方提交一致，无需
 同轮 `pull` 写 FETCH_HEAD 和 `merge --ff-only` 创建 ORIG_HEAD.lock 仍被拒绝，
 原因未明，应按具体命令区分，不能说所有 Git 写入都受限。
 工作区的 M/?? 只代表未提交内容，不是权限证据，不需要清理或丢弃。
+
+## 7. Inference Diagnostic V1 完成：发现跨卡 RoPE 错位
+
+2026-09-30 查询状态 COMPLETE。仅下载小 JSON 与日志，目录：
+`artifacts/kairos_inference_diagnostic_20260930/v1/kairos_r2/`。
+两次 full validation 的 log loss 均为 **0.6702645644545555**；
+与期望值差为 0，重复差也为 0。Brier、ECE 和两个时间块指标亦一致。
+这只证明该进程组合的重复推理稳定，**不能判为分布式语义验收通过**。
+
+两卡诊断结果：
+
+| 检查 | 结果 |
+|---|---|
+| state_dict 各张量哈希 | 同名全部一致 |
+| config / sector_ids | 一致 |
+| 软件与硬件 | 两卡均 PyTorch 2.10.0+cu128、Transformers 5.0.0、T4 capability 7.5 |
+| rank0 buffer 注册顺序 | sliding_inv、sliding_original_inv、full_inv、full_original_inv |
+| rank1 buffer 注册顺序 | full_inv、full_original_inv、sliding_inv、sliding_original_inv |
+| 同名 RoPE buffer 哈希 | full/sliding 四个 buffer 恰好交叉互换 |
+
+rank0 sliding SHA=`734f9e6b629f7baccc4de81b7e8d2982035ee1b81f73f158e7d33a4dcf13fa0e`，
+full SHA=`adb41194debe8e6c185d47754f68cc2dd59960a03cb4ccbc71acd14b860c4604`；
+rank1 同名 full/sliding 分别收到相反哈希。
+配置 full rope_theta=160000，sliding rope_theta=10000。
+两个 rank 的验证缓存哈希不同是预期的分片结果，不能单凭不同认定缓存损坏；
+此前两个失败进程没有同等级指纹，尚不能做完整跨运行缓存对照。
+
+### 机制与复现
+
+核对官方 v5.0.0 源码 `ModernBertRotaryEmbedding.__init__` 第258行：
+`self.layer_types = list(set(config.layer_types))`，按该顺序注册四个 buffer，
+第270/271行明确 `persistent=False`，所以 state_dict 恢复检查看不到它们。
+Python 进程间集合枚举顺序可能不同，原启动未固定 PYTHONHASHSEED。
+DDP 按注册顺序同步 buffer，跨卡顺序不同导致相同形状的不同语义值被交换。
+
+源码定位：
+`https://raw.githubusercontent.com/huggingface/transformers/v5.0.0/src/transformers/models/modernbert/modeling_modernbert.py`
+
+新增 CPU-only 机制复现脚本 `modernbert_finance/reproduce_rope_buffer_order.py`。
+命令：
+`KMP_DUPLICATE_LIB_OK=TRUE /opt/miniconda3/bin/python modernbert_finance/reproduce_rope_buffer_order.py`
+本机 PyTorch 2.13.0、Gloo，两进程，无金融模型训练：
+注册顺序反向时 rank1 full/sliding 值交换；统一排序后两卡同名值一致。
+两种情况 state_dict 都只有相同 weight，说明仅比较 state_dict 无法覆盖此缺陷。
+该本地实验不是 Kaggle 2.10 CUDA 的完全同环境复现；Kaggle 实际错位由其
+diagnostic_rank0/1.json 独立确认。
+
+### 结论边界和后续门禁
+
+已确认：本次诊断存在真实的跨卡 RoPE buffer 语义错位，不能把初始验证偏差
+解释为 LR 高低，因为那时尚未任何更新。注册顺序和 DDP 同步机制与现场吻合。
+它提供了跨运行结果不同的具体机制，但此前两个失败进程没有完整 buffer 快照，
+还不能量化各自差额或断言所有偏差只有这一个原因。
+
+现有 0.67026/0.62168 是历史运行口径的指标，不应直接视为单一、语义一致模型的
+健康验证指标；权重继续保全，先做一致 RoPE 的重新评估再决定使用价值。
+不把这个 R2 双卡缺陷反向算进 R1 单卡失败的归因。
+
+下一步在 DDP 包装之前固定 buffer 注册顺序，并在构造后、恢复后及推理前
+校验两卡同名 buffer 值与配置的理论值一致。仅设置随机数 seed 不足以替代这些
+语义断言。修复后先只推理复验，不强求健康配置重现旧的混合口径 0.67026，
+但必须保存旧/新口径差异；不得静默放宽原复现门禁。
+本次仅增加诊断结论和 CPU 复现脚本，没有修改训练脚本、重提诊断或新开训练。
