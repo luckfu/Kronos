@@ -184,3 +184,40 @@ def test_bounded_trial_configuration(tmp_path, monkeypatch):
     assert len(metadata["kernel_sources"]) == 2
     source = (directory / "lr_probe.py").read_text()
     assert source.index("if not repeat_ok:") < source.index("scaler.scale(loss).backward()")
+
+
+def test_formal_restart_configuration(tmp_path):
+    import json
+
+    restart = load_module(ROOT / "finetune/build_kairos_r2_restart.py")
+    directory = restart.build(tmp_path)
+    module = load_module(directory / "restart.py")
+    assert module.FRESH_R2 and module.REPAIRED_TRIAL
+    assert not module.LR_PROBE and not module.DIAGNOSTIC_ONLY
+    assert module.CHUNK_INDEX == 0
+    assert module.GPU_BUDGET_SECONDS == 36000
+    assert module.RUNTIME_RESERVE_SECONDS == 1800
+    assert module.SWANLAB_API_KEY_FALLBACK == ""
+    metadata = json.loads((directory / "kernel-metadata.json").read_text())
+    assert metadata["kernel_sources"] == ["wynstonliu/modernbert-decision-full-chunk-8"]
+    source = (directory / "restart.py").read_text()
+    assert source.index("if not passed:") < source.index("scaler.scale(loss).backward()")
+
+
+def test_independent_restart_cursor(tmp_path):
+    from types import SimpleNamespace
+
+    module = load_module(builder.build("1e4", tmp_path) / "lr_probe.py")
+    groups = [[{"symbol": str(g), "start_index": i, "asof_date": "2024-01-01"}
+               for i in range(size)] for g, size in enumerate([5, 3, 7])]
+    parquet = SimpleNamespace(
+        metadata=SimpleNamespace(row_group=lambda g: SimpleNamespace(num_rows=len(groups[g]))),
+        read_row_group=lambda g, columns: SimpleNamespace(to_pylist=lambda: groups[g]),
+    )
+    order = [2, 0, 1]
+    expected = [module.row_identity(row) for g in order for row in module.shuffle_group_rows(groups[g], g)]
+    for offset in range(len(expected)):
+        count = min(4, len(expected) - offset)
+        assert module.expected_segment_ids(parquet, order, offset, count) == expected[offset:offset+count]
+    with pytest.raises(RuntimeError):
+        module.expected_segment_ids(parquet, order, 15, 1)

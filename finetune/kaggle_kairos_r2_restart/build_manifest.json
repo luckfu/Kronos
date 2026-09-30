@@ -1,0 +1,10 @@
+{
+  "source_sha256": "cdf217360217f57fbf3b2c2889567e61dc3f462d6724a031d09621b46ba1ac21",
+  "generated_sha256": "4f5e3f1bec1a794516a51074ad1cf8206566652d7ac9532f5e7ebc4cc890e160",
+  "budget_seconds": 36000,
+  "segment_limit_is_dataset_ceiling": true,
+  "metric_patience_enabled": false,
+  "lr": 0.0001,
+  "initialization": "R1 final weights; fresh optimizer/scaler; cursor zero",
+  "cloud_credentials": "staging only, not tracked"
+}

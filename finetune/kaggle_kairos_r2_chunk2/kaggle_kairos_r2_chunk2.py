@@ -22,6 +22,7 @@ BATCH_SIZE = 16
 LR_PROBE = False
 DIAGNOSTIC_ONLY = False
 REPAIRED_TRIAL = False
+FRESH_R2 = False
 SOURCE_KERNEL_SLUG = ""
 REASSESS_KERNEL_SLUG = ""
 TOKENIZER_CODE_COMMIT = ""
@@ -91,6 +92,27 @@ def canonicalize_buffers(model: Any) -> None:
     # DDP broadcasts buffers by registration position, not by qualified name.
     for module in model.modules():
         module._buffers = dict(sorted(module._buffers.items()))
+
+
+def expected_segment_ids(parquet: Any, order: list[int], processed: int, count: int) -> list:
+    result = []
+    skip = processed
+    for group in order:
+        size = parquet.metadata.row_group(group).num_rows
+        if skip >= size:
+            skip -= size
+            continue
+        rows = shuffle_group_rows(parquet.read_row_group(
+            group, columns=["symbol", "start_index", "asof_date"]
+        ).to_pylist(), group)
+        take = min(count - len(result), size - skip)
+        result.extend(row_identity(row) for row in rows[skip:skip + take])
+        skip = 0
+        if len(result) == count:
+            break
+    if len(result) != count or len(set(result)) != count:
+        raise RuntimeError("independent coverage enumeration failed")
+    return result
 
 
 def rope_fingerprint(model: Any, torch: Any) -> dict[str, Any]:
@@ -563,6 +585,8 @@ def main() -> None:
     scaler = torch.amp.GradScaler("cuda")
     checkpoint = OUTPUT / "last_checkpoint.pt"
     best_checkpoint = OUTPUT / "best_model.pt"
+    if FRESH_R2 and checkpoint.exists():
+        raise RuntimeError("fresh R2 may not resume an existing working checkpoint")
     if is_main_process():
         if CHUNK_INDEX > 0 and not checkpoint.exists():
             previous = source_files("**/last_checkpoint.pt", SOURCE_KERNEL_SLUG)
@@ -570,14 +594,14 @@ def main() -> None:
                 raise RuntimeError(f"expected at most one previous checkpoint, found {previous}")
             if previous:
                 shutil.copy2(previous[0], checkpoint)
-        if not best_checkpoint.exists():
+        if not best_checkpoint.exists() and not FRESH_R2:
             previous_best = source_files("**/best_model.pt", SOURCE_KERNEL_SLUG)
             if len(previous_best) > 1:
                 raise RuntimeError(f"expected at most one previous best model, found {previous_best}")
             if previous_best:
                 shutil.copy2(previous_best[0], best_checkpoint)
     best_meta = OUTPUT / "best_metric.json"
-    if is_main_process() and not best_meta.exists():
+    if is_main_process() and not best_meta.exists() and not FRESH_R2:
         previous_meta = source_files("**/best_metric.json", SOURCE_KERNEL_SLUG)
         if len(previous_meta) > 1:
             raise RuntimeError(f"expected at most one previous best metric, found {previous_meta}")
@@ -668,9 +692,16 @@ def main() -> None:
         log(
             "r1_warm_start",
             source=str(initial_models[0]),
+            source_sha256=sha256_file(initial_models[0]) if FRESH_R2 else None,
             optimizer_reset=True,
             shuffle_seed=SHUFFLE_SEED,
         )
+        if FRESH_R2:
+            assert_restored_state(initial["model"], raw_model.state_dict(), torch)
+            if optimizer.state:
+                raise RuntimeError("fresh optimizer unexpectedly contains moments")
+            del initial
+            torch.cuda.empty_cache()
     else:
         raise RuntimeError("Relay requires the previous chunk's last_checkpoint.pt")
     if checkpoint.exists():
@@ -936,6 +967,36 @@ def main() -> None:
     probe_initial_score = best_score
     probe_best_score = best_score
     probe_stale_segments = 0
+    if FRESH_R2:
+        initial_validation = full_validation()
+        repeated_validation = full_validation()
+        passed = (
+            initial_validation == repeated_validation
+            and np.isfinite(initial_validation["all"]["macro_log_loss"])
+        )
+        preflight = {"passed": bool(passed), "initial": initial_validation,
+                     "repeated": repeated_validation, "optimizer_reset": True,
+                     "processed_samples": processed, "source": "R1 final_model.pt"}
+        if is_main_process():
+            (OUTPUT / "restart_preflight.json").write_text(json.dumps(preflight, indent=2) + "\n")
+        if not passed:
+            raise RuntimeError("fresh R2 initial predictions are not reproducible")
+        best_score = initial_validation["all"]["macro_log_loss"]
+        last_validation = initial_validation
+        if is_main_process():
+            torch.save({"model": raw_model.state_dict(), "metrics": initial_validation,
+                        "chunk_index": 0, "segment_index": 0, "processed_samples": 0,
+                        "rope_semantics": "canonical_verified"}, best_checkpoint)
+            best_meta.write_text(json.dumps({"macro_log_loss": best_score,
+                "chunk_index": 0, "segment_index": 0, "processed_samples": 0}, indent=2) + "\n")
+            swanlab_run.log({"validation/macro_log_loss": best_score,
+                            "train/processed_samples": 0}, step=0)
+        if distributed:
+            dist.barrier()
+        log("restart_preflight_passed", initial_macro_log_loss=best_score,
+            optimizer_reset=True, processed_samples=0)
+        if time.time() - runtime_started > GPU_BUDGET_SECONDS - RUNTIME_RESERVE_SECONDS - longest_segment_seconds:
+            raise RuntimeError("initialization consumed the fresh R2 budget")
     if LR_PROBE:
         initial_validation = full_validation()
         probe_initial_score = initial_validation["all"]["macro_log_loss"]
@@ -1083,6 +1144,14 @@ def main() -> None:
 
             global_segment_index = completed_segments + 1
             segment_samples = len(segment_rows)
+            if FRESH_R2:
+                expected = expected_segment_ids(train_pq, group_order, processed, segment_samples)
+                actual = [row_identity(row) for row in segment_rows]
+                if actual != expected:
+                    raise RuntimeError("fresh R2 sample coverage differs from independent cursor")
+                log("segment_coverage_verified", segment_index=global_segment_index,
+                    processed_before=processed, samples=segment_samples,
+                    identity_sha256=hashlib.sha256(json.dumps(actual).encode()).hexdigest())
             if LR_PROBE:
                 identity_hash = verify_segment_coverage(
                     segment_rows, expected_prefix, processed, seen_identities
@@ -1272,6 +1341,7 @@ def main() -> None:
                     "last_best_updated": last_best_updated,
                     "rope_semantics": "canonical_verified" if REPAIRED_TRIAL else "legacy",
                     "rope_fingerprint": rope_fingerprint(raw_model, torch) if REPAIRED_TRIAL else None,
+                    "run_purpose": RUN_PURPOSE,
                 }, checkpoint.with_suffix(".pt.tmp"))
                 checkpoint.with_suffix(".pt.tmp").replace(checkpoint)
             if distributed:
