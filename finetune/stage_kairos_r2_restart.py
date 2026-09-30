@@ -6,11 +6,12 @@ from pathlib import Path
 
 import swanlab
 
-from build_kairos_r2_restart import build, ROOT
+from build_kairos_r2_restart import build, ROOT, PROFILES
 
 
-def main():
-    source = build()
+def main(profile="canonical"):
+    config = PROFILES[profile]
+    source = build(profile=profile)
     key = os.environ.get("SWANLAB_API_KEY", "").strip()
     if not key:
         # Reuse the project's already-authorized logging credential without printing it.
@@ -22,9 +23,9 @@ def main():
         raise RuntimeError("Cloud logging credential missing; refuse submission")
     swanlab.login(api_key=key)
     run = swanlab.init(
-        id="kairos-r2-restart-20260930", resume="allow", project="finance",
-        workspace="roc_fu", experiment_name="kairos-r2-restart-20260930",
-        mode="cloud", config={"purpose": "formal R2 restart", "lr": 1e-4,
+        id=config["run_id"], resume="allow", project="finance",
+        workspace="roc_fu", experiment_name=config["run_id"],
+        mode="cloud", config={"purpose": "formal R2 restart", "lr": config["lr"],
                              "source": "R1 final weights", "session_budget_seconds": 36000},
     )
     url = run.url
@@ -32,7 +33,8 @@ def main():
         raise RuntimeError("Cloud run URL unavailable")
     run.log({"preflight/cloud_logging_ready": 1})
     swanlab.finish()
-    destination = ROOT / "artifacts/kairos_r2_restart_20260930/private_staging"
+    artifact_name = "kairos_r2_restart_20260930" if profile == "canonical" else config["run_id"].replace("-", "_")
+    destination = ROOT / "artifacts" / artifact_name / "private_staging"
     destination.mkdir(parents=True, exist_ok=True)
     os.chmod(destination, 0o700)
     tree = ast.parse((source / "restart.py").read_text())
@@ -52,4 +54,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profile", choices=PROFILES, default="canonical")
+    main(parser.parse_args().profile)

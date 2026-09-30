@@ -1,0 +1,12 @@
+{
+  "source_sha256": "cdf217360217f57fbf3b2c2889567e61dc3f462d6724a031d09621b46ba1ac21",
+  "generated_sha256": "86d653ab2a3190e4266a5f8a46ce67fafbfa685c404c85efa27a3eae89b1d822",
+  "budget_seconds": 36000,
+  "segment_limit_is_dataset_ceiling": true,
+  "metric_patience_enabled": false,
+  "lr": 3e-05,
+  "profile": "lr3e5",
+  "cloud_run_id": "kairos-r2-r1-lr3e5-20260930",
+  "initialization": "R1 final weights; fresh optimizer/scaler; cursor zero",
+  "cloud_credentials": "staging only, not tracked"
+}

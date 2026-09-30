@@ -221,3 +221,30 @@ def test_independent_restart_cursor(tmp_path):
         assert module.expected_segment_ids(parquet, order, offset, count) == expected[offset:offset+count]
     with pytest.raises(RuntimeError):
         module.expected_segment_ids(parquet, order, 15, 1)
+
+
+def test_lower_lr_restart_initializes_fresh_optimizer(tmp_path):
+    import ast
+    import json
+
+    restart = load_module(ROOT / "finetune/build_kairos_r2_restart.py")
+    directory = restart.build(tmp_path, profile="lr3e5")
+    module = load_module(directory / "restart.py")
+    assert module.FRESH_R2 and module.CHUNK_INDEX == 0
+    assert not module.LR_PROBE
+    assert module.LEARNING_RATE_OVERRIDE == 3e-5
+    assert module.SWANLAB_RUN_ID == "kairos-r2-r1-lr3e5-20260930"
+    assert module.SWANLAB_API_KEY_FALLBACK == ""
+    assert module.GPU_BUDGET_SECONDS == 36000
+    assert module.MAX_SEGMENTS_THIS_RUN == 451
+    tree = ast.parse((directory / "restart.py").read_text())
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute) and n.func.attr == "AdamW"]
+    assert len(calls) == 1
+    assert next(ast.literal_eval(k.value) for k in calls[0].keywords if k.arg == "lr") == 3e-5
+    metadata = json.loads((directory / "kernel-metadata.json").read_text())
+    assert metadata["id"] == "wynstonliu/kairos-r2-r1-restart-lr-3e-5"
+    assert metadata["kernel_sources"] == ["wynstonliu/modernbert-decision-full-chunk-8"]
+    manifest = json.loads((directory / "build_manifest.json").read_text())
+    assert manifest["lr"] == 3e-5
+    assert not manifest["metric_patience_enabled"]
