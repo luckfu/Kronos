@@ -597,6 +597,11 @@ C：金融 token 路径置零
 
 ### 10.5 当前状态记录
 
+**当前执行入口已更新：2026-09-30用户授权修复后正式重启R2，V1为
+`wynstonliu/kairos-r2-restart-canonical`，新云看板为`kairos-r2-restart-20260930`。
+后续监控/接力以 `kairos_r2_restart_cn.md` 为准。下表及下述冻结/LR对照描述保留为
+此前审计阶段历史，不能覆盖最新正式重启授权。**
+
 最后状态查询：Chunk 2 已于 2026-09-30 手工停止，API 返回取消确认；详细审计见
 `kairos_e1_full_diff_audit_cn.md`。
 以下是已查询或已下载报告证明的事实，不是预计完成量。
