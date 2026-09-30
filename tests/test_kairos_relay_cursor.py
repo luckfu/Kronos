@@ -109,3 +109,78 @@ def test_diagnostic_exits_before_training():
     calls = [ast.unparse(node.func) for node in ast.walk(diagnostic) if isinstance(node, ast.Call)]
     assert "full_validation" in calls
     assert not any("optimizer" in name or "backward" in name for name in calls)
+
+
+def test_observation_window_and_fail_closed(tmp_path):
+    module = load_module(builder.build("1e4", tmp_path) / "lr_probe.py")
+    module.EARLY_STOP_PATIENCE = 4
+    for completed in range(1, 8):
+        reason, _, _ = module.trial_stop_reason(1.4, 0.67, 10, completed)
+        assert reason == ""
+    assert module.trial_stop_reason(1.4, 0.67, 10, 8)[0] == "validation_patience_after_observation"
+    assert module.trial_stop_reason(float("nan"), 0.67, 0, 1)[0] == "nonfinite_validation"
+    assert module.trial_stop_reason(0.60, 0.67, 10, 8) == ("", 0.60, 0)
+
+
+def test_source_artifact_isolation(tmp_path):
+    module = load_module(builder.build("1e4", tmp_path / "module") / "lr_probe.py")
+    for slug in ("chunk1", "trial"):
+        path = tmp_path / "input" / slug / "last_checkpoint.pt"
+        path.parent.mkdir(parents=True)
+        path.touch()
+    assert module.source_files("**/last_checkpoint.pt", "chunk1", tmp_path / "input") == [
+        tmp_path / "input/chunk1/last_checkpoint.pt"
+    ]
+    assert module.source_files("**/last_checkpoint.pt", "missing", tmp_path / "input") == []
+
+
+def test_rope_numeric_guard_and_canonical_order(tmp_path):
+    import torch
+    from types import SimpleNamespace
+
+    module = load_module(builder.build("1e4", tmp_path) / "lr_probe.py")
+    model = torch.nn.Module()
+    model.backbone = torch.nn.Module()
+    model.backbone.rotary_emb = torch.nn.Module()
+    model.backbone.config = SimpleNamespace(
+        hidden_size=768, num_attention_heads=12,
+        rope_parameters={
+            "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0},
+            "full_attention": {"rope_type": "default", "rope_theta": 160000.0},
+        },
+    )
+    rotary = model.backbone.rotary_emb
+    for kind, params in model.backbone.config.rope_parameters.items():
+        value = 1.0 / (params["rope_theta"] ** (torch.arange(0, 64, 2, dtype=torch.float32) / 64))
+        rotary.register_buffer(f"{kind}_inv_freq", value, persistent=False)
+        rotary.register_buffer(f"{kind}_original_inv_freq", value.clone(), persistent=False)
+    module.canonicalize_buffers(model)
+    fingerprint = module.rope_fingerprint(model, torch)
+    names = [item[0] for item in fingerprint["ordered_buffers"]]
+    assert names == sorted(names)
+    assert not model.state_dict()
+    with torch.no_grad():
+        rotary.full_attention_inv_freq.copy_(rotary.sliding_attention_inv_freq)
+    with pytest.raises(AssertionError):
+        module.rope_fingerprint(model, torch)
+
+
+def test_bounded_trial_configuration(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.syspath_prepend(str(ROOT / "finetune"))
+    trial_builder = load_module(ROOT / "finetune/build_kairos_rope_fixed_trial.py")
+    directory = trial_builder.build_trial(tmp_path)
+    module = load_module(directory / "lr_probe.py")
+    assert module.REPAIRED_TRIAL and module.LR_PROBE and not module.DIAGNOSTIC_ONLY
+    assert module.LEARNING_RATE_OVERRIDE == 1e-4
+    assert module.GPU_BUDGET_SECONDS == 10800
+    assert module.MAX_SEGMENTS_THIS_RUN == 12
+    assert module.MIN_OBSERVATION_SEGMENTS == 8
+    assert module.EARLY_STOP_PATIENCE == 4
+    assert module.SOURCE_KERNEL_SLUG != module.REASSESS_KERNEL_SLUG
+    metadata = json.loads((directory / "kernel-metadata.json").read_text())
+    assert metadata["id"] == "wynstonliu/kairos-rope-fixed-bounded-trial"
+    assert len(metadata["kernel_sources"]) == 2
+    source = (directory / "lr_probe.py").read_text()
+    assert source.index("if not repeat_ok:") < source.index("scaler.scale(loss).backward()")

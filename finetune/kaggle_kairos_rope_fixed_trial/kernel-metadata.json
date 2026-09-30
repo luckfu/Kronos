@@ -1,0 +1,20 @@
+{
+  "id": "wynstonliu/kairos-rope-fixed-bounded-trial",
+  "title": "Kairos RoPE Fixed Bounded Trial",
+  "code_file": "lr_probe.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "wynstonliu/kairos-r2-modernbert-chunk-1",
+    "wynstonliu/kairos-r2-lr-probe-0-0001"
+  ]
+}

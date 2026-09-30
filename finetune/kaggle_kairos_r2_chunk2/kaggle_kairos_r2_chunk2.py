@@ -21,6 +21,11 @@ SEED = 20260927
 BATCH_SIZE = 16
 LR_PROBE = False
 DIAGNOSTIC_ONLY = False
+REPAIRED_TRIAL = False
+SOURCE_KERNEL_SLUG = ""
+REASSESS_KERNEL_SLUG = ""
+TOKENIZER_CODE_COMMIT = ""
+MIN_OBSERVATION_SEGMENTS = 8
 LEARNING_RATE_OVERRIDE = None
 EARLY_STOP_PATIENCE = 2
 EARLY_STOP_MIN_DELTA = 0.001
@@ -76,6 +81,55 @@ def find_one(pattern: str) -> Path:
     if len(matches) != 1:
         raise RuntimeError(f"expected one {pattern}, found {len(matches)}: {matches}")
     return matches[0]
+
+
+def source_files(pattern: str, slug: str = "", root: Path = Path("/kaggle/input")) -> list[Path]:
+    return sorted(path for path in root.glob(pattern) if not slug or slug in path.parts)
+
+
+def canonicalize_buffers(model: Any) -> None:
+    # DDP broadcasts buffers by registration position, not by qualified name.
+    for module in model.modules():
+        module._buffers = dict(sorted(module._buffers.items()))
+
+
+def rope_fingerprint(model: Any, torch: Any) -> dict[str, Any]:
+    rotary = model.backbone.rotary_emb
+    config = model.backbone.config
+    dim = config.hidden_size // config.num_attention_heads
+    expected_names = set()
+    for kind, params in config.rope_parameters.items():
+        if params["rope_type"] != "default":
+            raise RuntimeError("bounded trial only supports default RoPE")
+        expected = 1.0 / (
+            params["rope_theta"] ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim)
+        )
+        for suffix in ("inv_freq", "original_inv_freq"):
+            name = f"{kind}_{suffix}"
+            expected_names.add(name)
+            actual = getattr(rotary, name).detach().cpu()
+            torch.testing.assert_close(actual, expected, rtol=1e-6, atol=1e-8)
+    if set(dict(rotary.named_buffers())) != expected_names:
+        raise RuntimeError("unexpected rotary buffer schema")
+    return {
+        "ordered_buffers": [
+            [name, list(value.shape), str(value.dtype),
+             hashlib.sha256(value.detach().cpu().contiguous().reshape(-1)
+                            .view(torch.uint8).numpy().tobytes()).hexdigest()]
+            for name, value in model.named_buffers()
+        ],
+        "rope_parameters": config.rope_parameters,
+    }
+
+
+def trial_stop_reason(score: float, best: float, stale: int, completed: int) -> tuple[str, float, int]:
+    if not np.isfinite(score):
+        return "nonfinite_validation", best, stale
+    stale = 0 if score < best - EARLY_STOP_MIN_DELTA else stale + 1
+    best = min(best, score)
+    if completed >= MIN_OBSERVATION_SEGMENTS and stale >= EARLY_STOP_PATIENCE:
+        return "validation_patience_after_observation", best, stale
+    return "", best, stale
 
 
 def dashboard(state: dict[str, Any]) -> None:
@@ -316,6 +370,8 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("full training requires Kaggle GPU")
     gpu_count = torch.cuda.device_count()
+    if REPAIRED_TRIAL:
+        os.environ["PYTHONHASHSEED"] = str(SEED)
     if gpu_count >= 2 and "WORLD_SIZE" not in os.environ:
         command = [
             sys.executable,
@@ -389,6 +445,16 @@ def main() -> None:
             "git", "clone", "--depth", "1", "--branch", "master",
             "https://github.com/luckfu/Kronos.git", str(repo_path)
         ], check=True)
+    if REPAIRED_TRIAL and is_main_process():
+        subprocess.run(["git", "-C", str(repo_path), "fetch", "--depth", "1",
+                        "origin", TOKENIZER_CODE_COMMIT], check=True)
+        subprocess.run(["git", "-C", str(repo_path), "checkout", "--detach",
+                        TOKENIZER_CODE_COMMIT], check=True)
+        revision = subprocess.check_output(["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+                                           text=True).strip()
+        if revision != TOKENIZER_CODE_COMMIT:
+            raise RuntimeError("tokenizer implementation revision mismatch")
+        log("tokenizer_code_pinned", commit=revision)
     if distributed:
         dist.barrier()
     sys.path.insert(0, str(repo_path))
@@ -406,6 +472,8 @@ def main() -> None:
     for parameter in tokenizer.parameters():
         parameter.requires_grad_(False)
     tokenizer_sha256 = sha256_file(tokenizer_path / "model.safetensors")
+    if REPAIRED_TRIAL and tokenizer_sha256 != "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee":
+        raise RuntimeError("tokenizer differs from the audited source")
 
     class FullModel(nn.Module):
         def __init__(self) -> None:
@@ -453,6 +521,28 @@ def main() -> None:
 
     model = FullModel().to(device)
     raw_model = model
+
+    def verify_rope(stage: str) -> None:
+        if not REPAIRED_TRIAL:
+            return
+        try:
+            local = {"ok": True, "fingerprint": rope_fingerprint(raw_model, torch)}
+        except Exception as exc:
+            local = {"ok": False, "error": str(exc)}
+        gathered = [None for _ in range(world_size)]
+        if distributed:
+            dist.all_gather_object(gathered, local)
+        else:
+            gathered = [local]
+        if not all(item["ok"] for item in gathered) or any(item != gathered[0] for item in gathered):
+            raise RuntimeError(f"cross-rank RoPE semantics failed at {stage}: {gathered}")
+        if is_main_process():
+            (OUTPUT / f"rope_{stage}.json").write_text(json.dumps(gathered, indent=2) + "\n")
+        log("rope_verified", stage=stage, fingerprint=gathered[0]["fingerprint"])
+
+    if REPAIRED_TRIAL:
+        canonicalize_buffers(raw_model)
+        verify_rope("before_ddp")
     if distributed:
         model = DistributedDataParallel(
             model,
@@ -460,6 +550,7 @@ def main() -> None:
             output_device=local_rank,
             find_unused_parameters=False,
         )
+    verify_rope("after_ddp")
     log(
         "multi_gpu_detected",
         devices=torch.cuda.device_count(),
@@ -474,20 +565,20 @@ def main() -> None:
     best_checkpoint = OUTPUT / "best_model.pt"
     if is_main_process():
         if CHUNK_INDEX > 0 and not checkpoint.exists():
-            previous = sorted(Path("/kaggle/input").glob("**/last_checkpoint.pt"))
+            previous = source_files("**/last_checkpoint.pt", SOURCE_KERNEL_SLUG)
             if len(previous) > 1:
                 raise RuntimeError(f"expected at most one previous checkpoint, found {previous}")
             if previous:
                 shutil.copy2(previous[0], checkpoint)
         if not best_checkpoint.exists():
-            previous_best = sorted(Path("/kaggle/input").glob("**/best_model.pt"))
+            previous_best = source_files("**/best_model.pt", SOURCE_KERNEL_SLUG)
             if len(previous_best) > 1:
                 raise RuntimeError(f"expected at most one previous best model, found {previous_best}")
             if previous_best:
                 shutil.copy2(previous_best[0], best_checkpoint)
     best_meta = OUTPUT / "best_metric.json"
     if is_main_process() and not best_meta.exists():
-        previous_meta = sorted(Path("/kaggle/input").glob("**/best_metric.json"))
+        previous_meta = source_files("**/best_metric.json", SOURCE_KERNEL_SLUG)
         if len(previous_meta) > 1:
             raise RuntimeError(f"expected at most one previous best metric, found {previous_meta}")
         if previous_meta:
@@ -511,6 +602,8 @@ def main() -> None:
     if best_meta.exists():
         best_score = float(json.loads(best_meta.read_text(encoding="utf-8"))["macro_log_loss"])
     if checkpoint.exists():
+        if REPAIRED_TRIAL and sha256_file(checkpoint) != "45f4d7327d730e803fdf22c81e9baff20af5ea2e86b5e718d3d58b7467eabbcb":
+            raise RuntimeError("bounded trial must start from the audited Chunk 1 checkpoint")
         saved = torch.load(checkpoint, map_location=device)
         if saved.get("shuffle_seed") != SHUFFLE_SEED:
             raise RuntimeError("checkpoint shuffle seed mismatch")
@@ -583,6 +676,7 @@ def main() -> None:
     if checkpoint.exists():
         del saved
         torch.cuda.empty_cache()
+    verify_rope("after_restore")
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10", *TARGET_COLUMNS]
     expected_prefix: list[tuple[str, int, str]] = []
@@ -619,6 +713,22 @@ def main() -> None:
         "features": list(FEATURES),
         "normalization": "per_window_zscore_std_plus_1e-5_clip_5",
     }
+    train_prevalence = None
+    if REPAIRED_TRIAL:
+        totals = np.zeros(8, dtype=np.float64)
+        count = 0
+        for index in range(train_pq.num_row_groups):
+            table = train_pq.read_row_group(index, columns=list(TARGET_COLUMNS))
+            count += len(table)
+            for head, name in enumerate(TARGET_COLUMNS):
+                column = table[name].to_numpy()
+                if not np.isfinite(column).all() or not np.isin(column, [0, 1]).all():
+                    raise RuntimeError("invalid labels in train-prior computation")
+                totals[head] += column.sum(dtype=np.float64)
+        if count != train_total:
+            raise RuntimeError("training prior sample count mismatch")
+        train_prevalence = (totals / count).astype(np.float32)
+        log("train_prior", samples=count, prevalence=train_prevalence.tolist())
 
     def encode_token_cache(
         rows: list[dict[str, Any]],
@@ -661,12 +771,11 @@ def main() -> None:
         import sklearn.metrics
 
         nonlocal validation_token_cache
+        verify_rope("before_validation")
         if validation_token_cache is None:
             if not validation_cache_path.exists():
-                previous = sorted(
-                    Path("/kaggle/input").glob(
-                        f"**/validation_token_cache_rank{rank}.npz"
-                    )
+                previous = source_files(
+                    f"**/validation_token_cache_rank{rank}.npz", SOURCE_KERNEL_SLUG
                 )
                 if len(previous) > 1:
                     raise RuntimeError(
@@ -793,6 +902,17 @@ def main() -> None:
                 "macro_ece_10bin": float(np.mean([value["ece_10bin"] for value in values])),
                 "per_threshold": dict(zip(TARGET_COLUMNS, values)),
             }
+            if train_prevalence is not None:
+                prior = np.clip(train_prevalence, 1e-7, 1 - 1e-7)
+                truth_slice = labels[mask].astype(np.float32)
+                result[name]["train_prior_log_loss"] = float(
+                    -(truth_slice * np.log(prior) + (1 - truth_slice) * np.log(1 - prior)).mean()
+                )
+                result[name]["train_prior_brier"] = float(np.square(prior - truth_slice).mean())
+        if REPAIRED_TRIAL:
+            result["all"]["prediction_sha256"] = hashlib.sha256(
+                probabilities.tobytes()
+            ).hexdigest()
         result_holder = [result]
         if distributed:
             dist.barrier()
@@ -869,7 +989,71 @@ def main() -> None:
                 dist.barrier()
                 dist.destroy_process_group()
             return
-        if not np.isfinite(probe_initial_score) or abs(probe_initial_score - best_score) > 0.002:
+        if REPAIRED_TRIAL:
+            candidates = source_files("**/best_model.pt", REASSESS_KERNEL_SLUG)
+            if len(candidates) != 1:
+                raise RuntimeError(f"expected one prior best for reassessment: {candidates}")
+            candidate_sha = sha256_file(candidates[0])
+            if candidate_sha != "103c8e4ec901e62ad0b090e00a9d9eddd942fbb1cd3380c5c0fbac0e35d1a052":
+                raise RuntimeError("prior best identity mismatch")
+            candidate = torch.load(candidates[0], map_location="cpu", weights_only=True, mmap=True)
+            raw_model.load_state_dict(candidate["model"], strict=True)
+            candidate_old_metrics = candidate["metrics"]
+            del candidate
+            candidate_validation = full_validation()
+            source = torch.load(checkpoint, map_location="cpu", weights_only=True, mmap=True)
+            raw_model.load_state_dict(source["model"], strict=True)
+            assert_restored_state(source["model"], raw_model.state_dict(), torch)
+            assert_restored_state(source["optimizer"], optimizer.state_dict(), torch)
+            assert_restored_state(source["scaler"], scaler.state_dict(), torch)
+            del source
+            verify_rope("after_reassessment_restore")
+            repeated_validation = full_validation()
+            repeat_ok = (
+                np.isfinite(probe_initial_score)
+                and initial_validation["all"]["prediction_sha256"]
+                == repeated_validation["all"]["prediction_sha256"]
+                and initial_validation == repeated_validation
+            )
+            preflight = {
+                "passed": bool(repeat_ok),
+                "legacy_initial_macro_log_loss": best_score,
+                "repaired_initial_validation": initial_validation,
+                "repeated_initial_validation": repeated_validation,
+                "candidate_best_sha256": candidate_sha,
+                "candidate_legacy_metrics": candidate_old_metrics,
+                "candidate_repaired_validation": candidate_validation,
+                "training_source": SOURCE_KERNEL_SLUG,
+                "training_source_changed_by_reassessment": False,
+                "gate": "theoretical RoPE + identical named cross-rank buffers + exact repeat predictions",
+            }
+            if is_main_process():
+                (OUTPUT / "trial_preflight.json").write_text(json.dumps(preflight, indent=2) + "\n")
+            if not repeat_ok:
+                raise RuntimeError("repaired forward did not reproduce after weight restoration")
+            # Historical scores came from mixed RoPE semantics and cannot select new best.
+            best_score = probe_initial_score
+            last_validation = initial_validation
+            if is_main_process():
+                torch.save({
+                    "model": raw_model.state_dict(), "metrics": initial_validation,
+                    "chunk_index": 0, "segment_index": start_segment_index,
+                    "processed_samples": processed, "rope_semantics": "canonical_verified",
+                }, best_checkpoint.with_suffix(".pt.tmp"))
+                best_checkpoint.with_suffix(".pt.tmp").replace(best_checkpoint)
+                best_meta.write_text(json.dumps({
+                    "macro_log_loss": best_score, "chunk_index": 0,
+                    "segment_index": start_segment_index, "processed_samples": processed,
+                    "rope_semantics": "canonical_verified",
+                }, indent=2) + "\n")
+            if distributed:
+                dist.barrier()
+            log("trial_preflight_passed", initial_macro_log_loss=best_score,
+                candidate_repaired_macro_log_loss=candidate_validation["all"]["macro_log_loss"],
+                training_source=SOURCE_KERNEL_SLUG, optimizer_moments_preserved=True)
+        if not np.isfinite(probe_initial_score) or (
+            not REPAIRED_TRIAL and abs(probe_initial_score - best_score) > 0.002
+        ):
             raise RuntimeError(
                 f"initial validation does not reproduce Chunk 1 baseline: "
                 f"observed={probe_initial_score}, expected={best_score}, tolerance=0.002"
@@ -909,6 +1093,7 @@ def main() -> None:
             segment_global_start = processed
             segment_processed = 0
             segment_started = time.monotonic()
+            verify_rope("before_training")
             padded_count = ((segment_samples + world_size - 1) // world_size) * world_size
             padded_rows = segment_rows + [segment_rows[-1]] * (padded_count - segment_samples)
             local_rows = padded_rows[rank::world_size]
@@ -940,6 +1125,12 @@ def main() -> None:
                     if distributed:
                         dist.all_reduce(global_valid_count, op=dist.ReduceOp.SUM)
                     loss = local_loss_sum * world_size / global_valid_count.clamp_min(1)
+                if REPAIRED_TRIAL:
+                    finite = torch.isfinite(loss).to(torch.int32)
+                    if distributed:
+                        dist.all_reduce(finite, op=dist.ReduceOp.MIN)
+                    if not finite.item():
+                        raise RuntimeError("nonfinite training loss; refusing optimizer update")
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -1031,6 +1222,7 @@ def main() -> None:
                             "chunk_index": CHUNK_INDEX,
                             "segment_index": global_segment_index,
                             "processed_samples": processed,
+                            "rope_semantics": "canonical_verified" if REPAIRED_TRIAL else "legacy",
                         },
                         best_checkpoint.with_suffix(".pt.tmp"),
                     )
@@ -1078,6 +1270,8 @@ def main() -> None:
                     "processed_samples": processed,
                     "last_validation": last_validation,
                     "last_best_updated": last_best_updated,
+                    "rope_semantics": "canonical_verified" if REPAIRED_TRIAL else "legacy",
+                    "rope_fingerprint": rope_fingerprint(raw_model, torch) if REPAIRED_TRIAL else None,
                 }, checkpoint.with_suffix(".pt.tmp"))
                 checkpoint.with_suffix(".pt.tmp").replace(checkpoint)
             if distributed:
@@ -1113,9 +1307,14 @@ def main() -> None:
                 run_segment_limit = segments_this_run
                 stop_reason = "runtime_budget"
             if LR_PROBE:
-                reason, probe_best_score, probe_stale_segments = probe_stop_reason(
-                    validation_score, probe_best_score, probe_stale_segments, probe_initial_score
-                )
+                if REPAIRED_TRIAL:
+                    reason, probe_best_score, probe_stale_segments = trial_stop_reason(
+                        validation_score, probe_best_score, probe_stale_segments, segments_this_run
+                    )
+                else:
+                    reason, probe_best_score, probe_stale_segments = probe_stop_reason(
+                        validation_score, probe_best_score, probe_stale_segments, probe_initial_score
+                    )
                 if reason:
                     run_segment_limit = segments_this_run
                     stop_reason = reason
@@ -1126,6 +1325,7 @@ def main() -> None:
             "status": "CHUNK_COMPLETE",
             "purpose": RUN_PURPOSE,
             "learning_rate": optimizer.param_groups[0]["lr"],
+            "rope_repaired_trial": REPAIRED_TRIAL,
             "initial_macro_log_loss": probe_initial_score if LR_PROBE else None,
             "validation_history": validation_history,
             "stop_reason": stop_reason,

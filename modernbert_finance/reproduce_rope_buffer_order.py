@@ -1,6 +1,7 @@
 """CPU-only DDP reproducer for nonpersistent buffer registration order."""
 import json
 import tempfile
+import runpy
 from datetime import timedelta
 from pathlib import Path
 
@@ -28,7 +29,12 @@ class Probe(torch.nn.Module):
 def worker(rank, rendezvous, output, canonical):
     dist.init_process_group("gloo", init_method=rendezvous, rank=rank, world_size=2,
                             timeout=timedelta(seconds=30))
-    model = Probe(rank, canonical)
+    model = Probe(rank, False)
+    if canonical:
+        runner = Path(__file__).resolve().parents[1] / (
+            "finetune/kaggle_kairos_r2_chunk2/kaggle_kairos_r2_chunk2.py"
+        )
+        runpy.run_path(str(runner), run_name="rope_test")["canonicalize_buffers"](model)
     before = {name: value.item() for name, value in model.named_buffers()}
     wrapped = DistributedDataParallel(model)
     wrapped(torch.ones(1))
