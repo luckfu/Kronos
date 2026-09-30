@@ -2,6 +2,24 @@
 
 日期：2026-09-30（北京时间）。
 
+## LR 状态结论（避免混淆）
+
+**本轮 V1 实际 LR 为 3e-5。fresh 初始化的 LR 隐患在提交前已修复，不是当前运行中的未修复故障。**
+
+| 对象/阶段 | 目标与实际 LR | 判定 |
+| --- | --- | --- |
+| 已停止的旧 canonical 轮 | 目标 1e-4，实际 1e-4，override=None | 没有发生 LR 配置与执行不一致 |
+| 仅修改 override、未改 AdamW 的假设版本 | 目标 3e-5，fresh 路径实际仍会是 1e-4 | 反事实风险，不是已提交的新 V1 |
+| 本轮提交前生成及私有 staging | override 与实际 AdamW 初始化均为 3e-5 | 提交前已修复并测试 |
+| 本轮 V1 云端第 1/2/3 段 | optimizer 实际 LR 均为 3e-5 | 已由逐段运行日志确认 |
+
+区别证据来源：SwanLab config 的 `learning_rate_override` 只是配置；
+`segment_validation.learning_rate` 直接读取 `optimizer.param_groups[0]['lr']`，是实际 optimizer 值。
+因此“只改 override 时所有日志都会显示 3e-5”不准确：fresh 路径不会打印 restore 分支的
+`learning_rate_override` 事件，逐段验证日志反而会暴露实际 1e-4。
+修复包含在提交 `23f32ce` 的生成器和新脚本中。该 Git 提交记录的是已提交 V1 的实现，
+不能把 Git commit 时间当成代码修改/上传时间，也不应据此推断云端曾运行未修复版本。
+
 ## 决策与边界
 
 用户已手工停止 `wynstonliu/kairos-r2-restart-canonical`，并明确授权从 R1 权重重新开始、降低 LR。
@@ -79,8 +97,20 @@ CLI 状态已确认 `CANCEL_ACKNOWLEDGED`。
 远端已确认 `RUNNING`。北京时间 22:54:15 启动、22:54:39 检测到双 T4；
 22:55:22 的 DDP 前后 RoPE 校验通过，22:55:42 从 R1 加载，来源 SHA 与上文一致，
 `optimizer_reset=true`；恢复后 RoPE 校验通过，22:55:52 开始初始验证。
-此时尚未看到初始双验证通过或完成第 1 段，不能把 RUNNING 写成训练验收通过。
+上述是启动时快照，不代表当前仍停在初始验证；后续核验见下表。
 私有上传脚本与公开生成脚本的 AST 除凭据字段外完全一致，实际 AdamW 初始化 LR=3e-5。
+
+2026-09-30 后续云端日志核验（北京时间）：
+
+| 时间 | 事件 | 实际 LR | macro log loss |
+| --- | --- | --- | --- |
+| 23:04:45 | 初始复现门禁通过，processed_samples=0 | 尚无更新 | 0.9181997701525688 |
+| 23:12:20 | 第 1 段完整验证 | 3e-5 | 0.674934521317482 |
+| 23:19:57 | 第 2 段完整验证 | 3e-5 | 0.8086033910512924 |
+| 23:27:34 | 第 3 段完整验证 | 3e-5 | 0.6294979639351368 |
+
+第 3 段于 23:27:39 完成，累计 60,000 条。以上是有时间戳的已核验快照，不声称是实时最新状态，
+也不能仅凭三段宣布 LR 效果成立。针对 fresh LR 的两项配置回归测试再次通过。
 
 ```sh
 kaggle kernels status wynstonliu/kairos-r2-r1-restart-lr-3e-5
