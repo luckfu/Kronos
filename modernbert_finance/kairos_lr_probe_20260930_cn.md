@@ -206,6 +206,10 @@ Git 交付受当前权限阻塞：尝试先 pull，`.git/FETCH_HEAD` 返回 Oper
 
 ### Git 状态更正
 
+2026-09-30自动任务状态更正：`kairos-lr`更新失败是历史记录；接手核查时
+任务已为`PAUSED`，随后按用户要求通过应用工具成功删除，返回
+`deleteStatus: deleted`。旧任务已删除，无需继续检查停用，不影响Kaggle训练。
+
 以上权限描述是当次命令失败的记录，不是仓库持久权限问题的定论。
 后续用户确认 FETCH_HEAD 可写；代理重新执行 `git fetch --no-tags origin`
 也已成功，随后 `git add` 成功。`git rev-list --left-right --count

@@ -123,9 +123,12 @@ kaggle kernels output wynstonliu/kairos-r2-restart-canonical \
 
 ## 自动化与凭据注意
 
-旧自动任务`kairos-lr`此前更新多次被审批限制拒绝，其保存提示可能仍指向旧实验。
-接手人应检查并停用旧任务，避免重复监控或执行旧指令。本线程不声称已完成停用，
-也不声称已设置正式重启的自动接力。后续监控由用户指定的接手人负责。
+旧自动任务`kairos-lr`此前更新及删除调用曾被工具审批策略拦截，
+原始错误为`MCP tool call requires approval, but approval policy is never`，
+并非用户拒绝授权。2026-09-30接手核查时，本地配置已为`PAUSED`；
+随后按用户要求通过应用工具成功删除，返回`deleteStatus: deleted`。
+旧任务已删除，无需接手人再次停用；该操作不影响Kaggle训练。
+未设置正式重启的自动接力，后续监控仍由用户指定的接手人负责。
 
 私有上传staging在Git忽略目录，云凭据没有新增到跟踪文件；历史仓库中仍有旧脚本
 内嵌凭据，属于既存风险，不能把“新提交无密钥”写成“全仓库无密钥”。不要复制进
