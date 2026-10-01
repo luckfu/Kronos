@@ -1,0 +1,47 @@
+{
+  "phase": "U_tabular_train_to_val_confirm_launch",
+  "kind": "kaggle_cpu_tabular_enet_blend_train_to_val_primary_val_temporal_secondary",
+  "target": "y=1{mfe10>=0.10}",
+  "mfe10_def": "max(high[T+1:T+10])/close[T]-1",
+  "metrics": [
+    "delta_vs_prior",
+    "gate_passed"
+  ],
+  "recipes": [
+    "logistic_C0.01",
+    "enet_C0.01_l1_0.7",
+    "enet_C0.01_l1_0.5",
+    "blend_lr0.5_mlp0.5",
+    "blend_lr0.7_mlp0.3",
+    "blend_lr0.8_mlp0.2",
+    "blend_lr0.9_mlp0.1"
+  ],
+  "primary_protocol": "train_to_val",
+  "secondary_protocol": "val_temporal",
+  "train_window": "2023-01-01..2024-12-31",
+  "train_cap": 500000,
+  "gate_delta_vs_prior": -0.04,
+  "phase_t2_temporal_best_delta": -0.04179349770224927,
+  "alignment_fix": "filter_targets_by_asof_signal_window_in_build_enriched_matrix",
+  "kernel_slug": "user281434/kairos-mfe10-decision-tabular-phase-u",
+  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-u-20261002",
+  "fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
+  "not_tokenizer_sequence": true,
+  "not_ranking_ic": true,
+  "not_22_layer": true,
+  "not_tpu": true,
+  "status": "RUNNING",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-u",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-u-20261002",
+  "decision_only_charter": "modernbert_finance/kairos_decision_only_handoff_cn.md",
+  "prior_phases": {
+    "S_temporal_blend_best": -0.04179349770224905,
+    "T_status": "ERROR_infra_import",
+    "T2_temporal_blend_best": -0.04179349770224927,
+    "T2_train_to_val": "SKIPPED_alignment"
+  },
+  "launched_at_cst": "2026-10-02 00:48:45 CST",
+  "kernel_status_at_launch": "RUNNING",
+  "pushed_at_cst": "2026-10-02 00:48:45 CST",
+  "commit": "da32fb2"
+}

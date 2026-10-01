@@ -31,8 +31,10 @@
 
 ## 当前下一步
 
-- **Phase U（进行中）**：修 `build_enriched_matrix` 信号窗 targets 对齐；主协议 **train 2023–2024 → 全 val**；次协议 val_temporal 仍须过闸。  
-- Kernel 目标 slug：`user281434/kairos-mfe10-decision-tabular-phase-u`  
+- **Phase U（RUNNING，2026-10-02 00:48:45 CST）**：信号窗 targets 对齐已合入；主协议 **train 2023–2024 → 全 val**；次协议 val_temporal 仍须过闸。  
+- Kernel：`user281434/kairos-mfe10-decision-tabular-phase-u`  
+- URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-u  
+- SwanLab：`kairos-mfe10-decision-tabular-phase-u-20261002`  
 - **禁止**：Ranking 产品；22 层长训；TPU WIP；重启失败序列配方。
 
 ## 明确不做
