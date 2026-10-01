@@ -1,6 +1,6 @@
 # Kairos MFE≥10% 短 Sidecar 训练交接（单二分类头）
 
-日期：2026-10-01 21:25 CST（北京时间）。Phase I 未过闸；现推 Phase J freeze-backbone。
+日期：2026-10-01 22:25 CST（北京时间）。Phase J freeze-bb 未过闸；现推 Phase K identity-backbone。
 
 ## 一句话
 
@@ -38,7 +38,7 @@
 | 每 eval 必打 | `constant_prior_log_loss` / `delta_vs_prior` / `positive_rate` |
 | 早停 | 连续 **2** 次 eval 满足 `\|model_ll − prior_ll\| ≤ 1e-3` → `stuck_at_constant_prior` |
 | 预算 | `MAX_SEGMENTS_THIS_RUN=4`，`SEGMENT_SAMPLES=20000`，GPU ≈90min，1 chunk |
-| LR | `1e-4`；**FREEZE_BACKBONE**；fresh init 单 logit 头（不加载 8 头权重） |
+| LR | `1e-4`；**BACKBONE_MODE=identity**（绕过 22 层）；fresh embeds+头（不加载 8 头权重） |
 
 ## 代码与 Kernel
 
@@ -48,7 +48,7 @@
 | 训练脚本 | `finetune/kaggle_kairos_mfe10_sidecar/train_mfe10_sidecar.py` |
 | Builder | `finetune/build_kairos_mfe10_sidecar.py` |
 | Staging | `finetune/stage_kairos_mfe10_sidecar.py`（注入 SwanLab，不入库） |
-| Kernel slug | `user281434/kairos-mfe10-sidecar-short-phase-j-freeze-bb` |
+| Kernel slug | `user281434/kairos-mfe10-sidecar-short-phase-k-identity` |
 | 数据 | `luckfu/a-share-120d-temporal-symbol-holdout` + `luckfu/ashare120d-modernbert-targets` |
 | kernel_sources | **空**（不挂旧 chunk-8 / R2 权重） |
 | 单测 | `tests/test_kairos_mfe10_sidecar.py` |
@@ -72,18 +72,18 @@ git push origin master
 # 2) 私有 staging（写入 SwanLab key）+ Kaggle push
 python finetune/stage_kairos_mfe10_sidecar.py
 kaggle kernels push -p artifacts/kairos_mfe10_sidecar/private_staging
-kaggle kernels status user281434/kairos-mfe10-sidecar-short-phase-j-freeze-bb
+kaggle kernels status user281434/kairos-mfe10-sidecar-short-phase-k-identity
 ```
 
 若 CLI push 需要网页确认：打开  
-https://www.kaggle.com/code/user281434/kairos-mfe10-sidecar-short-phase-j-freeze-bb  
+https://www.kaggle.com/code/user281434/kairos-mfe10-sidecar-short-phase-k-identity  
 点 **Run** / **Resume**（GPU T4，Internet on）。
 
 ## SwanLab 如何看
 
 - 项目：`roc_fu/finance`
-- Run id：`kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001`
-- URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001
+- Run id：`kairos-mfe10-sidecar-short-phase-k-identity-20261001`
+- URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-phase-k-identity-20261001
 - 关键曲线：`validation/log_loss`、`validation/constant_prior_log_loss`、`validation/delta_vs_prior`、`validation/gate_passed`
 
 ## 明确不做

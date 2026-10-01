@@ -1,0 +1,48 @@
+{
+  "phase": "J_results_and_K_next",
+  "kernel_phase_j": "user281434/kairos-mfe10-sidecar-short-phase-j-freeze-bb",
+  "swanlab_run_id": "kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001",
+  "status": "COMPLETE",
+  "gate_passed": false,
+  "best_delta_vs_prior_init": 1.3803802001444154e-07,
+  "best_post_train_delta_seg3": 0.0008547167467574113,
+  "last_delta_seg4": 0.0066267511241477894,
+  "runtime_elapsed_seconds": 1782.745754480362,
+  "stop_reason": "segment_limit",
+  "freeze_held": true,
+  "compare": {
+    "phase_i_best_post_train_delta": 7.84083254024015e-06,
+    "broken_short_best_delta": 0.008022,
+    "tok_full_logistic_delta": -0.025916,
+    "logistic_base_xsection_delta": -0.03413,
+    "linear_bce_frozen_features_delta": -0.031446,
+    "gate": -0.04
+  },
+  "checkpoint_last_phase_j": {
+    "gate": 1.005386471748352,
+    "sigmoid_head_bias": 0.25462300258182685,
+    "head_bias_vs_logit_prior_abs": 0.006666282662764145,
+    "head_w_norm": 0.1891743540763855,
+    "patch_held": true,
+    "freeze_backbone": true,
+    "trainable_tensors": 13,
+    "frozen_tensors": 134
+  },
+  "diagnosis": {
+    "H1_gate_stuck": "resolved_in_phase_i_held_in_j",
+    "H2_bias_not_prior": "resolved_in_phase_i_held_in_j",
+    "H3_fresh_deep_underfit_trainable": "not_rescued_by_freeze",
+    "H7_random_frozen_backbone_useless": "primary_now"
+  },
+  "next_cheap_step": {
+    "phase": "K",
+    "kernel": "user281434/kairos-mfe10-sidecar-short-phase-k-identity",
+    "backbone_mode": "identity",
+    "freeze_backbone": false,
+    "learning_rate": 0.0001,
+    "budget": "4x20000",
+    "hypothesis": "bypass random 22-layer ModernBERT; mean-pool embeds may recover toward tok logistic signal",
+    "not_long_train": true,
+    "not_tpu": true
+  }
+}

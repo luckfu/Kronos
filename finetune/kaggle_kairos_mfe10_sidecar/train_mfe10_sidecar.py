@@ -37,16 +37,17 @@ RUNTIME_RESERVE_SECONDS = 12 * 60
 SEGMENT_ESTIMATE_SECONDS = 600.0
 SEGMENT_TIME_MARGIN = 1.15
 SHUFFLE_SEED = 20261001
-LEARNING_RATE = 1e-4  # Phase J: adapters-only; higher than full-finetune 3e-5
+LEARNING_RATE = 1e-4  # Phase K: shallow/identity; adapters + embeds only
 MFE10_THRESHOLD = 0.10
 PRIOR_STUCK_TOL = 1e-3
 PRIOR_STUCK_PATIENCE = 2
 GATE_DELTA_VS_PRIOR = -0.04
-FREEZE_BACKBONE = True  # Phase J: stop washing linear signal in fresh 22-layer BERT
+FREEZE_BACKBONE = False  # Phase K: no 22-layer backbone to freeze
+BACKBONE_MODE = "identity"  # Phase K: bypass random ModernBERT; mean-pool embeds
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-k-identity-20261001"
 OUTPUT = Path("/kaggle/working/kairos_mfe10_sidecar")
-RUN_PURPOSE = "mfe10-path-touch-binary-short-sidecar-freeze-bb"
+RUN_PURPOSE = "mfe10-path-touch-binary-short-sidecar-identity-bb"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_NAME = "buy_worth_mfe10pct"
 MFE10_DEF = "max(high[T+1:T+10]) / close[T] - 1"
@@ -301,6 +302,7 @@ def main() -> None:
         not_multi_head_r2=True,
         not_close_to_close=True,
         freeze_backbone=FREEZE_BACKBONE,
+        backbone_mode=BACKBONE_MODE,
         world_size=world_size,
     )
     random.seed(SEED)
@@ -386,21 +388,26 @@ def main() -> None:
             self.sector = nn.Embedding(len(sector_ids) + 1, hidden)
             self.size = nn.Sequential(nn.Linear(1, 32), nn.GELU(), nn.Linear(32, hidden))
             self.cond = nn.Parameter(torch.zeros(1, 1, hidden))
-            config = ModernBertConfig(
-                vocab_size=1024, hidden_size=hidden, intermediate_size=1152,
-                num_hidden_layers=22, num_attention_heads=12,
-                max_position_embeddings=128, pad_token_id=0,
-                attention_dropout=0.0, embedding_dropout=0.0, mlp_dropout=0.0,
-                reference_compile=False,
-            )
-            self.backbone = ModernBertModel(config)
-            native_embeddings = getattr(self.backbone.embeddings, "tok_embeddings", None)
-            if native_embeddings is None:
-                native_embeddings = getattr(self.backbone.embeddings, "word_embeddings", None)
-            if native_embeddings is None:
-                raise RuntimeError("Cannot locate ModernBERT native token embeddings")
-            for parameter in native_embeddings.parameters():
-                parameter.requires_grad_(False)
+            self.backbone_mode = BACKBONE_MODE
+            if BACKBONE_MODE == "identity":
+                # Phase K: no random 22-layer ModernBERT; mean-pool condition+market embeds.
+                self.backbone = None
+            else:
+                config = ModernBertConfig(
+                    vocab_size=1024, hidden_size=hidden, intermediate_size=1152,
+                    num_hidden_layers=22, num_attention_heads=12,
+                    max_position_embeddings=128, pad_token_id=0,
+                    attention_dropout=0.0, embedding_dropout=0.0, mlp_dropout=0.0,
+                    reference_compile=False,
+                )
+                self.backbone = ModernBertModel(config)
+                native_embeddings = getattr(self.backbone.embeddings, "tok_embeddings", None)
+                if native_embeddings is None:
+                    native_embeddings = getattr(self.backbone.embeddings, "word_embeddings", None)
+                if native_embeddings is None:
+                    raise RuntimeError("Cannot locate ModernBERT native token embeddings")
+                for parameter in native_embeddings.parameters():
+                    parameter.requires_grad_(False)
             self.head = nn.Linear(hidden, 1)
             # Phase I fix: calibrate initial probability to train prior (~25%), not 0.5.
             nn.init.zeros_(self.head.weight)
@@ -410,8 +417,11 @@ def main() -> None:
             condition = self.cond + self.sector(sector).unsqueeze(1) + self.size(size).unsqueeze(1)
             market = self.fusion(torch.cat([self.s1(s1), self.s2(s2)], -1)) * self.gate
             sequence = torch.cat([condition, market], 1)
-            mask = torch.ones(sequence.shape[:2], dtype=torch.long, device=sequence.device)
-            pooled = self.backbone(inputs_embeds=sequence, attention_mask=mask).last_hidden_state[:, 0]
+            if self.backbone is None:
+                pooled = sequence.mean(dim=1)
+            else:
+                mask = torch.ones(sequence.shape[:2], dtype=torch.long, device=sequence.device)
+                pooled = self.backbone(inputs_embeds=sequence, attention_mask=mask).last_hidden_state[:, 0]
             return self.head(pooled)
 
     group_order = shuffled_group_order(train_pq.num_row_groups)
@@ -450,7 +460,7 @@ def main() -> None:
 
     model = SingleBinaryModel(head_bias=head_bias).to(device)
     raw_model = model
-    if FREEZE_BACKBONE:
+    if FREEZE_BACKBONE and raw_model.backbone is not None:
         for parameter in raw_model.backbone.parameters():
             parameter.requires_grad_(False)
     trainable = [p for p in raw_model.parameters() if p.requires_grad]
@@ -458,6 +468,7 @@ def main() -> None:
     log(
         "param_freeze",
         freeze_backbone=FREEZE_BACKBONE,
+        backbone_mode=BACKBONE_MODE,
         trainable_tensors=len(trainable),
         frozen_tensors=len(frozen),
         trainable_numel=int(sum(p.numel() for p in trainable)),
