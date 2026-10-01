@@ -2,7 +2,7 @@
 
 日期：2026-10-02 00:27:50 CST（北京时间）。  
 前置：Phase S 时序切分 **过闸**；Phase T Kaggle 确认因 **`modernbert_finance` 未上 sys.path** 报 ERROR（无科学指标）。  
-Kernel：`user281434/kairos-mfe10-decision-tabular-phase-t2` → **RUNNING**  
+Kernel：`user281434/kairos-mfe10-decision-tabular-phase-t2` → **COMPLETE**  
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-t2  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-t2-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t2-20261002
@@ -38,3 +38,9 @@ Kaggle script kernel 不会把 `vendor/` 放到 `/kaggle/src/` 旁。T2 的 `set
 
 - Kernel logs + `/kaggle/working/kairos_mfe10_tabular_decision/report.json`
 - Launch JSON：`modernbert_finance/ablations/kairos_phase_t2_tabular_decision_launch.json`
+
+## 状态更新（2026-10-02 00:47:16 CST）
+
+Kernel **COMPLETE**。val_temporal 过闸（blend Δ≈−0.041793，复现 Phase S）。  
+train→val SKIPPED（信号窗 targets 未对齐）。详见  
+`modernbert_finance/kairos_phase_t2_tabular_decision_results_cn.md`。

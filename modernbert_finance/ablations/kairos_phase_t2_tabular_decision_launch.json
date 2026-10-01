@@ -27,7 +27,7 @@
   "not_ranking_ic": true,
   "not_22_layer": true,
   "not_tpu": true,
-  "status": "RUNNING",
+  "status": "COMPLETE",
   "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-t2",
   "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t2-20261002",
   "decision_only_charter": "modernbert_finance/kairos_decision_only_handoff_cn.md",
@@ -40,5 +40,16 @@
   "launched_at_cst": "2026-10-02 00:28:54 CST",
   "kernel_status_at_launch": "RUNNING",
   "pushed_at_cst": "2026-10-02 00:28:54 CST",
-  "commit": "dd2a8f3"
+  "commit": "dd2a8f3",
+  "kernel_status": "COMPLETE",
+  "completed_at_cst": "2026-10-02 00:47:16 CST",
+  "results_json": "modernbert_finance/ablations/kairos_phase_t2_tabular_decision_results.json",
+  "results_cn": "modernbert_finance/kairos_phase_t2_tabular_decision_results_cn.md",
+  "report_json": "scratch/kairos_phase_t2_outputs/kairos_mfe10_tabular_decision/report.json",
+  "log_path": "scratch/kairos_phase_t2_outputs/kairos-mfe10-decision-tabular-phase-t2.log",
+  "best_model": "blend_lr0.5_mlp0.5",
+  "best_delta_vs_prior": -0.04179349770224927,
+  "gate_passed": true,
+  "train_to_val_skipped": true,
+  "train_to_val_error": "feature windows 2347269 != targets 9010965; check signal date bounds / panel"
 }

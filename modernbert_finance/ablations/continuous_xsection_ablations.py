@@ -97,6 +97,24 @@ def build_enriched_matrix(
     start_date = pd.Timestamp(signal_start).date() if signal_start else None
     end_date = pd.Timestamp(signal_end).date() if signal_end else None
 
+    # Align target rows to the same signal window used when enumerating
+    # feature windows. Sidecar parquet is typically full-panel length; feature
+    # build skips asof outside [signal_start, signal_end]. Without this filter,
+    # train→val with a recent window mismatches (e.g. 2.35M vs 9.01M on train).
+    # Order is preserved (sorted symbol, start_index) so row i still matches.
+    if signal_start is not None or signal_end is not None:
+        if "asof_date" not in targets.columns:
+            raise ValueError(
+                "targets missing asof_date; cannot filter to signal window"
+            )
+        asof_ts = pd.to_datetime(targets["asof_date"])
+        mask = np.ones(len(targets), dtype=bool)
+        if signal_start is not None:
+            mask &= asof_ts >= pd.Timestamp(signal_start)
+        if signal_end is not None:
+            mask &= asof_ts <= pd.Timestamp(signal_end)
+        targets = targets.loc[mask].reset_index(drop=True)
+
     histories: list[np.ndarray] = []
     symbols: list[str] = []
     asofs: list[str] = []

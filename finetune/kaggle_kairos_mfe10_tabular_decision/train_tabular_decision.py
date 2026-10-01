@@ -1,9 +1,10 @@
-"""Kairos Phase T2: tabular enet/blend confirmation (decision-only).
+"""Kairos Phase U: train→val tabular decision confirm (decision-only).
 
-Primary protocol = val temporal 2025H2→2026H1 (same as Phase S gate-pass).
-Optional: train panel recent→val if build finishes in budget.
+Primary protocol = train 2023–2024 (capped ≤500k balanced) → full val.
+Secondary sanity = val temporal 2025H2→2026H1 (must still gate).
+Requires signal-window target alignment fix in build_enriched_matrix.
 
-y=1{mfe10>=0.10}; gate Δ≤-0.04. NO tokenizer / ranking / 22-layer / TPU.
+y=1{mfe10>=0.10}; gate Δ≤-0.04 on PRIMARY. NO tokenizer / ranking / 22-layer / TPU.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-t2-20261002"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-u-20261002"
 GATE = -0.04
 SEED = 20261001
 PHASE_S_BEST = -0.04179349770224905
@@ -143,7 +144,7 @@ def start_swanlab():
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "phase-t2-tabular-enet-blend-confirm",
+            "purpose": "phase-u-train-to-val-tabular-decision-confirm",
             "target": "y=1{mfe10>=0.10}",
             "gate": GATE,
             "phase_s_best": PHASE_S_BEST,
@@ -304,7 +305,7 @@ def eval_split(
 
 
 def try_train_to_val(val_comb: np.ndarray, val_y: np.ndarray) -> dict[str, Any] | None:
-    """Optional recent-train → full-val confirmation."""
+    """Primary: recent-train → full-val confirmation (Phase U)."""
     from modernbert_finance.ablations.buy_profit_mfe_ablations import (
         build_mfe_buy_labels,
     )
@@ -437,7 +438,8 @@ def main() -> int:
         }
         print(json.dumps({"phase": "train_to_val_error", "error": str(exc)}), flush=True)
 
-    # Prefer train→val best if present; else temporal.
+    # Phase U: PRIMARY = train_to_val; val_temporal is secondary sanity (must still gate).
+    temporal_gate = bool(temporal["gate_passed"])
     if (
         isinstance(train_to_val, dict)
         and train_to_val.get("best_delta_vs_prior") is not None
@@ -447,24 +449,29 @@ def main() -> int:
         best_model = train_to_val["best_model"]
         gate_passed = bool(train_to_val["gate_passed"])
         primary = "train_to_val"
+        status = "TABULAR_DECISION_COMPLETE"
     else:
         best_delta = float(temporal["best_delta_vs_prior"])
         best_model = temporal["best_model"]
-        gate_passed = bool(temporal["gate_passed"])
-        primary = "val_temporal"
+        gate_passed = False  # Phase U requires train_to_val for primary gate
+        primary = "train_to_val_MISSING_fallback_val_temporal"
+        status = "TABULAR_DECISION_PRIMARY_SKIPPED"
 
     report = {
-        "status": "TABULAR_DECISION_COMPLETE",
-        "purpose": "phase-t2-tabular-enet-blend-confirm",
+        "status": status,
+        "purpose": "phase-u-train-to-val-tabular-decision-confirm",
         "target": "y=1{mfe10>=0.10}",
         "gate": GATE,
         "phase_s_temporal_best_delta": PHASE_S_BEST,
+        "phase_t2_temporal_best_delta": PHASE_S_BEST,
         "primary_protocol": primary,
         "val_temporal": temporal,
+        "val_temporal_gate_passed": temporal_gate,
         "train_to_val": train_to_val,
         "best_model": best_model,
         "best_delta_vs_prior": best_delta,
         "gate_passed": gate_passed,
+        "secondary_val_temporal_still_gates": temporal_gate,
         "elapsed_seconds": float(time.time() - t0),
         "not_tokenizer_sequence": True,
         "not_ranking_ic": True,
@@ -492,6 +499,8 @@ def main() -> int:
         {
             "final/best_delta": best_delta,
             "final/gate_passed": int(gate_passed),
+            "final/primary_protocol": 1 if primary == "train_to_val" else 0,
+            "final/val_temporal_gate_passed": int(temporal_gate),
         }
     )
     swanlab.finish()

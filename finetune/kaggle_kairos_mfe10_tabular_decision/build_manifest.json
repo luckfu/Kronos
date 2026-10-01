@@ -1,18 +1,21 @@
 {
-  "slug": "kairos-mfe10-decision-tabular-phase-t2",
+  "slug": "kairos-mfe10-decision-tabular-phase-u",
   "owner": "user281434",
-  "title": "Kairos MFE10 Decision Tabular Phase T2",
-  "source_sha256": "0fa7807d31b747f99a0d2968f5a304a9960dbbcb0e95a36b27a16bccd010d5f9",
+  "title": "Kairos MFE10 Decision Tabular Phase U",
+  "source_sha256": "525d09e485a4302ce15f09e6df8931e9958fdb69ceac179ba65a38ca167a0fdb",
   "target": "y=1{mfe10>=0.10}",
-  "kind": "tabular_enet_blend_official_holdout_confirm_t2",
+  "kind": "tabular_enet_blend_train_to_val_confirm_u",
   "phase_s_temporal_best_delta": -0.04179349770224905,
   "gate": -0.04,
   "not_tokenizer_sequence": true,
   "not_ranking_ic": true,
   "not_22_layer": true,
   "not_tpu": true,
-  "phase_t_error": "ModuleNotFoundError modernbert_finance (vendor not shipped with script kernel)",
+  "phase_t2_temporal_best_delta": -0.04179349770224927,
+  "primary_protocol": "train_to_val",
+  "secondary_protocol": "val_temporal",
+  "alignment_fix": "filter_targets_by_asof_signal_window",
   "fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
-  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-t2-20261002",
-  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t2-20261002"
+  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-u-20261002",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-u-20261002"
 }
