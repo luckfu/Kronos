@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "finetune/kaggle_kairos_mfe10_sidecar/train_mfe10_sidecar.py"
 DEST = ROOT / "finetune/kaggle_kairos_mfe10_sidecar"
 
-SLUG = "kairos-mfe10-sidecar-short"
+SLUG = "kairos-mfe10-path-touch-sidecar-short"
 TITLE = "Kairos MFE10 Path-Touch Sidecar Short"
 OWNER = "user281434"
 SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-20261001"
