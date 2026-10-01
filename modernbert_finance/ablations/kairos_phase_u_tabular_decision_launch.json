@@ -30,7 +30,7 @@
   "not_ranking_ic": true,
   "not_22_layer": true,
   "not_tpu": true,
-  "status": "RUNNING",
+  "status": "COMPLETE",
   "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-u",
   "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-u-20261002",
   "decision_only_charter": "modernbert_finance/kairos_decision_only_handoff_cn.md",
@@ -43,5 +43,13 @@
   "launched_at_cst": "2026-10-02 00:48:45 CST",
   "kernel_status_at_launch": "RUNNING",
   "pushed_at_cst": "2026-10-02 00:48:45 CST",
-  "commit": "da32fb2"
+  "commit": "da32fb2",
+  "kernel_status": "COMPLETE",
+  "completed_at_cst": "2026-10-02 01:33:21 CST",
+  "gate_passed_primary": false,
+  "best_delta_vs_prior_primary": -0.027597938051234006,
+  "best_model_primary": "blend_lr0.5_mlp0.5",
+  "val_temporal_gate_passed": true,
+  "val_temporal_best_delta": -0.04179349770224927,
+  "next": "Phase V train2024→val + hist_gbm"
 }

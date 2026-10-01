@@ -1,7 +1,7 @@
 # Kairos 决策系统交接（Decision-Only Charter）
 
-日期：2026-10-02（北京时间）。  
-状态：**产品路径 = 决策标签 only**；表格特征路径已在时序切分上 **过闸**（Phase S / **T2 Kaggle 确认**）；排序探针已停作产品。
+日期：2026-10-02（北京时间，交接更新 2026-10-02 01:33:21 CST）。  
+状态：**产品路径 = 决策标签 only**；时序切分仍过闸（S/T2/U secondary）；**Phase U 主协议 train→val FAIL 闸**；排序探针已停作产品。
 
 ## 一句话
 
@@ -27,14 +27,14 @@
 | Phase R 时序 Logistic C=0.01 | Δ≈**−0.0398** | 近闸 |
 | **Phase S 时序 enet/blend** | Δ≈**−0.0418** | **过闸** |
 | **Phase T2 Kaggle 确认** | Δ≈**−0.041793** | **过闸复现**；train→val 因对齐 SKIP |
+| **Phase U train→val** | Δ≈**−0.027598** | **主协议 FAIL 闸**；temporal 仍 −0.041793 |
 | Phase Q 随机 mlp_3x | Δ≈−0.052（时序崩溃） | 随机切分不可作过闸证据 |
 
 ## 当前下一步
 
-- **Phase U（RUNNING，2026-10-02 00:48:45 CST）**：信号窗 targets 对齐已合入；主协议 **train 2023–2024 → 全 val**；次协议 val_temporal 仍须过闸。  
-- Kernel：`user281434/kairos-mfe10-decision-tabular-phase-u`  
-- URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-u  
-- SwanLab：`kairos-mfe10-decision-tabular-phase-u-20261002`  
+- **Phase U COMPLETE（2026-10-02 01:33:21 CST）**：主协议 train2023–2024→val **FAIL 闸**（blend Δ≈−0.027598）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。协议脆弱。  
+- **Phase V（下一步 / 启动中）**：主协议 **train 2024 → 全 val**（近期性）+ `hist_gbm`；次协议 val_temporal；slug `kairos-mfe10-decision-tabular-phase-v`。  
+- Kernel U：`user281434/kairos-mfe10-decision-tabular-phase-u` COMPLETE  
 - **禁止**：Ranking 产品；22 层长训；TPU WIP；重启失败序列配方。
 
 ## 明确不做

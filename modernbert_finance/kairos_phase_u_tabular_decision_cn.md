@@ -2,7 +2,7 @@
 
 日期：2026-10-02 00:48:45 CST（北京时间）。  
 前置：Phase T2 COMPLETE，val_temporal 过闸（blend Δ≈−0.041793）；train→val 因信号窗 targets 未对齐 SKIP。  
-Kernel：`user281434/kairos-mfe10-decision-tabular-phase-u` → **RUNNING**  
+Kernel：`user281434/kairos-mfe10-decision-tabular-phase-u` → **COMPLETE**（主协议 FAIL 闸；见 results_cn）  
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-u  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-u-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-u-20261002  
@@ -35,3 +35,10 @@ Commit：`da32fb2`
 
 - Kernel logs + `/kaggle/working/kairos_mfe10_tabular_decision/report.json`
 - Launch JSON：`modernbert_finance/ablations/kairos_phase_u_tabular_decision_launch.json`
+
+## 完成摘要（2026-10-02 01:33:21 CST）
+
+- 主协议 train→val：**gate_passed=false**，best Δ≈−0.027598（blend）
+- 次协议 val_temporal：**gate_passed=true**，Δ≈−0.041793
+- 结果：`modernbert_finance/kairos_phase_u_tabular_decision_results_cn.md`
+- 下一步：**Phase V**（train2024 + hist_gbm）
