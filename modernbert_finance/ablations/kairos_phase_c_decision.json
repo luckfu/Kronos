@@ -1,5 +1,5 @@
 {
-  "generated_at_cst": "2026-10-01T17:15:18.067050+08:00",
+  "generated_at_cst": "2026-10-01T17:15:52.299159+08:00",
   "phase_a_summary": {
     "macro_priors": {
       "train": 0.6013610425817468,
@@ -41,24 +41,24 @@
     "multihead_is_main_blocker": false,
     "recommendations": [
       {
-        "change": "Do NOT restart R2 / more GPU hours on same 8-head BCE + same features",
+        "change": "不要重启 R2 / 不要在同一 8-head BCE+同一特征上继续堆 GPU 小时",
         "evidence": "R2≈0.5966 matches train-prior-on-val macro LL=0.596610 (val self-prior=0.596412); collapse to constant prevalence.",
-        "next_experiment": "Replace training objective evaluation with an explicit constant-prior baseline log; abort runs that stay within 1e-3 of it after 1–2 chunks."
+        "next_experiment": "训练日志必须显式打印常数先验基线；若 1–2 个 chunk 后仍落在先验 ±1e-3 内则自动停训。"
       },
       {
-        "change": "Do NOT chase leakage/misalignment fixes as the primary path",
+        "change": "不要把泄漏/错位当作主修方向",
         "evidence": "temporal_integrity.ok=True, alignment.ok=True; future-corrupt leaves features invariant and changes labels.",
-        "next_experiment": "Keep the causal contract tests in CI; move effort to label/feature information content instead of pipeline paranoia."
+        "next_experiment": "把因果合同测试留在 CI；精力转到标签信息量与特征内容，而非管线臆测。"
       },
       {
-        "change": "Multi-head dilution is secondary — keep at most 2–4 heads but fix signal path",
+        "change": "八头稀释是次要问题——可减到 2–4 头，但先修信号路径",
         "evidence": "8-head independent macro Δ=-0.0196; best coarsened down_005_only Δ=-0.0245 (similar order).",
-        "next_experiment": "Try regression on continuous mfe10/mae10 (or first-touch) with the same window summaries before another transformer run."
+        "next_experiment": "在同样窗口汇总特征上先做连续 mfe10/mae10（或 first-touch）回归，再考虑 Transformer。"
       },
       {
-        "change": "Feature side: current OHLCVA summaries only beat prior by ~0.008–0.019",
+        "change": "特征侧：当前 OHLCVA 汇总相对先验仅 Δ≈0.008–0.025",
         "evidence": "Cheap logistic on summarized windows beats prior on all 8 heads, but effect sizes are small; deep model failed to harvest even that.",
-        "next_experiment": "Add cross-sectional ranks / sector-relative returns as cheap features; re-run logistic. If Δ still <0.02, revisit 10D MFE/MAE label definition (too noisy / nested) before ModernBERT."
+        "next_experiment": "加入截面排序/行业相对收益等便宜特征重跑 logistic；若 Δ 仍 <0.02，先改 10D MFE/MAE 标签定义再谈 ModernBERT。"
       }
     ],
     "abandon": {

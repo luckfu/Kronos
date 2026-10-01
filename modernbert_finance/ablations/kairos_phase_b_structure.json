@@ -208,15 +208,8 @@
   },
   "frozen_embedding_probe": {
     "ran_probe": false,
-    "reason": "Weights paths seen but probe skipped to avoid long GPU/download work.",
+    "reason": "No local Kairos/ModernBERT checkpoint under scratch/finetune; skip freeze-backbone linear probe (would require HF/Kaggle download + train).",
     "has_transformers": false,
-    "candidate_hits": [
-      "/home/box/.cache/huggingface/hub/models--NeoQuasar--Kronos-Tokenizer-base/snapshots/0e0117387f39004a9016484a186a908917e22426/model.safetensors",
-      "/home/box/.cache/huggingface/hub/models--NeoQuasar--Kronos-small/snapshots/901c26c1332695a2a8f243eb2f37243a37bea320/model.safetensors",
-      "/home/box/.cache/huggingface/hub/models--NeoQuasar--Kronos-Tokenizer-base/snapshots/0e0117387f39004a9016484a186a908917e22426/model.safetensors",
-      "/home/box/.cache/huggingface/hub/models--NeoQuasar--Kronos-small/snapshots/901c26c1332695a2a8f243eb2f37243a37bea320/model.safetensors",
-      "/home/box/.cache/huggingface/hub/models--NeoQuasar--Kronos-Tokenizer-base/snapshots/0e0117387f39004a9016484a186a908917e22426/config.json",
-      "/home/box/.cache/huggingface/hub/models--NeoQuasar--Kronos-small/snapshots/901c26c1332695a2a8f243eb2f37243a37bea320/config.json"
-    ]
+    "candidate_hits": []
   }
 }

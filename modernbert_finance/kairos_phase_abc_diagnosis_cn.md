@@ -64,7 +64,7 @@ Dataset `history = values[start:start+LOOKBACK]`，asof=`start+119`；标签只�
 - MultiOutput 共享特征 macro Δ = `-0.01990`
 - 单头 up_005 Δ = `-0.01711`
 - 粗标签 Δ：`{"any_up_threshold": -0.01099839391599422, "up_005_only": -0.017109405034147707, "down_005_only": -0.02452610717934911, "direction_up_minus_down": -0.002148553886063609, "signed_move": -0.0014996362961579024}`
-- 冻结 embedding 探针：`Weights paths seen but probe skipped to avoid long GPU/download work.`
+- 冻结 embedding 探针：`No local Kairos/ModernBERT checkpoint under scratch/finetune; skip freeze-backbone linear probe (would require HF/Kaggle download + train).`
 
 ## Phase C — 决策（无谄媚）
 
@@ -77,21 +77,21 @@ Dataset `history = values[start:start+LOOKBACK]`，asof=`start+119`；标签只�
 
 ### 建议下一步（每条一句）
 
-1. **改什么：** Do NOT restart R2 / more GPU hours on same 8-head BCE + same features
+1. **改什么：** 不要重启 R2 / 不要在同一 8-head BCE+同一特征上继续堆 GPU 小时
    - 证据：R2≈0.5966 matches train-prior-on-val macro LL=0.596610 (val self-prior=0.596412); collapse to constant prevalence.
-   - 下一实验：Replace training objective evaluation with an explicit constant-prior baseline log; abort runs that stay within 1e-3 of it after 1–2 chunks.
+   - 下一实验：训练日志必须显式打印常数先验基线；若 1–2 个 chunk 后仍落在先验 ±1e-3 内则自动停训。
 
-2. **改什么：** Do NOT chase leakage/misalignment fixes as the primary path
+2. **改什么：** 不要把泄漏/错位当作主修方向
    - 证据：temporal_integrity.ok=True, alignment.ok=True; future-corrupt leaves features invariant and changes labels.
-   - 下一实验：Keep the causal contract tests in CI; move effort to label/feature information content instead of pipeline paranoia.
+   - 下一实验：把因果合同测试留在 CI；精力转到标签信息量与特征内容，而非管线臆测。
 
-3. **改什么：** Multi-head dilution is secondary — keep at most 2–4 heads but fix signal path
+3. **改什么：** 八头稀释是次要问题——可减到 2–4 头，但先修信号路径
    - 证据：8-head independent macro Δ=-0.0196; best coarsened down_005_only Δ=-0.0245 (similar order).
-   - 下一实验：Try regression on continuous mfe10/mae10 (or first-touch) with the same window summaries before another transformer run.
+   - 下一实验：在同样窗口汇总特征上先做连续 mfe10/mae10（或 first-touch）回归，再考虑 Transformer。
 
-4. **改什么：** Feature side: current OHLCVA summaries only beat prior by ~0.008–0.019
+4. **改什么：** 特征侧：当前 OHLCVA 汇总相对先验仅 Δ≈0.008–0.025
    - 证据：Cheap logistic on summarized windows beats prior on all 8 heads, but effect sizes are small; deep model failed to harvest even that.
-   - 下一实验：Add cross-sectional ranks / sector-relative returns as cheap features; re-run logistic. If Δ still <0.02, revisit 10D MFE/MAE label definition (too noisy / nested) before ModernBERT.
+   - 下一实验：加入截面排序/行业相对收益等便宜特征重跑 logistic；若 Δ 仍 <0.02，先改 10D MFE/MAE 标签定义再谈 ModernBERT。
 
 ## 证据强度
 

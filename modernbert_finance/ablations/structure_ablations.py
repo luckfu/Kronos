@@ -227,19 +227,22 @@ def run_structure_ablations(
 
 def probe_frozen_embeddings_feasibility() -> dict[str, Any]:
     """Only run a linear probe if local ModernBERT/Kairos weights exist."""
-    candidates = [
-        Path("/workspace/Kronos/scratch/kairos_model"),
-        Path("/workspace/Kronos/scratch/modernbert_weights"),
-        Path.home() / ".cache/huggingface/hub",
+    search_roots = [
+        Path("/workspace/Kronos/scratch"),
+        Path("/workspace/Kronos/finetune"),
     ]
+    keywords = ("kairos", "modernbert", "answerdotai")
     found: list[str] = []
-    for path in candidates:
-        if path.is_dir():
-            # look for config/weights
-            for pattern in ("*.bin", "*.safetensors", "pytorch_model*", "model.safetensors", "config.json"):
-                hits = list(path.rglob(pattern))[:5]
-                found.extend(str(h) for h in hits)
-    # Also check transformers availability
+    for root in search_roots:
+        if not root.is_dir():
+            continue
+        for pattern in ("*.safetensors", "*.bin", "pytorch_model.bin", "model.safetensors"):
+            for hit in root.rglob(pattern):
+                low = str(hit).lower()
+                if any(k in low for k in keywords):
+                    found.append(str(hit))
+                if len(found) >= 20:
+                    break
     has_transformers = False
     try:
         import transformers  # noqa: F401
@@ -248,14 +251,19 @@ def probe_frozen_embeddings_feasibility() -> dict[str, Any]:
     except Exception:
         has_transformers = False
 
+    if not found:
+        reason = (
+            "No local Kairos/ModernBERT checkpoint under scratch/finetune; "
+            "skip freeze-backbone linear probe (would require HF/Kaggle download + train)."
+        )
+    else:
+        reason = (
+            "Kairos/ModernBERT-named weight files found locally but probe skipped "
+            "to avoid long GPU work in this diagnostic pass."
+        )
     return {
         "ran_probe": False,
-        "reason": (
-            "No local Kairos/ModernBERT checkpoint suitable for freeze-backbone "
-            "linear probe without a long download/train. Skip Phase B.2."
-            if not found
-            else "Weights paths seen but probe skipped to avoid long GPU/download work."
-        ),
+        "reason": reason,
         "has_transformers": has_transformers,
         "candidate_hits": found[:20],
     }
