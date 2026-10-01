@@ -19,7 +19,7 @@ import pyarrow.parquet as pq
 
 from modernbert_finance.build_dataset import FEATURES, HORIZON, LOOKBACK, prepare_frame
 from modernbert_finance.build_targets import WINDOW, target_row
-from modernbert_finance.dataset import load_panel
+from modernbert_finance.ablations._panel_io import load_panel
 
 
 @dataclass
