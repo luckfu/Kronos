@@ -1,0 +1,283 @@
+{
+  "phase": "I_sidecar_deep_fail_diagnosis",
+  "seed": 20261001,
+  "threshold": 0.1,
+  "definition": "y=1{mfe10>=0.1} where mfe10=max(high[T+1:T+10])/close[T]-1",
+  "wall_seconds": 26.445319175720215,
+  "script_audit": {
+    "loss": "binary_cross_entropy_with_logits (no pos_weight, no label_smoothing)",
+    "dropout": "all ModernBertConfig dropouts = 0.0",
+    "lr": 3e-05,
+    "fresh_init": true,
+    "market_gate_init": "nn.Parameter(torch.zeros(1))  # SILENCES market tokens",
+    "head_bias_init": "nn.Linear default (~0) → p≈0.5; NOT logit(train_prior)",
+    "prior_eval": "uses train_prior on val labels (rates match ~0.253)",
+    "label_source": "binary_from_mfe10(row['mfe10']); check_labels on first batch",
+    "label_invert": false,
+    "shuffle": "row-group permutation + within-group shuffle (fixed seed)",
+    "report_best_delta_bug": "report.json best_delta_vs_prior falls back to LAST delta when last segment did not update best — known; use best_metric.json",
+    "class_imbalance_handling": "none (25% pos is mild; not primary failure)"
+  },
+  "checkpoint_best": {
+    "path": "/workspace/kaggle_kairos_mfe10_sidecar_short_out/artifacts/kairos_mfe10_sidecar/best_model.pt",
+    "gate": 0.0020195289980620146,
+    "gate_near_zero": true,
+    "head_bias": 0.00471096346154809,
+    "sigmoid_head_bias": 0.5011777386872409,
+    "logit_prior": -1.0807723798841387,
+    "head_bias_vs_logit_prior": 1.0854833433456867,
+    "head_weight_norm": 0.5607942938804626,
+    "fusion_weight_norm": 16.023088455200195,
+    "s1_row_norm_mean": 19.556142807006836,
+    "s2_row_norm_mean": 19.582950592041016,
+    "cond_abs_mean": 0.0008116249809972942,
+    "hypothesis": "market=fusion(s1,s2)*gate with gate≈0 → market tokens nearly silenced; head.bias≈0 → default p≈0.5 vs prior≈0.25"
+  },
+  "checkpoint_last": {
+    "path": "/workspace/kaggle_kairos_mfe10_sidecar_short_out/artifacts/kairos_mfe10_sidecar/last_checkpoint.pt",
+    "gate": 0.008044314570724964,
+    "gate_near_zero": true,
+    "head_bias": 0.00335610075853765,
+    "sigmoid_head_bias": 0.5008390244021114,
+    "logit_prior": -1.0807723798841387,
+    "head_bias_vs_logit_prior": 1.0841284806426763,
+    "head_weight_norm": 0.5377104878425598,
+    "fusion_weight_norm": 16.130674362182617,
+    "s1_row_norm_mean": 19.533519744873047,
+    "s2_row_norm_mean": 19.560606002807617,
+    "cond_abs_mean": 0.001734125311486423,
+    "hypothesis": "market=fusion(s1,s2)*gate with gate≈0 → market tokens nearly silenced; head.bias≈0 → default p≈0.5 vs prior≈0.25"
+  },
+  "segment_pos_rate_audit": {
+    "group_order_hash": "42f6150d5e8b1b346912311ff45e15b39f259c2280c32392b9ace17b358b8b32",
+    "train_prior": 0.2533598787699209,
+    "train_n": 9010965,
+    "segments": [
+      {
+        "segment": 1,
+        "n": 20000,
+        "pos_rate": 0.30635,
+        "batch_pos_rate_mean": 0.30635,
+        "batch_pos_rate_std": 0.11689868476591173,
+        "batch_pos_rate_min": 0.0,
+        "batch_pos_rate_max": 0.6875,
+        "frac_batches_zero_pos": 0.0024
+      },
+      {
+        "segment": 2,
+        "n": 20000,
+        "pos_rate": 0.30565,
+        "batch_pos_rate_mean": 0.30565,
+        "batch_pos_rate_std": 0.11744659424606574,
+        "batch_pos_rate_min": 0.0,
+        "batch_pos_rate_max": 0.6875,
+        "frac_batches_zero_pos": 0.0024
+      },
+      {
+        "segment": 3,
+        "n": 20000,
+        "pos_rate": 0.26345,
+        "batch_pos_rate_mean": 0.26345,
+        "batch_pos_rate_std": 0.11700842918354215,
+        "batch_pos_rate_min": 0.0,
+        "batch_pos_rate_max": 0.6875,
+        "frac_batches_zero_pos": 0.012
+      },
+      {
+        "segment": 4,
+        "n": 20000,
+        "pos_rate": 0.23005,
+        "batch_pos_rate_mean": 0.23005,
+        "batch_pos_rate_std": 0.10523246884873508,
+        "batch_pos_rate_min": 0.0,
+        "batch_pos_rate_max": 0.5625,
+        "frac_batches_zero_pos": 0.0168
+      }
+    ],
+    "seg1_2_enriched_vs_prior": true
+  },
+  "val_prior_audit": {
+    "n": 123836,
+    "pos_rate": 0.2529393714267257,
+    "prior_log_loss": 0.5655413942316894,
+    "const_0p5_log_loss": 0.6931471805599454,
+    "const_0p5_delta_vs_prior": 0.12760578632825603
+  },
+  "bce_linear_frozen_features": {
+    "base": {
+      "n_train": 92877,
+      "n_test": 30959,
+      "feature_dim": 20,
+      "train_prior": 0.2529366796946499,
+      "prior_log_loss": 0.5655501397753303,
+      "bce_linear": {
+        "init_bias_to_prior": true,
+        "lr": 0.05,
+        "epochs": 40,
+        "model_log_loss": 0.5498452899847718,
+        "delta_vs_prior": -0.015704849790558528,
+        "beats_prior": true,
+        "mean_pred": 0.23699159920215607,
+        "pred_std": 0.09601270407438278,
+        "final_bias": -1.2137362957000732,
+        "sigmoid_final_bias": 0.22904063761234283
+      },
+      "sklearn_logistic": {
+        "model_log_loss": 0.5454407914605744,
+        "delta_vs_prior": -0.02010934831475586,
+        "beats_prior": true
+      },
+      "positive_rate_test": 0.25294744662295293
+    },
+    "comb": {
+      "n_train": 92877,
+      "n_test": 30959,
+      "feature_dim": 26,
+      "train_prior": 0.2529366796946499,
+      "prior_log_loss": 0.5655501397753303,
+      "bce_linear": {
+        "init_bias_to_prior": true,
+        "lr": 0.05,
+        "epochs": 40,
+        "model_log_loss": 0.5341036964586272,
+        "delta_vs_prior": -0.0314464433167031,
+        "beats_prior": true,
+        "mean_pred": 0.2681102752685547,
+        "pred_std": 0.1046423390507698,
+        "final_bias": -1.0602887868881226,
+        "sigmoid_final_bias": 0.2572542726993561
+      },
+      "sklearn_logistic": {
+        "model_log_loss": 0.5314197033367793,
+        "delta_vs_prior": -0.03413043643855096,
+        "beats_prior": true
+      },
+      "positive_rate_test": 0.25294744662295293
+    },
+    "comb_bias_zero_init": {
+      "n_train": 92877,
+      "n_test": 30959,
+      "feature_dim": 26,
+      "train_prior": 0.2529366796946499,
+      "prior_log_loss": 0.5655501397753303,
+      "bce_linear": {
+        "init_bias_to_prior": false,
+        "lr": 0.05,
+        "epochs": 40,
+        "model_log_loss": 0.5341112605274028,
+        "delta_vs_prior": -0.03143887924792754,
+        "beats_prior": true,
+        "mean_pred": 0.26821935176849365,
+        "pred_std": 0.10469657182693481,
+        "final_bias": -1.059768795967102,
+        "sigmoid_final_bias": 0.25735363364219666
+      },
+      "sklearn_logistic": {
+        "model_log_loss": 0.5314197033367793,
+        "delta_vs_prior": -0.03413043643855096,
+        "beats_prior": true
+      },
+      "positive_rate_test": 0.25294744662295293
+    }
+  },
+  "comparators": {
+    "deep_sidecar_best_delta": 0.008022,
+    "tok_full_logistic_delta": -0.025916333298968253,
+    "g2_comb_logistic_delta": -0.034130436131804,
+    "gate_delta_le": -0.04
+  },
+  "hypotheses": [
+    {
+      "id": "H1_gate_stuck_near_zero",
+      "strength": "strong",
+      "claim_zh": "market gate 短训后仍≈0，市况 token 几乎进不了 backbone",
+      "evidence": {
+        "best_gate": 0.0020195289980620146,
+        "last_gate": 0.008044314570724964,
+        "threshold_near_zero": 0.05
+      }
+    },
+    {
+      "id": "H2_head_bias_not_prior",
+      "strength": "strong",
+      "claim_zh": "head.bias≈0 → 默认 p≈0.5，相对 prior≈0.25 的常数先验劣 Δ≈+0.128",
+      "evidence": {
+        "best_sigmoid_bias": 0.5011777386872409,
+        "const_0p5_delta": 0.12760578632825603
+      }
+    },
+    {
+      "id": "H3_short_budget_underfit_deep",
+      "strength": "medium",
+      "claim_zh": "22 层 fresh ModernBERT + LR 3e-5 + 仅 80k 样本，远不够打开门控/学表征",
+      "evidence": {
+        "processed": 80000,
+        "layers": 22,
+        "lr": 3e-05,
+        "best_delta": 0.008022
+      }
+    },
+    {
+      "id": "H4_segment_pos_rate_shift",
+      "strength": "weak_medium",
+      "claim_zh": "短预算前两段正类率≈30.6% vs val 25.3%，有偏但不足以单独解释失败",
+      "evidence": {
+        "seg_pos_rates": [
+          0.30635,
+          0.30565,
+          0.26345,
+          0.23005
+        ],
+        "val_pos_rate": 0.2529393714267257
+      }
+    },
+    {
+      "id": "H5_label_or_prior_bug",
+      "strength": "rejected",
+      "claim_zh": "标签反转 / prior 计算错误 / 错列 — 已排除",
+      "evidence": {
+        "train_prior": 0.2533598787699209,
+        "val_pos_rate": 0.2529393714267257,
+        "label_invert": false,
+        "group_order_hash_matches_run": true
+      }
+    },
+    {
+      "id": "H6_loss_family_blocks_signal",
+      "strength": "rejected",
+      "claim_zh": "BCE 损失本身不会抹掉线性信号 — 同损失线性头可打赢先验",
+      "evidence": {
+        "bce_comb_delta": -0.0314464433167031,
+        "sklearn_comb_delta": -0.03413043643855096
+      }
+    }
+  ],
+  "decision": {
+    "root_cause_primary": "H1_gate_stuck_near_zero + H2_head_bias_not_prior",
+    "linear_bce_beats_prior": true,
+    "deep_sidecar_best_delta": 0.008022,
+    "tok_logistic_delta": -0.025916333298968253,
+    "g2_comb_delta": -0.034130436131804,
+    "tiny_fix": {
+      "recommended": true,
+      "changes": [
+        "init gate = 1.0 (or remove multiplicative gate for short sidecar)",
+        "init head.bias = logit(train_prior) after prior scan",
+        "optional: log mean(sigmoid(logits)) each segment to catch collapse"
+      ],
+      "do_not": [
+        "longer train with gate≈0",
+        "TPU / full R2",
+        "blame tokenizer (already ruled out)"
+      ],
+      "applied_in_repo": true,
+      "kaggle_rerun": "not_launched_awaiting_authorization"
+    },
+    "next_action_zh": "补丁已写入 train_mfe10_sidecar.py（gate=1 + bias=logit prior）；等授权再短 GPU 冒烟，否则停。"
+  },
+  "notes": [
+    "No TPU / no Kaggle long train in this phase.",
+    "BCE linear uses same loss family as sidecar (BCE-with-logits).",
+    "Frozen features = G2 Base / Base+xsection (handcrafted); tok logistic already Δ≈-0.026."
+  ]
+}

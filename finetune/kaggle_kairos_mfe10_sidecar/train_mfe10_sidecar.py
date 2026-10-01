@@ -12,6 +12,7 @@ baseline every eval; early-stop if stuck within ±1e-3 of prior for 2+ evals.
 from __future__ import annotations
 
 import hashlib
+import math
 import importlib.metadata
 import json
 import os
@@ -372,13 +373,14 @@ def main() -> None:
     class SingleBinaryModel(nn.Module):
         """Minimal single-logit head for path-MFE≥10% (not ordinal 8-head)."""
 
-        def __init__(self) -> None:
+        def __init__(self, head_bias: float = 0.0) -> None:
             super().__init__()
             hidden = 768
             self.s1 = nn.Embedding(1024, hidden // 2)
             self.s2 = nn.Embedding(1024, hidden // 2)
             self.fusion = nn.Linear(hidden, hidden)
-            self.gate = nn.Parameter(torch.zeros(1))
+            # Phase I fix: short budget cannot open a zero-init gate; start open.
+            self.gate = nn.Parameter(torch.ones(1))
             self.sector = nn.Embedding(len(sector_ids) + 1, hidden)
             self.size = nn.Sequential(nn.Linear(1, 32), nn.GELU(), nn.Linear(32, hidden))
             self.cond = nn.Parameter(torch.zeros(1, 1, hidden))
@@ -398,6 +400,9 @@ def main() -> None:
             for parameter in native_embeddings.parameters():
                 parameter.requires_grad_(False)
             self.head = nn.Linear(hidden, 1)
+            # Phase I fix: calibrate initial probability to train prior (~25%), not 0.5.
+            nn.init.zeros_(self.head.weight)
+            nn.init.constant_(self.head.bias, float(head_bias))
 
         def forward(self, s1: Any, s2: Any, size: Any, sector: Any) -> Any:
             condition = self.cond + self.sector(sector).unsqueeze(1) + self.size(size).unsqueeze(1)
@@ -406,19 +411,6 @@ def main() -> None:
             mask = torch.ones(sequence.shape[:2], dtype=torch.long, device=sequence.device)
             pooled = self.backbone(inputs_embeds=sequence, attention_mask=mask).last_hidden_state[:, 0]
             return self.head(pooled)
-
-    model = SingleBinaryModel().to(device)
-    raw_model = model
-    if distributed:
-        model = DistributedDataParallel(
-            model, device_ids=[local_rank], output_device=local_rank,
-            find_unused_parameters=False,
-        )
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
-    scaler = torch.amp.GradScaler("cuda")
-    checkpoint = OUTPUT / "last_checkpoint.pt"
-    best_checkpoint = OUTPUT / "best_model.pt"
-    best_meta = OUTPUT / "best_metric.json"
 
     group_order = shuffled_group_order(train_pq.num_row_groups)
     total_segments = (train_total + SEGMENT_SAMPLES - 1) // SEGMENT_SAMPLES
@@ -432,6 +424,7 @@ def main() -> None:
     )
 
     # Train prior from labels derived on-the-fly from mfe10 (full train scan).
+    # Computed BEFORE model init so head.bias can start at logit(prior).
     totals = 0.0
     count = 0
     for index in range(train_pq.num_row_groups):
@@ -443,7 +436,28 @@ def main() -> None:
     if count != train_total:
         raise RuntimeError("train prior sample count mismatch")
     train_prior = float(totals / count)
-    log("train_prior", samples=count, prevalence=train_prior, target=TARGET_NAME)
+    head_bias = math.log(max(train_prior, 1e-7) / max(1.0 - train_prior, 1e-7))
+    log(
+        "train_prior",
+        samples=count,
+        prevalence=train_prior,
+        head_bias_init=head_bias,
+        gate_init=1.0,
+        target=TARGET_NAME,
+    )
+
+    model = SingleBinaryModel(head_bias=head_bias).to(device)
+    raw_model = model
+    if distributed:
+        model = DistributedDataParallel(
+            model, device_ids=[local_rank], output_device=local_rank,
+            find_unused_parameters=False,
+        )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+    scaler = torch.amp.GradScaler("cuda")
+    checkpoint = OUTPUT / "last_checkpoint.pt"
+    best_checkpoint = OUTPUT / "best_model.pt"
+    best_meta = OUTPUT / "best_metric.json"
 
     columns = ["symbol", "start_index", "asof_date", "mfe10", "mae10"]
     local_batch_size = max(1, BATCH_SIZE // world_size)
@@ -829,10 +843,11 @@ def main() -> None:
         "processed_samples": processed,
         "best_log_loss": best_score,
         "best_delta_vs_prior": (
-            None if last_validation is None
-            else last_validation["all"]["delta_vs_prior"]
-            if not last_best_updated
-            else (best_score - last_validation["all"]["constant_prior_log_loss"])
+            None
+            if last_validation is None
+            else (
+                best_score - last_validation["all"]["constant_prior_log_loss"]
+            )
         ),
         "gate_delta": GATE_DELTA_VS_PRIOR,
         "validation": last_validation,

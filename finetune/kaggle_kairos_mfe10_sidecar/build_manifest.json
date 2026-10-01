@@ -2,7 +2,7 @@
   "slug": "kairos-mfe10-path-touch-sidecar-short",
   "owner": "user281434",
   "title": "Kairos MFE10 Path-Touch Sidecar Short",
-  "source_sha256": "2aa4734022a7b2ea14d528e3f7820172b0b15a6a9561bcdeb47313b01fbf54c2",
+  "source_sha256": "8814de9b37b219e79c9d06f6d14dc29a7e879810f38079366aba743070ae18b7",
   "target": "y=1{mfe10>=0.10} where mfe10=max(high[T+1:T+10])/close[T]-1",
   "not_close_to_close": true,
   "not_multi_head_r2": true,
