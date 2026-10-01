@@ -1,7 +1,8 @@
-"""Helpers for Kairos short ranking probe (Phase M).
+"""Helpers for Kairos short ranking probe (Phase M/N).
 
 Predict continuous path-mfe10 (or within-day CS ranks) with a light
-identity / freeze+rank head. Primary metrics: daily Rank IC and TopK lift.
+identity / freeze+rank head. Phase M: MSE; Phase N: pairwise/listwise.
+Primary metrics: daily Rank IC and TopK lift.
 NOT binary mfe≥10%. NOT 22-layer R2.
 """
 
@@ -21,6 +22,12 @@ TOPK_LIFT_BAR = 0.05
 # Ridge mfe10_comb reference from Phase L (honest continuous arm).
 PHASE_L_RIDGE_MFE_COMB_RANK_IC = 0.2734396296793431
 PHASE_L_RIDGE_MFE_COMB_TOPK_LIFT = 0.17436270462689324
+PHASE_M_MSE_RANK_IC = 0.08525129172480793
+PHASE_M_MSE_TOPK_LIFT = 0.05686906618296045
+LOSS_MODES = ("mse", "pairwise", "listwise")
+DEFAULT_LOSS_MODE_PHASE_N = "pairwise"
+PAIRWISE_MIN_GAP = 0.005
+LISTWISE_TEMPERATURE = 0.05
 
 
 def cs_rank(dates: np.ndarray | pd.Series, y: np.ndarray) -> np.ndarray:
@@ -159,7 +166,10 @@ def target_contract() -> dict[str, Any]:
         "not_multi_head_r2": True,
         "not_22_layer_binary": True,
         "preferred_backbone": "identity_or_freeze_rank_head",
+        "preferred_loss_modes": list(LOSS_MODES),
+        "default_loss_mode_phase_n": DEFAULT_LOSS_MODE_PHASE_N,
         "metrics": ["rank_ic_mean", "topk_lift"],
         "rank_ic_bar": RANK_IC_BAR,
         "topk_lift_bar": TOPK_LIFT_BAR,
+        "phase_m_mse_rank_ic": PHASE_M_MSE_RANK_IC,
     }

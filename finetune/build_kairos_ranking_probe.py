@@ -1,6 +1,6 @@
-"""Build Kairos short ranking probe kernel (Phase M).
+"""Build Kairos short ranking probe kernel (Phase N).
 
-Light identity + rank head predicting continuous mfe10.
+Light identity + pairwise/listwise rank loss on continuous mfe10.
 NOT binary mfe≥10%. NOT 22-layer R2. No TPU WIP.
 """
 
@@ -15,10 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "finetune/kaggle_kairos_ranking_probe/train_ranking_probe.py"
 DEST = ROOT / "finetune/kaggle_kairos_ranking_probe"
 
-SLUG = "kairos-ranking-probe-short-phase-m"
-TITLE = "Kairos Ranking Probe Short Phase M"
+SLUG = "kairos-ranking-probe-short-phase-n"
+TITLE = "Kairos Ranking Probe Short Phase N"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-m-20261001"
+SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-n-20261001"
 
 
 def build(destination: Path | None = None) -> Path:
@@ -60,6 +60,10 @@ def build(destination: Path | None = None) -> Path:
         "not_22_layer_binary": True,
         "backbone_mode": "identity",
         "freeze_backbone": False,
+        "loss_mode": "pairwise",
+        "pairwise_min_gap": 0.005,
+        "listwise_temperature": 0.05,
+        "batch_size": 64,
         "max_segments_this_run": 3,
         "segment_samples": 20_000,
         "gpu_budget_seconds": 3600,
@@ -70,6 +74,7 @@ def build(destination: Path | None = None) -> Path:
         "swanlab_url": f"https://swanlab.cn/@roc_fu/finance/runs/{SWANLAB_RUN_ID}",
         "cloud_credentials": "staging only, not tracked",
         "phase_l_ridge_mfe_comb_rank_ic": 0.2734396296793431,
+        "phase_m_mse_rank_ic": 0.08525129172480793,
     }
     (destination / "build_manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"

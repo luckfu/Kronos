@@ -1,8 +1,11 @@
-"""Kairos SHORT ranking probe (Phase M): light identity + rank head.
+"""Kairos SHORT ranking probe (Phase N): identity + pairwise/listwise rank loss.
 
 Target:
   continuous path mfe10 = max(high[T+1:T+10]) / close[T] - 1
   (optional train label = within-day CS percentile rank of mfe10)
+
+Phase M used MSE; Phase N probes same-day pairwise (default) or ListNet
+listwise ranking loss on the same identity mean-pool + rank head.
 
 NOT binary mfe≥10%. NOT 22-layer R2. Prefer identity backbone (light) or
 freeze+rank-head. Primary metrics: daily Rank IC / TopK lift vs mfe10.
@@ -27,7 +30,7 @@ import numpy as np
 
 # ---- short-budget ranking probe knobs (NOT full R2 / NOT binary) ----
 SEED = 20261001
-BATCH_SIZE = 16
+BATCH_SIZE = 64  # denser same-day pairs after date sort
 CHUNK_INDEX = 0
 SEGMENT_SAMPLES = 20_000
 MAX_SEGMENTS_THIS_RUN = 3  # short ranking probe
@@ -39,6 +42,10 @@ SHUFFLE_SEED = 20261001
 LEARNING_RATE = 1e-4
 # Train label: continuous mfe10, or within-day CS percentile of mfe10.
 TARGET_MODE = "mfe10_continuous"  # or "mfe_cs_rank"
+# Phase N: ranking losses (Phase M was mse).
+LOSS_MODE = "pairwise"  # pairwise | listwise | mse
+PAIRWISE_MIN_GAP = 0.005  # ignore near-ties in mfe (~0.5pp)
+LISTWISE_TEMPERATURE = 0.05  # soft targets over raw mfe within day
 RANK_IC_BAR = 0.05
 TOPK_FRAC = 0.20
 TOPK_LIFT_BAR = 0.05
@@ -48,9 +55,9 @@ RANK_IC_STUCK_PATIENCE = 2
 FREEZE_BACKBONE = False  # identity: no 22-layer to freeze
 BACKBONE_MODE = "identity"  # light: mean-pool embeds + rank head
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-m-20261001"
+SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-n-20261001"
 OUTPUT = Path("/kaggle/working/kairos_ranking_probe")
-RUN_PURPOSE = "mfe10-ranking-probe-identity-rank-head-phase-m"
+RUN_PURPOSE = "mfe10-ranking-probe-identity-pairwise-phase-n"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_NAME = "mfe10_continuous_rank"
 MFE10_DEF = "max(high[T+1:T+10]) / close[T] - 1"
@@ -171,6 +178,118 @@ def clears_rank_gate(rank_ic_mean: float, topk_lift: float) -> bool:
     return ic_ok or topk_ok
 
 
+def dates_to_ids(dates: np.ndarray) -> np.ndarray:
+    """Map datetime64[D] (or comparable) to dense int64 day ids."""
+    arr = np.asarray(dates)
+    if np.issubdtype(arr.dtype, np.datetime64):
+        return arr.astype("datetime64[D]").astype(np.int64)
+    # fallback: hashable object / string dates → factorize
+    _, inv = np.unique(arr.astype(str), return_inverse=True)
+    return inv.astype(np.int64)
+
+
+def same_date_pairwise_ranking_loss(
+    scores,
+    utilities,
+    date_ids,
+    *,
+    minimum_gap: float = PAIRWISE_MIN_GAP,
+    valid_mask=None,
+):
+    """Same-day pairwise logistic (softplus) on score order vs utility order."""
+    import torch
+    import torch.nn.functional as F
+
+    scores = scores.reshape(-1)
+    utilities = utilities.reshape(-1)
+    date_ids = date_ids.reshape(-1)
+    if valid_mask is not None:
+        valid_mask = valid_mask.reshape(-1).to(dtype=torch.bool)
+        scores = scores[valid_mask]
+        utilities = utilities[valid_mask]
+        date_ids = date_ids[valid_mask]
+    if scores.numel() < 2:
+        return scores.sum() * 0.0
+    same_date = date_ids[:, None] == date_ids[None, :]
+    group_sizes = same_date.sum(dim=1)
+    score_delta = scores[:, None] - scores[None, :]
+    utility_delta = utilities[:, None] - utilities[None, :]
+    pair_mask = same_date & torch.triu(utility_delta.abs() >= minimum_gap, diagonal=1)
+    pair_values = pair_mask.to(dtype=scores.dtype)
+    pair_counts_by_row = pair_values.sum(dim=1)
+    group_pair_counts = same_date.to(dtype=scores.dtype) @ pair_counts_by_row
+    pair_losses = F.softplus(-score_delta * utility_delta.sign())
+    normalized_pairs = (
+        pair_losses * pair_values / group_pair_counts.clamp_min(1)[:, None]
+    )
+    groups_with_pairs = (group_pair_counts > 0).to(dtype=scores.dtype)
+    group_count = (groups_with_pairs / group_sizes.clamp_min(1)).sum()
+    grouped_loss = normalized_pairs.sum() / group_count.clamp_min(1)
+    return torch.where(group_count > 0, grouped_loss, scores.sum() * 0.0)
+
+
+def same_date_listwise_listnet_loss(
+    scores,
+    utilities,
+    date_ids,
+    *,
+    temperature: float = LISTWISE_TEMPERATURE,
+    valid_mask=None,
+):
+    """Same-day ListNet: CE between softmax(utilities/T) and log_softmax(scores)."""
+    import torch
+    import torch.nn.functional as F
+
+    scores = scores.reshape(-1)
+    utilities = utilities.reshape(-1)
+    date_ids = date_ids.reshape(-1)
+    if valid_mask is not None:
+        valid_mask = valid_mask.reshape(-1).to(dtype=torch.bool)
+        scores = scores[valid_mask]
+        utilities = utilities[valid_mask]
+        date_ids = date_ids[valid_mask]
+    if scores.numel() < 2:
+        return scores.sum() * 0.0
+    unique = torch.unique(date_ids)
+    losses = []
+    for day in unique:
+        mask = date_ids == day
+        if int(mask.sum().item()) < 2:
+            continue
+        s = scores[mask]
+        u = utilities[mask]
+        # soft target over within-day mfe; temperature keeps mass on top names
+        target = F.softmax(u / max(float(temperature), 1e-6), dim=0)
+        log_p = F.log_softmax(s, dim=0)
+        losses.append(-(target * log_p).sum())
+    if not losses:
+        return scores.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
+def ranking_batch_loss(pred, target, date_ids, valid, loss_mode: str = LOSS_MODE):
+    """Dispatch mse / pairwise / listwise; returns scalar loss + tag."""
+    import torch.nn.functional as F
+
+    if loss_mode == "mse":
+        per_row = F.mse_loss(pred, target, reduction="none").mean(dim=1)
+        local_sum = per_row[valid].sum()
+        # caller normalizes by global valid count for DDP MSE
+        return local_sum, "mse", True
+    utilities = target.reshape(-1)
+    scores = pred.reshape(-1)
+    if loss_mode == "listwise":
+        loss = same_date_listwise_listnet_loss(
+            scores, utilities, date_ids, temperature=LISTWISE_TEMPERATURE, valid_mask=valid
+        )
+        return loss, "listwise", False
+    # default pairwise
+    loss = same_date_pairwise_ranking_loss(
+        scores, utilities, date_ids, minimum_gap=PAIRWISE_MIN_GAP, valid_mask=valid
+    )
+    return loss, "pairwise", False
+
+
 def rank_ic_stuck_stop(rank_ic_mean: float, stuck_streak: int) -> tuple[str, int]:
     if not np.isfinite(rank_ic_mean):
         return "nonfinite_rank_ic", stuck_streak + 1
@@ -260,11 +379,15 @@ def start_swanlab() -> tuple[Any, Any]:
             "rank_ic_bar": RANK_IC_BAR,
             "topk_frac": TOPK_FRAC,
             "topk_lift_bar": TOPK_LIFT_BAR,
-            "variant": "kairos-ranking-probe-short-phase-m",
+            "variant": "kairos-ranking-probe-short-phase-n",
+            "loss_mode": LOSS_MODE,
+            "pairwise_min_gap": PAIRWISE_MIN_GAP,
+            "listwise_temperature": LISTWISE_TEMPERATURE,
             "not_multi_head_r2": True,
             "not_binary_mfe10": True,
             "not_22_layer_binary": True,
             "phase_l_ridge_mfe_comb_rank_ic": PHASE_L_RIDGE_MFE_COMB_RANK_IC,
+            "phase_m_mse_rank_ic": 0.08525129172480793,
         },
         mode="cloud",
     )
@@ -383,9 +506,13 @@ def main() -> None:
         not_22_layer_binary=True,
         freeze_backbone=FREEZE_BACKBONE,
         backbone_mode=BACKBONE_MODE,
+        loss_mode=LOSS_MODE,
+        pairwise_min_gap=PAIRWISE_MIN_GAP,
+        listwise_temperature=LISTWISE_TEMPERATURE,
         rank_ic_bar=RANK_IC_BAR,
         topk_lift_bar=TOPK_LIFT_BAR,
         world_size=world_size,
+        phase_m_mse_rank_ic=0.08525129172480793,
     )
     random.seed(SEED)
     np.random.seed(SEED)
@@ -730,11 +857,13 @@ def main() -> None:
 
     # Initial eval (untrained) — Rank IC / TopK before any segment.
     last_validation = full_validation()
-    best_score = float(last_validation["all"]["rank_ic"]["mean"])
+    init_ic = float(last_validation["all"]["rank_ic"]["mean"])
+    # Avoid Phase M NaN pollution of best_metric.json when n_days=0 at init.
+    best_score = init_ic if math.isfinite(init_ic) else float("-inf")
     if is_main_process():
         best_meta.write_text(
             json.dumps({
-                "rank_ic_mean": best_score,
+                "rank_ic_mean": (init_ic if math.isfinite(init_ic) else None),
                 "topk_lift": last_validation["all"]["topk"]["lift_vs_chance"],
                 "mse": last_validation["all"]["mse"],
                 "gate_passed": last_validation["all"]["gate_passed"],
@@ -786,6 +915,11 @@ def main() -> None:
         segment_samples = len(segment_rows)
         segment_global_start = processed
         segment_started = time.monotonic()
+        # Date-sort so contiguous batches share asof_date → denser ranking pairs.
+        segment_rows = sorted(
+            segment_rows,
+            key=lambda r: (str(r.get("asof_date", "")), str(r.get("symbol", "")), int(r.get("start_index", 0))),
+        )
         padded_count = ((segment_samples + world_size - 1) // world_size) * world_size
         padded_rows = segment_rows + [segment_rows[-1]] * (padded_count - segment_samples)
         local_rows = padded_rows[rank::world_size]
@@ -794,6 +928,7 @@ def main() -> None:
             local_rows, train_arrays,
             check_labels=(rank == 0 and completed_segments == 0),
         )
+        local_date_ids = dates_to_ids(local_cache[6])
 
         for offset in range(0, len(local_rows), local_batch_size):
             batch_slice = slice(offset, offset + local_batch_size)
@@ -803,16 +938,24 @@ def main() -> None:
             sector = torch.from_numpy(local_cache[2][batch_slice]).to(device)
             size = torch.from_numpy(local_cache[3][batch_slice, None]).to(device)
             target = torch.from_numpy(local_cache[4][batch_slice]).to(device)
+            date_ids = torch.from_numpy(local_date_ids[batch_slice]).to(device)
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type="cuda", dtype=torch.float16):
                 pred = model(s1.long(), s2.long(), size, sector)
-                # MSE on continuous mfe10 (or CS ranks); identity rank head.
-                per_row = F.mse_loss(pred, target, reduction="none").mean(dim=1)
-                local_loss_sum = per_row[valid].sum()
-                global_valid_count = valid.sum().to(dtype=torch.float32)
-                if distributed:
-                    dist.all_reduce(global_valid_count, op=dist.ReduceOp.SUM)
-                loss = local_loss_sum * world_size / global_valid_count.clamp_min(1)
+                raw_loss, loss_tag, is_mse_sum = ranking_batch_loss(
+                    pred, target, date_ids, valid, LOSS_MODE
+                )
+                if is_mse_sum:
+                    global_valid_count = valid.sum().to(dtype=torch.float32)
+                    if distributed:
+                        dist.all_reduce(global_valid_count, op=dist.ReduceOp.SUM)
+                    loss = raw_loss * world_size / global_valid_count.clamp_min(1)
+                else:
+                    # Pairwise/listwise already reduced; mean across ranks for DDP.
+                    loss = raw_loss
+                    if distributed:
+                        dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+                        loss = loss / world_size
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -824,7 +967,8 @@ def main() -> None:
                 local_done = int(local_valid[:offset + local_batch_size].sum())
                 estimated = segment_global_start + min(segment_samples, local_done * world_size)
                 swanlab_run.log({
-                    "train/mse_loss": float(loss.detach().cpu()),
+                    f"train/{loss_tag}_loss": float(loss.detach().cpu()),
+                    "train/loss_mode": LOSS_MODE,
                     "train/processed_samples": estimated,
                     "train/segment_index": global_segment_index,
                 }, step=estimated)
@@ -863,7 +1007,7 @@ def main() -> None:
             phase_l_ridge_ic=PHASE_L_RIDGE_MFE_COMB_RANK_IC,
         )
 
-        last_best_updated = validation_score > best_score
+        last_best_updated = bool(math.isfinite(validation_score) and validation_score > best_score)
         if last_best_updated:
             best_score = validation_score
             if is_main_process():
@@ -969,6 +1113,10 @@ def main() -> None:
         "not_22_layer_binary": True,
         "backbone_mode": BACKBONE_MODE,
         "freeze_backbone": FREEZE_BACKBONE,
+        "loss_mode": LOSS_MODE,
+        "pairwise_min_gap": PAIRWISE_MIN_GAP,
+        "listwise_temperature": LISTWISE_TEMPERATURE,
+        "phase_m_mse_rank_ic": 0.08525129172480793,
         "train_label_mean": train_label_mean,
         "train_label_std": train_label_std,
         "stop_reason": stop_reason,

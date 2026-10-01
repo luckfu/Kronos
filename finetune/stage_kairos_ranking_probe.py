@@ -52,8 +52,9 @@ def stage() -> dict:
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "mfe10 ranking probe short phase M",
+            "purpose": "mfe10 ranking probe short phase N pairwise",
             "target": "continuous mfe10 Rank IC",
+            "loss_mode": "pairwise",
             "not_binary_mfe10": True,
             "not_22_layer_binary": True,
             "session_budget_seconds": 3600,

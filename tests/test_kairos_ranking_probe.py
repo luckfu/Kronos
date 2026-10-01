@@ -8,7 +8,10 @@ from pathlib import Path
 import numpy as np
 
 from modernbert_finance.ranking_probe import (
+    DEFAULT_LOSS_MODE_PHASE_N,
+    LOSS_MODES,
     MFE10_DEF,
+    PHASE_M_MSE_RANK_IC,
     RANK_IC_BAR,
     TARGET_NAME,
     TOPK_LIFT_BAR,
@@ -76,9 +79,20 @@ def test_train_script_syntax_and_knobs() -> None:
     ast.parse(src)
     assert 'BACKBONE_MODE = "identity"' in src
     assert "TARGET_MODE = \"mfe10_continuous\"" in src
+    assert 'LOSS_MODE = "pairwise"' in src
+    assert "same_date_pairwise_ranking_loss" in src
+    assert "same_date_listwise_listnet_loss" in src
     assert "MAX_SEGMENTS_THIS_RUN = 3" in src
     assert "not_22_layer_binary" in src
-    assert "F.mse_loss" in src
     assert "validation/rank_ic_mean" in src
+    assert "SWANLAB_RUN_ID = \"kairos-ranking-probe-short-phase-n-20261001\"" in src
     assert "MFE10_THRESHOLD" not in src
     assert "binary_cross_entropy" not in src
+
+
+def test_phase_n_loss_contract() -> None:
+    c = target_contract()
+    assert DEFAULT_LOSS_MODE_PHASE_N == "pairwise"
+    assert "pairwise" in LOSS_MODES and "listwise" in LOSS_MODES
+    assert c["default_loss_mode_phase_n"] == "pairwise"
+    assert PHASE_M_MSE_RANK_IC > 0.05
