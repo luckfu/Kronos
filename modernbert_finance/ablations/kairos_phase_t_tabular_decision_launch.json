@@ -35,5 +35,7 @@
     "Q_random_mlp3_delta_caveat": -0.05244913167027376,
     "R_temporal_logistic_C0.01": -0.039814562905750694,
     "S_temporal_blend_best": -0.04179349770224905
-  }
+  },
+  "commit": "943b40c",
+  "pushed_at_cst": "2026-10-01 16:14:49 CST"
 }

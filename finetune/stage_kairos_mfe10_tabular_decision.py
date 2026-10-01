@@ -82,6 +82,16 @@ def stage() -> dict:
     os.chmod(path, 0o600)
     shutil.copy2(source / "kernel-metadata.json", destination / "kernel-metadata.json")
     shutil.copy2(source / "build_manifest.json", destination / "build_manifest.json")
+    vendor_src = source / "vendor"
+    vendor_dst = destination / "vendor"
+    if vendor_dst.exists():
+        shutil.rmtree(vendor_dst)
+    if vendor_src.is_dir():
+        shutil.copytree(
+            vendor_src,
+            vendor_dst,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
     preflight = {
         "url": url,
         "cloud_logging_ready": True,

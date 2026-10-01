@@ -6,6 +6,7 @@ Kernel：`user281434/kairos-mfe10-decision-tabular-phase-t` → **RUNNING**
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-t  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-t-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t-20261002  
+Commit：`943b40c`  
 启动：2026-10-01 16:14:17 CST
 
 ## 设定
