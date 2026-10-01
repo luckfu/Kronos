@@ -1,10 +1,10 @@
 # Kairos MFE≥10% 短 Sidecar 训练交接（单二分类头）
 
-日期：2026-10-01 22:25 CST（北京时间）。Phase J freeze-bb 未过闸；现推 Phase K identity-backbone。
+日期：2026-10-01 22:38 CST（北京时间）。Phase K identity 未过闸（best Δ≈−0.003）；用户对齐排序非二分类 → Phase L 本地排序消融已跑通。
 
 ## 一句话
 
-**新目标**：`y=1{mfe10≥0.10}`，其中 `mfe10=max(high[T+1:T+10])/close[T]-1`（路径触及，非收盘对收盘）。  
+**现状**：Phase K COMPLETE 未过闸。**原目标**（二分类）：`y=1{mfe10≥0.10}`，其中 `mfe10=max(high[T+1:T+10])/close[T]-1`（路径触及，非收盘对收盘）。  
 **开训**：短 sidecar（≤4 segments / 1 chunk），**不是**旧 8 头 R2 重启。  
 **闸门**：验证 Δ logloss ≤ `-0.04` vs 常数先验；正类率约 `25%`。
 
