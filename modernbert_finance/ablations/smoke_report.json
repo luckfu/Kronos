@@ -1,0 +1,154 @@
+{
+  "mode": "smoke",
+  "n_samples": 560,
+  "feature_dim": 20,
+  "alignment": {
+    "ok": true,
+    "n_samples": 560,
+    "n_checked": 64,
+    "mismatches": [],
+    "notes": [
+      "Compared 64 rows against recomputed target_row(); lookback=120, horizon=10, features=('open', 'high', 'low', 'close', 'volume', 'amount')."
+    ]
+  },
+  "label_shuffle": {
+    "ok": true,
+    "n_samples": 560,
+    "head": "up_005",
+    "prior_log_loss": 0.6923752982652681,
+    "shuffled_fit_log_loss": 0.7183057439311687,
+    "true_fit_log_loss": 0.6909680511619203,
+    "shuffle_minus_prior": 0.02607721205777358,
+    "true_minus_prior": -0.0012604807114748873,
+    "notes": [
+      "Shuffled labels should yield log loss ≈ constant prior (gap near 0).",
+      "True labels may beat the prior if the summarized features carry signal.",
+      "test_prior_log_loss=0.692229"
+    ]
+  },
+  "simple_baseline": {
+    "ok": true,
+    "results": [
+      {
+        "head": "up_003",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.5623351446188083,
+        "model_log_loss": 0.5761936742318817,
+        "model_brier": 0.19516687593133422,
+        "model_mse": null,
+        "beats_prior": false
+      },
+      {
+        "head": "up_005",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.6922285318733952,
+        "model_log_loss": 0.6909680511619203,
+        "model_brier": 0.2486254240515594,
+        "model_mse": null,
+        "beats_prior": true
+      },
+      {
+        "head": "up_008",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.44670872733996203,
+        "model_log_loss": 0.48865562645466676,
+        "model_brier": 0.14760997059893352,
+        "model_mse": null,
+        "beats_prior": false
+      },
+      {
+        "head": "up_012",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.10354796757746546,
+        "model_log_loss": 0.07915583901638255,
+        "model_brier": 0.01963500909014317,
+        "model_mse": null,
+        "beats_prior": true
+      },
+      {
+        "head": "down_003",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.4903394304906517,
+        "model_log_loss": 0.5146948642280889,
+        "model_brier": 0.1615321954779549,
+        "model_mse": null,
+        "beats_prior": false
+      },
+      {
+        "head": "down_005",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.6905939864775921,
+        "model_log_loss": 0.6883642743703492,
+        "model_brier": 0.24530169997811424,
+        "model_mse": null,
+        "beats_prior": true
+      },
+      {
+        "head": "down_008",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.5101464839287556,
+        "model_log_loss": 0.5010960509822239,
+        "model_brier": 0.16378569847319552,
+        "model_mse": null,
+        "beats_prior": true
+      },
+      {
+        "head": "down_012",
+        "kind": "logistic",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": 0.07487597323206042,
+        "model_log_loss": 0.06577740860999576,
+        "model_brier": 0.013348896160941067,
+        "model_mse": null,
+        "beats_prior": true
+      },
+      {
+        "head": "mfe10",
+        "kind": "linear",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": null,
+        "model_log_loss": null,
+        "model_brier": null,
+        "model_mse": 0.0008180899939344003,
+        "beats_prior": null
+      },
+      {
+        "head": "mae10",
+        "kind": "linear",
+        "n_train": 420,
+        "n_test": 140,
+        "prior_log_loss": null,
+        "model_log_loss": null,
+        "model_brier": null,
+        "model_mse": 0.0007000496041651354,
+        "beats_prior": null
+      }
+    ],
+    "notes": [
+      "Binary heads: LogisticRegression vs constant prevalence prior.",
+      "mfe10/mae10: LinearRegression MSE only (no prior log loss)."
+    ]
+  },
+  "how_to_verify_alignment": [
+    "Dataset enumerates sorted(symbol) × start_index; sidecar must match 1:1.",
+    "asof = start + lookback - 1 (lookback=120); labels use only the next 10 bars.",
+    "Run verify_feature_label_alignment(panel, targets_parquet) after any rebuild.",
+    "Mismatch in row counts → wrong panel hash / date filter / sort order."
+  ]
+}
