@@ -2,7 +2,7 @@
 
 日期：2026-10-01（北京时间）。  
 前置：排序 Phase O COMPLETE → 产品枢轴回决策；Phase K identity Δ≈−0.003 未过闸；表格 Logistic Δ≈−0.034。  
-Kernel：`user281434/kairos-mfe10-decision-short-phase-p` → **RUNNING**  
+Kernel：`user281434/kairos-mfe10-decision-short-phase-p` → **COMPLETE**  
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-short-phase-p  
 Commit：`8e6ff68`  
 启动：2026-10-01 23:28:44 CST  
@@ -32,3 +32,7 @@ URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-short-phase-
 - Kernel logs + `kairos_mfe10_sidecar/report.json`
 - SwanLab：`validation/delta_vs_prior` / `gate_passed`
 - 本地 launch JSON：`modernbert_finance/ablations/kairos_phase_p_shallow_freeze_decision_launch.json`
+
+## 结果
+
+见 `kairos_phase_p_shallow_freeze_decision_results_cn.md`（COMPLETE；best Δ≈0，未过闸；劣于 K）。

@@ -1,0 +1,227 @@
+{
+  "phase": "R_tabular_temporal_regularized_decision",
+  "kind": "cpu_val_temporal_2025H2_to_2026H1_regularized",
+  "target": "y=1{mfe10>=0.10}",
+  "status": "COMPLETE",
+  "split": {
+    "train": "asof<=2025-12-31",
+    "test": "asof>=2026-01-01",
+    "n_train": 63268,
+    "n_test": 60568,
+    "pos_train": 0.24622241891635582,
+    "pos_test": 0.25995575221238937
+  },
+  "prior_ll_on_test_using_train_prior": 0.5735125707710965,
+  "models": {
+    "logistic_comb": {
+      "delta_vs_prior": -0.03780105231196684,
+      "model_log_loss": 0.5357115184591297,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.2511308432450269,
+      "pred_std": 0.11011179202487124,
+      "fit_seconds": 3.4680681228637695,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "logistic_comb_C0.1": {
+      "delta_vs_prior": -0.03864104644663191,
+      "model_log_loss": 0.5348715243244646,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.24896820691868163,
+      "pred_std": 0.10641470559425566,
+      "fit_seconds": 1.3120834827423096,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "logistic_comb_C0.01": {
+      "delta_vs_prior": -0.039814562905750694,
+      "model_log_loss": 0.5336980078653458,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.2489686300644828,
+      "pred_std": 0.10582157811605396,
+      "fit_seconds": 0.567868709564209,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "logistic_platt": {
+      "delta_vs_prior": -0.037564350352414344,
+      "model_log_loss": 0.5359482204186822,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.25023659669249465,
+      "pred_std": 0.10070924534304336,
+      "fit_seconds": 10.193065404891968,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp1_a1e3": {
+      "delta_vs_prior": -0.03923561896311678,
+      "model_log_loss": 0.5342769518079797,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.2477432168018521,
+      "pred_std": 0.11338237858646907,
+      "fit_seconds": 1.9917714595794678,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp1_a1e2": {
+      "delta_vs_prior": -0.03914020242028249,
+      "model_log_loss": 0.534372368350814,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.24750598255278783,
+      "pred_std": 0.11294906983871293,
+      "fit_seconds": 1.7416863441467285,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp1_a1e1": {
+      "delta_vs_prior": -0.039359639107849564,
+      "model_log_loss": 0.534152931663247,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.24774647425431173,
+      "pred_std": 0.11309331418076657,
+      "fit_seconds": 1.6668436527252197,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp2_a1e2": {
+      "delta_vs_prior": -0.03516811159656896,
+      "model_log_loss": 0.5383444591745276,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.26244020413759517,
+      "pred_std": 0.11628478448998071,
+      "fit_seconds": 3.280158281326294,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp2_a1e1": {
+      "delta_vs_prior": -0.0050774239182029834,
+      "model_log_loss": 0.5684351468528935,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.25877083195296524,
+      "pred_std": 0.1622281121405594,
+      "fit_seconds": 7.991967678070068,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp3_a1e1": {
+      "delta_vs_prior": 0.09707806626212212,
+      "model_log_loss": 0.6705906370332186,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.2487181928348979,
+      "pred_std": 0.19797397590343105,
+      "fit_seconds": 13.788195848464966,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    },
+    "mlp3_a1e0": {
+      "delta_vs_prior": -0.03741089259466257,
+      "model_log_loss": 0.536101678176434,
+      "prior_log_loss": 0.5735125707710965,
+      "gate_passed": false,
+      "mean_pred": 0.25611737473922674,
+      "pred_std": 0.11853637450400403,
+      "fit_seconds": 5.496150493621826,
+      "train_prior": 0.24622241891635582,
+      "n_train": 63268,
+      "n_test": 60568
+    }
+  },
+  "ranked_deltas": [
+    {
+      "model": "logistic_comb_C0.01",
+      "delta": -0.039814562905750694
+    },
+    {
+      "model": "mlp1_a1e1",
+      "delta": -0.039359639107849564
+    },
+    {
+      "model": "mlp1_a1e3",
+      "delta": -0.03923561896311678
+    },
+    {
+      "model": "mlp1_a1e2",
+      "delta": -0.03914020242028249
+    },
+    {
+      "model": "logistic_comb_C0.1",
+      "delta": -0.03864104644663191
+    },
+    {
+      "model": "logistic_comb",
+      "delta": -0.03780105231196684
+    },
+    {
+      "model": "logistic_platt",
+      "delta": -0.037564350352414344
+    },
+    {
+      "model": "mlp3_a1e0",
+      "delta": -0.03741089259466257
+    },
+    {
+      "model": "mlp2_a1e2",
+      "delta": -0.03516811159656896
+    },
+    {
+      "model": "mlp2_a1e1",
+      "delta": -0.0050774239182029834
+    },
+    {
+      "model": "mlp3_a1e1",
+      "delta": 0.09707806626212212
+    }
+  ],
+  "best": {
+    "model": "logistic_comb_C0.01",
+    "delta_vs_prior": -0.039814562905750694,
+    "model_log_loss": 0.5336980078653458,
+    "prior_log_loss": 0.5735125707710965,
+    "gate_passed": false,
+    "mean_pred": 0.2489686300644828,
+    "pred_std": 0.10582157811605396,
+    "fit_seconds": 0.567868709564209,
+    "train_prior": 0.24622241891635582,
+    "n_train": 63268,
+    "n_test": 60568
+  },
+  "phase_q_random_split_caveat": {
+    "mlp_3x_comb_random_delta": -0.05244913167027376,
+    "mlp_3x_temporal_delta": 0.09707806626212212,
+    "note": "Phase Q random 75/25 gate pass for deep MLP was optimistic; temporal split is the decision metric here."
+  },
+  "compare": {
+    "phase_p_best_delta": 1.38e-07,
+    "phase_k_best_delta": -0.002970473307763233,
+    "phase_q_random_mlp3_delta": -0.05244913167027376,
+    "g2_logistic_random_delta": -0.034130436131804,
+    "gate": -0.04
+  },
+  "decision": {
+    "gate_passed": false,
+    "best_model": "logistic_comb_C0.01",
+    "best_delta_vs_prior": -0.039814562905750694,
+    "interpretation": "temporal_logistic_near_gate"
+  },
+  "elapsed_seconds": 59.008339405059814
+}

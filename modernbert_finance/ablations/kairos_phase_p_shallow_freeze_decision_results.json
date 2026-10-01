@@ -1,0 +1,61 @@
+{
+  "phase": "P_shallow_freeze_decision_results",
+  "kind": "short_shallow_freeze_tok_embeds_decision_bce",
+  "target": "y=1{mfe10>=0.10}",
+  "mfe10_def": "max(high[T+1:T+10])/close[T]-1",
+  "status": "COMPLETE",
+  "gate_passed": false,
+  "best_delta_vs_prior": 1.3803802001444154e-07,
+  "best_source": "init_pre_train",
+  "best_log_loss": 0.5655419998184276,
+  "prior_ll": 0.5655418617804076,
+  "train_prior": 0.2533598787699209,
+  "val_positive_rate": 0.252939373254776,
+  "val_n": 123836,
+  "init_delta": 1.3803802001444154e-07,
+  "segment_deltas": {
+    "init": 1.3803802001444154e-07,
+    "seg1": 0.006003435582034533,
+    "seg2": 0.026027288078641964,
+    "seg3": 0.03824501010500858,
+    "seg4": 0.027052303795350507
+  },
+  "stop_reason": "segment_limit",
+  "segments_this_run": 4,
+  "processed_samples": 80000,
+  "backbone_mode": "shallow",
+  "shallow_layers": 2,
+  "freeze_tokenizer_embeds": true,
+  "freeze_backbone": false,
+  "learning_rate": 0.0001,
+  "param_freeze": {
+    "trainable_tensors": 24,
+    "frozen_tensors": 3,
+    "trainable_numel": 10715202,
+    "frozen_numel": 1572864
+  },
+  "kernel_slug": "user281434/kairos-mfe10-decision-short-phase-p",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-short-phase-p",
+  "swanlab_run_id": "kairos-mfe10-decision-short-phase-p-20261001",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-short-phase-p-20261001",
+  "compare": {
+    "phase_k_identity_best_delta": -0.002970473307763233,
+    "logistic_base_xsection_delta": -0.03413,
+    "linear_bce_frozen_features_delta": -0.031446,
+    "tok_full_logistic_delta": -0.025916,
+    "phase_p_best_delta": 1.3803802001444154e-07,
+    "gate": -0.04,
+    "vs_k": "worse_than_K_all_post_train_deltas_positive",
+    "vs_logistic": "orders_of_magnitude_worse"
+  },
+  "diagnosis": {
+    "shallow_freeze_fails": true,
+    "all_train_segments_worsen_ll": true,
+    "best_is_constant_prior_init": true,
+    "tokenizer_sequence_path_short_budget_dead": true,
+    "next_angle": "tabular_features_plus_shallow_mlp_no_tokenizer"
+  },
+  "completed_at_cst": "2026-10-01 16:06:11 CST",
+  "source": "kaggle kernels logs (report.json not in kernel output zip; SSL/source-tree dump)",
+  "local_report": "/workspace/kaggle_kairos_mfe10_decision_phase_p_out/report_from_logs.json"
+}

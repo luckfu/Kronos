@@ -26,11 +26,15 @@
   "not_tpu": true,
   "phase_k_identity_best_delta": -0.002970473307763233,
   "logistic_base_xsection_delta": -0.03413,
-  "status": "RUNNING_OR_QUEUED",
+  "status": "COMPLETE",
   "launched_at_cst": "2026-10-01 23:28:07 CST",
   "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-short-phase-p",
   "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-short-phase-p-20261001",
   "decision_only_charter": "modernbert_finance/kairos_decision_only_handoff_cn.md",
   "commit": "8e6ff68",
-  "pushed_at_cst": "2026-10-01 23:28:44 CST"
+  "pushed_at_cst": "2026-10-01 23:28:44 CST",
+  "completed_at_cst": "2026-10-01 16:06:11 CST",
+  "best_delta_vs_prior": 1.3803802001444154e-07,
+  "gate_passed": false,
+  "results_json": "modernbert_finance/ablations/kairos_phase_p_shallow_freeze_decision_results.json"
 }

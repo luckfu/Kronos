@@ -1,0 +1,16 @@
+{
+  "slug": "kairos-mfe10-decision-tabular-phase-t",
+  "owner": "user281434",
+  "title": "Kairos MFE10 Decision Tabular Phase T",
+  "source_sha256": "ac6859291cff2bbe1f6d024a99e917ad0c49f6ac2e6d81e5a1e5ad46d894505b",
+  "target": "y=1{mfe10>=0.10}",
+  "kind": "tabular_enet_blend_official_holdout_confirm",
+  "phase_s_temporal_best_delta": -0.04179349770224905,
+  "gate": -0.04,
+  "not_tokenizer_sequence": true,
+  "not_ranking_ic": true,
+  "not_22_layer": true,
+  "not_tpu": true,
+  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-t-20261002",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t-20261002"
+}
