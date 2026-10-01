@@ -6,6 +6,7 @@ import json
 import os
 import pickle
 import random
+import resource
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 import numpy as np
+from finetune.global_parquet_sampler import GlobalParquetSampler, SAMPLER_VERSION
 SEED = 20260927
 BATCH_SIZE = 16
 LR_PROBE = False
@@ -29,7 +31,6 @@ EARLY_STOP_MIN_DELTA = 0.001
 MAX_VALIDATION_DEGRADATION = 0.2
 CHUNK_INDEX = 0
 SEGMENT_SAMPLES = 20000
-SAMPLER_VERSION = 'global_sample_permutation_v1'
 GPU_BUDGET_SECONDS = 36000
 RUNTIME_RESERVE_SECONDS = 1800
 SEGMENT_ESTIMATE_SECONDS = 546.412109773
@@ -73,24 +74,6 @@ def canonicalize_buffers(model: Any) -> None:
     for module in model.modules():
         module._buffers = dict(sorted(module._buffers.items()))
 
-def expected_segment_ids(parquet: Any, order: list[int], processed: int, count: int) -> list:
-    result = []
-    skip = processed
-    for group in order:
-        size = parquet.metadata.row_group(group).num_rows
-        if skip >= size:
-            skip -= size
-            continue
-        rows = shuffle_group_rows(parquet.read_row_group(group, columns=['symbol', 'start_index', 'asof_date']).to_pylist(), group)
-        take = min(count - len(result), size - skip)
-        result.extend((row_identity(row) for row in rows[skip:skip + take]))
-        skip = 0
-        if len(result) == count:
-            break
-    if len(result) != count or len(set(result)) != count:
-        raise RuntimeError('independent coverage enumeration failed')
-    return result
-
 def rope_fingerprint(model: Any, torch: Any) -> dict[str, Any]:
     rotary = model.backbone.rotary_emb
     config = model.backbone.config
@@ -129,60 +112,8 @@ def dashboard(state: dict[str, Any]) -> None:
     html = f'<!doctype html><meta charset="utf-8"><title>Kairos R2 training</title>\n<style>body{{font:16px system-ui;margin:32px;background:#f6f7f9;color:#17202a}}\nmain{{max-width:900px;margin:auto}}.grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}}\n.card,pre{{background:white;border:1px solid #ddd;border-radius:8px;padding:16px}}\n.label{{color:#667085;font-size:13px}}.value{{font-size:24px;font-weight:650;margin-top:6px}}</style>\n<main><h1>Kairos R2 training</h1><div class="grid">\n<div class="card"><div class="label">Phase</div><div class="value">{state.get('phase', 'starting')}</div></div>\n<div class="card"><div class="label">Progress</div><div class="value">{percent:.2f}%</div></div>\n<div class="card"><div class="label">Samples</div><div class="value">{processed:,}/{total:,}</div></div>\n</div><pre>{json.dumps(state, ensure_ascii=False, indent=2, default=str)}</pre></main>'
     (OUTPUT / 'dashboard.html').write_text(html, encoding='utf-8')
 
-def shuffled_group_order(num_groups: int) -> list[int]:
-    return np.random.default_rng(SHUFFLE_SEED).permutation(num_groups).tolist()
-
-def shuffle_group_rows(rows: list[dict[str, Any]], group_id: int) -> list[dict[str, Any]]:
-    order = np.random.default_rng(SHUFFLE_SEED + group_id + 1).permutation(len(rows))
-    return [rows[int(index)] for index in order]
-
-def group_order_hash(order: list[int]) -> str:
-    return hashlib.sha256(','.join(map(str, order)).encode('ascii')).hexdigest()
-
-
-class GlobalParquetSampler:
-    """Materialize the sample rows and use one deterministic global permutation."""
-
-    def __init__(self, parquet: Any, columns: list[str], seed: int,
-                 cursor: int = 0) -> None:
-        self.rows = parquet.read(columns=columns).to_pylist()
-        self.total = len(self.rows)
-        self.permutation = np.random.default_rng(seed).permutation(self.total)
-        self.cursor = int(cursor)
-        if not 0 <= self.cursor <= self.total:
-            raise RuntimeError('global sampler cursor out of range')
-
-    @classmethod
-    def from_state(cls, parquet: Any, columns: list[str], seed: int,
-                   state: dict) -> 'GlobalParquetSampler':
-        sampler = cls(parquet, columns, seed, int(state['cursor']))
-        if int(state.get('total', -1)) != sampler.total:
-            raise RuntimeError('global sampler sample count mismatch')
-        return sampler
-
-    def state_dict(self) -> dict[str, Any]:
-        return {'sampler_version': SAMPLER_VERSION, 'cursor': self.cursor,
-                'total': self.total}
-
-    def take(self, count: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        if count < 0 or self.cursor + count > self.total:
-            raise RuntimeError('global sampler exhausted or invalid request')
-        positions = self.permutation[self.cursor:self.cursor + count]
-        rows = [self.rows[int(position)] for position in positions]
-        self.cursor += count
-        return rows, {'cursor': self.cursor}
-
 def row_identity(row: dict[str, Any]) -> tuple[str, int, str]:
     return (str(row['symbol']), int(row['start_index']), str(row['asof_date']))
-
-def verify_segment_coverage(rows: list[dict[str, Any]], expected: list[tuple[str, int, str]], offset: int, seen: set[tuple[str, int, str]]) -> str:
-    identities = [row_identity(row) for row in rows]
-    if identities != expected[offset:offset + len(identities)]:
-        raise RuntimeError('segment sample identities differ from independent prefix')
-    if len(set(identities)) != len(identities) or seen.intersection(identities):
-        raise RuntimeError('duplicate sample identity in training prefix')
-    seen.update(identities)
-    return hashlib.sha256(json.dumps(identities, separators=(',', ':')).encode()).hexdigest()
 
 def probe_stop_reason(score: float, best: float, stale: int, initial: float) -> tuple[str, float, int]:
     if not np.isfinite(score):
@@ -461,7 +392,6 @@ def main() -> None:
             shutil.copy2(previous_meta[0], best_meta)
     if distributed:
         dist.barrier()
-    group_order = shuffled_group_order(train_pq.num_row_groups)
     total_segments = (train_total + SEGMENT_SAMPLES - 1) // SEGMENT_SAMPLES
     if TOTAL_SEGMENTS is not None and TOTAL_SEGMENTS != total_segments:
         raise RuntimeError(f'configured total segments {TOTAL_SEGMENTS} != computed {total_segments}')
@@ -540,21 +470,8 @@ def main() -> None:
         raise RuntimeError('global sampler cursor does not match processed sample count')
     log('global_sampler_ready', sampler_version=SAMPLER_VERSION,
         total_samples=sampler.total, processed_samples=processed,
-        permutation_seed=SHUFFLE_SEED)
-    expected_prefix: list[tuple[str, int, str]] = []
-    seen_identities: set[tuple[str, int, str]] = set()
-    if LR_PROBE:
-        prefix_limit = processed + run_segment_limit * SEGMENT_SAMPLES
-        for expected_group_id in group_order:
-            expected_rows = shuffle_group_rows(train_pq.read_row_group(expected_group_id, columns=columns).to_pylist(), expected_group_id)
-            expected_prefix.extend((row_identity(row) for row in expected_rows))
-            if len(expected_prefix) >= prefix_limit:
-                break
-        expected_prefix = expected_prefix[:prefix_limit]
-        if len(set(expected_prefix)) != len(expected_prefix):
-            raise RuntimeError('independent prefix itself contains duplicate identities')
-        seen_identities.update(expected_prefix[:processed])
-        log('probe_prefix_verified', samples=len(expected_prefix), sha256=hashlib.sha256(json.dumps(expected_prefix, separators=(',', ':')).encode()).hexdigest(), source_processed_samples=processed)
+        permutation_seed=SHUFFLE_SEED,
+        rss_max_mb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
     local_batch_size = max(1, BATCH_SIZE // world_size)
     validation_token_cache: tuple[np.ndarray, ...] | None = None
     validation_cache_path = OUTPUT / f'validation_token_cache_rank{rank}.npz'
