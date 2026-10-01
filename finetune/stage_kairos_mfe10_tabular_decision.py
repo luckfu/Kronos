@@ -1,4 +1,4 @@
-"""Stage SwanLab credential and prepare Phase V tabular kernel push."""
+"""Stage SwanLab credential and prepare Phase W tabular kernel push."""
 
 from __future__ import annotations
 
@@ -52,11 +52,15 @@ def stage() -> dict:
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "mfe10 decision tabular Phase V train2024→val + hist_gbm (recency)",
+            "purpose": "mfe10 decision tabular Phase W longer train→val winners confirm",
             "target": "y=1{mfe10>=0.10}",
             "not_tokenizer_sequence": True,
             "not_ranking_ic": True,
+            "not_hist_gbm": True,
             "phase_s_best_delta": -0.04179349770224905,
+            "phase_u_primary_best": -0.027597938051234006,
+            "train_cap": 1200000,
+            "mlp_max_iter": 160,
             "gate": -0.04,
         },
     )

@@ -1,0 +1,69 @@
+{
+  "phase": "W_tabular_longer_train_to_val_winners_launch",
+  "kind": "kaggle_cpu_tabular_enet_blend_longer_train_to_val_primary_val_temporal_secondary",
+  "target": "y=1{mfe10>=0.10}",
+  "mfe10_def": "max(high[T+1:T+10])/close[T]-1",
+  "metrics": [
+    "delta_vs_prior",
+    "gate_passed"
+  ],
+  "recipes": [
+    "logistic_C0.01",
+    "enet_C0.01_l1_0.7",
+    "enet_C0.01_l1_0.5",
+    "blend_lr0.5_mlp0.5",
+    "blend_lr0.7_mlp0.3",
+    "blend_lr0.8_mlp0.2",
+    "blend_lr0.9_mlp0.1"
+  ],
+  "primary_protocol": "train_to_val",
+  "secondary_protocol": "val_temporal",
+  "train_window": "2023-01-01..2024-12-31",
+  "train_cap": 1200000,
+  "mlp_max_iter": 160,
+  "mlp_n_iter_no_change": 12,
+  "vs_phase_u": {
+    "train_cap_u": 500000,
+    "train_cap_w": 1200000,
+    "mlp_max_iter_u": 80,
+    "mlp_max_iter_w": 160,
+    "window": "same_2023_2024"
+  },
+  "vs_phase_v": {
+    "dropped_hist_gbm": true,
+    "window_back_to_u": true,
+    "reason": "V hist_gbm failed worse; W lengthens U-window winners only"
+  },
+  "gate_delta_vs_prior": -0.04,
+  "user_direction": "winners get moderately longer train; not forever on short smokes",
+  "overrides_phase_v_hard_stop": true,
+  "hard_conclude_if_primary_still_fails": true,
+  "phase_s_temporal_best_delta": -0.04179349770224905,
+  "phase_t2_temporal_best_delta": -0.04179349770224927,
+  "phase_u_primary_best_delta": -0.027597938051234006,
+  "phase_u_primary_gate_passed": false,
+  "phase_v_primary_best_delta": -0.02272150397385786,
+  "phase_v_primary_gate_passed": false,
+  "kernel_slug": "user281434/kairos-mfe10-decision-tabular-phase-w",
+  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-w-20261002",
+  "fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
+  "not_tokenizer_sequence": true,
+  "not_ranking_ic": true,
+  "not_22_layer": true,
+  "not_tpu": true,
+  "not_hist_gbm": true,
+  "status": "PREPARED",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-w",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-w-20261002",
+  "decision_only_charter": "modernbert_finance/kairos_decision_only_handoff_cn.md",
+  "prior_phases": {
+    "S_temporal_blend_best": -0.04179349770224905,
+    "T2_temporal_blend_best": -0.04179349770224927,
+    "U_train_to_val_best": -0.027597938051234006,
+    "U_primary_gate": false,
+    "V_train2024_hist_gbm_best": -0.02272150397385786,
+    "V_primary_gate": false,
+    "V_declared_hard_stop": true
+  },
+  "prepared_at_cst": "2026-10-02 07:25:27 CST"
+}
