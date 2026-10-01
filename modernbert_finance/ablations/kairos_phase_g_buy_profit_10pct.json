@@ -1,0 +1,154 @@
+{
+  "phase": "G_buy_profit_10pct",
+  "n_samples": 123836,
+  "base_dim": 20,
+  "xsec_dim": 6,
+  "xsec_cols": [
+    "cs_rank_ret5",
+    "cs_rank_ret20",
+    "cs_rank_vol20",
+    "ind_rel_ret5",
+    "ind_rel_ret20",
+    "ind_rel_vol20"
+  ],
+  "seed": 20261001,
+  "threshold": 0.1,
+  "definition": {
+    "primary": "y = 1{fwd_ret_10 >= 0.10} where fwd_ret_10 = close[T+10]/close[T]-1",
+    "optional_industry_neutral": "y_ind = 1{ind_resid_fwd_10_mean >= 0.10} (Phase F mean demean; fallback market when industry-day n < 2)",
+    "horizon": 10,
+    "threshold": 0.1
+  },
+  "industry_stats": {
+    "fwd10_mean_demean": {
+      "how": "mean",
+      "min_industry_n": 2,
+      "n_rows": 123836,
+      "n_used_industry": 120774,
+      "n_fallback_market": 3062,
+      "fallback_rate": 0.024726250847895603,
+      "n_unique_sectors": 73,
+      "n_unique_asof": 242,
+      "industry_day_n_mean": 23.07044801188669,
+      "industry_day_n_median": 18.0,
+      "resid_mean": -0.00021765256153821695,
+      "resid_std": 0.08319933624860733
+    },
+    "sector_field": "sector",
+    "threshold_on_resid": 0.1
+  },
+  "label_prevalence": {
+    "buy_profit_10pct_rate": 0.11042023321166704,
+    "buy_profit_10pct_n_pos": 13674,
+    "buy_profit_10pct_n": 123836,
+    "fwd_ret_10_mean": 0.005044395472382474,
+    "fwd_ret_10_std": 0.09770766098155052,
+    "fwd_ret_10_p90": 0.10725737446094963,
+    "fwd_ret_10_p95": 0.1658844242443871,
+    "fwd_ret_10_p99": 0.3437026870396449,
+    "fwd_sign_up_rate": 0.4827836816434639,
+    "buy_profit_10pct_ind_resid_rate": 0.07769146290254854,
+    "buy_profit_10pct_ind_resid_n_pos": 9621,
+    "ind_resid_fwd_10_mean_mean": -0.00021765256153821695,
+    "ind_resid_fwd_10_mean_std": 0.08319933624860733
+  },
+  "logistic": {
+    "buy_profit_10pct_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.3474267306013412,
+      "model_log_loss": 0.33882725230269384,
+      "delta_model_minus_prior": -0.008599478298647378,
+      "beats_prior": true,
+      "positive_rate_test": 0.11043638360412159
+    },
+    "buy_profit_10pct_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.3474267306013412,
+      "model_log_loss": 0.33206740883221436,
+      "delta_model_minus_prior": -0.015359321769126855,
+      "beats_prior": true,
+      "positive_rate_test": 0.11043638360412159
+    },
+    "fwd_sign_up_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.6925553722490525,
+      "model_log_loss": 0.6900431995943623,
+      "delta_model_minus_prior": -0.00251217265469017,
+      "beats_prior": true,
+      "positive_rate_test": 0.4827998320359185
+    },
+    "fwd_sign_up_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.6925553722490525,
+      "model_log_loss": 0.6892478215302758,
+      "delta_model_minus_prior": -0.0033075507187767528,
+      "beats_prior": true,
+      "positive_rate_test": 0.4827998320359185
+    },
+    "buy_profit_10pct_ind_resid_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.27307461600210997,
+      "model_log_loss": 0.2653906442983121,
+      "delta_model_minus_prior": -0.007683971703797865,
+      "beats_prior": true,
+      "positive_rate_test": 0.07768338770632126
+    },
+    "buy_profit_10pct_ind_resid_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.27307461600210997,
+      "model_log_loss": 0.2581042865107111,
+      "delta_model_minus_prior": -0.01497032949139887,
+      "beats_prior": true,
+      "positive_rate_test": 0.07768338770632126
+    }
+  },
+  "decision": {
+    "lifts_enough": false,
+    "verdict": "buy_profit_10pct__no_lift__do_not_train",
+    "recommend_next": "买入盈利(+10%/10日)未过 Δ≤-0.04，也未相对 Phase E/F 二分类明显更好；不要据此开训。可结束廉价消融，或换质变标签，而非再拧阈值。",
+    "train_yes_no": "no",
+    "diagnostic_notes": [
+      "Primary positive rate=0.1104 (n_pos=13674/123836); threshold=0.10 on fwd_ret_10.",
+      "Industry-neutral resid >= 0.10 positive rate=0.0777.",
+      "Train panel not on disk locally; ablation uses validation panel only (n=123836).",
+      "Primary comb Δ=-0.015359 vs bar -0.04; best Phase E/F binary Δ=-0.012270859304657045."
+    ],
+    "thresholds": {
+      "logit_delta_bar": -0.04,
+      "lift_delta_vs_phase_ef_binary": -0.02,
+      "profit_threshold": 0.1,
+      "rare_pos_rate_flag": 0.05,
+      "imbalance_warn_rate": 0.1,
+      "primary_head": "buy_profit_10pct logistic (comb)",
+      "optional_head": "buy_profit_10pct_ind_resid logistic (comb)"
+    },
+    "phase_e_fwd_sign_up_comb_delta": -0.0033075507187767528,
+    "phase_e_fwd_cs_top20_comb_delta": -0.012270859304657045,
+    "phase_e_verdict": "none_lift_enough__do_not_justify_relabel_train_yet",
+    "phase_f_ind_resid_sign_up_mean_comb_delta": -0.002215324511504857,
+    "phase_f_ind_resid_cs_top20_comb_delta": -0.010187678560042601,
+    "phase_f_verdict": "industry_neutral__no_lift__do_not_train",
+    "best_phase_ef_binary_delta": -0.012270859304657045,
+    "primary_logit_delta": -0.015359321769126855,
+    "ind_resid_logit_delta": -0.01497032949139887,
+    "beats_abs_delta_bar": false,
+    "clearly_better_than_phase_ef_binary": false,
+    "ind_beats_abs_delta_bar": false,
+    "ind_clearly_better_than_phase_ef_binary": false,
+    "class_too_rare": false,
+    "class_imbalanced": false,
+    "rationale": "Primary: y=1{fwd_ret_10>=0.1} logistic comb. Pass if Δ≤-0.04 or clearly better than best Phase E/F binary (Δ more negative by 0.02). Industry-neutral same-threshold resid is optional diagnostic/alternate."
+  }
+}
