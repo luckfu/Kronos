@@ -37,15 +37,16 @@ RUNTIME_RESERVE_SECONDS = 12 * 60
 SEGMENT_ESTIMATE_SECONDS = 600.0
 SEGMENT_TIME_MARGIN = 1.15
 SHUFFLE_SEED = 20261001
-LEARNING_RATE = 3e-5
+LEARNING_RATE = 1e-4  # Phase J: adapters-only; higher than full-finetune 3e-5
 MFE10_THRESHOLD = 0.10
 PRIOR_STUCK_TOL = 1e-3
 PRIOR_STUCK_PATIENCE = 2
 GATE_DELTA_VS_PRIOR = -0.04
+FREEZE_BACKBONE = True  # Phase J: stop washing linear signal in fresh 22-layer BERT
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-i-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001"
 OUTPUT = Path("/kaggle/working/kairos_mfe10_sidecar")
-RUN_PURPOSE = "mfe10-path-touch-binary-short-sidecar"
+RUN_PURPOSE = "mfe10-path-touch-binary-short-sidecar-freeze-bb"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_NAME = "buy_worth_mfe10pct"
 MFE10_DEF = "max(high[T+1:T+10]) / close[T] - 1"
@@ -299,6 +300,7 @@ def main() -> None:
         learning_rate=LEARNING_RATE,
         not_multi_head_r2=True,
         not_close_to_close=True,
+        freeze_backbone=FREEZE_BACKBONE,
         world_size=world_size,
     )
     random.seed(SEED)
@@ -448,12 +450,26 @@ def main() -> None:
 
     model = SingleBinaryModel(head_bias=head_bias).to(device)
     raw_model = model
+    if FREEZE_BACKBONE:
+        for parameter in raw_model.backbone.parameters():
+            parameter.requires_grad_(False)
+    trainable = [p for p in raw_model.parameters() if p.requires_grad]
+    frozen = [p for p in raw_model.parameters() if not p.requires_grad]
+    log(
+        "param_freeze",
+        freeze_backbone=FREEZE_BACKBONE,
+        trainable_tensors=len(trainable),
+        frozen_tensors=len(frozen),
+        trainable_numel=int(sum(p.numel() for p in trainable)),
+        frozen_numel=int(sum(p.numel() for p in frozen)),
+        learning_rate=LEARNING_RATE,
+    )
     if distributed:
         model = DistributedDataParallel(
             model, device_ids=[local_rank], output_device=local_rank,
             find_unused_parameters=False,
         )
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.AdamW(trainable, lr=LEARNING_RATE)
     scaler = torch.amp.GradScaler("cuda")
     checkpoint = OUTPUT / "last_checkpoint.pt"
     best_checkpoint = OUTPUT / "best_model.pt"

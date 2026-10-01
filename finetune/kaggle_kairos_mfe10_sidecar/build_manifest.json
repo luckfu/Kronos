@@ -1,8 +1,8 @@
 {
-  "slug": "kairos-mfe10-sidecar-short-phase-i",
+  "slug": "kairos-mfe10-sidecar-short-phase-j-freeze-bb",
   "owner": "user281434",
-  "title": "Kairos MFE10 Sidecar Short Phase I",
-  "source_sha256": "fd2029905841b9209bc8cdea3d014836a0142d47e14b6672bcc0a64f9dff927c",
+  "title": "Kairos MFE10 Sidecar Short Phase J Freeze BB",
+  "source_sha256": "c88e1570fe1c776f97f5c2aafd9f17bcc89e09b19030c8a7a70ed8cd32588040",
   "target": "y=1{mfe10>=0.10} where mfe10=max(high[T+1:T+10])/close[T]-1",
   "not_close_to_close": true,
   "not_multi_head_r2": true,
@@ -10,12 +10,13 @@
   "max_segments_this_run": 4,
   "segment_samples": 20000,
   "gpu_budget_seconds": 5400,
-  "learning_rate": 3e-05,
+  "learning_rate": 0.0001,
+  "freeze_backbone": true,
   "gate_delta_vs_prior": -0.04,
   "prior_stuck_tol": 0.001,
   "prior_stuck_patience": 2,
-  "swanlab_run_id": "kairos-mfe10-sidecar-short-phase-i-20261001",
-  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-phase-i-20261001",
+  "swanlab_run_id": "kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001",
   "cloud_credentials": "staging only, not tracked",
   "expected_val_pos_rate": 0.2529
 }

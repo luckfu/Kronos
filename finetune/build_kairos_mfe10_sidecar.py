@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "finetune/kaggle_kairos_mfe10_sidecar/train_mfe10_sidecar.py"
 DEST = ROOT / "finetune/kaggle_kairos_mfe10_sidecar"
 
-SLUG = "kairos-mfe10-sidecar-short-phase-i"
-TITLE = "Kairos MFE10 Sidecar Short Phase I"
+SLUG = "kairos-mfe10-sidecar-short-phase-j-freeze-bb"
+TITLE = "Kairos MFE10 Sidecar Short Phase J Freeze BB"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-i-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-j-freeze-bb-20261001"
 
 
 def build(destination: Path | None = None) -> Path:
@@ -60,7 +60,8 @@ def build(destination: Path | None = None) -> Path:
         "max_segments_this_run": 4,
         "segment_samples": 20_000,
         "gpu_budget_seconds": 5400,
-        "learning_rate": 3e-5,
+        "learning_rate": 1e-4,
+        "freeze_backbone": True,
         "gate_delta_vs_prior": -0.04,
         "prior_stuck_tol": 1e-3,
         "prior_stuck_patience": 2,
