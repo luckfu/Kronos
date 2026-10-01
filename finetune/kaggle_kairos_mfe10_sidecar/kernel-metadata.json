@@ -1,6 +1,6 @@
 {
-  "id": "user281434/kairos-mfe10-path-touch-sidecar-short",
-  "title": "Kairos MFE10 Path-Touch Sidecar Short",
+  "id": "user281434/kairos-mfe10-sidecar-short-phase-i",
+  "title": "Kairos MFE10 Sidecar Short Phase I",
   "code_file": "train_mfe10_sidecar.py",
   "language": "python",
   "kernel_type": "script",

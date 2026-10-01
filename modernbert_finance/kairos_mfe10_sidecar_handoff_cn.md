@@ -48,7 +48,7 @@
 | 训练脚本 | `finetune/kaggle_kairos_mfe10_sidecar/train_mfe10_sidecar.py` |
 | Builder | `finetune/build_kairos_mfe10_sidecar.py` |
 | Staging | `finetune/stage_kairos_mfe10_sidecar.py`（注入 SwanLab，不入库） |
-| Kernel slug | `user281434/kairos-mfe10-path-touch-sidecar-short` |
+| Kernel slug | `user281434/kairos-mfe10-sidecar-short-phase-i` |
 | 数据 | `luckfu/a-share-120d-temporal-symbol-holdout` + `luckfu/ashare120d-modernbert-targets` |
 | kernel_sources | **空**（不挂旧 chunk-8 / R2 权重） |
 | 单测 | `tests/test_kairos_mfe10_sidecar.py` |
@@ -72,18 +72,18 @@ git push origin master
 # 2) 私有 staging（写入 SwanLab key）+ Kaggle push
 python finetune/stage_kairos_mfe10_sidecar.py
 kaggle kernels push -p artifacts/kairos_mfe10_sidecar/private_staging
-kaggle kernels status user281434/kairos-mfe10-path-touch-sidecar-short
+kaggle kernels status user281434/kairos-mfe10-sidecar-short-phase-i
 ```
 
 若 CLI push 需要网页确认：打开  
-https://www.kaggle.com/code/user281434/kairos-mfe10-path-touch-sidecar-short  
+https://www.kaggle.com/code/user281434/kairos-mfe10-sidecar-short-phase-i  
 点 **Run** / **Resume**（GPU T4，Internet on）。
 
 ## SwanLab 如何看
 
 - 项目：`roc_fu/finance`
-- Run id：`kairos-mfe10-path-touch-sidecar-short-20261001`
-- URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-path-touch-sidecar-short-20261001
+- Run id：`kairos-mfe10-sidecar-short-phase-i-20261001`
+- URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-phase-i-20261001
 - 关键曲线：`validation/log_loss`、`validation/constant_prior_log_loss`、`validation/delta_vs_prior`、`validation/gate_passed`
 
 ## 明确不做

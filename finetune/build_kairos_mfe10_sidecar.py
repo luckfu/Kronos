@@ -14,10 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "finetune/kaggle_kairos_mfe10_sidecar/train_mfe10_sidecar.py"
 DEST = ROOT / "finetune/kaggle_kairos_mfe10_sidecar"
 
-SLUG = "kairos-mfe10-path-touch-sidecar-short"
-TITLE = "Kairos MFE10 Path-Touch Sidecar Short"
+SLUG = "kairos-mfe10-sidecar-short-phase-i"
+TITLE = "Kairos MFE10 Sidecar Short Phase I"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-i-20261001"
 
 
 def build(destination: Path | None = None) -> Path:

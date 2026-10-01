@@ -43,7 +43,7 @@ PRIOR_STUCK_TOL = 1e-3
 PRIOR_STUCK_PATIENCE = 2
 GATE_DELTA_VS_PRIOR = -0.04
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-i-20261001"
 OUTPUT = Path("/kaggle/working/kairos_mfe10_sidecar")
 RUN_PURPOSE = "mfe10-path-touch-binary-short-sidecar"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
@@ -181,7 +181,7 @@ def start_swanlab() -> tuple[Any, Any]:
             "gate_delta_vs_prior": GATE_DELTA_VS_PRIOR,
             "prior_stuck_tol": PRIOR_STUCK_TOL,
             "prior_stuck_patience": PRIOR_STUCK_PATIENCE,
-            "variant": "kairos-mfe10-short-sidecar",
+            "variant": "kairos-mfe10-short-sidecar-phase-i",
             "not_multi_head_r2": True,
             "not_close_to_close": True,
         },

@@ -1,8 +1,8 @@
 {
-  "slug": "kairos-mfe10-path-touch-sidecar-short",
+  "slug": "kairos-mfe10-sidecar-short-phase-i",
   "owner": "user281434",
-  "title": "Kairos MFE10 Path-Touch Sidecar Short",
-  "source_sha256": "8814de9b37b219e79c9d06f6d14dc29a7e879810f38079366aba743070ae18b7",
+  "title": "Kairos MFE10 Sidecar Short Phase I",
+  "source_sha256": "fd2029905841b9209bc8cdea3d014836a0142d47e14b6672bcc0a64f9dff927c",
   "target": "y=1{mfe10>=0.10} where mfe10=max(high[T+1:T+10])/close[T]-1",
   "not_close_to_close": true,
   "not_multi_head_r2": true,
@@ -14,8 +14,8 @@
   "gate_delta_vs_prior": -0.04,
   "prior_stuck_tol": 0.001,
   "prior_stuck_patience": 2,
-  "swanlab_run_id": "kairos-mfe10-sidecar-short-20261001",
-  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-20261001",
+  "swanlab_run_id": "kairos-mfe10-sidecar-short-phase-i-20261001",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-sidecar-short-phase-i-20261001",
   "cloud_credentials": "staging only, not tracked",
   "expected_val_pos_rate": 0.2529
 }
