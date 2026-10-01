@@ -1,0 +1,33 @@
+{
+  "phase": "O_shallow_freeze_embeds_launch",
+  "kind": "short_shallow_freeze_tok_embeds_rank_head",
+  "target": "mfe10_continuous",
+  "loss_mode": "mse",
+  "metrics": [
+    "rank_ic_mean",
+    "topk_lift"
+  ],
+  "backbone_mode": "shallow",
+  "shallow_layers": 2,
+  "freeze_tokenizer_embeds": true,
+  "freeze_backbone": false,
+  "batch_size": 64,
+  "max_segments": 3,
+  "segment_samples": 20000,
+  "gpu_budget_seconds": 3600,
+  "rank_ic_bar": 0.05,
+  "topk_lift_bar": 0.05,
+  "kernel_slug": "user281434/kairos-ranking-probe-short-phase-o",
+  "swanlab_run_id": "kairos-ranking-probe-short-phase-o-20261001",
+  "not_22_layer_binary": true,
+  "not_tpu": true,
+  "phase_m_mse_rank_ic": 0.08525129172480793,
+  "phase_n_pairwise_rank_ic": 0.08171161247975986,
+  "phase_l_best_arm": "ridge_mfe_cs_comb",
+  "phase_l_best_rank_ic": 0.27620045257688736,
+  "status": "READY_TO_LAUNCH",
+  "not_local": true,
+  "local_cheaper": false,
+  "reason_kaggle": "no local GPU; Phase M/N wall ~2.5-3.5min on 2xT4 so short Kaggle is cheaper",
+  "launched_at_cst": "2026-10-01 23:17:18 CST"
+}

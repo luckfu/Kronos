@@ -1,14 +1,14 @@
-"""Kairos SHORT ranking probe (Phase N): identity + pairwise/listwise rank loss.
+"""Kairos SHORT ranking probe (Phase O): freeze tok embeds + shallow rank head.
 
 Target:
   continuous path mfe10 = max(high[T+1:T+10]) / close[T] - 1
   (optional train label = within-day CS percentile rank of mfe10)
 
-Phase M used MSE; Phase N probes same-day pairwise (default) or ListNet
-listwise ranking loss on the same identity mean-pool + rank head.
+Phase O: freeze s1/s2 tokenizer embeds; train shallow (2-layer) non-identity
+ModernBERT + rank head with MSE. Rank IC / TopK primary metrics.
+Compares to Phase M identity MSE Rank IC≈0.085 / Phase N pairwise≈0.082.
 
-NOT binary mfe≥10%. NOT 22-layer R2. Prefer identity backbone (light) or
-freeze+rank-head. Primary metrics: daily Rank IC / TopK lift vs mfe10.
+NOT binary mfe≥10%. NOT 22-layer R2 / binary. No TPU WIP.
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ SHUFFLE_SEED = 20261001
 LEARNING_RATE = 1e-4
 # Train label: continuous mfe10, or within-day CS percentile of mfe10.
 TARGET_MODE = "mfe10_continuous"  # or "mfe_cs_rank"
-# Phase N: ranking losses (Phase M was mse).
-LOSS_MODE = "pairwise"  # pairwise | listwise | mse
+# Phase O: MSE for A/B vs Phase M identity; pairwise/listwise still available.
+LOSS_MODE = "mse"  # pairwise | listwise | mse
 PAIRWISE_MIN_GAP = 0.005  # ignore near-ties in mfe (~0.5pp)
 LISTWISE_TEMPERATURE = 0.05  # soft targets over raw mfe within day
 RANK_IC_BAR = 0.05
@@ -52,18 +52,22 @@ TOPK_LIFT_BAR = 0.05
 # Early-stop if Rank IC mean stays near 0 for PATIENCE consecutive evals.
 RANK_IC_STUCK_TOL = 0.01
 RANK_IC_STUCK_PATIENCE = 2
-FREEZE_BACKBONE = False  # identity: no 22-layer to freeze
-BACKBONE_MODE = "identity"  # light: mean-pool embeds + rank head
+FREEZE_BACKBONE = False  # train shallow layers (NOT freeze whole bb)
+FREEZE_TOKENIZER_EMBEDS = True  # freeze s1/s2 (tokenizer-side embeds)
+BACKBONE_MODE = "shallow"  # non-identity shallow ModernBERT + rank head
+SHALLOW_LAYERS = 2  # NOT 22
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-n-20261001"
+SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-o-20261001"
 OUTPUT = Path("/kaggle/working/kairos_ranking_probe")
-RUN_PURPOSE = "mfe10-ranking-probe-identity-pairwise-phase-n"
+RUN_PURPOSE = "mfe10-ranking-probe-shallow-freeze-embeds-phase-o"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_NAME = "mfe10_continuous_rank"
 MFE10_DEF = "max(high[T+1:T+10]) / close[T] - 1"
 REPO_CLONE_URL = "https://github.com/luckfu/Kronos.git"
 REPO_CLONE_BRANCH = "master"
 PHASE_L_RIDGE_MFE_COMB_RANK_IC = 0.2734396296793431
+PHASE_M_MSE_RANK_IC = 0.08525129172480793
+PHASE_N_PAIRWISE_RANK_IC = 0.08171161247975986
 
 
 def log(phase: str, **fields: object) -> None:
@@ -364,10 +368,13 @@ def start_swanlab() -> tuple[Any, Any]:
         workspace="roc_fu",
         experiment_name=SWANLAB_RUN_ID,
         config={
-            "model": "identity-meanpool-rank-head",
+            "model": "shallow-freeze-tok-embeds-rank-head",
             "hidden_size": 768,
-            "layers": 0,
+            "layers": SHALLOW_LAYERS if BACKBONE_MODE == "shallow" else 0,
             "backbone_mode": BACKBONE_MODE,
+            "shallow_layers": SHALLOW_LAYERS,
+            "freeze_tokenizer_embeds": FREEZE_TOKENIZER_EMBEDS,
+            "freeze_backbone": FREEZE_BACKBONE,
             "batch_size": BATCH_SIZE,
             "chunk_index": CHUNK_INDEX,
             "segment_samples": SEGMENT_SAMPLES,
@@ -379,7 +386,7 @@ def start_swanlab() -> tuple[Any, Any]:
             "rank_ic_bar": RANK_IC_BAR,
             "topk_frac": TOPK_FRAC,
             "topk_lift_bar": TOPK_LIFT_BAR,
-            "variant": "kairos-ranking-probe-short-phase-n",
+            "variant": "kairos-ranking-probe-short-phase-o",
             "loss_mode": LOSS_MODE,
             "pairwise_min_gap": PAIRWISE_MIN_GAP,
             "listwise_temperature": LISTWISE_TEMPERATURE,
@@ -387,7 +394,8 @@ def start_swanlab() -> tuple[Any, Any]:
             "not_binary_mfe10": True,
             "not_22_layer_binary": True,
             "phase_l_ridge_mfe_comb_rank_ic": PHASE_L_RIDGE_MFE_COMB_RANK_IC,
-            "phase_m_mse_rank_ic": 0.08525129172480793,
+            "phase_m_mse_rank_ic": PHASE_M_MSE_RANK_IC,
+            "phase_n_pairwise_rank_ic": PHASE_N_PAIRWISE_RANK_IC,
         },
         mode="cloud",
     )
@@ -505,14 +513,17 @@ def main() -> None:
         not_binary_mfe10=True,
         not_22_layer_binary=True,
         freeze_backbone=FREEZE_BACKBONE,
+        freeze_tokenizer_embeds=FREEZE_TOKENIZER_EMBEDS,
         backbone_mode=BACKBONE_MODE,
+        shallow_layers=SHALLOW_LAYERS,
         loss_mode=LOSS_MODE,
         pairwise_min_gap=PAIRWISE_MIN_GAP,
         listwise_temperature=LISTWISE_TEMPERATURE,
         rank_ic_bar=RANK_IC_BAR,
         topk_lift_bar=TOPK_LIFT_BAR,
         world_size=world_size,
-        phase_m_mse_rank_ic=0.08525129172480793,
+        phase_m_mse_rank_ic=PHASE_M_MSE_RANK_IC,
+        phase_n_pairwise_rank_ic=PHASE_N_PAIRWISE_RANK_IC,
     )
     random.seed(SEED)
     np.random.seed(SEED)
@@ -584,7 +595,7 @@ def main() -> None:
         parameter.requires_grad_(False)
 
     class RankHeadModel(nn.Module):
-        """Light identity mean-pool + single score head for ranking mfe10."""
+        """Shallow non-identity (or identity) + single score head for ranking mfe10."""
 
         def __init__(self, head_bias: float = 0.0) -> None:
             super().__init__()
@@ -598,13 +609,19 @@ def main() -> None:
             self.size = nn.Sequential(nn.Linear(1, 32), nn.GELU(), nn.Linear(32, hidden))
             self.cond = nn.Parameter(torch.zeros(1, 1, hidden))
             self.backbone_mode = BACKBONE_MODE
+            self.shallow_layers = int(SHALLOW_LAYERS)
             if BACKBONE_MODE == "identity":
-                # Phase K: no random 22-layer ModernBERT; mean-pool condition+market embeds.
+                # Phase K/M/N: no ModernBERT; mean-pool condition+market embeds.
                 self.backbone = None
-            else:
+            elif BACKBONE_MODE == "shallow":
+                # Phase O: shallow non-identity ONLY (never 22-layer).
+                if self.shallow_layers < 1 or self.shallow_layers > 4:
+                    raise RuntimeError(
+                        f"SHALLOW_LAYERS must be in 1..4 for Phase O, got {self.shallow_layers}"
+                    )
                 config = ModernBertConfig(
                     vocab_size=1024, hidden_size=hidden, intermediate_size=1152,
-                    num_hidden_layers=22, num_attention_heads=12,
+                    num_hidden_layers=self.shallow_layers, num_attention_heads=12,
                     max_position_embeddings=128, pad_token_id=0,
                     attention_dropout=0.0, embedding_dropout=0.0, mlp_dropout=0.0,
                     reference_compile=False,
@@ -617,6 +634,11 @@ def main() -> None:
                     raise RuntimeError("Cannot locate ModernBERT native token embeddings")
                 for parameter in native_embeddings.parameters():
                     parameter.requires_grad_(False)
+            else:
+                raise RuntimeError(
+                    f"unsupported BACKBONE_MODE={BACKBONE_MODE!r}; "
+                    "use identity|shallow (no 22-layer binary)"
+                )
             self.head = nn.Linear(hidden, 1)
             # Ranking score: zero weight, bias at train-label mean (z later).
             nn.init.zeros_(self.head.weight)
@@ -672,6 +694,11 @@ def main() -> None:
 
     model = RankHeadModel(head_bias=head_bias).to(device)
     raw_model = model
+    if FREEZE_TOKENIZER_EMBEDS:
+        for parameter in raw_model.s1.parameters():
+            parameter.requires_grad_(False)
+        for parameter in raw_model.s2.parameters():
+            parameter.requires_grad_(False)
     if FREEZE_BACKBONE and raw_model.backbone is not None:
         for parameter in raw_model.backbone.parameters():
             parameter.requires_grad_(False)
@@ -680,7 +707,9 @@ def main() -> None:
     log(
         "param_freeze",
         freeze_backbone=FREEZE_BACKBONE,
+        freeze_tokenizer_embeds=FREEZE_TOKENIZER_EMBEDS,
         backbone_mode=BACKBONE_MODE,
+        shallow_layers=SHALLOW_LAYERS if BACKBONE_MODE == "shallow" else 0,
         trainable_tensors=len(trainable),
         frozen_tensors=len(frozen),
         trainable_numel=int(sum(p.numel() for p in trainable)),
@@ -1112,11 +1141,14 @@ def main() -> None:
         "not_binary_mfe10": True,
         "not_22_layer_binary": True,
         "backbone_mode": BACKBONE_MODE,
+        "shallow_layers": SHALLOW_LAYERS if BACKBONE_MODE == "shallow" else 0,
         "freeze_backbone": FREEZE_BACKBONE,
+        "freeze_tokenizer_embeds": FREEZE_TOKENIZER_EMBEDS,
         "loss_mode": LOSS_MODE,
         "pairwise_min_gap": PAIRWISE_MIN_GAP,
         "listwise_temperature": LISTWISE_TEMPERATURE,
-        "phase_m_mse_rank_ic": 0.08525129172480793,
+        "phase_m_mse_rank_ic": PHASE_M_MSE_RANK_IC,
+        "phase_n_pairwise_rank_ic": PHASE_N_PAIRWISE_RANK_IC,
         "train_label_mean": train_label_mean,
         "train_label_std": train_label_std,
         "stop_reason": stop_reason,

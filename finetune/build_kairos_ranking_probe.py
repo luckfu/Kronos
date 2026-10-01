@@ -1,7 +1,8 @@
-"""Build Kairos short ranking probe kernel (Phase N).
+"""Build Kairos short ranking probe kernel (Phase O).
 
-Light identity + pairwise/listwise rank loss on continuous mfe10.
-NOT binary mfe≥10%. NOT 22-layer R2. No TPU WIP.
+Freeze tokenizer embeds (s1/s2) + shallow (2-layer) non-identity rank head
+on continuous mfe10; MSE + Rank IC / TopK. NOT binary mfe≥10%. NOT 22-layer.
+No TPU WIP.
 """
 
 from __future__ import annotations
@@ -15,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "finetune/kaggle_kairos_ranking_probe/train_ranking_probe.py"
 DEST = ROOT / "finetune/kaggle_kairos_ranking_probe"
 
-SLUG = "kairos-ranking-probe-short-phase-n"
-TITLE = "Kairos Ranking Probe Short Phase N"
+SLUG = "kairos-ranking-probe-short-phase-o"
+TITLE = "Kairos Ranking Probe Short Phase O"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-n-20261001"
+SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-o-20261001"
 
 
 def build(destination: Path | None = None) -> Path:
@@ -58,9 +59,11 @@ def build(destination: Path | None = None) -> Path:
         "not_binary_mfe10": True,
         "not_multi_head_r2": True,
         "not_22_layer_binary": True,
-        "backbone_mode": "identity",
+        "backbone_mode": "shallow",
+        "shallow_layers": 2,
+        "freeze_tokenizer_embeds": True,
         "freeze_backbone": False,
-        "loss_mode": "pairwise",
+        "loss_mode": "mse",
         "pairwise_min_gap": 0.005,
         "listwise_temperature": 0.05,
         "batch_size": 64,
@@ -75,6 +78,7 @@ def build(destination: Path | None = None) -> Path:
         "cloud_credentials": "staging only, not tracked",
         "phase_l_ridge_mfe_comb_rank_ic": 0.2734396296793431,
         "phase_m_mse_rank_ic": 0.08525129172480793,
+        "phase_n_pairwise_rank_ic": 0.08171161247975986,
     }
     (destination / "build_manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"

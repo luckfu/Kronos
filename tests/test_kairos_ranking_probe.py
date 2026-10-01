@@ -12,7 +12,9 @@ from modernbert_finance.ranking_probe import (
     LOSS_MODES,
     MFE10_DEF,
     PHASE_M_MSE_RANK_IC,
+    PHASE_N_PAIRWISE_RANK_IC,
     RANK_IC_BAR,
+    SHALLOW_LAYERS_PHASE_O,
     TARGET_NAME,
     TOPK_LIFT_BAR,
     clears_rank_gate,
@@ -77,15 +79,18 @@ def test_train_script_syntax_and_knobs() -> None:
     script = ROOT / "finetune/kaggle_kairos_ranking_probe/train_ranking_probe.py"
     src = script.read_text(encoding="utf-8")
     ast.parse(src)
-    assert 'BACKBONE_MODE = "identity"' in src
-    assert "TARGET_MODE = \"mfe10_continuous\"" in src
-    assert 'LOSS_MODE = "pairwise"' in src
+    assert 'BACKBONE_MODE = "shallow"' in src
+    assert "SHALLOW_LAYERS = 2" in src
+    assert "FREEZE_TOKENIZER_EMBEDS = True" in src
+    assert 'TARGET_MODE = "mfe10_continuous"' in src
+    assert 'LOSS_MODE = "mse"' in src
     assert "same_date_pairwise_ranking_loss" in src
     assert "same_date_listwise_listnet_loss" in src
     assert "MAX_SEGMENTS_THIS_RUN = 3" in src
     assert "not_22_layer_binary" in src
     assert "validation/rank_ic_mean" in src
-    assert "SWANLAB_RUN_ID = \"kairos-ranking-probe-short-phase-n-20261001\"" in src
+    assert 'SWANLAB_RUN_ID = "kairos-ranking-probe-short-phase-o-20261001"' in src
+    assert "num_hidden_layers=22" not in src
     assert "MFE10_THRESHOLD" not in src
     assert "binary_cross_entropy" not in src
 
@@ -96,3 +101,13 @@ def test_phase_n_loss_contract() -> None:
     assert "pairwise" in LOSS_MODES and "listwise" in LOSS_MODES
     assert c["default_loss_mode_phase_n"] == "pairwise"
     assert PHASE_M_MSE_RANK_IC > 0.05
+
+
+def test_phase_o_shallow_contract() -> None:
+    c = target_contract()
+    assert c["default_backbone_phase_o"] == "shallow"
+    assert c["shallow_layers_phase_o"] == SHALLOW_LAYERS_PHASE_O == 2
+    assert c["freeze_tokenizer_embeds_phase_o"] is True
+    assert c["not_22_layer_binary"] is True
+    assert PHASE_N_PAIRWISE_RANK_IC > 0.05
+    assert abs(PHASE_N_PAIRWISE_RANK_IC - 0.08171161247975986) < 1e-12
