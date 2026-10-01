@@ -1,0 +1,70 @@
+{
+  "generated_at_cst": "2026-10-01T17:15:18.067050+08:00",
+  "phase_a_summary": {
+    "macro_priors": {
+      "train": 0.6013610425817468,
+      "val": 0.5964121974175791,
+      "val_2025H2": 0.5589410386626524,
+      "val_2026H1": 0.6134292861484925
+    },
+    "train_prior_on_val": 0.5966100946600079,
+    "temporal_ok": true,
+    "align_ok": true
+  },
+  "phase_b_summary": {
+    "independent_8head_macro_delta": -0.019569535139329325,
+    "multioutput_8head_macro_delta": -0.019896598776739112,
+    "single_head_up_005_delta": -0.017109405034147707,
+    "coarsened_deltas": {
+      "any_up_threshold": -0.01099839391599422,
+      "up_005_only": -0.017109405034147707,
+      "down_005_only": -0.02452610717934911,
+      "direction_up_minus_down": -0.002148553886063609,
+      "signed_move": -0.0014996362961579024
+    },
+    "verdict": "If single-head / coarsened deltas are similar to 8-head macro, multi-head loss is NOT the main reason the deep model stuck at prior. If coarsened >> 8-head, prefer fewer heads."
+  },
+  "decision": {
+    "root_cause": "deep_model_collapsed_to_constant_train_prior",
+    "r2_stuck_approx": 0.5966,
+    "train_macro_prior": 0.6013610425817468,
+    "val_macro_prior": 0.5964121974175791,
+    "train_prior_scored_on_val": 0.5966100946600079,
+    "gap_r2_vs_train_prior_on_val": 1.0094660007897716e-05,
+    "temporal_integrity_ok": true,
+    "alignment_ok": true,
+    "independent_8head_macro_delta": -0.019569535139329325,
+    "best_coarsened": {
+      "name": "down_005_only",
+      "delta": -0.02452610717934911
+    },
+    "multihead_is_main_blocker": false,
+    "recommendations": [
+      {
+        "change": "Do NOT restart R2 / more GPU hours on same 8-head BCE + same features",
+        "evidence": "R2≈0.5966 matches train-prior-on-val macro LL=0.596610 (val self-prior=0.596412); collapse to constant prevalence.",
+        "next_experiment": "Replace training objective evaluation with an explicit constant-prior baseline log; abort runs that stay within 1e-3 of it after 1–2 chunks."
+      },
+      {
+        "change": "Do NOT chase leakage/misalignment fixes as the primary path",
+        "evidence": "temporal_integrity.ok=True, alignment.ok=True; future-corrupt leaves features invariant and changes labels.",
+        "next_experiment": "Keep the causal contract tests in CI; move effort to label/feature information content instead of pipeline paranoia."
+      },
+      {
+        "change": "Multi-head dilution is secondary — keep at most 2–4 heads but fix signal path",
+        "evidence": "8-head independent macro Δ=-0.0196; best coarsened down_005_only Δ=-0.0245 (similar order).",
+        "next_experiment": "Try regression on continuous mfe10/mae10 (or first-touch) with the same window summaries before another transformer run."
+      },
+      {
+        "change": "Feature side: current OHLCVA summaries only beat prior by ~0.008–0.019",
+        "evidence": "Cheap logistic on summarized windows beats prior on all 8 heads, but effect sizes are small; deep model failed to harvest even that.",
+        "next_experiment": "Add cross-sectional ranks / sector-relative returns as cheap features; re-run logistic. If Δ still <0.02, revisit 10D MFE/MAE label definition (too noisy / nested) before ModernBERT."
+      }
+    ],
+    "abandon": {
+      "long_gpu_r2_same_config": true,
+      "eight_head_equal_weight_as_sole_metric": true,
+      "leakage_as_primary_hypothesis": true
+    }
+  }
+}
