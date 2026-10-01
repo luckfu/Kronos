@@ -1,6 +1,6 @@
 {
-  "id": "user281434/kairos-mfe10-sidecar-short-phase-k-identity",
-  "title": "Kairos MFE10 Sidecar Short Phase K Identity",
+  "id": "user281434/kairos-mfe10-decision-short-phase-p",
+  "title": "Kairos MFE10 Decision Short Phase P",
   "code_file": "train_mfe10_sidecar.py",
   "language": "python",
   "kernel_type": "script",

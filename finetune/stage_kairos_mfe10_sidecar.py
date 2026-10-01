@@ -57,9 +57,12 @@ def stage() -> dict:
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "mfe10 path-touch binary short sidecar",
+            "purpose": "mfe10 decision shallow freeze-embeds Phase P",
             "target": "y=1{mfe10>=0.10} path MFE",
             "not_multi_head_r2": True,
+            "not_ranking_ic": True,
+            "backbone_mode": "shallow",
+            "freeze_tokenizer_embeds": True,
             "session_budget_seconds": 5400,
             "max_segments": 4,
         },

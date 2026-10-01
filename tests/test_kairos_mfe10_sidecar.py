@@ -7,6 +7,9 @@ import math
 import numpy as np
 
 from modernbert_finance.mfe10_sidecar import (
+    PHASE_P_BACKBONE,
+    PHASE_P_FREEZE_TOKENIZER_EMBEDS,
+    PHASE_P_SHALLOW_LAYERS,
     GATE_DELTA_VS_PRIOR,
     MFE10_DEF,
     MFE10_THRESHOLD,
@@ -89,3 +92,11 @@ def test_eval_summary_prints_prior() -> None:
     assert abs(summary["delta_vs_prior"]) < 1e-6
     assert summary["gate_passed"] is False
     assert abs(binary_log_loss(p, y) - summary["model_log_loss"]) < 1e-12
+
+
+def test_decision_only_phase_p_contract() -> None:
+    contract = target_contract()
+    assert contract["not_ranking_ic"] is True
+    assert PHASE_P_BACKBONE == "shallow"
+    assert PHASE_P_SHALLOW_LAYERS == 2
+    assert PHASE_P_FREEZE_TOKENIZER_EMBEDS is True

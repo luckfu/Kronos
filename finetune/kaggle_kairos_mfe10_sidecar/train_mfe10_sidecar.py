@@ -1,12 +1,12 @@
-"""Kairos SHORT sidecar: single binary head for path MFE≥10%/10d.
+"""Kairos SHORT sidecar Phase P: decision y=1{mfe10≥0.10} only.
 
 Target:
   mfe10 = max(high[T+1:T+10]) / close[T] - 1
   y     = 1{ mfe10 >= 0.10 }
 
-NOT close-to-close. NOT the old 8-head R2 (up_003/005/008/012 + down_*).
-Fresh init; short budget (few segments / 1 chunk); print constant-prior
-baseline every eval; early-stop if stuck within ±1e-3 of prior for 2+ evals.
+Phase P: freeze tokenizer embeds (s1/s2) + shallow (2-layer) BCE head.
+Fixed gate=1 + head bias=logit(prior). Metric = Δ logloss vs constant prior.
+NOT ranking IC. NOT close-to-close. NOT 8-head R2. NOT 22-layer.
 """
 
 from __future__ import annotations
@@ -37,17 +37,19 @@ RUNTIME_RESERVE_SECONDS = 12 * 60
 SEGMENT_ESTIMATE_SECONDS = 600.0
 SEGMENT_TIME_MARGIN = 1.15
 SHUFFLE_SEED = 20261001
-LEARNING_RATE = 1e-4  # Phase K: shallow/identity; adapters + embeds only
+LEARNING_RATE = 1e-4  # Phase P: shallow bb + frozen tok embeds
 MFE10_THRESHOLD = 0.10
 PRIOR_STUCK_TOL = 1e-3
 PRIOR_STUCK_PATIENCE = 2
 GATE_DELTA_VS_PRIOR = -0.04
-FREEZE_BACKBONE = False  # Phase K: no 22-layer backbone to freeze
-BACKBONE_MODE = "identity"  # Phase K: bypass random ModernBERT; mean-pool embeds
+FREEZE_BACKBONE = False  # train shallow layers (NOT freeze whole bb)
+FREEZE_TOKENIZER_EMBEDS = True  # freeze s1/s2 (tokenizer-side embeds)
+BACKBONE_MODE = "shallow"  # Phase P: 2-layer non-identity decision head
+SHALLOW_LAYERS = 2  # NOT 22
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-k-identity-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-short-phase-p-20261001"
 OUTPUT = Path("/kaggle/working/kairos_mfe10_sidecar")
-RUN_PURPOSE = "mfe10-path-touch-binary-short-sidecar-identity-bb"
+RUN_PURPOSE = "mfe10-decision-shallow-freeze-embeds-phase-p"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 TARGET_NAME = "buy_worth_mfe10pct"
 MFE10_DEF = "max(high[T+1:T+10]) / close[T] - 1"
@@ -302,7 +304,11 @@ def main() -> None:
         not_multi_head_r2=True,
         not_close_to_close=True,
         freeze_backbone=FREEZE_BACKBONE,
+        freeze_tokenizer_embeds=FREEZE_TOKENIZER_EMBEDS,
         backbone_mode=BACKBONE_MODE,
+        shallow_layers=SHALLOW_LAYERS,
+        not_ranking_ic=True,
+        not_22_layer=True,
         world_size=world_size,
     )
     random.seed(SEED)
@@ -389,13 +395,19 @@ def main() -> None:
             self.size = nn.Sequential(nn.Linear(1, 32), nn.GELU(), nn.Linear(32, hidden))
             self.cond = nn.Parameter(torch.zeros(1, 1, hidden))
             self.backbone_mode = BACKBONE_MODE
+            self.shallow_layers = int(SHALLOW_LAYERS)
             if BACKBONE_MODE == "identity":
-                # Phase K: no random 22-layer ModernBERT; mean-pool condition+market embeds.
+                # Legacy Phase K path: mean-pool condition+market embeds.
                 self.backbone = None
-            else:
+            elif BACKBONE_MODE == "shallow":
+                # Phase P: shallow non-identity ONLY (never 22-layer).
+                if self.shallow_layers < 1 or self.shallow_layers > 4:
+                    raise RuntimeError(
+                        f"SHALLOW_LAYERS must be in 1..4 for Phase P, got {self.shallow_layers}"
+                    )
                 config = ModernBertConfig(
                     vocab_size=1024, hidden_size=hidden, intermediate_size=1152,
-                    num_hidden_layers=22, num_attention_heads=12,
+                    num_hidden_layers=self.shallow_layers, num_attention_heads=12,
                     max_position_embeddings=128, pad_token_id=0,
                     attention_dropout=0.0, embedding_dropout=0.0, mlp_dropout=0.0,
                     reference_compile=False,
@@ -408,6 +420,11 @@ def main() -> None:
                     raise RuntimeError("Cannot locate ModernBERT native token embeddings")
                 for parameter in native_embeddings.parameters():
                     parameter.requires_grad_(False)
+            else:
+                raise RuntimeError(
+                    f"unsupported BACKBONE_MODE={BACKBONE_MODE!r}; "
+                    "use identity|shallow (no 22-layer decision)"
+                )
             self.head = nn.Linear(hidden, 1)
             # Phase I fix: calibrate initial probability to train prior (~25%), not 0.5.
             nn.init.zeros_(self.head.weight)
@@ -460,6 +477,11 @@ def main() -> None:
 
     model = SingleBinaryModel(head_bias=head_bias).to(device)
     raw_model = model
+    if FREEZE_TOKENIZER_EMBEDS:
+        for parameter in raw_model.s1.parameters():
+            parameter.requires_grad_(False)
+        for parameter in raw_model.s2.parameters():
+            parameter.requires_grad_(False)
     if FREEZE_BACKBONE and raw_model.backbone is not None:
         for parameter in raw_model.backbone.parameters():
             parameter.requires_grad_(False)
@@ -468,7 +490,9 @@ def main() -> None:
     log(
         "param_freeze",
         freeze_backbone=FREEZE_BACKBONE,
+        freeze_tokenizer_embeds=FREEZE_TOKENIZER_EMBEDS,
         backbone_mode=BACKBONE_MODE,
+        shallow_layers=SHALLOW_LAYERS if BACKBONE_MODE == "shallow" else 0,
         trainable_tensors=len(trainable),
         frozen_tensors=len(frozen),
         trainable_numel=int(sum(p.numel() for p in trainable)),
@@ -859,11 +883,18 @@ def main() -> None:
     report = {
         "status": "SIDECAR_COMPLETE",
         "purpose": RUN_PURPOSE,
+        "phase": "P_shallow_freeze_decision",
         "target": TARGET_NAME,
         "mfe10_def": MFE10_DEF,
         "threshold": MFE10_THRESHOLD,
         "not_multi_head_r2": True,
         "not_close_to_close": True,
+        "not_ranking_ic": True,
+        "not_22_layer": True,
+        "backbone_mode": BACKBONE_MODE,
+        "shallow_layers": SHALLOW_LAYERS if BACKBONE_MODE == "shallow" else 0,
+        "freeze_tokenizer_embeds": FREEZE_TOKENIZER_EMBEDS,
+        "freeze_backbone": FREEZE_BACKBONE,
         "train_prior": train_prior,
         "stop_reason": stop_reason,
         "segments_this_run": segments_this_run,

@@ -1,5 +1,6 @@
-"""Build Kairos short sidecar kernel for path-MFE≥10% single binary head.
+"""Build Kairos short decision sidecar: y=1{mfe10≥0.10} (Phase P).
 
+Freeze tokenizer embeds + shallow (2-layer) BCE head. NOT ranking IC.
 Does NOT restart the old 8-head R2 recipe. Fresh single-head, short budget.
 """
 
@@ -14,10 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "finetune/kaggle_kairos_mfe10_sidecar/train_mfe10_sidecar.py"
 DEST = ROOT / "finetune/kaggle_kairos_mfe10_sidecar"
 
-SLUG = "kairos-mfe10-sidecar-short-phase-k-identity"
-TITLE = "Kairos MFE10 Sidecar Short Phase K Identity"
+SLUG = "kairos-mfe10-decision-short-phase-p"
+TITLE = "Kairos MFE10 Decision Short Phase P"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-mfe10-sidecar-short-phase-k-identity-20261001"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-short-phase-p-20261001"
 
 
 def build(destination: Path | None = None) -> Path:
@@ -56,13 +57,17 @@ def build(destination: Path | None = None) -> Path:
         "target": "y=1{mfe10>=0.10} where mfe10=max(high[T+1:T+10])/close[T]-1",
         "not_close_to_close": True,
         "not_multi_head_r2": True,
+        "not_ranking_ic": True,
+        "not_22_layer": True,
         "not_old_kernel": "user281434/kairos-r2-r1-restart-lr-3e-5",
+        "backbone_mode": "shallow",
+        "shallow_layers": 2,
+        "freeze_tokenizer_embeds": True,
+        "freeze_backbone": False,
         "max_segments_this_run": 4,
         "segment_samples": 20_000,
         "gpu_budget_seconds": 5400,
         "learning_rate": 1e-4,
-        "freeze_backbone": False,
-        "backbone_mode": "identity",
         "gate_delta_vs_prior": -0.04,
         "prior_stuck_tol": 1e-3,
         "prior_stuck_patience": 2,
@@ -70,6 +75,9 @@ def build(destination: Path | None = None) -> Path:
         "swanlab_url": f"https://swanlab.cn/@roc_fu/finance/runs/{SWANLAB_RUN_ID}",
         "cloud_credentials": "staging only, not tracked",
         "expected_val_pos_rate": 0.2529,
+        "phase_k_identity_best_delta": -0.002970473307763233,
+        "logistic_base_xsection_delta": -0.03413,
+        "gate": -0.04,
     }
     (destination / "build_manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"

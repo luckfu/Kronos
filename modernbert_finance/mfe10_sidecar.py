@@ -1,4 +1,6 @@
-"""Helpers for Kairos short sidecar: y=1{mfe10>=0.10} (path MFE, not ctc).
+"""Helpers for Kairos decision sidecar: y=1{mfe10>=0.10} (path MFE, not ctc).
+
+Product path = decision label only (Phase P+). Ranking IC is diagnostic, not product.
 
 Target definition (decision / Phase G2):
   mfe10 = max(high[T+1:T+10]) / close[T] - 1
@@ -113,14 +115,28 @@ def eval_summary(
     }
 
 
+# Phase P preferred cheap decision stack (not ranking).
+PHASE_P_BACKBONE = "shallow"
+PHASE_P_SHALLOW_LAYERS = 2
+PHASE_P_FREEZE_TOKENIZER_EMBEDS = True
+PHASE_K_IDENTITY_BEST_DELTA = -0.002970473307763233
+LOGISTIC_BASE_XSECTION_DELTA = -0.03413
+
+
 def target_contract() -> dict[str, Any]:
     return {
         "name": TARGET_NAME,
         "formula": f"y = 1{{mfe10 >= {MFE10_THRESHOLD}}} where mfe10 = {MFE10_DEF}",
         "not_close_to_close": True,
         "not_multi_head_r2": True,
+        "not_ranking_ic": True,
         "expected_val_pos_rate": EXPECTED_VAL_POS_RATE,
         "gate_delta_vs_prior": GATE_DELTA_VS_PRIOR,
         "prior_stuck_tol": PRIOR_STUCK_TOL,
         "prior_stuck_patience": PRIOR_STUCK_PATIENCE,
+        "phase_p_backbone": PHASE_P_BACKBONE,
+        "phase_p_shallow_layers": PHASE_P_SHALLOW_LAYERS,
+        "phase_p_freeze_tokenizer_embeds": PHASE_P_FREEZE_TOKENIZER_EMBEDS,
+        "phase_k_identity_best_delta": PHASE_K_IDENTITY_BEST_DELTA,
+        "logistic_base_xsection_delta": LOGISTIC_BASE_XSECTION_DELTA,
     }

@@ -25,13 +25,16 @@
   "phase_n_pairwise_rank_ic": 0.08171161247975986,
   "phase_l_best_arm": "ridge_mfe_cs_comb",
   "phase_l_best_rank_ic": 0.27620045257688736,
-  "status": "RUNNING",
+  "status": "COMPLETE",
   "not_local": true,
   "local_cheaper": false,
   "reason_kaggle": "no local GPU; Phase M/N wall ~2.5-3.5min on 2xT4 so short Kaggle is cheaper",
   "launched_at_cst": "2026-10-01 23:18:10 CST",
-  "kernel_status": "RUNNING",
+  "kernel_status": "COMPLETE",
   "kernel_url": "https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-o",
   "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-o-20261001",
-  "commit": "9077aa6"
+  "commit": "9077aa6",
+  "stopped_note": "Already COMPLETE when checked 2026-10-01 ~23:25 CST; cancel N/A. Ranking-as-product STOPPED: pivot to decision y=1{mfe10>=0.10} only.",
+  "product_verdict": "ranking_diagnostic_dead_end",
+  "next": "Phase P decision shallow freeze-embeds BCE"
 }
