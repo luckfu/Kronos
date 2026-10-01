@@ -38,6 +38,7 @@
     "T_status": "ERROR_infra_import"
   },
   "launched_at_cst": "2026-10-02 00:28:54 CST",
-  "kernel_status_at_launch": "pending_poll",
-  "pushed_at_cst": "2026-10-02 00:28:54 CST"
+  "kernel_status_at_launch": "RUNNING",
+  "pushed_at_cst": "2026-10-02 00:28:54 CST",
+  "commit": "dd2a8f3"
 }

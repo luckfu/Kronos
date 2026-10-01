@@ -6,6 +6,7 @@ Kernel：`user281434/kairos-mfe10-decision-tabular-phase-t2` → **RUNNING**
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-t2  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-t2-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t2-20261002
+Commit：`dd2a8f3`  
 启动：2026-10-02 00:28:54 CST
 
 ## 相对 Phase T 的修复
