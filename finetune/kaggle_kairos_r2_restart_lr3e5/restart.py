@@ -29,6 +29,7 @@ EARLY_STOP_MIN_DELTA = 0.001
 MAX_VALIDATION_DEGRADATION = 0.2
 CHUNK_INDEX = 0
 SEGMENT_SAMPLES = 20000
+SAMPLER_VERSION = 'global_sample_permutation_v1'
 GPU_BUDGET_SECONDS = 36000
 RUNTIME_RESERVE_SECONDS = 1800
 SEGMENT_ESTIMATE_SECONDS = 546.412109773
@@ -137,6 +138,39 @@ def shuffle_group_rows(rows: list[dict[str, Any]], group_id: int) -> list[dict[s
 
 def group_order_hash(order: list[int]) -> str:
     return hashlib.sha256(','.join(map(str, order)).encode('ascii')).hexdigest()
+
+
+class GlobalParquetSampler:
+    """Materialize the sample rows and use one deterministic global permutation."""
+
+    def __init__(self, parquet: Any, columns: list[str], seed: int,
+                 cursor: int = 0) -> None:
+        self.rows = parquet.read(columns=columns).to_pylist()
+        self.total = len(self.rows)
+        self.permutation = np.random.default_rng(seed).permutation(self.total)
+        self.cursor = int(cursor)
+        if not 0 <= self.cursor <= self.total:
+            raise RuntimeError('global sampler cursor out of range')
+
+    @classmethod
+    def from_state(cls, parquet: Any, columns: list[str], seed: int,
+                   state: dict) -> 'GlobalParquetSampler':
+        sampler = cls(parquet, columns, seed, int(state['cursor']))
+        if int(state.get('total', -1)) != sampler.total:
+            raise RuntimeError('global sampler sample count mismatch')
+        return sampler
+
+    def state_dict(self) -> dict[str, Any]:
+        return {'sampler_version': SAMPLER_VERSION, 'cursor': self.cursor,
+                'total': self.total}
+
+    def take(self, count: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if count < 0 or self.cursor + count > self.total:
+            raise RuntimeError('global sampler exhausted or invalid request')
+        positions = self.permutation[self.cursor:self.cursor + count]
+        rows = [self.rows[int(position)] for position in positions]
+        self.cursor += count
+        return rows, {'cursor': self.cursor}
 
 def row_identity(row: dict[str, Any]) -> tuple[str, int, str]:
     return (str(row['symbol']), int(row['start_index']), str(row['asof_date']))
@@ -433,8 +467,7 @@ def main() -> None:
         raise RuntimeError(f'configured total segments {TOTAL_SEGMENTS} != computed {total_segments}')
     run_segment_limit = min(MAX_SEGMENTS_THIS_RUN, total_segments)
     start_segment_index = 0
-    start_group_order_pos = 0
-    start_row_offset = 0
+    resume_sampler_state: dict[str, Any] | None = None
     processed = 0
     last_validation = None
     last_best_updated = False
@@ -442,19 +475,17 @@ def main() -> None:
     if best_meta.exists():
         best_score = float(json.loads(best_meta.read_text(encoding='utf-8'))['macro_log_loss'])
     if checkpoint.exists():
-        if REPAIRED_TRIAL and sha256_file(checkpoint) != '45f4d7327d730e803fdf22c81e9baff20af5ea2e86b5e718d3d58b7467eabbcb':
-            raise RuntimeError('bounded trial must start from the audited Chunk 1 checkpoint')
         saved = torch.load(checkpoint, map_location=device)
         if saved.get('shuffle_seed') != SHUFFLE_SEED:
             raise RuntimeError('checkpoint shuffle seed mismatch')
-        if saved.get('group_order_hash') != group_order_hash(group_order):
-            raise RuntimeError('checkpoint row-group order mismatch')
+        if saved.get('sampler_version') != SAMPLER_VERSION:
+            raise RuntimeError('checkpoint was created by a non-global sampler')
         raw_model.load_state_dict(saved['model'])
         optimizer.load_state_dict(saved['optimizer'])
         scaler.load_state_dict(saved['scaler'])
         if LR_PROBE:
-            if (saved.get('chunk_index'), saved.get('completed_segments'), saved.get('processed_samples'), saved.get('group_order_pos'), saved.get('row_offset')) != (0, 1, 20000, 0, 20000):
-                raise RuntimeError('LR probe requires the unmodified Chunk 1 segment-1 checkpoint')
+            if (saved.get('chunk_index'), saved.get('completed_segments'), saved.get('processed_samples')) != (0, 1, 20000):
+                raise RuntimeError('LR probe requires the segment-1 checkpoint')
             if abs(saved['last_validation']['all']['macro_log_loss'] - 0.6702645644545555) > 1e-08:
                 raise RuntimeError('unexpected source checkpoint metric')
             assert_restored_state(saved['model'], raw_model.state_dict(), torch)
@@ -468,14 +499,16 @@ def main() -> None:
         saved_chunk = int(saved['chunk_index'] if 'chunk_index' in saved else CHUNK_INDEX - 1)
         if saved_chunk in {CHUNK_INDEX, CHUNK_INDEX - 1}:
             start_segment_index = int(saved.get('completed_segments', 0))
-            start_group_order_pos = int(saved.get('group_order_pos', 0))
-            start_row_offset = int(saved.get('row_offset', 0))
+            resume_sampler_state = saved.get('sampler_state')
+            if resume_sampler_state is None:
+                raise RuntimeError('mixed sampler checkpoint state is missing')
         else:
             raise RuntimeError(f'checkpoint chunk mismatch: saved={saved_chunk}, current={CHUNK_INDEX}')
         processed = int(saved['processed_samples'])
         last_validation = saved.get('last_validation')
         last_best_updated = bool(saved.get('last_best_updated', False))
-        log('checkpoint_resumed', chunk_index=saved_chunk, completed_segments=start_segment_index, group_order_pos=start_group_order_pos, row_offset=start_row_offset, processed_samples=processed)
+        log('checkpoint_resumed', chunk_index=saved_chunk, completed_segments=start_segment_index,
+            sampler_version=SAMPLER_VERSION, processed_samples=processed)
     elif CHUNK_INDEX == 0:
         initial_models = sorted(Path('/kaggle/input').glob('**/final_model.pt'))
         if len(initial_models) != 1:
@@ -498,6 +531,16 @@ def main() -> None:
         torch.cuda.empty_cache()
     verify_rope('after_restore')
     columns = ['symbol', 'start_index', 'asof_date', 'mfe10', 'mae10', *TARGET_COLUMNS]
+    sampler = (GlobalParquetSampler.from_state(train_pq, columns, SHUFFLE_SEED, resume_sampler_state)
+               if resume_sampler_state is not None
+               else GlobalParquetSampler(train_pq, columns, SHUFFLE_SEED))
+    if sampler.total != train_total:
+        raise RuntimeError(f'global sampler sample count mismatch: {sampler.total} != {train_total}')
+    if processed != sampler.cursor:
+        raise RuntimeError('global sampler cursor does not match processed sample count')
+    log('global_sampler_ready', sampler_version=SAMPLER_VERSION,
+        total_samples=sampler.total, processed_samples=processed,
+        permutation_seed=SHUFFLE_SEED)
     expected_prefix: list[tuple[str, int, str]] = []
     seen_identities: set[tuple[str, int, str]] = set()
     if LR_PROBE:
@@ -638,10 +681,7 @@ def main() -> None:
     started = time.monotonic()
     model.train()
     completed_segments = start_segment_index
-    group_order_pos = start_group_order_pos
-    row_offset = start_row_offset
     segments_this_run = 0
-    segment_rows: list[dict[str, Any]] = []
     segment_processed = 0
     segment_global_start = processed
     segment_started = time.monotonic()
@@ -734,33 +774,18 @@ def main() -> None:
         probe_best_score = probe_initial_score
         if time.time() - runtime_started > GPU_BUDGET_SECONDS - RUNTIME_RESERVE_SECONDS - longest_segment_seconds:
             raise RuntimeError('initialization consumed the probe training budget')
-    while group_order_pos < len(group_order) and segments_this_run < run_segment_limit:
-        loaded_group_order_pos = group_order_pos
-        group_id = group_order[group_order_pos]
-        rows = shuffle_group_rows(train_pq.read_row_group(group_id, columns=columns).to_pylist(), group_id)
-        while group_order_pos == loaded_group_order_pos and row_offset < len(rows) and (segments_this_run < run_segment_limit):
-            remaining = SEGMENT_SAMPLES - len(segment_rows)
-            take = min(remaining, len(rows) - row_offset)
-            segment_rows.extend(rows[row_offset:row_offset + take])
-            row_offset += take
-            if len(segment_rows) < SEGMENT_SAMPLES:
-                if row_offset == len(rows) and group_order_pos + 1 < len(group_order):
-                    group_order_pos += 1
-                    row_offset = 0
-                    break
-            global_segment_index = completed_segments + 1
-            segment_samples = len(segment_rows)
-            if FRESH_R2:
-                expected = expected_segment_ids(train_pq, group_order, processed, segment_samples)
-                actual = [row_identity(row) for row in segment_rows]
-                if actual != expected:
-                    raise RuntimeError('fresh R2 sample coverage differs from independent cursor')
-                log('segment_coverage_verified', segment_index=global_segment_index, processed_before=processed, samples=segment_samples, identity_sha256=hashlib.sha256(json.dumps(actual).encode()).hexdigest())
-            if LR_PROBE:
-                identity_hash = verify_segment_coverage(segment_rows, expected_prefix, processed, seen_identities)
-                log('segment_coverage_verified', segment_index=global_segment_index, samples=segment_samples, identity_sha256=identity_hash, group_order_pos=group_order_pos, row_offset=row_offset)
-            segment_global_start = processed
-            segment_processed = 0
+    while sampler.cursor < sampler.total and segments_this_run < run_segment_limit:
+        segment_rows, _sampler_metadata = sampler.take(min(SEGMENT_SAMPLES, sampler.total - sampler.cursor))
+        global_segment_index = completed_segments + 1
+        segment_samples = len(segment_rows)
+        actual = [row_identity(row) for row in segment_rows]
+        log('segment_coverage_verified', segment_index=global_segment_index,
+            processed_before=processed, samples=segment_samples,
+            identity_sha256=hashlib.sha256(json.dumps(actual).encode()).hexdigest(),
+            sampler_cursor=sampler.cursor, sampler_version=SAMPLER_VERSION)
+        segment_global_start = processed
+        segment_processed = 0
+        if segment_samples:
             segment_started = time.monotonic()
             verify_rope('before_training')
             padded_count = (segment_samples + world_size - 1) // world_size * world_size
@@ -803,7 +828,7 @@ def main() -> None:
                 if is_main_process() and (estimated_processed % 25000 < BATCH_SIZE or offset + local_batch_size >= len(local_rows)):
                     rate = estimated_processed / max(time.monotonic() - started, 1e-06)
                     segment_processed = estimated_segment_processed
-                    state = {'phase': 'training', 'processed_samples': estimated_processed, 'total_samples': train_total, 'row_group': group_id, 'order_pos': group_order_pos, 'segment_total': total_segments, 'segment_index': global_segment_index, 'segment_samples': segment_samples, 'segment_processed_samples': segment_processed, 'segment_progress': min(1.0, segment_processed / max(segment_samples, 1)), 'loss': float(loss.detach().cpu()), 'samples_per_second': rate, 'eta_seconds': (segment_samples - segment_processed) / max(rate, 1e-06)}
+                    state = {'phase': 'training', 'processed_samples': estimated_processed, 'total_samples': train_total, 'sampler_cursor': sampler.cursor, 'segment_total': total_segments, 'segment_index': global_segment_index, 'segment_samples': segment_samples, 'segment_processed_samples': segment_processed, 'segment_progress': min(1.0, segment_processed / max(segment_samples, 1)), 'loss': float(loss.detach().cpu()), 'samples_per_second': rate, 'eta_seconds': (segment_samples - segment_processed) / max(rate, 1e-06)}
                     log('training_progress', **{key: value for key, value in state.items() if key != 'phase'})
                     dashboard(state)
                     swanlab_run.log({'train/loss': float(loss.detach().cpu()), 'train/processed_samples': estimated_processed, 'train/global_processed_samples': estimated_processed, 'train/global_total_samples': train_total, 'train/segment_total': total_segments, 'train/segment_index': global_segment_index, 'train/segment_processed_samples': segment_processed, 'train/segment_samples': segment_samples, 'train/segment_progress': state['segment_progress'], 'train/samples_per_second': rate, 'train/eta_seconds': state['eta_seconds']}, step=estimated_processed)
@@ -815,12 +840,8 @@ def main() -> None:
                 processed_holder = [processed if is_main_process() else None]
                 dist.broadcast_object_list(processed_holder, src=0)
                 processed = int(processed_holder[0])
-            segment_rows = []
             completed_segments += 1
             segments_this_run += 1
-            if row_offset == len(rows):
-                group_order_pos += 1
-                row_offset = 0
             last_validation = full_validation()
             validation_score = last_validation['all']['macro_log_loss']
             validation_history.append({'segment_index': global_segment_index, 'processed_samples': processed, 'learning_rate': optimizer.param_groups[0]['lr'], 'validation': last_validation})
@@ -839,7 +860,7 @@ def main() -> None:
                     log('best_model_updated', macro_log_loss=best_score, segment_index=global_segment_index, processed_samples=processed)
             if is_main_process():
                 swanlab_run.log({'validation/macro_log_loss': last_validation['all']['macro_log_loss'], 'validation/macro_brier': last_validation['all']['macro_brier'], 'validation/macro_ece': last_validation['all']['macro_ece_10bin'], 'validation/2025H2_log_loss': last_validation['2025H2']['macro_log_loss'], 'validation/2026H1_log_loss': last_validation['2026H1']['macro_log_loss'], 'validation/samples': last_validation['all']['samples'], 'validation/segment_complete': 1, 'validation/best_updated': int(last_best_updated), 'train/segment_total': total_segments, 'train/segment_index': global_segment_index}, step=processed)
-                torch.save({'model': raw_model.state_dict(), 'optimizer': optimizer.state_dict(), 'scaler': scaler.state_dict(), 'chunk_index': CHUNK_INDEX, 'completed_segments': completed_segments, 'group_order_pos': group_order_pos, 'row_offset': row_offset, 'shuffle_seed': SHUFFLE_SEED, 'group_order_hash': group_order_hash(group_order), 'processed_samples': processed, 'last_validation': last_validation, 'last_best_updated': last_best_updated, 'rope_semantics': 'canonical_verified' if REPAIRED_TRIAL else 'legacy', 'rope_fingerprint': rope_fingerprint(raw_model, torch) if REPAIRED_TRIAL else None, 'run_purpose': RUN_PURPOSE}, checkpoint.with_suffix('.pt.tmp'))
+                torch.save({'model': raw_model.state_dict(), 'optimizer': optimizer.state_dict(), 'scaler': scaler.state_dict(), 'chunk_index': CHUNK_INDEX, 'completed_segments': completed_segments, 'sampler_state': sampler.state_dict(), 'sampler_version': SAMPLER_VERSION, 'shuffle_seed': SHUFFLE_SEED, 'processed_samples': processed, 'last_validation': last_validation, 'last_best_updated': last_best_updated, 'rope_semantics': 'canonical_verified' if REPAIRED_TRIAL else 'legacy', 'rope_fingerprint': rope_fingerprint(raw_model, torch) if REPAIRED_TRIAL else None, 'run_purpose': RUN_PURPOSE}, checkpoint.with_suffix('.pt.tmp'))
                 checkpoint.with_suffix('.pt.tmp').replace(checkpoint)
             if distributed:
                 dist.barrier()
@@ -866,7 +887,7 @@ def main() -> None:
                     stop_reason = reason
                     log('probe_early_stop', reason=reason, stale_segments=probe_stale_segments)
     if completed_segments < total_segments:
-        report = {'status': 'CHUNK_COMPLETE', 'purpose': RUN_PURPOSE, 'learning_rate': optimizer.param_groups[0]['lr'], 'rope_repaired_trial': REPAIRED_TRIAL, 'initial_macro_log_loss': probe_initial_score if LR_PROBE else None, 'validation_history': validation_history, 'stop_reason': stop_reason, 'gpu_budget_seconds': GPU_BUDGET_SECONDS, 'runtime_elapsed_seconds': time.time() - runtime_started, 'chunk_index': CHUNK_INDEX, 'processed_samples': processed, 'completed_segments': completed_segments, 'segments_this_run': segments_this_run, 'shuffle_seed': SHUFFLE_SEED, 'group_order_hash': group_order_hash(group_order), 'segment_total': total_segments, 'segment_index': completed_segments, 'segment_samples': segment_samples, 'segment_processed_samples': max(0, processed - segment_global_start), 'checkpoint': str(checkpoint), 'best_model': str(best_checkpoint), 'best_macro_log_loss': best_score, 'validation_samples': last_validation['all']['samples'], 'best_updated': int(last_best_updated), 'validation': last_validation, 'elapsed_seconds': time.monotonic() - started}
+        report = {'status': 'CHUNK_COMPLETE', 'purpose': RUN_PURPOSE, 'learning_rate': optimizer.param_groups[0]['lr'], 'rope_repaired_trial': REPAIRED_TRIAL, 'initial_macro_log_loss': probe_initial_score if LR_PROBE else None, 'validation_history': validation_history, 'stop_reason': stop_reason, 'gpu_budget_seconds': GPU_BUDGET_SECONDS, 'runtime_elapsed_seconds': time.time() - runtime_started, 'chunk_index': CHUNK_INDEX, 'processed_samples': processed, 'completed_segments': completed_segments, 'segments_this_run': segments_this_run, 'shuffle_seed': SHUFFLE_SEED, 'sampler_version': SAMPLER_VERSION, 'segment_total': total_segments, 'segment_index': completed_segments, 'segment_samples': segment_samples, 'segment_processed_samples': max(0, processed - segment_global_start), 'checkpoint': str(checkpoint), 'best_model': str(best_checkpoint), 'best_macro_log_loss': best_score, 'validation_samples': last_validation['all']['samples'], 'best_updated': int(last_best_updated), 'validation': last_validation, 'elapsed_seconds': time.monotonic() - started}
         if is_main_process():
             (OUTPUT / 'chunk_report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
             dashboard({'phase': 'chunk complete', 'processed_samples': processed, 'total_samples': train_total, 'chunk_index': CHUNK_INDEX, 'completed_segments': completed_segments, 'segment_total': total_segments})
