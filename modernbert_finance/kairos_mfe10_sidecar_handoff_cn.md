@@ -1,6 +1,6 @@
 # Kairos MFE≥10% 短 Sidecar 训练交接（单二分类头）
 
-日期：2026-10-01 22:38 CST（北京时间）。Phase K identity 未过闸（best Δ≈−0.003）；用户对齐排序非二分类 → Phase L 本地排序消融已跑通。
+日期：2026-10-01 22:38 CST（北京时间）。Phase K identity 未过闸（best Δ≈−0.003）；用户对齐排序非二分类 → Phase L 本地排序消融已过闸 → Phase M 短 ranking probe（identity + Rank IC）已实现/推送。
 
 ## 一句话
 
