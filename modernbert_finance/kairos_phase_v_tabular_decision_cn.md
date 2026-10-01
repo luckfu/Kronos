@@ -2,7 +2,7 @@
 
 日期：2026-10-02 01:34:03 CST（北京时间）。  
 前置：Phase U COMPLETE — 主协议 train2023–2024→val **FAIL 闸**（blend Δ≈−0.027598）；val_temporal 仍过闸（Δ≈−0.041793）。  
-Kernel：`user281434/kairos-mfe10-decision-tabular-phase-v` → **RUNNING**  
+Kernel：`user281434/kairos-mfe10-decision-tabular-phase-v` → **COMPLETE**（结果见 kairos_phase_v_tabular_decision_results_cn.md；HARD-STOP）  
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-v  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-v-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-v-20261002

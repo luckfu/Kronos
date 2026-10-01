@@ -1,13 +1,13 @@
 # Kairos 决策系统交接（Decision-Only Charter）
 
-日期：2026-10-02（北京时间，交接更新 2026-10-02 01:33:21 CST）。  
-状态：**产品路径 = 决策标签 only**；时序切分仍过闸（S/T2/U secondary）；**Phase U 主协议 train→val FAIL 闸**；排序探针已停作产品。
+日期：2026-10-02（北京时间，交接更新 2026-10-02 02:12:48 CST）。  
+状态：**产品路径 = 决策标签 only**；时序切分仍过闸（S/T2/U/V secondary）；**Phase U/V 主协议 train→val 均 FAIL 闸**；**日线表格轴 HARD-STOP**；排序探针已停作产品。
 
 ## 一句话
 
 一切实验围绕 **`y = 1{mfe10 ≥ 0.10}`**，闸门 = `Δ logloss vs 常数先验 ≤ −0.04`。  
-**当前赢家**：时序切分上 `Logistic⊕浅MLP` 融合 / elastic-net（Base+xsection）；**序列 ModernBERT 短烟（I/J/K/P）已证伪**。  
-**Kaggle 确认**：Phase T2 COMPLETE，blend Δ≈**−0.041793**（= Phase S）。
+**当前赢家（仅时序协议）**：时序切分上 `Logistic⊕浅MLP` 融合 / elastic-net（Base+xsection）；**序列 ModernBERT 短烟（I/J/K/P）已证伪**；**train→val 主协议未过闸（U/V）**。  
+**Kaggle 确认**：Phase T2/U/V secondary blend Δ≈**−0.041793**（= Phase S）。
 
 ## 标签契约
 
@@ -16,7 +16,7 @@
 | mfe10 | `max(high[T+1:T+10]) / close[T] - 1` |
 | 标签 | `y = 1{mfe10 ≥ 0.10}` |
 | 闸门 | `Δ ≤ −0.04` |
-| 判读切分 | **时序**优先于随机 75/25；下一步补 **train→val** |
+| 判读切分 | **时序**可过闸；**train→val 主协议** U/V 均 FAIL |
 
 ## 诊断摘要
 
@@ -28,21 +28,23 @@
 | **Phase S 时序 enet/blend** | Δ≈**−0.0418** | **过闸** |
 | **Phase T2 Kaggle 确认** | Δ≈**−0.041793** | **过闸复现**；train→val 因对齐 SKIP |
 | **Phase U train→val** | Δ≈**−0.027598** | **主协议 FAIL 闸**；temporal 仍 −0.041793 |
+| **Phase V train2024+hist_gbm** | Δ≈**−0.022722** | **主协议 FAIL 且劣于 U**；temporal 仍 −0.041793 |
 | Phase Q 随机 mlp_3x | Δ≈−0.052（时序崩溃） | 随机切分不可作过闸证据 |
 
-## 当前下一步
+## 当前状态（HARD-STOP）
 
-- **Phase U COMPLETE（2026-10-02 01:33:21 CST）**：主协议 train2023–2024→val **FAIL 闸**（blend Δ≈−0.027598）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。协议脆弱。  
-- **Phase V（RUNNING，2026-10-02 01:34:49 CST）**：主协议 **train 2024 → 全 val**（近期性）+ `hist_gbm`；次协议 val_temporal。  
-- Kernel V：`user281434/kairos-mfe10-decision-tabular-phase-v`  
+- **Phase V COMPLETE（2026-10-02 02:12:48 CST）**：主协议 train2024→val **FAIL 闸**（hist_gbm Δ≈−0.022722，劣于 U）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。  
+- **结论**：日线 Base+xsection 表格配方族（logistic / enet / LR⊕mlp / hist_gbm）在 `y=1{mfe10≥0.10}` 上 **无法清 train→val 闸**；近期性与树非线性均未解救。  
+- **下一步**：**不再发下一表格 kernel**；不复活 Ranking 产品；不开 22 层 R2；不碰 TPU WIP。重启需新证据轴。  
+- Kernel V：`user281434/kairos-mfe10-decision-tabular-phase-v` COMPLETE  
 - URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-v  
 - SwanLab：`kairos-mfe10-decision-tabular-phase-v-20261002`  
-- Kernel U：`user281434/kairos-mfe10-decision-tabular-phase-u` COMPLETE  
-- **禁止**：Ranking 产品；22 层长训；TPU WIP；重启失败序列配方。
+- **禁止**：Ranking 产品；22 层长训；TPU WIP；重启失败序列配方；同轴 Phase W。
 
 ## 明确不做
 
 1. 不重启 ranking Phase。  
 2. 不重启 `kairos-r2-r1-restart-lr-3e-5` / 旧 8 头。  
 3. 不提交同事 TPU WIP（`beta_v21_c1*` 等 dirty）。  
-4. 不开全量 R2。
+4. 不开全量 R2。  
+5. 不在无新证据轴时再发 train→val 表格短实验。
