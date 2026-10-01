@@ -1,6 +1,6 @@
 {
-  "id": "user281434/kairos-mfe10-decision-tabular-phase-u",
-  "title": "Kairos MFE10 Decision Tabular Phase U",
+  "id": "user281434/kairos-mfe10-decision-tabular-phase-v",
+  "title": "Kairos MFE10 Decision Tabular Phase V",
   "code_file": "train_tabular_decision.py",
   "language": "python",
   "kernel_type": "script",

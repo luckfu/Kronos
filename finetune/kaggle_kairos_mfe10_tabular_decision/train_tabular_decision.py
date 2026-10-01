@@ -1,8 +1,9 @@
-"""Kairos Phase U: train→val tabular decision confirm (decision-only).
+"""Kairos Phase V: train2024→val tabular decision + hist_gbm (decision-only).
 
-Primary protocol = train 2023–2024 (capped ≤500k balanced) → full val.
-Secondary sanity = val temporal 2025H2→2026H1 (must still gate).
-Requires signal-window target alignment fix in build_enriched_matrix.
+Hypothesis: Phase U fail may be distant-train dilution; test recency + tree nonlinearity.
+Primary protocol = train 2024-01-01..2024-12-31 (capped ≤500k balanced) → full val.
+Secondary sanity = val temporal 2025H2→2026H1 (must still report / preferably gate).
+Recipes: logistic / enet / LR⊕mlp blends + HistGradientBoostingClassifier (hist_gbm).
 
 y=1{mfe10>=0.10}; gate Δ≤-0.04 on PRIMARY. NO tokenizer / ranking / 22-layer / TPU.
 """
@@ -21,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-u-20261002"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-v-20261002"
 GATE = -0.04
 SEED = 20261001
 PHASE_S_BEST = -0.04179349770224905
@@ -144,7 +145,7 @@ def start_swanlab():
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "phase-u-train-to-val-tabular-decision-confirm",
+            "purpose": "phase-v-train2024-to-val-tabular-decision-hist-gbm",
             "target": "y=1{mfe10>=0.10}",
             "gate": GATE,
             "phase_s_best": PHASE_S_BEST,
@@ -230,6 +231,21 @@ def eval_split(
         ),
     ]
 
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
+    recipes.append(
+        (
+            "hist_gbm",
+            HistGradientBoostingClassifier(
+                max_iter=120,
+                learning_rate=0.08,
+                max_depth=6,
+                min_samples_leaf=80,
+                random_state=SEED,
+            ),
+        )
+    )
+
     for rname, clf in recipes:
         t1 = time.time()
         clf.fit(x_tr, y_tr.astype(int))
@@ -305,7 +321,7 @@ def eval_split(
 
 
 def try_train_to_val(val_comb: np.ndarray, val_y: np.ndarray) -> dict[str, Any] | None:
-    """Primary: recent-train → full-val confirmation (Phase U)."""
+    """Primary: 2024-only train → full-val confirmation (Phase V recency)."""
     from modernbert_finance.ablations.buy_profit_mfe_ablations import (
         build_mfe_buy_labels,
     )
@@ -331,7 +347,7 @@ def try_train_to_val(val_comb: np.ndarray, val_y: np.ndarray) -> dict[str, Any] 
     packed_tr = build_mfe_buy_labels(
         train_panel,
         pd.read_parquet(train_targets),
-        signal_start="2023-01-01",
+        signal_start="2024-01-01",
         signal_end="2024-12-31",
     )
     build_s = float(time.time() - t_build)
@@ -370,7 +386,7 @@ def try_train_to_val(val_comb: np.ndarray, val_y: np.ndarray) -> dict[str, Any] 
             json.dumps({"phase": "train_capped", "n_train": int(len(y_tr))}),
             flush=True,
         )
-    result = eval_split("train2023_2024_to_val", x_tr, y_tr, val_comb, val_y)
+    result = eval_split("train2024_to_val", x_tr, y_tr, val_comb, val_y)
     result["build_seconds"] = build_s
     return result
 
@@ -438,7 +454,7 @@ def main() -> int:
         }
         print(json.dumps({"phase": "train_to_val_error", "error": str(exc)}), flush=True)
 
-    # Phase U: PRIMARY = train_to_val; val_temporal is secondary sanity (must still gate).
+    # Phase V: PRIMARY = train2024→val; val_temporal is secondary sanity (must still report).
     temporal_gate = bool(temporal["gate_passed"])
     if (
         isinstance(train_to_val, dict)
@@ -453,13 +469,13 @@ def main() -> int:
     else:
         best_delta = float(temporal["best_delta_vs_prior"])
         best_model = temporal["best_model"]
-        gate_passed = False  # Phase U requires train_to_val for primary gate
+        gate_passed = False  # Phase V requires train_to_val for primary gate
         primary = "train_to_val_MISSING_fallback_val_temporal"
         status = "TABULAR_DECISION_PRIMARY_SKIPPED"
 
     report = {
         "status": status,
-        "purpose": "phase-u-train-to-val-tabular-decision-confirm",
+        "purpose": "phase-v-train2024-to-val-tabular-decision-hist-gbm",
         "target": "y=1{mfe10>=0.10}",
         "gate": GATE,
         "phase_s_temporal_best_delta": PHASE_S_BEST,

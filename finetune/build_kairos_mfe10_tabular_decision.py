@@ -1,7 +1,7 @@
-"""Build Kairos Phase U tabular decision train→val confirmation kernel.
+"""Build Kairos Phase V tabular decision train2024→val + hist_gbm kernel.
 
-Keeps Phase T2 git-clone vendor path. Primary protocol = train→val after
-signal-window target alignment fix in build_enriched_matrix.
+Keeps Phase T2 git-clone vendor path. Primary = train 2024 → full val;
+adds HistGradientBoostingClassifier; secondary val_temporal still reported.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "finetune/kaggle_kairos_mfe10_tabular_decision"
 SOURCE = DEST / "train_tabular_decision.py"
 
-SLUG = "kairos-mfe10-decision-tabular-phase-u"
-TITLE = "Kairos MFE10 Decision Tabular Phase U"
+SLUG = "kairos-mfe10-decision-tabular-phase-v"
+TITLE = "Kairos MFE10 Decision Tabular Phase V"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-u-20261002"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-v-20261002"
 
 VENDOR_FILES = [
     "modernbert_finance/build_dataset.py",
@@ -90,7 +90,7 @@ def build(destination: Path | None = None) -> Path:
         "title": TITLE,
         "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "target": "y=1{mfe10>=0.10}",
-        "kind": "tabular_enet_blend_train_to_val_confirm_u",
+        "kind": "tabular_enet_blend_hist_gbm_train2024_to_val_v",
         "phase_s_temporal_best_delta": -0.04179349770224905,
         "gate": -0.04,
         "not_tokenizer_sequence": True,
@@ -98,10 +98,25 @@ def build(destination: Path | None = None) -> Path:
         "not_22_layer": True,
         "not_tpu": True,
         "phase_t2_temporal_best_delta": -0.04179349770224927,
-        "primary_protocol": "train_to_val",
+        "phase_u_train_to_val_best_delta": -0.027597938051234006,
+        "phase_u_primary_gate_passed": False,
+        "primary_protocol": "train2024_to_val",
         "secondary_protocol": "val_temporal",
+        "train_window": "2024-01-01..2024-12-31",
+        "train_cap": 500000,
+        "recipes": [
+            "logistic_C0.01",
+            "enet_C0.01_l1_0.7",
+            "enet_C0.01_l1_0.5",
+            "hist_gbm",
+            "blend_lr0.5_mlp0.5",
+            "blend_lr0.7_mlp0.3",
+            "blend_lr0.8_mlp0.2",
+            "blend_lr0.9_mlp0.1",
+        ],
         "alignment_fix": "filter_targets_by_asof_signal_window",
         "fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
+        "hypothesis": "U fail may be distant-train; test recency + tree nonlinearity",
         "swanlab_run_id": SWANLAB_RUN_ID,
         "swanlab_url": f"https://swanlab.cn/@roc_fu/finance/runs/{SWANLAB_RUN_ID}",
     }

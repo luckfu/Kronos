@@ -33,7 +33,10 @@
 ## 当前下一步
 
 - **Phase U COMPLETE（2026-10-02 01:33:21 CST）**：主协议 train2023–2024→val **FAIL 闸**（blend Δ≈−0.027598）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。协议脆弱。  
-- **Phase V（下一步 / 启动中）**：主协议 **train 2024 → 全 val**（近期性）+ `hist_gbm`；次协议 val_temporal；slug `kairos-mfe10-decision-tabular-phase-v`。  
+- **Phase V（RUNNING，2026-10-02 01:34:49 CST）**：主协议 **train 2024 → 全 val**（近期性）+ `hist_gbm`；次协议 val_temporal。  
+- Kernel V：`user281434/kairos-mfe10-decision-tabular-phase-v`  
+- URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-v  
+- SwanLab：`kairos-mfe10-decision-tabular-phase-v-20261002`  
 - Kernel U：`user281434/kairos-mfe10-decision-tabular-phase-u` COMPLETE  
 - **禁止**：Ranking 产品；22 层长训；TPU WIP；重启失败序列配方。
 

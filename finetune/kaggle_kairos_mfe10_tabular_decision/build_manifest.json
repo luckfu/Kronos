@@ -1,10 +1,10 @@
 {
-  "slug": "kairos-mfe10-decision-tabular-phase-u",
+  "slug": "kairos-mfe10-decision-tabular-phase-v",
   "owner": "user281434",
-  "title": "Kairos MFE10 Decision Tabular Phase U",
-  "source_sha256": "525d09e485a4302ce15f09e6df8931e9958fdb69ceac179ba65a38ca167a0fdb",
+  "title": "Kairos MFE10 Decision Tabular Phase V",
+  "source_sha256": "e36fac8ab776725df2980747f5a1aaf5349bc1c4a1eb67ce1262b27db1ca5ca8",
   "target": "y=1{mfe10>=0.10}",
-  "kind": "tabular_enet_blend_train_to_val_confirm_u",
+  "kind": "tabular_enet_blend_hist_gbm_train2024_to_val_v",
   "phase_s_temporal_best_delta": -0.04179349770224905,
   "gate": -0.04,
   "not_tokenizer_sequence": true,
@@ -12,10 +12,25 @@
   "not_22_layer": true,
   "not_tpu": true,
   "phase_t2_temporal_best_delta": -0.04179349770224927,
-  "primary_protocol": "train_to_val",
+  "phase_u_train_to_val_best_delta": -0.027597938051234006,
+  "phase_u_primary_gate_passed": false,
+  "primary_protocol": "train2024_to_val",
   "secondary_protocol": "val_temporal",
+  "train_window": "2024-01-01..2024-12-31",
+  "train_cap": 500000,
+  "recipes": [
+    "logistic_C0.01",
+    "enet_C0.01_l1_0.7",
+    "enet_C0.01_l1_0.5",
+    "hist_gbm",
+    "blend_lr0.5_mlp0.5",
+    "blend_lr0.7_mlp0.3",
+    "blend_lr0.8_mlp0.2",
+    "blend_lr0.9_mlp0.1"
+  ],
   "alignment_fix": "filter_targets_by_asof_signal_window",
   "fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
-  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-u-20261002",
-  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-u-20261002"
+  "hypothesis": "U fail may be distant-train; test recency + tree nonlinearity",
+  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-v-20261002",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-v-20261002"
 }
