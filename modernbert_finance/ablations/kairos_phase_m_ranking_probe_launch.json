@@ -2,7 +2,10 @@
   "phase": "M_ranking_probe_launch",
   "kind": "short_identity_rank_head",
   "target": "mfe10_continuous",
-  "metrics": ["rank_ic_mean", "topk_lift"],
+  "metrics": [
+    "rank_ic_mean",
+    "topk_lift"
+  ],
   "backbone_mode": "identity",
   "freeze_backbone": false,
   "max_segments": 3,
@@ -15,5 +18,9 @@
   "not_22_layer_binary": true,
   "not_tpu": true,
   "phase_l_best_arm": "ridge_mfe_cs_comb",
-  "phase_l_best_rank_ic": 0.27620045257688736
+  "phase_l_best_rank_ic": 0.27620045257688736,
+  "status": "RUNNING",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-m",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-m-20261001",
+  "commit": "93e8738"
 }
