@@ -52,7 +52,7 @@ def stage() -> dict:
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "mfe10 decision tabular Phase T enet/blend confirm",
+            "purpose": "mfe10 decision tabular Phase T2 enet/blend confirm (clone-path fix)",
             "target": "y=1{mfe10>=0.10}",
             "not_tokenizer_sequence": True,
             "not_ranking_ic": True,

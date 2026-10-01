@@ -1,4 +1,4 @@
-"""Kairos Phase T: tabular enet/blend confirmation (decision-only).
+"""Kairos Phase T2: tabular enet/blend confirmation (decision-only).
 
 Primary protocol = val temporal 2025H2→2026H1 (same as Phase S gate-pass).
 Optional: train panel recent→val if build finishes in budget.
@@ -20,10 +20,12 @@ import numpy as np
 import pandas as pd
 
 SWANLAB_API_KEY_FALLBACK = ""  # injected at private staging only
-SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-t-20261002"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-t2-20261002"
 GATE = -0.04
 SEED = 20261001
 PHASE_S_BEST = -0.04179349770224905
+REPO_CLONE_URL = "https://github.com/luckfu/Kronos.git"
+REPO_CLONE_BRANCH = "master"
 
 
 def find_one(pattern: str) -> Path:
@@ -34,14 +36,91 @@ def find_one(pattern: str) -> Path:
 
 
 def setup_vendor_path() -> None:
+    """Put modernbert_finance on sys.path.
+
+    Kaggle *script* kernels only execute code_file; the staged vendor/ tree is
+    often NOT present next to /kaggle/src/script.py (Phase T ERROR). Mirror the
+    sidecar pattern: shallow-clone the public repo when needed.
+    """
+    import subprocess
+
+    candidates: list[Path] = []
     here = Path(__file__).resolve().parent
     vendor = here / "vendor"
     if vendor.is_dir():
-        sys.path.insert(0, str(vendor))
-    for cand in (Path("/workspace/Kronos"), Path.cwd()):
+        candidates.append(vendor)
+    for cand in (
+        Path("/workspace/Kronos"),
+        Path.cwd(),
+        Path("/kaggle/working/Kronos"),
+        here.parent.parent,  # local: finetune/kaggle_*/../..
+    ):
         if (cand / "modernbert_finance").is_dir():
-            sys.path.insert(0, str(cand))
-            break
+            candidates.append(cand)
+
+    for root in candidates:
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        try:
+            import modernbert_finance  # noqa: F401
+            print(
+                json.dumps(
+                    {
+                        "phase": "vendor_ready",
+                        "root": str(root),
+                        "mode": "local_or_vendor",
+                    }
+                ),
+                flush=True,
+            )
+            return
+        except Exception:
+            continue
+
+    repo_path = Path("/kaggle/working/Kronos")
+    if not (repo_path / "modernbert_finance" / "__init__.py").is_file():
+        if repo_path.exists():
+            import shutil
+
+            shutil.rmtree(repo_path)
+        print(
+            json.dumps(
+                {
+                    "phase": "clone_repo",
+                    "url": REPO_CLONE_URL,
+                    "branch": REPO_CLONE_BRANCH,
+                    "dest": str(repo_path),
+                }
+            ),
+            flush=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                REPO_CLONE_BRANCH,
+                REPO_CLONE_URL,
+                str(repo_path),
+            ],
+            check=True,
+        )
+    if str(repo_path) not in sys.path:
+        sys.path.insert(0, str(repo_path))
+    import modernbert_finance  # noqa: F401
+
+    print(
+        json.dumps(
+            {
+                "phase": "vendor_ready",
+                "root": str(repo_path),
+                "mode": "git_clone",
+            }
+        ),
+        flush=True,
+    )
 
 
 def start_swanlab():
@@ -64,7 +143,7 @@ def start_swanlab():
         experiment_name=SWANLAB_RUN_ID,
         mode="cloud",
         config={
-            "purpose": "phase-t-tabular-enet-blend-confirm",
+            "purpose": "phase-t2-tabular-enet-blend-confirm",
             "target": "y=1{mfe10>=0.10}",
             "gate": GATE,
             "phase_s_best": PHASE_S_BEST,
@@ -376,7 +455,7 @@ def main() -> int:
 
     report = {
         "status": "TABULAR_DECISION_COMPLETE",
-        "purpose": "phase-t-tabular-enet-blend-confirm",
+        "purpose": "phase-t2-tabular-enet-blend-confirm",
         "target": "y=1{mfe10>=0.10}",
         "gate": GATE,
         "phase_s_temporal_best_delta": PHASE_S_BEST,

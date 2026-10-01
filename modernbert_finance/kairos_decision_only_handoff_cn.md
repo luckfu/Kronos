@@ -29,7 +29,8 @@
 
 ## 当前下一步
 
-- **Phase T**：Kaggle 官方 holdout train→val 复验 enet / blend（短烟）。
+- **Phase T**：Kaggle 确认因 vendor 未随 script kernel 上传 → `ModuleNotFoundError`（ERROR，无指标）。
+- **Phase T2**：同配方短重跑；`setup_vendor_path` 改为 git clone（sidecar 模式）。
 - **禁止**：Ranking 产品；22 层长训；TPU WIP；重启失败序列配方。
 
 ## 明确不做

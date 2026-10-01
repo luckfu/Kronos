@@ -25,7 +25,7 @@
   "not_ranking_ic": true,
   "not_22_layer": true,
   "not_tpu": true,
-  "status": "RUNNING_OR_QUEUED",
+  "status": "ERROR",
   "launched_at_cst": "2026-10-01 16:14:17 CST",
   "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-t",
   "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t-20261002",
@@ -38,5 +38,14 @@
   },
   "commit": "856ff51",
   "pushed_at_cst": "2026-10-01 16:14:49 CST",
-  "kernel_status_at_launch": "RUNNING"
+  "kernel_status_at_launch": "RUNNING",
+  "kernel_status_final": "KernelWorkerStatus.ERROR",
+  "error_type": "ModuleNotFoundError",
+  "error_message": "No module named 'modernbert_finance'",
+  "root_cause": "Kaggle script kernel does not ship staged vendor/ next to /kaggle/src/script.py; setup_vendor_path found nothing; failed before any fit/metrics.",
+  "scientific_metrics_produced": false,
+  "completed_at_cst": "2026-10-02 00:27:50 CST",
+  "results_json": "modernbert_finance/ablations/kairos_phase_t_tabular_decision_results.json",
+  "results_memo": "modernbert_finance/kairos_phase_t_tabular_decision_results_cn.md",
+  "next": "Phase T2"
 }

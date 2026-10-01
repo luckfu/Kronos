@@ -2,7 +2,7 @@
 
 日期：2026-10-02（北京时间）。  
 前置：Phase S 时序切分 **过闸**（blend Δ≈−0.0418；enet Δ≈−0.0404）。  
-Kernel：`user281434/kairos-mfe10-decision-tabular-phase-t` → **RUNNING**  
+Kernel：`user281434/kairos-mfe10-decision-tabular-phase-t` → **ERROR**（见 results memo）  
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-t  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-t-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-t-20261002  
@@ -38,3 +38,7 @@ Commit：`943b40c`
 
 - Kernel logs + `/kaggle/working/kairos_mfe10_tabular_decision/report.json`
 - Launch JSON：`modernbert_finance/ablations/kairos_phase_t_tabular_decision_launch.json`
+
+## 结果
+
+见 `kairos_phase_t_tabular_decision_results_cn.md`（infra ERROR → Phase T2）。

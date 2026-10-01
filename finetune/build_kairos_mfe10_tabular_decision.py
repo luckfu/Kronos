@@ -1,4 +1,9 @@
-"""Build Kairos Phase T tabular decision confirmation kernel (enet/blend)."""
+"""Build Kairos Phase T2 tabular decision confirmation kernel (enet/blend).
+
+Phase T ERROR root cause: Kaggle script kernels do not ship the staged vendor/
+tree next to /kaggle/src/script.py, so modernbert_finance was missing.
+Phase T2 train script clones luckfu/Kronos (sidecar pattern) as primary path.
+"""
 
 from __future__ import annotations
 
@@ -11,10 +16,47 @@ ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "finetune/kaggle_kairos_mfe10_tabular_decision"
 SOURCE = DEST / "train_tabular_decision.py"
 
-SLUG = "kairos-mfe10-decision-tabular-phase-t"
-TITLE = "Kairos MFE10 Decision Tabular Phase T"
+SLUG = "kairos-mfe10-decision-tabular-phase-t2"
+TITLE = "Kairos MFE10 Decision Tabular Phase T2"
 OWNER = "user281434"
-SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-t-20261002"
+SWANLAB_RUN_ID = "kairos-mfe10-decision-tabular-phase-t2-20261002"
+
+VENDOR_FILES = [
+    "modernbert_finance/build_dataset.py",
+    "modernbert_finance/build_targets.py",
+    "modernbert_finance/mfe10_sidecar.py",
+    "modernbert_finance/ablations/_panel_io.py",
+    "modernbert_finance/ablations/buy_profit_mfe_ablations.py",
+    "modernbert_finance/ablations/continuous_xsection_ablations.py",
+    "modernbert_finance/ablations/label_time_diagnostics.py",
+    "modernbert_finance/ablations/simple_baseline.py",
+]
+
+
+def _sync_vendor(destination: Path) -> None:
+    """Keep a local vendor mirror for offline/dev; Kaggle uses git clone.
+
+    Package __init__.py files are written empty so a partial vendor tree does
+    not pull alignment/label_shuffle (full package __init__ side effects).
+    """
+    vendor_root = destination / "vendor"
+    if vendor_root.exists():
+        shutil.rmtree(vendor_root)
+    for rel in VENDOR_FILES:
+        src = ROOT / rel
+        if not src.is_file():
+            if rel.endswith("mfe10_sidecar.py"):
+                continue
+            raise FileNotFoundError(rel)
+        dst = vendor_root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    for pkg_init in (
+        vendor_root / "modernbert_finance" / "__init__.py",
+        vendor_root / "modernbert_finance" / "ablations" / "__init__.py",
+    ):
+        pkg_init.parent.mkdir(parents=True, exist_ok=True)
+        pkg_init.write_text('"""Vendor stub package (submodules imported directly)."""\n')
 
 
 def build(destination: Path | None = None) -> Path:
@@ -22,6 +64,7 @@ def build(destination: Path | None = None) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     if not (destination / "train_tabular_decision.py").exists():
         raise FileNotFoundError("train_tabular_decision.py missing")
+    _sync_vendor(destination)
     source_bytes = (destination / "train_tabular_decision.py").read_bytes()
     metadata = {
         "id": f"{OWNER}/{SLUG}",
@@ -48,13 +91,15 @@ def build(destination: Path | None = None) -> Path:
         "title": TITLE,
         "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "target": "y=1{mfe10>=0.10}",
-        "kind": "tabular_enet_blend_official_holdout_confirm",
+        "kind": "tabular_enet_blend_official_holdout_confirm_t2",
         "phase_s_temporal_best_delta": -0.04179349770224905,
         "gate": -0.04,
         "not_tokenizer_sequence": True,
         "not_ranking_ic": True,
         "not_22_layer": True,
         "not_tpu": True,
+        "phase_t_error": "ModuleNotFoundError modernbert_finance (vendor not shipped with script kernel)",
+        "fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
         "swanlab_run_id": SWANLAB_RUN_ID,
         "swanlab_url": f"https://swanlab.cn/@roc_fu/finance/runs/{SWANLAB_RUN_ID}",
     }
