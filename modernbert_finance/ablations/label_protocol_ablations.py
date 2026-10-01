@@ -485,47 +485,54 @@ def run_phase_e(
         "delta_model_minus_prior", float("nan")
     )
 
-    # Lift thresholds vs Phase D (directional R²~0.11, FT logistic Δ~-0.009, macro~-0.03)
-    # Justify next step if a protocol clearly beats Phase D direction OR hits absolute bars.
+    # Stricter gates (avoid apples-to-oranges FT Δ comparisons).
+    # Absolute: directional R²≥0.15 OR primary directional logistic Δ≤-0.04.
+    # Relative: directional R² ≥ Phase D best_dir_r2 + 0.04.
+    # CS-quintile / magnitude-day heads are reported but do NOT alone trigger "enough".
     DIR_R2_BAR = 0.15
     LOGIT_DELTA_BAR = -0.04
-    LIFT_R2_VS_D = 0.04  # absolute R² points above Phase D directional
-    LIFT_DELTA_VS_D_FT = 0.015  # more negative than Phase D FT Δ by this much
+    LIFT_R2_VS_D = 0.04
 
-    def _lifts(r2: float, delta: float, *, is_directional_r2: bool = True) -> dict[str, Any]:
-        beats_abs_r2 = isinstance(r2, float) and r2 == r2 and r2 >= DIR_R2_BAR
-        beats_abs_delta = isinstance(delta, float) and delta == delta and delta <= LOGIT_DELTA_BAR
-        beats_d_r2 = (
-            is_directional_r2
-            and phase_d_dir_r2 is not None
-            and isinstance(r2, float)
-            and r2 == r2
-            and r2 >= float(phase_d_dir_r2) + LIFT_R2_VS_D
-        )
-        beats_d_ft = (
-            phase_d_ft_up_delta is not None
-            and isinstance(delta, float)
-            and delta == delta
-            and delta <= float(phase_d_ft_up_delta) - LIFT_DELTA_VS_D_FT
-        )
-        enough = bool(beats_abs_r2 or beats_abs_delta or beats_d_r2 or beats_d_ft)
-        return {
-            "beats_abs_r2_bar": beats_abs_r2,
-            "beats_abs_delta_bar": beats_abs_delta,
-            "beats_phase_d_r2_by_lift": beats_d_r2,
-            "beats_phase_d_ft_delta_by_lift": beats_d_ft,
-            "lifts_enough": enough,
-        }
-
-    a_lift = _lifts(a_best_r2, a_best_delta)
-    # For B, vol-scaled R² may still be magnitude; use net_vol / resid as more directional
+    # Primary directional metrics (comparable across protocols):
+    a_dir_r2 = protocol_a_reg["fwd_ret_10_comb"].get("ridge_r2", float("nan"))
+    a_dir_delta = protocol_a_clf["fwd_sign_up_comb"].get(
+        "delta_model_minus_prior", float("nan")
+    )
+    a_cs_best_delta = _best_delta(
+        protocol_a_clf, ["fwd_cs_top20_comb", "fwd_cs_bot20_comb"]
+    )
     b_dir_r2 = max(
         protocol_b_scaled["net_vol_scaled_comb"].get("ridge_r2", -999),
         protocol_b_resid["net_resid_vol_comb"].get("ridge_r2", -999),
         protocol_b_resid["mfe_resid_vol_comb"].get("ridge_r2", -999),
     )
-    b_lift = _lifts(float(b_dir_r2), b_best_delta)
-    c_lift = _lifts(float(c_dir_r2), float(c_decisive_delta))
+    b_dir_delta = protocol_b_clf["net_vs_pos_comb"].get(
+        "delta_model_minus_prior", float("nan")
+    )
+    c_dir_delta = float(c_decisive_delta)  # decisive direction is the clean target
+
+    def _lifts(r2: float, delta: float) -> dict[str, Any]:
+        beats_abs_r2 = isinstance(r2, float) and r2 == r2 and r2 >= DIR_R2_BAR
+        beats_abs_delta = (
+            isinstance(delta, float) and delta == delta and delta <= LOGIT_DELTA_BAR
+        )
+        beats_d_r2 = (
+            phase_d_dir_r2 is not None
+            and isinstance(r2, float)
+            and r2 == r2
+            and r2 >= float(phase_d_dir_r2) + LIFT_R2_VS_D
+        )
+        enough = bool(beats_abs_r2 or beats_abs_delta or beats_d_r2)
+        return {
+            "beats_abs_r2_bar": beats_abs_r2,
+            "beats_abs_delta_bar": beats_abs_delta,
+            "beats_phase_d_r2_by_lift": beats_d_r2,
+            "lifts_enough": enough,
+        }
+
+    a_lift = _lifts(float(a_dir_r2), float(a_dir_delta))
+    b_lift = _lifts(float(b_dir_r2), float(b_dir_delta))
+    c_lift = _lifts(float(c_dir_r2), float(c_dir_delta))
 
     winners = []
     if a_lift["lifts_enough"]:
@@ -535,31 +542,47 @@ def run_phase_e(
     if c_lift["lifts_enough"]:
         winners.append("C_cleaner_first_touch")
 
+    # Diagnostic notes (not win conditions)
+    notes = []
+    if isinstance(a_cs_best_delta, float) and a_cs_best_delta < -0.02:
+        notes.append(
+            f"A CS top/bot20 logistic Δ={a_cs_best_delta:.4f} is modest but "
+            "cross-section label+features; not treated as directional lift alone."
+        )
+    if float(b_dir_r2) + 1e-12 < float(phase_d_dir_r2 or 0) - 0.05:
+        notes.append(
+            "B vol-residualizing collapses Phase D mfe/mae R² — confirms much of "
+            "Phase D continuous signal was volatility/magnitude, not direction."
+        )
+    if abs(float(c_dir_delta)) < 0.005:
+        notes.append(
+            "C decisive first-touch direction Δ≈0 — cleaner FT removes the weak "
+            "all-sample edge; direction still not linearly available."
+        )
+
     if not winners:
         verdict = "none_lift_enough__do_not_justify_relabel_train_yet"
         recommend_next = (
-            "No alternative protocol beats Phase D directional bars enough. "
-            "Do not start a new Kaggle/label-rebuild train on these defs yet; "
-            "either stop Kairos cheap path or invent a qualitatively different label "
-            "(e.g. longer horizon, industry-neutral fwd return with cost model)."
+            "三种主方向协议均未过关：不要基于这些定义开标签重建长训；"
+            "要么结束 Kairos 廉价消融路径，要么换质变标签"
+            "（更长 horizon / 行业中性 fwd+成本），而非再拧 10D MFE/MAE。"
         )
         best_protocol = None
     else:
-        # Pick the strongest by |logistic delta| then R²
         scored = []
         for name, r2, delta in (
-            ("A_forward_return", a_best_r2, a_best_delta),
-            ("B_vol_residualized", float(b_dir_r2), b_best_delta),
-            ("C_cleaner_first_touch", float(c_dir_r2), float(c_decisive_delta)),
+            ("A_forward_return", float(a_dir_r2), float(a_dir_delta)),
+            ("B_vol_residualized", float(b_dir_r2), float(b_dir_delta)),
+            ("C_cleaner_first_touch", float(c_dir_r2), float(c_dir_delta)),
         ):
             if name in winners:
                 scored.append((name, delta, r2))
-        scored.sort(key=lambda t: (t[1], -t[2]))  # most negative delta first
+        scored.sort(key=lambda t: (t[1], -t[2]))
         best_protocol = scored[0][0]
         verdict = f"{best_protocol}__lifts_enough_for_next_step"
         recommend_next = (
-            f"Adopt {best_protocol} as the next label definition for a short "
-            "rebuild+linear confirm; still no full R2 8-head restart."
+            f"采用 {best_protocol} 作为下一标签定义，做短重建+线性确认；"
+            "仍不要全量 R2 八头重启。"
         )
 
     decision = {
@@ -567,44 +590,59 @@ def run_phase_e(
         "winners": winners,
         "verdict": verdict,
         "recommend_next": recommend_next,
+        "diagnostic_notes": notes,
         "thresholds": {
             "dir_r2_bar": DIR_R2_BAR,
             "logit_delta_bar": LOGIT_DELTA_BAR,
             "lift_r2_vs_phase_d": LIFT_R2_VS_D,
-            "lift_delta_vs_phase_d_ft": LIFT_DELTA_VS_D_FT,
+            "primary_directional_heads": {
+                "A": "fwd_ret_10 ridge + fwd_sign_up logistic",
+                "B": "net/mfe vol-resid ridge + net_vs_pos logistic",
+                "C": "ft_signed_8 ridge + decisive up-first logistic",
+            },
         },
         "phase_b_macro_delta": phase_b_macro,
         "phase_d_best_directional_r2": phase_d_dir_r2,
         "phase_d_macro_delta_xsection": phase_d_macro,
         "phase_d_ft_upside_first_comb_delta": phase_d_ft_up_delta,
         "protocol_A": {
-            "best_ridge_r2": a_best_r2,
-            "best_logit_delta": a_best_delta,
+            "primary_ridge_r2": float(a_dir_r2),
+            "primary_logit_delta": float(a_dir_delta),
+            "cs_quintile_best_delta": float(a_cs_best_delta)
+            if a_cs_best_delta == a_cs_best_delta
+            else None,
+            "any_ridge_r2": a_best_r2,
+            "any_logit_delta": a_best_delta,
             **a_lift,
         },
         "protocol_B": {
-            "best_directional_ridge_r2": float(b_dir_r2),
+            "primary_ridge_r2": float(b_dir_r2),
+            "primary_logit_delta": float(b_dir_delta),
             "best_any_ridge_r2": b_best_r2,
-            "best_logit_delta": b_best_delta,
+            "best_any_logit_delta": b_best_delta,
             **b_lift,
         },
         "protocol_C": {
-            "best_signed_ridge_r2": float(c_dir_r2),
+            "primary_ridge_r2": float(c_dir_r2),
+            "primary_logit_delta": float(c_dir_delta),
             "best_any_ridge_r2": c_best_r2,
-            "best_logit_delta": c_best_delta,
+            "best_any_logit_delta": c_best_delta,
             "decisive5_delta": float(c_decisive_delta)
             if c_decisive_delta == c_decisive_delta
             else None,
             "decisive8_delta": float(c_decisive8_delta)
             if c_decisive8_delta == c_decisive8_delta
             else None,
+            "ft_clean8_up_all_delta": protocol_c_clf["ft_clean8_up_all_comb"].get(
+                "delta_model_minus_prior"
+            ),
             **c_lift,
         },
         "rationale": (
-            "Phase E asks whether forward-return, vol-residualized MFE/MAE, or cleaner "
-            "first-touch labels raise linear effect size enough vs Phase B/D to justify "
-            "rebuilding training labels. Absolute bars: directional R²≥0.15 or logistic "
-            "Δ≤-0.04; relative: +0.04 R² vs Phase D directional or FT Δ improved by 0.015."
+            "Primary directional metrics only (fwd_ret_10 / fwd_sign; vol-resid net; "
+            "decisive FT). Absolute: R²≥0.15 or Δ≤-0.04; relative: +0.04 R² vs Phase D "
+            "directional. CS-quintile and FT-day magnitude heads are diagnostics, not "
+            "win conditions."
         ),
     }
 
@@ -702,9 +740,9 @@ def write_cn_memo(payload: dict[str, Any], out_md: Path) -> str:
         f"| Phase D 最好方向 Ridge R² | {dec['phase_d_best_directional_r2']} |",
         f"| Phase D FT upside_first comb Δ | {dec['phase_d_ft_upside_first_comb_delta']} |",
         "",
-        f"门槛：R²≥`{dec['thresholds']['dir_r2_bar']}` 或 logistic Δ≤`{dec['thresholds']['logit_delta_bar']}`；"
-        f"或相对 Phase D 方向 R²+`{dec['thresholds']['lift_r2_vs_phase_d']}` / FT Δ 再改善 "
-        f"`{dec['thresholds']['lift_delta_vs_phase_d_ft']}`。",
+        f"门槛（仅主方向头）：R²≥`{dec['thresholds']['dir_r2_bar']}` 或 logistic Δ≤"
+        f"`{dec['thresholds']['logit_delta_bar']}`；或相对 Phase D 方向 R²+"
+        f"`{dec['thresholds']['lift_r2_vs_phase_d']}`。CS 分位 / FT-day 不作过关条件。",
         "",
         "## 标签分布",
         "",
@@ -780,19 +818,28 @@ def write_cn_memo(payload: dict[str, Any], out_md: Path) -> str:
         "",
         "## 4) 与 Phase D 对比 + 决策",
         "",
-        "| 协议 | 方向 R² | 最好 Δ | lifts_enough |",
+        "| 协议 | 主方向 R² | 主方向 Δ | lifts_enough |",
         "| --- | ---: | ---: | :---: |",
-        f"| A 前向收益 | {pa_['best_ridge_r2']:.6f} | {pa_['best_logit_delta']:+.6f} | "
+        f"| A 前向收益 | {pa_['primary_ridge_r2']:.6f} | {pa_['primary_logit_delta']:+.6f} | "
         f"{'Y' if pa_['lifts_enough'] else 'N'} |",
-        f"| B 波动残差 | {pb_['best_directional_ridge_r2']:.6f} | {pb_['best_logit_delta']:+.6f} | "
+        f"| B 波动残差 | {pb_['primary_ridge_r2']:.6f} | {pb_['primary_logit_delta']:+.6f} | "
         f"{'Y' if pb_['lifts_enough'] else 'N'} |",
-        f"| C 干净 FT | {pc_['best_signed_ridge_r2']:.6f} | {pc_['best_logit_delta']:+.6f} | "
+        f"| C 干净 FT | {pc_['primary_ridge_r2']:.6f} | {pc_['primary_logit_delta']:+.6f} | "
         f"{'Y' if pc_['lifts_enough'] else 'N'} |",
         "",
         f"- best_protocol = `{dec['best_protocol']}`",
         f"- winners = `{dec['winners']}`",
         f"- verdict = `{dec['verdict']}`",
         f"- 判据：{dec['rationale']}",
+        "",
+        "### 诊断备注",
+        "",
+    ]
+    for note in dec.get("diagnostic_notes") or []:
+        lines.append(f"- {note}")
+    if not dec.get("diagnostic_notes"):
+        lines.append("- （无）")
+    lines += [
         "",
         "### 建议下一步（每条一句）",
         "",
