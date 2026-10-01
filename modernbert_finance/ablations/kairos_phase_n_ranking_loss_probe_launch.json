@@ -26,5 +26,13 @@
   "phase_m_gate_passed": true,
   "phase_l_best_arm": "ridge_mfe_cs_comb",
   "phase_l_best_rank_ic": 0.27620045257688736,
-  "status": "READY_TO_LAUNCH"
+  "status": "RUNNING",
+  "kernel_status": "RUNNING",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-n",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-n-20261001",
+  "commit": "e64aeb3",
+  "launched_at_cst": "2026-10-01 22:54:43 CST",
+  "not_local": true,
+  "local_cheaper": false,
+  "reason_kaggle": "no local GPU; Phase M wall ~3.5min on 2xT4 so short Kaggle is cheaper than setting up GPU locally"
 }

@@ -2,8 +2,11 @@
 
 日期：2026-10-01（北京时间）。  
 前置：Phase M identity+MSE 过闸 Rank IC≈**0.085** / TopK lift≈**0.057**。  
-Kernel：`user281434/kairos-ranking-probe-short-phase-n`  
-SwanLab：`roc_fu/finance` / `kairos-ranking-probe-short-phase-n-20261001`
+Kernel：`user281434/kairos-ranking-probe-short-phase-n` → **RUNNING**  
+URL：https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-n  
+SwanLab：`roc_fu/finance` / `kairos-ranking-probe-short-phase-n-20261001`  
+URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-n-20261001  
+Commit：`e64aeb3`
 
 ## 一句话
 
