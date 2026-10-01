@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 import numpy as np
-from finetune.global_parquet_sampler import GlobalParquetSampler, SAMPLER_VERSION
+from global_parquet_sampler import GlobalParquetSampler, SAMPLER_VERSION
 SEED = 20260927
 BATCH_SIZE = 16
 LR_PROBE = False
