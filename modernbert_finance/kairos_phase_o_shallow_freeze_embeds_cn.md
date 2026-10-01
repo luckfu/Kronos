@@ -2,7 +2,7 @@
 
 日期：2026-10-01（北京时间）。  
 前置：Phase N pairwise 过闸 Rank IC≈**0.082** ≈ Phase M MSE **0.085**；TopK≈**0.064**。  
-Kernel：`user281434/kairos-ranking-probe-short-phase-o` → **RUNNING**  
+Kernel：`user281434/kairos-ranking-probe-short-phase-o` → **COMPLETE**（查询时已结束；cancel N/A）  
 URL：https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-o  
 SwanLab：`roc_fu/finance` / `kairos-ranking-probe-short-phase-o-20261001`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-o-20261001  
@@ -30,3 +30,9 @@ Commit：`9077aa6`
 - Kernel logs + `kairos_ranking_probe/report.json`
 - SwanLab Rank IC 曲线
 - 本地 launch JSON：`modernbert_finance/ablations/kairos_phase_o_shallow_freeze_embeds_launch.json`
+
+
+## 产品枢轴（后记）
+
+排序-as-product **停止**。详见 `kairos_phase_o_ranking_stop_decision_pivot_cn.md` 与 `kairos_decision_only_handoff_cn.md`。  
+下一实验 = **Phase P 决策** `y=1{mfe10≥0.10}`（非 Rank IC）。
