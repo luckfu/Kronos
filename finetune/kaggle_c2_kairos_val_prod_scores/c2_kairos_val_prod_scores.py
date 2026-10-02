@@ -273,9 +273,17 @@ def worker(rank, plan):
         raise RuntimeError(f"worker {rank} has no GPU")
     device = torch.device("cuda:0")
 
-    tokenizer = KronosTokenizer.from_pretrained(plan["tokenizer_dir"])
-    model = Kronos.from_pretrained(plan["checkpoint_dir"])
-    model = model.to(device).eval()
+    tokenizer = (
+        KronosTokenizer.from_pretrained(Path(plan["tokenizer_dir"])).to(device).eval()
+    )
+    model = Kronos.from_pretrained(
+        Path(plan["checkpoint_dir"]),
+        num_sectors=86,
+        num_size_buckets=0,
+        context_layer=6,
+        use_size_percentile=True,
+        size_mlp_hidden_dim=64,
+    ).to(device).eval()
 
     with open(plan["panel_path"], "rb") as handle:
         panel = pickle.load(handle)
