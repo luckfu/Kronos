@@ -36,3 +36,10 @@ v2 ERROR: `ModuleNotFoundError: tpu_self_checks` in `train_predictor.py`（校�
 
 重建：`python3 finetune/build_kaggle_beta_v21_c1_dual_t4_kernel.py`
 推送：`kaggle kernels push -p finetune/kaggle_beta_v21_c1_dual_t4_kernel`
+
+## v5（2026-10-02）分母重校准
+
+- 评审：去段内日期排序正确，但同日 ranking 变稀；旧 dens 使 score 虚降。
+- 清空 `KRONOS_BETA_V21_VALIDATION_DENOMINATORS`；`AUTO_CALIBRATE=1`。
+- dens.json 写入 `feeding_mode=shuffled_no_segment_date_sort`；不匹配则 wipe 重校准。
+- 跨版本比 `weighted_forecast_loss`，不比 score；同日 batch 路径仍 TODO。

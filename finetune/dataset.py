@@ -646,6 +646,9 @@ class QlibDataset(Dataset):
         # or use_stage3_rank — full-segment chronological feed reintroduces
         # overlapping-window time bias. Same-day ranking batches need a
         # separate batching path, not whole-segment date sort.
+        # TODO(same-day-ranking-batch): build independent same-date pair batches
+        # (~dense ranking) without reintroducing whole-segment date sort; then
+        # bump beta_v21_score feeding_mode so dens auto-recalibrate.
         self.active_positions = self.coverage_order[start:end]
 
     def coverage_state(self, segment_index: int = 0) -> dict:

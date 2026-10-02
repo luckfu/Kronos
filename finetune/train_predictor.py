@@ -365,11 +365,13 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
     return guard
 
 
-def validate_resume_guard(saved, current):
+def validate_resume_guard(saved, current, ignore_keys=None):
     if not isinstance(saved, dict):
         raise ValueError(
             'Resume checkpoint has no complete resume_guard; refusing unsafe continuation'
         )
+    ignored = set(ignore_keys or ())
+    current = {key: value for key, value in current.items() if key not in ignored}
     missing = sorted(set(current) - set(saved))
     if missing:
         raise ValueError(
@@ -946,6 +948,32 @@ def beta_v21_validation_score(metrics, config):
         + 0.10 * metrics['ranking_loss'] / safe_ranking
     )
 
+
+
+DEFAULT_BETA_V21_SCORE_FEEDING_MODE = 'shuffled_no_segment_date_sort'
+
+
+def resolve_beta_v21_score_feeding_mode(config):
+    raw = str(config.get('beta_v21_score_feeding_mode', '') or '').strip()
+    return raw or DEFAULT_BETA_V21_SCORE_FEEDING_MODE
+
+
+def should_reuse_saved_beta_v21_denominators(saved, feeding_mode, force_recalibrate):
+    """Reuse dens.json only when feeding paradigm matches and force is off.
+
+    Chronological within-segment date-sort dens inflate ranking_loss; after
+    removing that sort, same-day pairs are sparse and old dens make
+    beta_v21_score look ~0.07–0.08 better than reality. When a same-day
+    ranking batch path lands later, bump feeding_mode so dens recalibrate.
+    """
+    if force_recalibrate:
+        return False
+    if not isinstance(saved, dict):
+        return False
+    csv = str(saved.get('csv') or '').strip()
+    if not csv:
+        return False
+    return str(saved.get('feeding_mode') or '').strip() == feeding_mode
 
 
 def prepare_model_for_validation(model, device, optimizer=None):
@@ -1954,21 +1982,49 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         save_dir, 'beta_v21_validation_denominators.json'
     )
     calibration_metrics = None
+    denominators_recalibrated_this_run = False
     if config.get('use_beta_v21_auxiliary', False):
-        if not config.get('beta_v21_validation_denominators') and os.path.exists(
-            denominator_path
-        ):
+        feeding_mode = resolve_beta_v21_score_feeding_mode(config)
+        force_recalibrate = bool(config.get('beta_v21_force_recalibrate', False))
+        if os.path.exists(denominator_path):
             with open(denominator_path) as handle:
                 saved_denominators = json.load(handle)
-            config['beta_v21_validation_denominators'] = saved_denominators['csv']
+            if should_reuse_saved_beta_v21_denominators(
+                saved_denominators, feeding_mode, force_recalibrate
+            ):
+                if not config.get('beta_v21_validation_denominators'):
+                    config['beta_v21_validation_denominators'] = saved_denominators['csv']
+            else:
+                old_mode = (
+                    None if not isinstance(saved_denominators, dict)
+                    else saved_denominators.get('feeding_mode')
+                )
+                if rank == 0:
+                    print(
+                        'Wiping Beta v2.1 validation denominators for recalibration '
+                        f'(saved_feeding_mode={old_mode!r}, '
+                        f'current_feeding_mode={feeding_mode!r}, '
+                        f'force={force_recalibrate}).',
+                        flush=True,
+                    )
+                    try:
+                        os.remove(denominator_path)
+                    except FileNotFoundError:
+                        pass
+                config['beta_v21_validation_denominators'] = ''
+                force_recalibrate = True
         if (
             not config.get('beta_v21_validation_denominators')
-            and config.get('beta_v21_auto_calibrate', False)
+            and (
+                config.get('beta_v21_auto_calibrate', False) or force_recalibrate
+            )
         ):
             if rank == 0:
                 print(
                     'Calibrating fixed Beta v2.1 validation denominators from '
-                    'the untrained auxiliary-head initialization.'
+                    'the untrained auxiliary-head initialization '
+                    f'(feeding_mode={feeding_mode}).',
+                    flush=True,
                 )
             prepare_model_for_validation(model, device, optimizer=None)
             calibration_config = dict(config)
@@ -1995,11 +2051,18 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f'{value:.17g}' for value in denominator_values
             )
             config['beta_v21_validation_denominators'] = denominator_csv
+            denominators_recalibrated_this_run = True
             if rank == 0:
                 with open(f'{denominator_path}.tmp', 'w') as handle:
                     json.dump({
                         'source': 'untrained_beta_v21_heads_on_parent_checkpoint',
                         'parent_path': config['pretrained_predictor_path'],
+                        'feeding_mode': feeding_mode,
+                        'note': (
+                            'Dens are tied to feeding_mode. Sparse same-day ranking '
+                            '(~0.37 pairs/batch after no segment date-sort) shrinks '
+                            'ranking dens; bump feeding_mode when same-day batch path lands.'
+                        ),
                         'path': denominator_values[0],
                         'history': denominator_values[1],
                         'return': denominator_values[2],
@@ -2324,7 +2387,22 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
     elif config.get('resume_training', False) and os.path.exists(resume_path):
         resume_state = torch.load(resume_path, map_location='cpu', weights_only=False)
-        validate_resume_guard(resume_state.get('resume_guard'), resume_guard)
+        ignore_guard_keys = (
+            ('beta_v21_validation_denominators',)
+            if denominators_recalibrated_this_run
+            else ()
+        )
+        validate_resume_guard(
+            resume_state.get('resume_guard'),
+            resume_guard,
+            ignore_keys=ignore_guard_keys,
+        )
+        if denominators_recalibrated_this_run and rank == 0:
+            print(
+                'Resume guard: ignored beta_v21_validation_denominators after '
+                'explicit feeding-mode recalibration this run.',
+                flush=True,
+            )
         saved_effective_epochs = int(resume_state.get('effective_epochs', effective_epochs))
         if saved_effective_epochs != effective_epochs:
             raise ValueError(

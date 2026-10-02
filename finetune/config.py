@@ -277,6 +277,16 @@ class Config:
         self.beta_v21_auto_calibrate = os.getenv(
             "KRONOS_BETA_V21_AUTO_CALIBRATE", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
+        self.beta_v21_force_recalibrate = os.getenv(
+            "KRONOS_BETA_V21_FORCE_RECALIBRATE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        # Score dens are feeding-paradigm specific. Chronological segment date-sort
+        # dens must not be reused after shuffled_no_segment_date_sort (sparse
+        # same-day ranking). Change this string when same-day batch path lands.
+        self.beta_v21_score_feeding_mode = os.getenv(
+            "KRONOS_BETA_V21_SCORE_FEEDING_MODE",
+            "shuffled_no_segment_date_sort",
+        ).strip() or "shuffled_no_segment_date_sort"
 
         self.collect_validation_auxiliary = os.getenv(
             "KRONOS_COLLECT_VALIDATION_AUXILIARY", "0"
