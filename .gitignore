@@ -100,3 +100,4 @@ tmp/
 /scratch/
 /webui/stock_name_cache.json
 /webui/stock_name_cache.json.lock
+finetune/kaggle_datasets/
