@@ -1,5 +1,5 @@
 {
-  "id": "smmt315/kronos-beta-v2-1-c1-tpu-smoke",
+  "id": "user281434/kronos-beta-v2-1-c1-tpu-smoke",
   "title": "Kronos Beta V2 1 C1 TPU Smoke",
   "code_file": "kaggle_beta_v21_c1_tpu.py",
   "language": "python",
@@ -7,11 +7,15 @@
   "is_private": true,
   "enable_gpu": false,
   "enable_tpu": true,
-  "machine_shape": "TpuV5E8",
   "enable_internet": true,
+  "keywords": [
+    "tpu"
+  ],
   "dataset_sources": [
     "luckfu/a-share-120d-temporal-symbol-holdout"
   ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [],
+  "docker_image": "gcr.io/kaggle-private-byod/python-tpuvm@sha256:a2111cb9be558ea4bc187754bb95d7b65e90d8259434f1eb0e0ab1193ff498c0",
+  "machine_shape": "TpuV5E8"
 }

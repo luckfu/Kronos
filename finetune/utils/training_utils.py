@@ -50,9 +50,25 @@ def setup_ddp():
         elif thread_per_device:
             rank = runtime_value("global_ordinal", "get_ordinal", 0)
             default_cores = int(os.getenv("KRONOS_TPU_CORES", "8"))
-            world_size = runtime_value("addressable_device_count", "xrt_world_size", default_cores)
-            if world_size <= 1 and default_cores > 1:
-                world_size = default_cores
+            addressable = runtime_value(
+                "addressable_device_count", "xrt_world_size", default_cores
+            )
+            # torch_xla's own world size gates xm.optimizer_step's gradient
+            # all-reduce.  It must equal the device count, otherwise every
+            # core silently trains an independent replica (old spawn_threads).
+            world_size = runtime_value("world_size", "xrt_world_size", 1)
+            if world_size != addressable or world_size != default_cores:
+                raise RuntimeError(
+                    "xla_world_size_check_failed: torch_xla.runtime.world_size()="
+                    f"{world_size}, addressable_device_count={addressable}, "
+                    f"KRONOS_TPU_CORES={default_cores}. The launcher must call "
+                    "xm.set_replication (see finetune/tpu_train_entry.py)."
+                )
+            if rank == 0:
+                print(
+                    "xla_world_size_check_passed "
+                    f"runtime.world_size={world_size} addressable={addressable}"
+                )
             local_rank = runtime_value("local_ordinal", "get_local_ordinal", rank)
         else:
             rank = int(os.environ["ORDINAL"]) if "ORDINAL" in os.environ else runtime_value(

@@ -291,21 +291,42 @@ class RotaryPositionalEmbedding(nn.Module):
         self.sin_cached = None
 
     def _update_cos_sin_cache(self, x, seq_len):
-        if seq_len != self.seq_len_cached:
+        # The cache is a plain attribute (not a buffer), so model.to(device)
+        # does not move it; rebuild when the device changes as well.
+        if (
+            seq_len != self.seq_len_cached
+            or self.cos_cached is None
+            or self.cos_cached.device != x.device
+        ):
             self.seq_len_cached = seq_len
-            t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
-            freqs = torch.einsum('i,j->ij', t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[None, None, :, :]
-            self.sin_cached = emb.sin()[None, None, :, :]
+            # Always float32 and outside autocast: under bf16 autocast the
+            # einsum lowers to a bf16 bmm and position*frequency angles lose up
+            # to ~0.4 rad by position ~120.  The outer product below is the
+            # same single fp32 multiply per element as the former einsum, so
+            # fp32 results are bit-identical.
+            with torch.autocast(device_type=x.device.type, enabled=False):
+                t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
+                inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
+                freqs = t[:, None] * inv_freq[None, :]
+                emb = torch.cat((freqs, freqs), dim=-1)
+                self.cos_cached = emb.cos()[None, None, :, :]
+                self.sin_cached = emb.sin()[None, None, :, :]
         return self.cos_cached, self.sin_cached
 
     def forward(self, q, k):
         cos, sin = self._update_cos_sin_cache(q, q.shape[-2])
-        return (
-            (q * cos) + (self._rotate_half(q) * sin),
-            (k * cos) + (self._rotate_half(k) * sin),
-        )
+        return self._apply_rotary(q, cos, sin), self._apply_rotary(k, cos, sin)
+
+    def _apply_rotary(self, x, cos, sin):
+        # cos/sin are float32.  Rotate in float32 (bf16 -> fp32 is exact) and
+        # round once back to the input dtype, so q/k keep the dtype of v under
+        # bf16/fp16 autocast.  Returning the fp32 product instead promotes q/k
+        # to float32 while v stays bf16, which scaled_dot_product_attention
+        # rejects ("Expected query, key, and value to have the same dtype").
+        # For float32 inputs .float()/.to() are no-ops: results are bit-identical.
+        x_float = x.float()
+        rotated = (x_float * cos) + (self._rotate_half(x_float) * sin)
+        return rotated.to(x.dtype)
 
     def _rotate_half(self, x):
         x1, x2 = x.chunk(2, dim=-1)

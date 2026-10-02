@@ -24,7 +24,10 @@ def test_tpu_entry_bootstraps_project_import_paths_before_worker_imports():
     assert source.index('os.environ.setdefault("PJRT_DEVICE"') < source.index(
         "import torch_xla"
     )
-    assert source.index('os.environ.setdefault("XLA_USE_BF16"') < source.index(
+    # fp32 master weights: the entry must never enable XLA_USE_BF16 storage and
+    # must reject it before torch_xla is imported.
+    assert 'os.environ.setdefault("XLA_USE_BF16"' not in source
+    assert source.index('"XLA_USE_BF16", "XLA_DOWNCAST_BF16"') < source.index(
         "import torch_xla"
     )
 
@@ -44,10 +47,27 @@ def test_tpu_entry_spawns_single_worker_and_runs_trainer_config():
         worker(0)
 
     fake_xmp.spawn = spawn
-    def spawn_threads(worker):
+
+    class SpawnFn:
+        def __init__(self, fn):
+            self.fn = fn
+
+        def __call__(self):
+            self.fn(0)
+
+    def run_thread_per_device(*, local_rank, local_world_size, fn, initializer_fn):
+        calls.append(("replicated_threads", local_rank, local_world_size,
+                      initializer_fn.__name__))
+        fn()
+
+    def spawn_threads(worker):  # must NOT be used: leaves world_size()==1
         calls.append(("spawn_threads",))
         worker(0)
+
+    fake_pjrt._SpawnFn = SpawnFn
+    fake_pjrt._run_thread_per_device = run_thread_per_device
     fake_pjrt.spawn_threads = spawn_threads
+    fake_internal.pjrt = fake_pjrt
     fake_config = types.ModuleType("config")
 
     class FakeConfig:
@@ -71,7 +91,7 @@ def test_tpu_entry_spawns_single_worker_and_runs_trainer_config():
         runpy.run_path(str(TPU_ENTRY), run_name="__main__")
         assert os.environ["KRONOS_DEVICE"] == "xla"
         assert os.environ["PJRT_DEVICE"] == "TPU"
-        assert os.environ["XLA_USE_BF16"] == "1"
+        assert "XLA_USE_BF16" not in os.environ
         assert os.environ["KRONOS_XLA_SINGLE_PROCESS"] == "1"
 
     assert calls == [
@@ -86,13 +106,18 @@ def test_tpu_entry_spawns_single_worker_and_runs_trainer_config():
         assert os.environ["KRONOS_XLA_THREAD_PER_DEVICE"] == "1"
 
     assert calls == [
-        ("spawn_threads",),
+        ("replicated_threads", 0, 1, "initialize_replicated_threads"),
         ("main", {"marker": "configured"}),
     ]
 
     calls.clear()
     fake_pjrt_no_threads = types.ModuleType("torch_xla._internal.pjrt")
-    modules_no_threads = dict(modules, **{"torch_xla._internal.pjrt": fake_pjrt_no_threads})
+    fake_internal_no_threads = types.ModuleType("torch_xla._internal")
+    fake_internal_no_threads.pjrt = fake_pjrt_no_threads
+    modules_no_threads = dict(modules, **{
+        "torch_xla._internal": fake_internal_no_threads,
+        "torch_xla._internal.pjrt": fake_pjrt_no_threads,
+    })
     with patch.dict(sys.modules, modules_no_threads), patch.dict(os.environ, {"KRONOS_TPU_CORES": "8"}, clear=False):
         runpy.run_path(str(TPU_ENTRY), run_name="__main__")
         assert os.environ["KRONOS_XLA_SINGLE_PROCESS"] == "0"
@@ -223,7 +248,7 @@ def test_c1_runner_environment_passes_config_validation(tmp_path):
     assert config.beta_v21_auto_calibrate
     assert config.best_selection_metric == "beta_v21_score"
     assert config.validation_full_only
-    assert config.validation_rank0_only
+    assert not config.validation_rank0_only
     assert config.n_train_iter == 20480
     assert config.n_val_iter == 0
     assert config.coverage_passes == 3
@@ -231,10 +256,13 @@ def test_c1_runner_environment_passes_config_validation(tmp_path):
     assert config.beta_v21_consistency_samples == 128
     assert config.batch_size == 64
     assert env["PJRT_DEVICE"] == "TPU"
-    assert env["XLA_USE_BF16"] == "1"
+    assert "XLA_USE_BF16" not in env
+    assert "XLA_DOWNCAST_BF16" not in env
+    assert env["KRONOS_AMP_DTYPE"] == "bfloat16"
+    assert env["KRONOS_TPU_LAUNCHER"] == "auto"
     assert env["KRONOS_XLA_SINGLE_PROCESS"] == "0"
     assert env["KRONOS_NUM_WORKERS"] == "0"
-    assert env["KRONOS_VALIDATION_RANK0_ONLY"] == "1"
+    assert env["KRONOS_VALIDATION_RANK0_ONLY"] == "0"
     assert env["KRONOS_MAX_RUNTIME_SECONDS"] == "27000"
     assert env["SWANLAB_RUN_ID"] == runner.SWANLAB_RUN_ID
 
@@ -394,7 +422,7 @@ def test_validation_progress_receives_rank_at_every_call_site():
         and isinstance(node.func, ast.Name)
         and node.func.id == "evaluate_validation"
     ]
-    assert len(calls) == 3
+    assert len(calls) == 4  # + eval-only base-model validation
     assert all(
         any(keyword.arg == "rank" for keyword in call.keywords)
         for call in calls
@@ -403,8 +431,10 @@ def test_validation_progress_receives_rank_at_every_call_site():
 
 def test_xla_validation_preserves_global_auxiliary_metric_inputs():
     source = TRAINER.read_text()
-    assert "collect_validation_auxiliary = use_beta_v21 and device.type != 'xla'" in source
-    assert "if collect_validation_auxiliary:\n                        validation_auxiliary.append" in source
+    # Sample-level aux collection is opt-in: full ~123k val + all_gather_object
+    # SIGKILL'd dual-T4 after calibration 1935/1935; scalar sums are enough.
+    assert "bool(config.get('collect_validation_auxiliary', False))" in source
+    assert "if collect_validation_auxiliary:\n                    validation_auxiliary.append" in source
     assert "if collect_validation_auxiliary and validation_auxiliary:" in source
     assert "Every XLA validation replica must receive samples" not in source
 
@@ -442,3 +472,96 @@ def test_beta_v21_validation_score_safe_against_zero_denominators():
     score = score_fn(metrics, config)
     assert score is not None
     assert score > 0.0
+
+
+def _load_validation_precision():
+    spec = importlib.util.spec_from_file_location(
+        "validation_precision", ROOT / "finetune/validation_precision.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_validation_fixed_point_reduction_is_exact_and_not_bf16_quantized():
+    vp = _load_validation_precision()
+    # Per-rank float64 sums of loss*n; values 1e-4 apart around 2.3 would
+    # collapse to the same bf16 value (step 0.0156) but must stay distinct.
+    rank_totals = [
+        [2.3125 * 12937, 2.3126 * 12937, 0.306641 * 12937],
+        [2.3127 * 12810, 2.3128 * 12810, 0.306700 * 12810],
+    ]
+    encoded = [vp.encode_fixed_point(totals) for totals in rank_totals]
+    whole = [sum(values) for values in zip(*(item[0] for item in encoded))]
+    fraction = [sum(values) for values in zip(*(item[1] for item in encoded))]
+    reduced = vp.decode_fixed_point(whole, fraction)
+    expected = [sum(values) for values in zip(*rank_totals)]
+    for got, want in zip(reduced, expected):
+        assert abs(got - want) < 1e-5
+    samples = 12937 + 12810
+    means = vp.weighted_means(("a", "b", "c"), reduced, samples)
+    # Sample-weighted global mean, not a mean of per-rank means.
+    assert abs(means["a"] - (2.3125 * 12937 + 2.3127 * 12810) / samples) < 1e-9
+    assert abs(means["b"] - means["a"] - 1e-4) < 1e-8
+    assert f"{means['a']:.8f}" != f"{means['b']:.8f}"
+    # int parts stay int32-safe even for 100k-sample sums.
+    assert max(fraction) < 2 ** 31 and max(whole) < 2 ** 31
+    negative_whole, negative_fraction = vp.encode_fixed_point([-0.25])
+    assert vp.decode_fixed_point(negative_whole, negative_fraction) == [-0.25]
+
+
+def test_validation_accumulator_is_sample_weighted_fp64():
+    torch = __import__("pytest").importorskip("torch")
+    vp = _load_validation_precision()
+    device = torch.device("cpu")
+    for host in (False, True):
+        accumulator = vp.ValidationLossAccumulator(("loss", "aux"), device, host)
+        accumulator.add({"loss": torch.tensor(2.3125), "aux": torch.tensor(0.5)}, 3)
+        accumulator.add({"loss": torch.tensor(2.3126)}, 1)
+        accumulator.add({"loss": torch.tensor(9.0)}, 0)
+        totals = accumulator.totals()
+        want = float(torch.tensor(2.3125)) * 3 + float(torch.tensor(2.3126))
+        assert abs(totals[0] - want) < 1e-9
+        assert abs(totals[1] - 1.5) < 1e-12
+        means = vp.weighted_means(accumulator.keys, totals, 4)
+        assert abs(means["loss"] - want / 4) < 1e-12
+    reduced, counts = vp.all_reduce_validation_sums([1.25, 2.5], [2, 7], device)
+    assert reduced == [1.25, 2.5] and counts == [2, 7]
+    fp16_logits = torch.randn(2, 3, dtype=torch.float16)
+    assert vp.to_float32([fp16_logits])[0].dtype == torch.float32
+    assert vp.to_float32({"id": torch.tensor([1])})["id"].dtype == torch.long
+
+
+def test_validation_uses_fp32_losses_fp64_sums_and_eight_decimal_logs():
+    source = TRAINER.read_text()
+    evaluate = source[source.index("def evaluate_validation("):source.index(
+        "def reset_cuda_peak_memory("
+    )]
+    assert "logits = to_float32(logits)" in evaluate
+    assert "ValidationLossAccumulator(sums, device)" in evaluate
+    assert "all_reduce_validation_sums(" in evaluate
+    assert ".item() * batch_samples" not in evaluate
+    assert "xm.all_reduce(xm.REDUCE_SUM, totals)" not in evaluate
+    assert 'print(f"Validation Loss: {avg_val_loss:.8f}")' in source
+    assert "{avg_val_forecast_loss:.8f} / " in source
+    assert "format_validation_value(primary_metrics.get('beta_v21_score'))" in source
+    builder = (ROOT / "finetune/build_kaggle_beta_v21_c1_tpu_kernel.py").read_text()
+    assert '"finetune/validation_precision.py"' in builder
+
+
+def test_c1_runner_swanlab_regexes_parse_eight_decimal_validation_lines():
+    runner = load_tpu_runner()
+    line = "Validation Forecast/History/Full: 2.31254321 / 2.53120001 / 2.51569999"
+    match = runner.VALIDATION_LOG_RE.search(line)
+    assert match and tuple(map(float, match.groups())) == (
+        2.31254321, 2.53120001, 2.51569999
+    )
+    score = runner.BETA_SCORE_LOG_RE.search(
+        "Best selection metric: beta_v21_score=1.00101523"
+    )
+    assert score and float(score.group(1)) == 1.00101523
+    assert runner.TRAIN_LOG_RE.search(
+        "[Rank 0, Segment 1/1563, Step 10/40] Adaptation LR 3.4e-06, "
+        "Condition LR 3.4e-06, Loss: 0.80470000, Forecast: 2.14060000, "
+        "History: 2.43750000"
+    )

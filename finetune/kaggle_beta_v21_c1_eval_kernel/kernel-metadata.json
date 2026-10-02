@@ -1,6 +1,6 @@
 {
-  "id": "user281434/kronos-beta-v2-1-c1-tpu",
-  "title": "Kronos Beta V2 1 C1 TPU",
+  "id": "user281434/kronos-beta-v2-1-c1-base-eval",
+  "title": "Kronos Beta V2 1 C1 Base Eval",
   "code_file": "kaggle_beta_v21_c1_tpu.py",
   "language": "python",
   "kernel_type": "script",

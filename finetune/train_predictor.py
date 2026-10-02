@@ -77,6 +77,16 @@ from utils.training_utils import (
     format_time
 )
 from drive_cleanup import cleanup_drive_conflict_files
+from validation_precision import (
+    ValidationLossAccumulator,
+    all_reduce_validation_sums,
+    to_float32,
+    weighted_means,
+)
+try:
+    import tpu_self_checks
+except ImportError:  # GPU/dual-T4 overlay may omit TPU-only helpers
+    tpu_self_checks = None
 
 
 STOP_REQUESTED = False
@@ -224,7 +234,9 @@ def save_resume_state(path, model, optimizer, scheduler, **metadata):
         )
         if is_master:
             os.replace(temporary, path)
-        distributed_barrier(model_device, 'kronos_resume_state_saved')
+        # No barrier here: every caller runs inside a ``rank == 0`` block, and
+        # with real PJRT replication a rank-0-only rendezvous would hang (or
+        # pair with the next all-rank barrier).  Callers synchronize after.
         cleanup_drive_conflict_files()
         return
     else:
@@ -271,6 +283,9 @@ def _save_xla_pretrained(model, path, config):
 
     state_path = f'{path}.xla_state.pt'
     xm.save(model.state_dict(), state_path)
+    if hasattr(xm, 'is_master_ordinal') and not xm.is_master_ordinal():
+        # xm.save wrote nothing on non-master replicas (weights are identical).
+        return
     try:
         state_dict = torch.load(state_path, map_location='cpu')
 
@@ -335,7 +350,7 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
         'validation_full_only',
         'use_beta_v21_auxiliary', 'beta_v21_auxiliary_warmup_steps',
         'beta_v21_ema_decay', 'beta_v21_validation_denominators',
-        'beta_v21_auto_calibrate',
+        'beta_v21_auto_calibrate', 'collect_validation_auxiliary',
         'beta_v21_consistency_samples', 'beta_v21_consistency_sample_count',
         'exclude_fixed_validation_from_training',
     )
@@ -877,8 +892,17 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
 
 
 def resolve_amp_dtype(config, device):
-    """Return the configured CUDA autocast dtype, or None when AMP is disabled."""
-    if not bool(config.get('use_amp', False)) or device.type != 'cuda':
+    """Return the predictor autocast dtype, or None when AMP is disabled.
+
+    CUDA: the configured dtype (fp16 + GradScaler, or bf16).  XLA/TPU: always
+    bfloat16 autocast over fp32 master weights (fp16 autocast is not a TPU
+    mixed-precision mode and needs no GradScaler).
+    """
+    if not bool(config.get('use_amp', False)):
+        return None
+    if device.type == 'xla':
+        return torch.bfloat16
+    if device.type != 'cuda':
         return None
     dtype_name = str(config.get('amp_dtype', 'float16')).strip().lower()
     if dtype_name in {'float16', 'fp16'}:
@@ -899,6 +923,11 @@ def move_auxiliary_labels(labels, device):
     }
 
 
+def format_validation_value(value):
+    """Format validation scalars with 8 decimals (None stays 'None')."""
+    return 'None' if value is None else f'{float(value):.8f}'
+
+
 def beta_v21_validation_score(metrics, config):
     raw = str(config.get('beta_v21_validation_denominators', '')).strip()
     if not raw:
@@ -916,6 +945,277 @@ def beta_v21_validation_score(metrics, config):
         + 0.20 * metrics['barrier_loss'] / safe_barrier
         + 0.10 * metrics['ranking_loss'] / safe_ranking
     )
+
+
+
+def prepare_model_for_validation(model, device, optimizer=None):
+    """Clear grads and release training scratch before validation.
+
+    After a training segment the optimizer (AdamW) fp32 state is live and the
+    previous step's graph may still be held. Combined with AR consistency decode
+    this was exhausting TPU/host memory (SIGKILL with no [VAL] progress). On
+    CUDA dual-T4 the same prep frees AMP/allocator fragmentation before the
+    full ~123k-sample validation pass.
+    """
+    if optimizer is not None:
+        try:
+            optimizer.zero_grad(set_to_none=True)
+        except TypeError:
+            optimizer.zero_grad()
+    else:
+        for parameter in model.parameters():
+            if parameter.grad is not None:
+                parameter.grad = None
+    if device.type == 'xla' and xm is not None:
+        xm.mark_step()
+    elif device.type == 'cuda' and torch.cuda.is_available():
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
+
+def _release_xla_validation_scratch(device):
+    """Best-effort host/device scratch release between scalar val and AR pass."""
+    import gc
+    if device.type == 'xla' and xm is not None:
+        gc.collect()
+        xm.mark_step()
+        return
+    if device.type == 'cuda' and torch.cuda.is_available():
+        gc.collect()
+        torch.cuda.empty_cache()
+
+
+def consistency_ar_batch_cap(config, device):
+    """Per-step AR microbatch size. Cap on XLA/CUDA; elsewhere no default cap."""
+    configured = int(config.get('beta_v21_consistency_ar_batch', 0) or 0)
+    if configured <= 0:
+        configured = int(
+            os.getenv('KRONOS_BETA_V21_CONSISTENCY_AR_BATCH', '0') or '0'
+        )
+    if configured > 0:
+        return configured
+    if device.type in {'xla', 'cuda'}:
+        # Dual-T4 AR decode of 2048 consistency samples without a microbatch
+        # can OOM the 15GB cards after a full teacher-forcing val.
+        return 8
+    return 0  # 0 => take the full remaining slice of each loader batch
+
+
+def run_return_path_consistency(
+    model, tokenizer, loader, device, config, amp_dtype, rank,
+    consistency_limit, distributed_world_size, rank0_only_validation,
+):
+    """Second-pass return-path consistency (AR decode), after scalar validation.
+
+    Teacher-forcing scalar metrics (including beta_v21_score) are already final
+    when this runs, so a later AR OOM cannot erase the score. On XLA the AR
+    microbatch is capped and ``auto_regressive_inference`` mark_steps each
+    decode step.
+    """
+    consistency_samples = int(config.get('beta_v21_consistency_samples', 0))
+    empty = (torch.empty(0, 4), torch.empty(0, 4), torch.empty(0, 4))
+    if consistency_samples <= 0 or consistency_limit <= 0:
+        return consistency_statistics(*empty)
+
+    core_model = model.module if isinstance(model, DDP) else model
+    ar_cap = consistency_ar_batch_cap(config, device)
+    if rank == 0:
+        print(
+            "[VAL] Consistency pass starting: "
+            f"target_samples={consistency_samples} "
+            f"(per_rank_limit={consistency_limit}, "
+            f"ar_batch_cap={ar_cap if ar_cap > 0 else 'full'})",
+            flush=True,
+        )
+
+    _release_xla_validation_scratch(device)
+
+    consistency_auxiliary = []
+    consistency_generated = []
+    consistency_actual = []
+    consistency_seen = 0
+    lookback = int(config['lookback_window'])
+    predict_window = int(config['predict_window'])
+    float_tokenizer = Float32Tokenizer(tokenizer)
+
+    with torch.no_grad():
+        for batch in loader:
+            if consistency_seen >= consistency_limit:
+                break
+            batch_x, batch_x_stamp = batch[0], batch[1]
+            auxiliary_labels = batch[-1]
+            batch_sector = (
+                batch[2]
+                if len(batch) > 2 and config.get('use_sector_features', True)
+                else None
+            )
+            batch_size_bucket = (
+                batch[3]
+                if len(batch) > 3 and config.get('use_size_features', True)
+                else None
+            )
+            batch_size_percentile = (
+                batch[4]
+                if len(batch) > 4 and config.get('use_size_percentile', False)
+                else None
+            )
+            if config.get('disable_condition_inputs', False):
+                batch_sector = batch_size_bucket = batch_size_percentile = None
+            batch_x = batch_x.to(device, non_blocking=True)
+            batch_x_stamp = batch_x_stamp.to(device, non_blocking=True)
+            if batch_sector is not None:
+                batch_sector = batch_sector.to(device, non_blocking=True)
+            if batch_size_bucket is not None:
+                batch_size_bucket = batch_size_bucket.to(device, non_blocking=True)
+            if batch_size_percentile is not None:
+                batch_size_percentile = batch_size_percentile.to(
+                    device, non_blocking=True
+                )
+            auxiliary_labels = move_auxiliary_labels(auxiliary_labels, device)
+            batch_samples = int(batch_x.shape[0])
+            offset = 0
+            while offset < batch_samples and consistency_seen < consistency_limit:
+                take = min(
+                    batch_samples - offset,
+                    consistency_limit - consistency_seen,
+                    ar_cap if ar_cap > 0 else batch_samples,
+                )
+                sl = slice(offset, offset + take)
+                token_seq_0, token_seq_1 = tokenizer.encode(batch_x[sl], half=True)
+                token_in = [token_seq_0[:, :-1], token_seq_1[:, :-1]]
+                token_out = [token_seq_0[:, 1:], token_seq_1[:, 1:]]
+                sector_sl = None if batch_sector is None else batch_sector[sl]
+                bucket_sl = (
+                    None if batch_size_bucket is None else batch_size_bucket[sl]
+                )
+                percentile_sl = (
+                    None if batch_size_percentile is None
+                    else batch_size_percentile[sl]
+                )
+                with torch.autocast(
+                    device_type=device.type,
+                    dtype=amp_dtype or torch.float16,
+                    enabled=amp_dtype is not None,
+                ):
+                    model_output = model(
+                        token_in[0], token_in[1], batch_x_stamp[sl, :-1, :],
+                        sector_id=sector_sl, size_bucket=bucket_sl,
+                        size_percentile=percentile_sl,
+                        use_teacher_forcing=True, s1_targets=token_out[0],
+                        return_auxiliary=True,
+                        asof_index=int(config['lookback_window']) - 1,
+                    )
+                    _logits, auxiliary_predictions = model_output
+                    generated = auto_regressive_inference(
+                        float_tokenizer,
+                        core_model,
+                        batch_x[sl, :lookback],
+                        batch_x_stamp[sl, :lookback],
+                        batch_x_stamp[
+                            sl, lookback:lookback + predict_window
+                        ],
+                        int(config.get('max_context', 512)),
+                        predict_window,
+                        clip=float(config.get('clip', 5.0)),
+                        T=1.0,
+                        top_k=0,
+                        top_p=1.0,
+                        sample_count=int(
+                            config.get('beta_v21_consistency_sample_count', 1)
+                        ),
+                        verbose=False,
+                        sample_logits=False,
+                        sector_id=sector_sl,
+                        size_bucket=bucket_sl,
+                        size_percentile=percentile_sl,
+                    )
+                auxiliary_predictions = to_float32(auxiliary_predictions)
+                generated_path = torch.as_tensor(
+                    generated[:, -predict_window:, :], device=device
+                )
+                generated_returns = generated_return_targets(
+                    generated_path,
+                    auxiliary_labels['feature_means'][sl],
+                    auxiliary_labels['feature_stds'][sl],
+                    auxiliary_labels['return_scales'][sl],
+                )
+                consistency_auxiliary.append(
+                    auxiliary_predictions['return'].detach().cpu()
+                )
+                consistency_generated.append(generated_returns.detach().cpu())
+                consistency_actual.append(
+                    auxiliary_labels['return_targets'][sl].detach().cpu()
+                )
+                consistency_seen += take
+                offset += take
+                if device.type == 'xla' and xm is not None:
+                    xm.mark_step()
+
+    if rank == 0:
+        print(
+            f"[VAL] Consistency pass finished: local_samples={consistency_seen}",
+            flush=True,
+        )
+
+    local_consistency = (
+        torch.cat(consistency_auxiliary),
+        torch.cat(consistency_generated),
+        torch.cat(consistency_actual),
+    ) if consistency_auxiliary else empty
+    gathered = [local_consistency]
+    if dist.is_available() and dist.is_initialized():
+        gathered = [None] * dist.get_world_size()
+        dist.all_gather_object(gathered, local_consistency)
+    if rank0_only_validation:
+        combined = list(local_consistency)
+    elif (
+        device.type == 'xla' and xm is not None
+        and distributed_world_size > 1
+    ):
+        combined = [
+            xm.all_gather(value.to(device), dim=0).cpu()[:consistency_samples]
+            for value in local_consistency
+        ]
+    else:
+        combined = [
+            torch.cat([item[index] for item in gathered], dim=0)[
+                :consistency_samples
+            ]
+            for index in range(3)
+        ]
+    return consistency_statistics(*combined)
+
+
+class Float32Tokenizer:
+    """Run a KronosTokenizer's encode/decode outside any active autocast.
+
+    The training loop tokenizes in float32 (outside the predictor autocast).
+    The Beta v2.1 return-path consistency check calls
+    ``auto_regressive_inference`` inside the predictor autocast, which would
+    otherwise encode the context and decode the generated path in bf16 and
+    yield different tokens from the float32 teacher-forced path.
+    """
+
+    def __init__(self, tokenizer):
+        self._tokenizer = tokenizer
+
+    @staticmethod
+    def _device_type(value):
+        if isinstance(value, (list, tuple)):
+            value = value[0]
+        return value.device.type
+
+    def encode(self, x, half=False):
+        with torch.autocast(device_type=self._device_type(x), enabled=False):
+            return self._tokenizer.encode(x, half=half)
+
+    def decode(self, x, half=False):
+        with torch.autocast(device_type=self._device_type(x), enabled=False):
+            return self._tokenizer.decode(x, half=half)
+
+    def __getattr__(self, name):
+        return getattr(self._tokenizer, name)
 
 
 def evaluate_validation(
@@ -971,20 +1271,23 @@ def evaluate_validation(
         loader = []
     if rank0_only_validation and rank == 0:
         consistency_limit = int(config.get('beta_v21_consistency_samples', 0))
-    consistency_auxiliary = []
-    consistency_generated = []
-    consistency_actual = []
-    # A full TPU validation can contain 100k+ samples.  Keeping auxiliary
-    # predictions and labels for every batch and then all-gathering them
-    # creates a second copy on every TPU replica and can exhaust the Kaggle
-    # host before the scalar metrics are reduced.  The scalar auxiliary losses
-    # are already accumulated below, so only non-XLA callers need the legacy
-    # sample-level collection for detailed post-hoc statistics.
-    collect_validation_auxiliary = use_beta_v21 and device.type != 'xla'
+    # A full validation can contain 100k+ samples (~123k on A-share holdout).
+    # Keeping auxiliary predictions/labels for every batch and then
+    # all_gather_object-ing them duplicates ~60k+ sample tensors on each DDP
+    # rank and has SIGKILL'd dual-T4 Kaggle hosts right after "[VAL] Processed
+    # 1935/1935 batches..." (calibration).  Scalar auxiliary losses are already
+    # accumulated below, so sample-level collection is opt-in only
+    # (KRONOS_COLLECT_VALIDATION_AUXILIARY=1 / collect_validation_auxiliary).
+    collect_validation_auxiliary = (
+        use_beta_v21
+        and bool(config.get('collect_validation_auxiliary', False))
+    )
     validation_auxiliary = []
     period_names = dict(period_names or {})
-    period_sums = {
-        int(code): {key: 0.0 for key in sums}
+    # fp32 losses -> float64 sample-weighted sums (see validation_precision).
+    loss_accumulator = ValidationLossAccumulator(sums, device)
+    period_accumulators = {
+        int(code): ValidationLossAccumulator(sums, device)
         for code in period_names
     }
     period_samples = {int(code): 0 for code in period_names}
@@ -1040,120 +1343,58 @@ def evaluate_validation(
                     return_auxiliary=use_beta_v21,
                     asof_index=int(config['lookback_window']) - 1,
                 )
-                if use_beta_v21:
-                    logits, auxiliary_predictions = model_output
-                else:
-                    logits = model_output
-                losses = compute_predictor_losses(
-                    core_model.head, logits, token_out, config
+            if use_beta_v21:
+                logits, auxiliary_predictions = model_output
+            else:
+                logits = model_output
+            # Validation losses are computed outside autocast from fp32
+            # logits/aux outputs so small checkpoint differences stay visible.
+            logits = to_float32(logits)
+            losses = compute_predictor_losses(
+                core_model.head, logits, token_out, config
+            )
+            if use_beta_v21:
+                auxiliary_predictions = to_float32(auxiliary_predictions)
+                auxiliary_losses = compute_auxiliary_losses(
+                    auxiliary_predictions['return'],
+                    auxiliary_predictions['barrier'],
+                    to_float32(auxiliary_labels),
                 )
-                if use_beta_v21:
-                    auxiliary_losses = compute_auxiliary_losses(
-                        auxiliary_predictions['return'],
-                        auxiliary_predictions['barrier'],
-                        auxiliary_labels,
-                    )
-                    if collect_validation_auxiliary:
-                        validation_auxiliary.append((
-                            auxiliary_predictions['return'].detach().float().cpu(),
-                            auxiliary_predictions['barrier'].detach().float().cpu(),
-                            {
-                                key: auxiliary_labels[key].detach().cpu()
-                                for key in (
-                                    'return_targets', 'return_scales',
-                                    'barrier_target', 'barrier_valid',
-                                    'utility', 'date_id',
-                                )
-                            },
-                        ))
+                if collect_validation_auxiliary:
+                    validation_auxiliary.append((
+                        auxiliary_predictions['return'].detach().float().cpu(),
+                        auxiliary_predictions['barrier'].detach().float().cpu(),
+                        {
+                            key: auxiliary_labels[key].detach().cpu()
+                            for key in (
+                                'return_targets', 'return_scales',
+                                'barrier_target', 'barrier_valid',
+                                'utility', 'date_id',
+                            )
+                        },
+                    ))
             batch_samples = int(batch_x.shape[0])
             samples += batch_samples
-            sums['objective_loss'] += losses['objective'].item() * batch_samples
-            sums['full_sequence_loss'] += losses['full_sequence'].item() * batch_samples
-            sums['history_loss'] += losses['history'].item() * batch_samples
-            sums['forecast_loss'] += losses['forecast'].item() * batch_samples
+            batch_values = {
+                'objective_loss': losses['objective'],
+                'full_sequence_loss': losses['full_sequence'],
+                'history_loss': losses['history'],
+                'forecast_loss': losses['forecast'],
+            }
             if use_beta_v21:
-                sums['weighted_forecast_loss'] += (
-                    losses['weighted_forecast'].item() * batch_samples
-                )
-                sums['return_loss'] += auxiliary_losses['return'].item() * batch_samples
-                sums['return_huber_loss'] += (
-                    auxiliary_losses['return_huber'].item() * batch_samples
-                )
-                sums['return_bias_loss'] += (
-                    auxiliary_losses['return_bias'].item() * batch_samples
-                )
-                sums['barrier_loss'] += auxiliary_losses['barrier'].item() * batch_samples
-                sums['ranking_loss'] += auxiliary_losses['ranking'].item() * batch_samples
+                batch_values.update({
+                    'weighted_forecast_loss': losses['weighted_forecast'],
+                    'return_loss': auxiliary_losses['return'],
+                    'return_huber_loss': auxiliary_losses['return_huber'],
+                    'return_bias_loss': auxiliary_losses['return_bias'],
+                    'barrier_loss': auxiliary_losses['barrier'],
+                    'ranking_loss': auxiliary_losses['ranking'],
+                })
             batches += 1
             if rank == 0 and (batches % 50 == 0 or batches == len(loader)):
                 print(
                     f"[VAL] Processed {batches}/{len(loader)} batches...",
                     flush=True,
-                )
-
-            consistency_seen = sum(
-                value.shape[0] for value in consistency_auxiliary
-            )
-            if use_beta_v21 and consistency_seen < consistency_limit:
-                consistency_count = min(
-                    batch_samples, consistency_limit - consistency_seen
-                )
-                lookback = int(config['lookback_window'])
-                predict_window = int(config['predict_window'])
-                with torch.autocast(
-                    device_type=device.type,
-                    dtype=amp_dtype or torch.float16,
-                    enabled=amp_dtype is not None,
-                ):
-                    generated = auto_regressive_inference(
-                        tokenizer,
-                        core_model,
-                        batch_x[:consistency_count, :lookback],
-                        batch_x_stamp[:consistency_count, :lookback],
-                        batch_x_stamp[
-                            :consistency_count,
-                            lookback:lookback + predict_window,
-                        ],
-                        int(config.get('max_context', 512)),
-                        predict_window,
-                        clip=float(config.get('clip', 5.0)),
-                        T=1.0,
-                        top_k=0,
-                        top_p=1.0,
-                        sample_count=int(
-                            config.get('beta_v21_consistency_sample_count', 1)
-                        ),
-                        verbose=False,
-                        sample_logits=False,
-                        sector_id=(
-                            batch_sector[:consistency_count]
-                            if batch_sector is not None else None
-                        ),
-                        size_bucket=(
-                            batch_size_bucket[:consistency_count]
-                            if batch_size_bucket is not None else None
-                        ),
-                        size_percentile=(
-                            batch_size_percentile[:consistency_count]
-                            if batch_size_percentile is not None else None
-                        ),
-                    )
-                generated_path = torch.as_tensor(
-                    generated[:, -predict_window:, :], device=device
-                )
-                generated_returns = generated_return_targets(
-                    generated_path,
-                    auxiliary_labels['feature_means'][:consistency_count],
-                    auxiliary_labels['feature_stds'][:consistency_count],
-                    auxiliary_labels['return_scales'][:consistency_count],
-                )
-                consistency_auxiliary.append(
-                    auxiliary_predictions['return'][:consistency_count].detach().cpu()
-                )
-                consistency_generated.append(generated_returns.detach().cpu())
-                consistency_actual.append(
-                    auxiliary_labels['return_targets'][:consistency_count].detach().cpu()
                 )
 
             if run_condition_ablation:
@@ -1183,9 +1424,6 @@ def evaluate_validation(
                         sector_id=None, size_bucket=None, size_percentile=None,
                         use_teacher_forcing=True, s1_targets=token_out[0],
                     )
-                    none_losses = compute_predictor_losses(
-                        core_model.head, none_logits, token_out, config
-                    )
                     shuffled_logits = model(
                         token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
                         sector_id=shuffled_sector,
@@ -1193,15 +1431,21 @@ def evaluate_validation(
                         size_percentile=shuffled_percentile,
                         use_teacher_forcing=True, s1_targets=token_out[0],
                     )
-                    shuffled_losses = compute_predictor_losses(
-                        core_model.head, shuffled_logits, token_out, config
-                    )
-                sums['condition_none_forecast_loss'] += (
-                    none_losses['forecast'].item() * batch_samples
+                none_logits = to_float32(none_logits)
+                shuffled_logits = to_float32(shuffled_logits)
+                none_losses = compute_predictor_losses(
+                    core_model.head, none_logits, token_out, config
                 )
-                sums['condition_shuffled_forecast_loss'] += (
-                    shuffled_losses['forecast'].item() * batch_samples
+                shuffled_losses = compute_predictor_losses(
+                    core_model.head, shuffled_logits, token_out, config
                 )
+                batch_values['condition_none_forecast_loss'] = none_losses['forecast']
+                batch_values['condition_shuffled_forecast_loss'] = (
+                    shuffled_losses['forecast']
+                )
+            # One fp32 vector per batch: device float64 sums on CUDA/CPU, a
+            # single host copy on XLA/MPS (was one .item() per loss term).
+            loss_accumulator.add(batch_values, batch_samples)
 
             if batch_period is not None:
                 batch_period = batch_period.to(device)
@@ -1216,11 +1460,12 @@ def evaluate_validation(
                         [value[mask] for value in token_out],
                         config,
                     )
-                    values = period_sums[int(code)]
-                    values['objective_loss'] += period_losses['objective'].item() * count
-                    values['full_sequence_loss'] += period_losses['full_sequence'].item() * count
-                    values['history_loss'] += period_losses['history'].item() * count
-                    values['forecast_loss'] += period_losses['forecast'].item() * count
+                    values = {
+                        'objective_loss': period_losses['objective'],
+                        'full_sequence_loss': period_losses['full_sequence'],
+                        'history_loss': period_losses['history'],
+                        'forecast_loss': period_losses['forecast'],
+                    }
                     if run_condition_ablation:
                         period_none = compute_predictor_losses(
                             core_model.head,
@@ -1234,30 +1479,23 @@ def evaluate_validation(
                             [value[mask] for value in token_out],
                             config,
                         )
-                        values['condition_none_forecast_loss'] += (
-                            period_none['forecast'].item() * count
+                        values['condition_none_forecast_loss'] = period_none['forecast']
+                        values['condition_shuffled_forecast_loss'] = (
+                            period_shuffled['forecast']
                         )
-                        values['condition_shuffled_forecast_loss'] += (
-                            period_shuffled['forecast'].item() * count
-                        )
+                    period_accumulators[int(code)].add(values, count)
                     period_samples[int(code)] += count
 
     ordered_keys = tuple(sums)
-    totals = torch.tensor([sums[key] for key in ordered_keys], device=device)
-    counts = torch.tensor([batches, samples], device=device, dtype=torch.long)
-    if dist.is_available() and dist.is_initialized():
-        dist.all_reduce(totals, op=dist.ReduceOp.SUM)
-        dist.all_reduce(counts, op=dist.ReduceOp.SUM)
-    elif device.type == 'xla' and xm is not None and distributed_world_size > 1:
-        totals = xm.all_reduce(xm.REDUCE_SUM, totals)
-        counts = xm.all_reduce(xm.REDUCE_SUM, counts)
-    divisor = max(1, int(counts[1].item()))
-    result = {
-        key: float(value)
-        for key, value in zip(ordered_keys, (totals / divisor).tolist())
-    }
-    result['batches'] = int(counts[0].item())
-    result['samples'] = int(counts[1].item())
+    # Reduce float64 sums (exact int64 fixed-point on XLA) across all replicas
+    # and divide on the host: global mean = sum(loss*n) / sum(n).
+    global_totals, global_counts = all_reduce_validation_sums(
+        loss_accumulator.totals(), [batches, samples], device,
+        xm=xm, xla_world_size=distributed_world_size,
+    )
+    result = weighted_means(ordered_keys, global_totals, global_counts[1])
+    result['batches'] = int(global_counts[0])
+    result['samples'] = int(global_counts[1])
     if use_beta_v21:
         local_validation = None
         if collect_validation_auxiliary and validation_auxiliary:
@@ -1310,39 +1548,20 @@ def evaluate_validation(
                     'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
                 })
         result['beta_v21_score'] = beta_v21_validation_score(result, config)
-        local_consistency = (
-            torch.cat(consistency_auxiliary),
-            torch.cat(consistency_generated),
-            torch.cat(consistency_actual),
-        ) if consistency_auxiliary else (
-            torch.empty(0, 4), torch.empty(0, 4), torch.empty(0, 4)
+        if rank == 0:
+            print(
+                "[VAL] Scalar validation complete: "
+                f"samples={result['samples']}, "
+                f"beta_v21_score={format_validation_value(result.get('beta_v21_score'))}",
+                flush=True,
+            )
+        # Decoupled second pass: AR consistency cannot kill beta_v21_score.
+        result['return_path_consistency'] = run_return_path_consistency(
+            model, tokenizer, loader, device, config, amp_dtype, rank,
+            consistency_limit=consistency_limit,
+            distributed_world_size=distributed_world_size,
+            rank0_only_validation=rank0_only_validation,
         )
-        gathered = [local_consistency]
-        if dist.is_available() and dist.is_initialized():
-            gathered = [None] * dist.get_world_size()
-            dist.all_gather_object(gathered, local_consistency)
-        consistency_samples = int(config.get('beta_v21_consistency_samples', 0))
-        if rank0_only_validation:
-            # Validation is intentionally rank-0-only on Kaggle TPU. The
-            # scalar losses have already been reduced above; consistency is a
-            # diagnostic and need not be all-gathered from empty workers.
-            combined = list(local_consistency)
-        elif (
-            device.type == 'xla' and xm is not None
-            and distributed_world_size > 1
-        ):
-            combined = [
-                xm.all_gather(value.to(device), dim=0).cpu()[:consistency_samples]
-                for value in local_consistency
-            ]
-        else:
-            combined = [
-                torch.cat([item[index] for item in gathered], dim=0)[
-                    :consistency_samples
-                ]
-                for index in range(3)
-            ]
-        result['return_path_consistency'] = consistency_statistics(*combined)
     if run_condition_ablation:
         result['condition_full_minus_none_forecast_loss'] = (
             result['forecast_loss'] - result['condition_none_forecast_loss']
@@ -1358,27 +1577,13 @@ def evaluate_validation(
             result.pop(key)
     result['periods'] = {}
     for code, name in sorted(period_names.items()):
-        values = period_sums[int(code)]
-        period_totals = torch.tensor(
-            [values[key] for key in ordered_keys], device=device
+        period_totals, period_counts = all_reduce_validation_sums(
+            period_accumulators[int(code)].totals(),
+            [period_samples[int(code)]], device,
+            xm=xm, xla_world_size=distributed_world_size,
         )
-        period_count = torch.tensor(
-            period_samples[int(code)], device=device, dtype=torch.long
-        )
-        if dist.is_available() and dist.is_initialized():
-            dist.all_reduce(period_totals, op=dist.ReduceOp.SUM)
-            dist.all_reduce(period_count, op=dist.ReduceOp.SUM)
-        elif device.type == 'xla' and xm is not None and distributed_world_size > 1:
-            period_totals = xm.all_reduce(xm.REDUCE_SUM, period_totals)
-            period_count = xm.all_reduce(xm.REDUCE_SUM, period_count)
-        period_divisor = max(1, int(period_count.item()))
-        metrics = {
-            key: float(value)
-            for key, value in zip(
-                ordered_keys, (period_totals / period_divisor).tolist()
-            )
-        }
-        metrics['samples'] = int(period_count.item())
+        metrics = weighted_means(ordered_keys, period_totals, period_counts[0])
+        metrics['samples'] = int(period_counts[0])
         if run_condition_ablation:
             metrics['condition_full_minus_none_forecast_loss'] = (
                 metrics['forecast_loss']
@@ -1426,6 +1631,282 @@ def write_oom_marker(config, exc):
         }, handle, indent=2)
 
 
+EVAL_ONLY_TRUE_VALUES = {'1', 'true', 'yes', 'on'}
+
+
+def eval_only_requested():
+    """KRONOS_EVAL_ONLY=1 validates the untouched parent once and exits.
+
+    Default off.  The check happens after Beta v2.1 denominator calibration
+    and before the optimizer/scheduler exist, so zero optimizer steps run.
+    """
+    return os.getenv('KRONOS_EVAL_ONLY', '0').strip().lower() in EVAL_ONLY_TRUE_VALUES
+
+
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, torch.Tensor):
+        return _json_safe(value.detach().cpu().tolist())
+    if isinstance(value, (np.floating, np.integer)):
+        return value.item()
+    return value
+
+
+def run_eval_only_validation(
+    model, tokenizer, device, config, save_dir, rank, loader, valid_dataset,
+    amp_dtype, calibration_metrics=None, start_time=None,
+):
+    """Run one full validation of the pretrained model; no training."""
+    started = time.time()
+    if rank == 0:
+        print(
+            "EVAL-ONLY: Running Base Model Validation on "
+            f"{len(valid_dataset):,} samples with zero optimizer steps."
+        )
+    metrics = evaluate_validation(
+        model, tokenizer, loader, device, config, amp_dtype,
+        run_condition_ablation=False,
+        period_names=getattr(valid_dataset, 'validation_period_names', {}),
+        rank=rank,
+    )
+    elapsed = time.time() - started
+    denominators_csv = str(
+        config.get('beta_v21_validation_denominators', '') or ''
+    ).strip()
+    denominator_source = (
+        'auto_calibrated_same_run_parent_checkpoint'
+        if calibration_metrics is not None
+        else ('fixed_env_or_saved' if denominators_csv else None)
+    )
+    use_beta_v21 = bool(config.get('use_beta_v21_auxiliary', False))
+    document = {
+        'mode': 'eval_only_base_model',
+        'optimizer_steps': 0,
+        'pretrained_predictor_path': config.get('pretrained_predictor_path'),
+        'validation_seconds': elapsed,
+        'total_seconds': None if start_time is None else time.time() - start_time,
+        'beta_v21_validation_denominators': denominators_csv or None,
+        'beta_v21_denominator_source': denominator_source,
+        'beta_v21_score_definition': (
+            '0.50*weighted_forecast/path + 0.20*return/return + '
+            '0.20*barrier/barrier + 0.10*ranking/ranking '
+            '(denominators = path,history,return,barrier,ranking)'
+        ),
+        'metrics': _json_safe(metrics),
+        'calibration_metrics': _json_safe(calibration_metrics),
+    }
+    if rank == 0:
+        print("\n--- Base Model Validation Summary (eval-only, 0 optimizer steps) ---")
+        print(f"Base Model Validation Loss: {metrics['objective_loss']:.8f}")
+        print(
+            "Base Model Validation Forecast/History/Full: "
+            f"{metrics['forecast_loss']:.8f} / "
+            f"{metrics['history_loss']:.8f} / "
+            f"{metrics['full_sequence_loss']:.8f}"
+        )
+        if use_beta_v21:
+            print(
+                "Base Model Validation v2.1 Score/Return/Bias/Barrier/Rank: "
+                f"{format_validation_value(metrics.get('beta_v21_score'))} / "
+                f"{metrics['return_loss']:.8f} / "
+                f"{metrics['return_bias_loss']:.8f} / "
+                f"{metrics['barrier_loss']:.8f} / "
+                f"{metrics['ranking_loss']:.8f}"
+            )
+            print(
+                "Base Model Validation Weighted Forecast (score path term): "
+                f"{metrics['weighted_forecast_loss']:.8f}"
+            )
+            print(
+                "Base Model beta_v21_score denominators "
+                f"(path,history,return,barrier,ranking; {denominator_source}): "
+                f"{denominators_csv}"
+            )
+            if 'return_path_consistency' in metrics:
+                print(
+                    "Base Model Validation Return-Path Consistency JSON: "
+                    + json.dumps(
+                        _json_safe(metrics['return_path_consistency']),
+                        sort_keys=True,
+                    )
+                )
+        for period, period_metrics in metrics.get('periods', {}).items():
+            print(
+                f"Base Model Validation {period} Objective/Forecast/History/Full: "
+                f"{period_metrics['objective_loss']:.8f} / "
+                f"{period_metrics['forecast_loss']:.8f} / "
+                f"{period_metrics['history_loss']:.8f} / "
+                f"{period_metrics['full_sequence_loss']:.8f} "
+                f"({period_metrics['samples']:,} samples)"
+            )
+        print(
+            f"Base Model Validation samples/batches: {metrics['samples']:,} / "
+            f"{metrics['batches']:,}; validation time {elapsed:.1f}s"
+        )
+        os.makedirs(save_dir, exist_ok=True)
+        path = os.path.join(save_dir, 'base_model_validation.json')
+        with open(f'{path}.tmp', 'w') as handle:
+            json.dump(document, handle, indent=2)
+        os.replace(f'{path}.tmp', path)
+        append_metric(
+            save_dir,
+            type='base_model_validation',
+            segment=0,
+            step=0,
+            loss=metrics['objective_loss'],
+            forecast_loss=metrics['forecast_loss'],
+            history_loss=metrics['history_loss'],
+            full_sequence_loss=metrics['full_sequence_loss'],
+            beta_v21_score=metrics.get('beta_v21_score'),
+            return_loss=metrics.get('return_loss'),
+            barrier_loss=metrics.get('barrier_loss'),
+            ranking_loss=metrics.get('ranking_loss'),
+            samples=metrics['samples'],
+            batches=metrics['batches'],
+        )
+        write_progress(
+            save_dir,
+            status='eval_only_completed',
+            current_segment=0,
+            optimizer_steps=0,
+            base_model_validation=path,
+            device=str(device),
+        )
+        print(f"EVAL-ONLY: wrote {path}; exiting without training.")
+    distributed_barrier(device, 'kronos_eval_only_done')
+    return document
+
+
+def master_weight_dtype(model):
+    """Storage dtype of the trainable weights (bf16 under XLA_USE_BF16)."""
+    dtypes = {str(p.dtype).removeprefix('torch.') for p in model.parameters()}
+    dtype = dtypes.pop() if len(dtypes) == 1 else 'mixed'
+    if tpu_self_checks is not None and tpu_self_checks.bf16_env_flags():
+        return 'bfloat16'
+    return dtype
+
+
+def refuse_low_precision_checkpoint(state, device, path):
+    """Never continue TPU training from a bf16-storage (pre-fix) checkpoint."""
+    if device.type != 'xla':
+        return
+    saved = state.get('master_weight_dtype')
+    if saved != 'float32' or not state.get('xla_gradient_all_reduce', False):
+        raise ValueError(
+            f'Refusing to resume TPU training from {path}: it was written by the '
+            'pre-fix TPU trainer (XLA_USE_BF16 storage and/or no gradient '
+            f'all-reduce; master_weight_dtype={saved!r}, '
+            f"xla_gradient_all_reduce={state.get('xla_gradient_all_reduce')!r}). "
+            'Start fresh from the fp32 parent in a new output directory.'
+        )
+
+
+def _xla_all_reduce_sum_tensor(value):
+    return xm.all_reduce(xm.REDUCE_SUM, value)
+
+
+def run_xla_startup_checks(model, device, rank, world_size):
+    """Fail fast before training: topology, real collectives, fp32 storage.
+
+    Every replica must call this (it issues collectives).
+    """
+    if tpu_self_checks is None:
+        raise ImportError(
+            "tpu_self_checks is required on XLA/TPU; include it in the kernel overlay"
+        )
+    tpu_self_checks.assert_no_bf16_storage_env()
+    messages = []
+    if world_size > 1:
+        runtime_world_size = (
+            xr.world_size() if xr is not None and hasattr(xr, 'world_size')
+            else get_xla_world_size()
+        )
+        messages.append(tpu_self_checks.check_world_size(
+            runtime_world_size, world_size, context=f'(rank {rank})'
+        ))
+        timeout = float(os.getenv('KRONOS_COLLECTIVE_CHECK_TIMEOUT_SECONDS', '900'))
+        with tpu_self_checks.Watchdog(timeout, 'xla_collective_check'):
+            def reduce_scalar(value):
+                tensor = torch.tensor([float(value)], dtype=torch.float32).to(device)
+                return float(_xla_all_reduce_sum_tensor(tensor).cpu().item())
+
+            def gather_scalar(value):
+                tensor = torch.tensor([float(value)], dtype=torch.float32).to(device)
+                rows = tpu_self_checks.gather_rows_via_all_reduce(
+                    tensor, rank, world_size, device, _xla_all_reduce_sum_tensor
+                )
+                return rows.cpu().reshape(-1).tolist()
+
+            messages.append(tpu_self_checks.check_collectives(
+                rank, world_size, reduce_scalar, gather_scalar
+            ))
+    parameters = [p for p in model.parameters()]
+    probe = tpu_self_checks.parameter_probe(parameters).cpu()
+    storage = tpu_self_checks.check_fp32_storage(
+        probe,
+        [p.dtype for p in parameters],
+        allow_bf16_parent=os.getenv('KRONOS_ALLOW_BF16_PARENT', '0').strip().lower()
+        in tpu_self_checks.TRUE_VALUES,
+    )
+    messages.append('fp32_master_weight_check_passed ' + json.dumps(storage, sort_keys=True))
+    if rank == 0:
+        for message in messages:
+            print(message, flush=True)
+    return storage
+
+
+def begin_first_step_sync_check(model, batch_x, device, rank, world_size):
+    """Capture pre-reduction state for the first optimizer step (all ranks)."""
+    parameters = [p for p in model.parameters() if p.requires_grad]
+    local_rows = int(batch_x.shape[0])
+    return {
+        'parameters': parameters,
+        'params_before': tpu_self_checks.parameter_probe(parameters).clone(),
+        'grads_before_rows': tpu_self_checks.gather_rows_via_all_reduce(
+            tpu_self_checks.gradient_probe(parameters), rank, world_size, device,
+            _xla_all_reduce_sum_tensor,
+        ),
+        'global_rows': _xla_all_reduce_sum_tensor(
+            torch.tensor([float(local_rows)], dtype=torch.float32).to(device)
+        ),
+        'local_rows': local_rows,
+    }
+
+
+def finish_first_step_sync_check(state, model, optimizer, device, rank, world_size):
+    """After step 1: identical weights/grads on every rank, fp32 updates applied."""
+    timeout = float(os.getenv('KRONOS_FIRST_STEP_CHECK_TIMEOUT_SECONDS', '1800'))
+    with tpu_self_checks.Watchdog(timeout, 'grad_sync_check'):
+        parameters = state['parameters']
+        params_after = tpu_self_checks.parameter_probe(parameters)
+        changed = (params_after != state['params_before']).float().mean()
+        params_rows = tpu_self_checks.gather_rows_via_all_reduce(
+            params_after, rank, world_size, device, _xla_all_reduce_sum_tensor
+        )
+        grads_after_rows = tpu_self_checks.gather_rows_via_all_reduce(
+            tpu_self_checks.gradient_probe(parameters), rank, world_size, device,
+            _xla_all_reduce_sum_tensor,
+        )
+        xm.mark_step()
+        result = tpu_self_checks.evaluate_first_step(
+            world_size=world_size,
+            gathered_params_after=params_rows.cpu().tolist(),
+            gathered_grads_before_reduce=state['grads_before_rows'].cpu().tolist(),
+            gathered_grads_after_reduce=grads_after_rows.cpu().tolist(),
+            changed_fraction=float(changed.cpu().item()),
+            global_batch_rows=int(round(float(state['global_rows'].cpu().item()))),
+            local_batch_rows=state['local_rows'],
+            optimizer_state_info=tpu_self_checks.check_optimizer_state_dtypes(optimizer),
+        )
+    result['param_dtype'] = master_weight_dtype(model)
+    if rank == 0:
+        print(tpu_self_checks.format_passed(result), flush=True)
+    return result
+
+
 def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_size):
     """
     The main training and validation loop for the predictor.
@@ -1442,9 +1923,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         effective_bs = config['batch_size'] * world_size
         print(f"Effective BATCHSIZE per GPU: {config['batch_size']}, Total: {effective_bs}")
         print(
-            f"Predictor AMP: {amp_dtype_name}; gradient scaling: "
+            f"Predictor AMP: {amp_dtype_name}"
+            f"{' autocast' if use_amp else ''}; gradient scaling: "
             f"{'enabled' if scale_gradients else 'disabled'}; "
-            "tokenizer encoding remains float32."
+            "master weights/optimizer state: float32; "
+            "tokenizer encoding and RoPE remain float32."
         )
         print(
             f"Predictor loss mode: {config.get('predictor_loss_mode', 'full_sequence')}; "
@@ -1470,6 +1953,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     denominator_path = os.path.join(
         save_dir, 'beta_v21_validation_denominators.json'
     )
+    calibration_metrics = None
     if config.get('use_beta_v21_auxiliary', False):
         if not config.get('beta_v21_validation_denominators') and os.path.exists(
             denominator_path
@@ -1486,6 +1970,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     'Calibrating fixed Beta v2.1 validation denominators from '
                     'the untrained auxiliary-head initialization.'
                 )
+            prepare_model_for_validation(model, device, optimizer=None)
             calibration_config = dict(config)
             calibration_config['beta_v21_consistency_samples'] = 0
             calibration_metrics = evaluate_validation(
@@ -1532,6 +2017,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             raise ValueError(
                 'Beta v2.1 requires fixed validation denominators or auto calibration'
             )
+
+    if eval_only_requested():
+        # Base-model measurement: the parent weights are untouched here (no
+        # optimizer, no resume/transition load has happened yet).
+        return run_eval_only_validation(
+            model, tokenizer, device, config, save_dir, rank,
+            large_val_loader, valid_dataset, amp_dtype,
+            calibration_metrics=calibration_metrics, start_time=start_time,
+        )
 
     segments_per_coverage = max(
         1, math.ceil(train_dataset.total_samples / train_dataset.n_samples)
@@ -1717,6 +2211,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             amp_scaler=scaler.state_dict() if scaler is not None else {},
             use_amp=use_amp,
             amp_dtype=amp_dtype_name,
+            master_weight_dtype=master_weight_dtype(core_model),
+            xla_gradient_all_reduce=bool(device.type == 'xla' and world_size > 1),
             effective_epochs=effective_epochs,
             segments_per_coverage=segments_per_coverage,
             coverage_passes=coverage_passes,
@@ -1787,6 +2283,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         validate_scheduler_transition_state(
             transition_state, config, amp_dtype_name
         )
+        refuse_low_precision_checkpoint(transition_state, device, transition_path)
         core_model.load_state_dict(transition_state['model'])
         restore_optimizer_for_scheduler_transition(
             optimizer, transition_state, target_optimizer_group_plan, device
@@ -1868,6 +2365,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             raise ValueError('Resume scheduler total steps do not match current plan')
         if int(resume_state.get('scheduler_warmup_steps', -1)) != warmup_steps:
             raise ValueError('Resume scheduler warmup steps do not match current plan')
+        refuse_low_precision_checkpoint(resume_state, device, resume_path)
         core_model.load_state_dict(resume_state['model'])
         if config.get('use_beta_v21_auxiliary', False):
             saved_ema = resume_state.get('beta_v21_loss_ema')
@@ -2042,6 +2540,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             device=str(device),
         )
 
+    first_step_check_done = False
     last_completed_segment = start_epoch
     for epoch_idx in range(start_epoch, effective_epochs):
         epoch_start_time = time.time()
@@ -2137,6 +2636,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 else:
                     logits = model_output
                 core_model.collect_condition_stats = False
+            # Losses in float32 outside autocast (bf16 autocast covers only the
+            # predictor forward); matches the fp32 validation loss path.
+            logits = to_float32(logits)
+            if use_beta_v21:
+                auxiliary_predictions = to_float32(auxiliary_predictions)
+            with torch.autocast(device_type=device.type, enabled=False):
                 losses = compute_predictor_losses(core_model.head, logits, token_out, config)
                 auxiliary_losses = None
                 normalized_losses = None
@@ -2201,17 +2706,36 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         f'{family}_{name}': value
                         for name, value in family_stats.items()
                     })
+            run_first_step_check = bool(
+                device.type == 'xla' and world_size > 1 and not first_step_check_done
+            )
+            if run_first_step_check:
+                first_step_state = begin_first_step_sync_check(
+                    core_model, batch_x, device, rank, world_size
+                )
+            if device.type == 'xla':
+                # Same as xm.optimizer_step (reduce_gradients + step + sync),
+                # but clipping sees the all-reduced (global-mean) gradient,
+                # like DDP on GPU.  reduce_gradients is a real all-reduce only
+                # when runtime.world_size() == 8 (checked at startup).
+                xm.reduce_gradients(optimizer)
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), max_norm=float(config.get('gradient_clip_norm', 3.0))
             )
             if device.type == 'xla':
-                xm.optimizer_step(optimizer, barrier=True)
+                optimizer.step()
+                xm.mark_step()
             elif scaler is not None:
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 optimizer.step()
             scheduler.step()
+            if run_first_step_check:
+                finish_first_step_sync_check(
+                    first_step_state, core_model, optimizer, device, rank, world_size
+                )
+                first_step_check_done = True
             epoch_loss_sum += float(loss.item())
             epoch_full_loss_sum += float(losses['full_sequence'].item())
             epoch_history_loss_sum += float(losses['history'].item())
@@ -2228,7 +2752,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     f"Adaptation LR {adaptation_lr:.10e}, "
                     f"Condition LR {condition_lr:.10e}, Loss: {loss.item():.4f}, "
                     f"Forecast: {losses['forecast'].item():.4f}, "
-                    f"History: {losses['history'].item():.4f}"
+                    f"History: {losses['history'].item():.4f}, "
+                    f"GlobalBatch: {int(batch_x.shape[0]) * world_size} "
+                    f"({int(batch_x.shape[0])} x {world_size} replicas)"
                 )
                 if monitoring_stats:
                     print(
@@ -2403,6 +2929,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         large_metrics = None
         quick_metrics = None
         if not validation_full_only:
+            prepare_model_for_validation(model, device, optimizer)
             quick_metrics = evaluate_validation(
                 model, tokenizer, val_loader, device, config, amp_dtype,
                 run_condition_ablation=run_condition_ablation,
@@ -2415,6 +2942,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     f"Running fixed large validation at Segment {epoch_idx + 1}: "
                     f"{len(valid_dataset):,} samples."
                 )
+            prepare_model_for_validation(model, device, optimizer)
             large_metrics = evaluate_validation(
                 model, tokenizer, large_val_loader, device, config, amp_dtype,
                 run_condition_ablation=False,
@@ -2457,19 +2985,19 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         # --- End of Epoch Summary & Checkpointing (Master Process Only) ---
         if rank == 0:
             print(f"\n--- Coverage Segment {epoch_idx + 1}/{effective_epochs} Summary ---")
-            print(f"Validation Loss: {avg_val_loss:.4f}")
+            print(f"Validation Loss: {avg_val_loss:.8f}")
             print(
-                f"Validation Forecast/History/Full: {avg_val_forecast_loss:.4f} / "
-                f"{avg_val_history_loss:.4f} / {avg_val_full_loss:.4f}"
+                f"Validation Forecast/History/Full: {avg_val_forecast_loss:.8f} / "
+                f"{avg_val_history_loss:.8f} / {avg_val_full_loss:.8f}"
             )
             if config.get('use_beta_v21_auxiliary', False):
                 print(
                     "Validation v2.1 Score/Return/Bias/Barrier/Rank: "
-                    f"{primary_metrics.get('beta_v21_score')} / "
-                    f"{primary_metrics['return_loss']:.6f} / "
-                    f"{primary_metrics['return_bias_loss']:.6f} / "
-                    f"{primary_metrics['barrier_loss']:.6f} / "
-                    f"{primary_metrics['ranking_loss']:.6f}"
+                    f"{format_validation_value(primary_metrics.get('beta_v21_score'))} / "
+                    f"{primary_metrics['return_loss']:.8f} / "
+                    f"{primary_metrics['return_bias_loss']:.8f} / "
+                    f"{primary_metrics['barrier_loss']:.8f} / "
+                    f"{primary_metrics['ranking_loss']:.8f}"
                 )
                 print(
                     "Validation Return-Path Consistency JSON: "
@@ -2480,50 +3008,50 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             for period, metrics in primary_metrics.get('periods', {}).items():
                 print(
                     f"Validation {period} Objective/Forecast/History/Full: "
-                    f"{metrics['objective_loss']:.6f} / "
-                    f"{metrics['forecast_loss']:.6f} / "
-                    f"{metrics['history_loss']:.6f} / "
-                    f"{metrics['full_sequence_loss']:.6f} "
+                    f"{metrics['objective_loss']:.8f} / "
+                    f"{metrics['forecast_loss']:.8f} / "
+                    f"{metrics['history_loss']:.8f} / "
+                    f"{metrics['full_sequence_loss']:.8f} "
                     f"({metrics['samples']:,} samples)"
                 )
             print(
                 "Validation Train Average/Best: "
-                f"{epoch_loss_sum / max(epoch_batches, 1):.6f} / "
-                f"{best_val_loss:.6f}"
+                f"{epoch_loss_sum / max(epoch_batches, 1):.8f} / "
+                f"{best_val_loss:.8f}"
             )
             if selection_val_loss is None:
                 print(f"Best selection metric: {selection_metric}=not evaluated")
             else:
                 print(
                     f"Best selection metric: {selection_metric}="
-                    f"{selection_val_loss:.6f}"
+                    f"{selection_val_loss:.8f}"
                 )
             if large_metrics is not None:
                 print(
                     "Large Validation Objective/Forecast/History/Full: "
-                    f"{large_metrics['objective_loss']:.6f} / "
-                    f"{large_metrics['forecast_loss']:.6f} / "
-                    f"{large_metrics['history_loss']:.6f} / "
-                    f"{large_metrics['full_sequence_loss']:.6f}"
+                    f"{large_metrics['objective_loss']:.8f} / "
+                    f"{large_metrics['forecast_loss']:.8f} / "
+                    f"{large_metrics['history_loss']:.8f} / "
+                    f"{large_metrics['full_sequence_loss']:.8f}"
                 )
                 for period, metrics in large_metrics.get('periods', {}).items():
                     print(
                         f"Large Validation {period} Objective/Forecast/History/Full: "
-                        f"{metrics['objective_loss']:.6f} / "
-                        f"{metrics['forecast_loss']:.6f} / "
-                        f"{metrics['history_loss']:.6f} / "
-                        f"{metrics['full_sequence_loss']:.6f} "
+                        f"{metrics['objective_loss']:.8f} / "
+                        f"{metrics['forecast_loss']:.8f} / "
+                        f"{metrics['history_loss']:.8f} / "
+                        f"{metrics['full_sequence_loss']:.8f} "
                         f"({metrics['samples']:,} samples)"
                     )
             if ablation_metrics:
                 print(
                     "Validation Condition Full/None/Shuffled Forecast: "
-                    f"{avg_val_forecast_loss:.6f} / "
-                    f"{ablation_metrics['condition_none_forecast_loss']:.6f} / "
-                    f"{ablation_metrics['condition_shuffled_forecast_loss']:.6f}; "
+                    f"{avg_val_forecast_loss:.8f} / "
+                    f"{ablation_metrics['condition_none_forecast_loss']:.8f} / "
+                    f"{ablation_metrics['condition_shuffled_forecast_loss']:.8f}; "
                     "Delta Full-None/Full-Shuffled: "
-                    f"{ablation_metrics['condition_full_minus_none_forecast_loss']:.6f} / "
-                    f"{ablation_metrics['condition_full_minus_shuffled_forecast_loss']:.6f}"
+                    f"{ablation_metrics['condition_full_minus_none_forecast_loss']:.8f} / "
+                    f"{ablation_metrics['condition_full_minus_shuffled_forecast_loss']:.8f}"
                 )
             memory_metrics = cuda_peak_memory(device)
             if memory_metrics:
@@ -2564,7 +3092,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 os.replace(best_metric_temporary, best_metric_path)
                 print(
                     f"Best model saved to {save_path} "
-                    f"({selection_metric}: {best_val_loss:.4f})"
+                    f"({selection_metric}: {best_val_loss:.8f})"
                 )
             # Best is committed before State. If Kaggle interrupts between the
             # two, best_metric.json lets the next run reconcile that transaction.
@@ -2844,6 +3372,8 @@ def main(config: dict):
     reset_conditioning(model, config)
     configure_trainable_parameters(model, config)
     model.to(device)
+    if device.type == 'xla':
+        run_xla_startup_checks(model, device, rank, world_size)
     if dist.is_available() and dist.is_initialized():
         model = DDP(model, device_ids=[local_rank], find_unused_parameters=False)
 
