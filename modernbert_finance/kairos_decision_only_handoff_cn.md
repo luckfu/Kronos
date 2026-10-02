@@ -49,3 +49,12 @@
 ## 若重启
 
 需用户显式点名**新证据轴**（特征族/模型族/协议显著不同于已死路径），默认建议停。
+
+## Phase Z2（最后一轴）— HARD-STOP FAIL
+
+- Kernel COMPLETE: https://www.kaggle.com/code/user281434/kronos-c2-seg179-kairos-val-prod-scores
+- C2 Seg@179 prod scores on Kairos val 2025-07-03..2026-07-02 (n=123836, 100% mfe10 join)
+- val_temporal best Δ≈−0.01986 (gate −0.04) → FAIL
+- train→val BLOCKED (no train scores; not worth weeks of GPU given val upper bound)
+- **永久停止** binary `mfe10≥10%` 决策产品路径
+- 结果：`kairos_phase_z2_kronos_val_score_decision_results_cn.md`
