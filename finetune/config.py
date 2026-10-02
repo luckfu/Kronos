@@ -98,10 +98,10 @@ class Config:
         self.validation_full_only = os.getenv(
             "KRONOS_VALIDATION_FULL_ONLY", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
-        # On a single Kaggle TPU host, running the 100k+ sample validation
-        # concurrently on all eight PJRT workers multiplies host-side pandas
-        # and XLA staging buffers. Rank 0 can evaluate the fixed set while
-        # the other workers synchronize on the reduced scalar metrics.
+        # Optional escape hatch: when true on multi-worker XLA, only rank 0
+        # iterates the fixed validation set (others keep empty loaders and
+        # still join scalar reductions). Default is sharded validation across
+        # all workers; set KRONOS_VALIDATION_RANK0_ONLY=1 if host RAM OOMs.
         self.validation_rank0_only = os.getenv(
             "KRONOS_VALIDATION_RANK0_ONLY", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -276,6 +276,10 @@ class Config:
         ).strip()
         self.beta_v21_auto_calibrate = os.getenv(
             "KRONOS_BETA_V21_AUTO_CALIBRATE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+
+        self.collect_validation_auxiliary = os.getenv(
+            "KRONOS_COLLECT_VALIDATION_AUXILIARY", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
         if self.beta_v21_validation_denominators:
             denominator_values = tuple(

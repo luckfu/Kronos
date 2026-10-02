@@ -24,6 +24,8 @@ FILES = (
     "finetune/asset_metadata.py",
     "finetune/export_last_model.py",
     "finetune/tpu_train_entry.py",
+    "finetune/tpu_self_checks.py",
+    "finetune/validation_precision.py",
     "finetune/drive_cleanup.py",
     "finetune/utils/__init__.py",
     "finetune/utils/training_utils.py",

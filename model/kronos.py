@@ -589,6 +589,24 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
     return x
 
 
+
+def _xla_mark_step(device):
+    """Flush the XLA live graph after each AR decode step on TPU.
+
+    ``auto_regressive_inference`` unrolls ``pred_len`` decode steps. Without a
+    mark_step boundary, torch_xla can retain one giant graph spanning the whole
+    unroll (teacher-forcing + AR in the same validation batch made this worse
+    after fp32 master weights / AdamW state were already allocated).
+    """
+    if getattr(device, 'type', None) != 'xla':
+        return
+    try:
+        import torch_xla.core.xla_model as xm
+    except ImportError:
+        return
+    xm.mark_step()
+
+
 def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False, sample_logits=True):
     with torch.no_grad():
         x = torch.clip(x, -clip, clip)
@@ -682,6 +700,8 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
                 post_buffer.copy_(torch.roll(post_buffer, shifts=-1, dims=1))
                 pre_buffer[:, -1] = sample_pre.squeeze(-1)
                 post_buffer[:, -1] = sample_post.squeeze(-1)
+
+            _xla_mark_step(device)
 
         full_pre = torch.cat([x_token[0], generated_pre], dim=1)
         full_post = torch.cat([x_token[1], generated_post], dim=1)
