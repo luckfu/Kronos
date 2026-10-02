@@ -33,3 +33,28 @@ def test_mfe_vs_close_to_close_semantics() -> None:
     fwd_ret_10 = 0.02
     assert (mfe10 >= PROFIT_THRESHOLD) == 1
     assert (fwd_ret_10 >= PROFIT_THRESHOLD) == 0
+
+
+def test_mfe10_daily_cs_percentile_top_quintile() -> None:
+    from modernbert_finance.ablations.buy_profit_mfe_ablations import (
+        CS_TOP_PERCENTILE,
+        mfe10_daily_cs_percentile,
+    )
+
+    # Two days, 5 names each → rank pct in {0.2,0.4,0.6,0.8,1.0}; top quintile = pct>=0.80
+    mfe = np.array([0.01, 0.05, 0.10, 0.20, 0.30, 0.02, 0.04, 0.06, 0.08, 0.50])
+    asof = ["2024-01-02"] * 5 + ["2024-01-03"] * 5
+    pct = mfe10_daily_cs_percentile(mfe, asof)
+    y = (pct >= CS_TOP_PERCENTILE).astype(np.int64)
+    assert CS_TOP_PERCENTILE == 0.80
+    np.testing.assert_allclose(pct[:5], [0.2, 0.4, 0.6, 0.8, 1.0])
+    np.testing.assert_array_equal(y[:5], [0, 0, 0, 1, 1])
+    assert int(y.sum()) == 4  # two days × top two ranks (>=0.80)
+
+
+def test_soft_absolute_threshold_constant() -> None:
+    from modernbert_finance.ablations.buy_profit_mfe_ablations import (
+        SOFT_ABSOLUTE_THRESHOLD,
+    )
+
+    assert SOFT_ABSOLUTE_THRESHOLD == 0.08

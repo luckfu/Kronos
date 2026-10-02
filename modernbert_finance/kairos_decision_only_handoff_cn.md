@@ -1,50 +1,49 @@
 # Kairos 决策系统交接（Decision-Only Charter）
 
-日期：2026-10-02（北京时间，交接更新 2026-10-02 10:38:47 CST）。  
-状态：**产品路径 = 决策标签 only**；时序切分曾过闸（S/T2/U/V/W secondary）；**主协议 train→val 在 U/V/W FAIL**；**Phase X Qlib/Alpha158+LGB 主/次协议均 FAIL** → **HARD-CONCLUDE（表格轴 + Qlib/Alpha158 轴）**；排序探针已停作产品。
+日期：2026-10-02（北京时间，交接更新 2026-10-02 11:04:47 CST）。  
+状态：**产品路径 = 决策标签 only**；时序切分曾过闸（S/T2/U/V/W/Y secondary）；**主协议 train→val 在 U/V/W/X/Y/Y-alt 均 FAIL**；排序探针已停作产品。
 
 ## 一句话
 
-一切实验围绕 **`y = 1{mfe10 ≥ 0.10}`**，闸门 = `Δ logloss vs 常数先验 ≤ −0.04`。  
-**当前赢家（仅时序协议）**：时序切分上 `Logistic⊕浅MLP` 融合 / elastic-net（Base+xsection）；**序列 ModernBERT 短烟（I/J/K/P）已证伪**；**train→val 主协议未过闸（U/V/W）**。  
-**Kaggle 确认**：Phase T2/U/V/W secondary blend Δ≈**−0.041793**（= Phase S）；Phase W 加长后主协议 best Δ≈**−0.028500**（仍 FAIL）。
+闸门 = `Δ logloss vs 常数先验 ≤ −0.04`（主协议 train→val）。  
+**表格 Base+xsection 赢家栈**仅稳过 **val_temporal**；主协议在绝对 mfe10≥10%、CS top 五分位、软绝对 ≥8%、Alpha158+LGB 上均未过闸。  
+**当前：HARD-CONCLUDE 标签族空转**（绝对/CS-top/软绝对）+ 已死轴（序列 ModernBERT、Qlib/Alpha158、Ranking 产品）。
 
-## 标签契约
+## 标签契约（历史）
 
 | 项 | 值 |
 | --- | --- |
-| mfe10 | `max(high[T+1:T+10]) / close[T] - 1` |
-| 标签 | `y = 1{mfe10 ≥ 0.10}` |
-| 闸门 | `Δ ≤ −0.04` |
-| 判读切分 | **时序**可过闸；**train→val 主协议** U/V/W 均 FAIL |
+| mfe10 | `max(high[T+1:T+10]) / close[T] - 1`（不变） |
+| 曾用标签 | `y=1{mfe10≥0.10}`；`y=1{CS pct(mfe10)≥0.80}`；`y=1{mfe10≥0.08}` |
+| 闸门 | `Δ ≤ −0.04` on **train→val** |
+| 判读 | 时序次闸可过；主协议未过 |
 
 ## 诊断摘要
 
-| 路径 | 结果 | 产品含义 |
-| --- | ---: | --- |
-| Phase I/J/K/P 序列 sidecar | Δ≈0 ~ −0.003 | 短预算序列路径失败 |
-| G2 / Q 随机 Logistic | Δ≈−0.034 | 表格基线 |
-| Phase R 时序 Logistic C=0.01 | Δ≈**−0.0398** | 近闸 |
-| **Phase S 时序 enet/blend** | Δ≈**−0.0418** | **过闸** |
-| **Phase T2 Kaggle 确认** | Δ≈**−0.041793** | **过闸复现**；train→val 因对齐 SKIP |
-| **Phase U train→val** | Δ≈**−0.027598** | **主协议 FAIL 闸**；temporal 仍 −0.041793 |
-| **Phase V train2024+hist_gbm** | Δ≈**−0.022722** | **主协议 FAIL 且劣于 U**；temporal 仍 −0.041793 |
-| **Phase W 加长赢家** | Δ≈**−0.028500** | **主协议仍 FAIL**（略好于 U）；预算否证 |
-| Phase Q 随机 mlp_3x | Δ≈−0.052（时序崩溃） | 随机切分不可作过闸证据 |
+| 路径 | 主协议 Δ | 次协议 temporal | 产品含义 |
+| --- | ---: | ---: | --- |
+| I/J/K/P 序列 sidecar | ~0 | — | 序列死 |
+| **S/T2 时序 enet/blend** | （未主跑） | **−0.0418** | 次闸过 |
+| **U/V/W 绝对 ≥10%** | **−0.0285**（W） | −0.0418 | 主 FAIL；表格 HARD-CONCLUDE |
+| **X Alpha158+LGB** | **−0.0258** | −0.0352 FAIL | Qlib 轴死 |
+| **Y CS top 五分位** | **−0.0314** | −0.0416 | 标签换轴仍主 FAIL |
+| **Y-alt 软绝对 ≥8%** | **−0.0219** | −0.0421 | 更差；硬报停 |
 
-## 当前状态（Phase X COMPLETE → HARD-CONCLUDE Qlib/Alpha158）
+## 当前状态（Phase Y / Y-alt COMPLETE → HARD-REPORT）
 
-- **Phase W COMPLETE（2026-10-02 08:14:16 CST）**：主协议 train→val **FAIL 闸**（blend Δ≈−0.028500）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。表格轴 HARD-CONCLUDE。  
-- **Phase X COMPLETE（2026-10-02 10:38:47 CST）**：Qlib 轴 Alpha158(158)+LGB binary 短烟；主协议 Δ≈**−0.025819 FAIL**；次协议 temporal Δ≈**−0.035231 FAIL**（劣于 S/W 表格 temporal）。  
-- **硬结论**：Alpha158+树二分类未清主闸且未保住时序次闸 → **HARD-CONCLUDE Qlib/Alpha158 对本 mfe10 标签**；不加长 confirm。  
-- 结果：`modernbert_finance/kairos_phase_x_qlib_alpha158_decision_results_cn.md`  
-- **禁止**：Ranking 产品；ModernBERT 复活；TPU WIP `beta_v21_c1*`；同 Alpha158/表格轴空转；用 IC/TopK 回救。  
-- **若重启**：换标签定义，或用户显式点名短名单 #2+（需异于已死序列配方）；默认建议停。
+- **Phase Y COMPLETE（2026-10-02 10:57:23 CST）**：CS-top 标签主协议 FAIL（Δ≈−0.031380）；temporal 过闸。  
+- **Phase Y-alt COMPLETE（2026-10-02 11:04:30 CST）**：`mfe10≥0.08` 主协议 FAIL（Δ≈−0.021921）；更差。  
+- **硬结论**：换决策标签定义（CS-top / 软绝对）未能清主闸 → **停止本标签族 + Base+xsection 表格栈空转**；不加长；不发 kernel。  
+- 结果：`kairos_phase_y_cs_top_tabular_results_cn.md`、`kairos_phase_y_alt_mfe08_tabular_results_cn.md`
 
 ## 明确不做
 
 1. 不重启 ranking Phase。  
-2. 不重启 `kairos-r2-r1-restart-lr-3e-5` / 旧 8 头。  
-3. 不提交同事 TPU WIP（`beta_v21_c1*` 等 dirty）。  
-4. 不开全量 R2。  
-5. Phase W 主协议已 FAIL：硬结论成立，不再沿同一表格轴空转。
+2. 不复活 ModernBERT / 序列 tokenizer。  
+3. 不碰 TPU WIP（`beta_v21_c1*`）。  
+4. 不开 Time-Series-Library 序列复刻（高复刻已死轴）。  
+5. 不再沿同一表格栈对 mfe10 绝对/CS 变体加长烟测。
+
+## 若重启
+
+需用户显式点名**新证据轴**（特征族/模型族/协议显著不同于已死路径），默认建议停。

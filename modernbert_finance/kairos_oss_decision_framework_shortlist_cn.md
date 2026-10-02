@@ -59,3 +59,9 @@
 - 次协议 val_temporal：Δ≈**−0.035231** → **FAIL**
 - 决策：`FAIL_HARD_CONCLUDE_QLIB_ALPHA158_AXIS`；不加长 confirm
 - 详见：`kairos_phase_x_qlib_alpha158_decision_results_cn.md`
+
+## Phase Y 标签轴结果（2026-10-02 11:04:47 CST）
+
+- CS top 五分位：主协议 Δ≈**−0.031380 FAIL**；temporal −0.041619 PASS  
+- 备选 soft `mfe10≥0.08`：主协议 Δ≈**−0.021921 FAIL**（更差）  
+- 决策：`FAIL_HARD_REPORT_LABEL_AXIS`；停标签族空转；不自动开 #2 TSLib

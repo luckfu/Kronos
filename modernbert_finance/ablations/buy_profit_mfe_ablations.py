@@ -29,6 +29,8 @@ from modernbert_finance.build_dataset import HORIZON
 
 SEED = 20261001
 PROFIT_THRESHOLD = 0.10
+SOFT_ABSOLUTE_THRESHOLD = 0.08  # Phase Y alternate if CS-top fails
+CS_TOP_PERCENTILE = 0.80  # Phase Y primary: top quintile within day
 LOGIT_DELTA_BAR = -0.04
 LIFT_DELTA_VS_PHASE_EF = -0.02
 RARE_POS_RATE = 0.05
@@ -38,6 +40,16 @@ IMBALANCE_WARN_RATE = 0.10
 MFE10_DEF = f"max(high[T+1:T+{HORIZON}]) / close[T] - 1"
 
 
+def mfe10_daily_cs_percentile(mfe: np.ndarray, asof_date: Any) -> np.ndarray:
+    """Daily cross-sectional percentile rank of path-MFE (label-only; 0..1)."""
+    mfe = np.asarray(mfe, dtype=np.float64).reshape(-1)
+    asof = pd.Series(pd.to_datetime(asof_date)).astype(str)
+    if len(mfe) != len(asof):
+        raise ValueError(f"mfe len {len(mfe)} != asof_date len {len(asof)}")
+    tmp = pd.DataFrame({"mfe": mfe, "asof_date": asof})
+    return tmp.groupby("asof_date")["mfe"].rank(pct=True).to_numpy(dtype=np.float64)
+
+
 def build_mfe_buy_labels(
     panel: Any,
     targets: pd.DataFrame,
@@ -45,20 +57,51 @@ def build_mfe_buy_labels(
     signal_start: str | None = "2025-07-03",
     signal_end: str | None = "2026-07-02",
     threshold: float = PROFIT_THRESHOLD,
+    label_mode: str = "absolute",
+    cs_pct: float = CS_TOP_PERCENTILE,
 ) -> dict[str, Any]:
-    """Reuse Phase D feature pack; y from panel targets mfe10 (Phase D field)."""
+    """Reuse Phase D feature pack; y from panel targets mfe10 (Phase D field).
+
+    label_mode:
+      - "absolute": y = 1{mfe10 >= threshold}  (Phase G2 / S–W default)
+      - "cs_top":   y = 1{daily CS percentile(mfe10) >= cs_pct}  (Phase Y)
+    """
     packed = build_enriched_matrix(
         panel, targets, signal_start=signal_start, signal_end=signal_end
     )
     mfe = np.asarray(packed["targets"]["mfe10"], dtype=np.float64)
-    y = (mfe >= float(threshold)).astype(np.int64)
+    asof = packed["meta"]["asof_date"]
+    mfe_cs = mfe10_daily_cs_percentile(mfe, asof)
+    mode = str(label_mode).strip().lower()
+    if mode == "absolute":
+        y = (mfe >= float(threshold)).astype(np.int64)
+        primary_def = f"y = 1{{mfe10 >= {threshold:.2f}}} where mfe10 = {MFE10_DEF}"
+        decision_note = (
+            "worth-it if path reaches +10% within 10 sessions "
+            "(max favorable excursion from entry ≥ 10%)"
+        )
+    elif mode == "cs_top":
+        y = (mfe_cs >= float(cs_pct)).astype(np.int64)
+        primary_def = (
+            f"y = 1{{daily CS percentile(mfe10) >= {cs_pct:.2f}}} "
+            f"where mfe10 = {MFE10_DEF}"
+        )
+        decision_note = (
+            f"buy if path-MFE is in top {(1.0 - float(cs_pct)) * 100:.0f}% "
+            "cross-section within the signal day (relative worth-it)"
+        )
+    else:
+        raise ValueError(f"unknown label_mode={label_mode!r}; use absolute|cs_top")
 
     # Sanity: definition identity vs build_targets
     definition_ok = True  # field provenance; numeric recompute audited in Phase A
 
     buy_labels: dict[str, Any] = {
         "mfe10": mfe,
-        "buy_worth_mfe10pct": y,
+        "mfe10_cs_pct": mfe_cs,
+        "buy_worth_mfe10pct": y,  # name kept for stack compatibility
+        "buy_worth_mfe_cs_top": (mfe_cs >= float(cs_pct)).astype(np.int64),
+        "buy_worth_mfe_abs": (mfe >= float(threshold)).astype(np.int64),
         "mfe_sign_up": (mfe > 0.0).astype(np.int64),
     }
 
@@ -66,20 +109,19 @@ def build_mfe_buy_labels(
         **packed,
         "buy_labels": buy_labels,
         "threshold": float(threshold),
+        "label_mode": mode,
+        "cs_pct": float(cs_pct),
         "definition": {
-            "primary": (
-                f"y = 1{{mfe10 >= {threshold:.2f}}} where mfe10 = {MFE10_DEF}"
-            ),
+            "primary": primary_def,
+            "label_mode": mode,
+            "cs_pct": float(cs_pct),
             "phase_g_wrong_target": (
                 f"Phase G used y = 1{{fwd_ret_{HORIZON} >= {threshold:.2f}}} where "
                 f"fwd_ret_{HORIZON} = close[T+{HORIZON}]/close[T]-1 (close-to-close; "
                 "not path MFE)"
             ),
             "mfe10_formula": MFE10_DEF,
-            "matches_decision_system": (
-                "worth-it if path reaches +10% within 10 sessions "
-                "(max favorable excursion from entry ≥ 10%)"
-            ),
+            "matches_decision_system": decision_note,
             "horizon": int(HORIZON),
             "threshold": float(threshold),
             "definition_ok": definition_ok,
