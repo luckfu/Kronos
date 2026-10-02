@@ -58,3 +58,12 @@
 - train→val BLOCKED (no train scores; not worth weeks of GPU given val upper bound)
 - **永久停止** binary `mfe10≥10%` 决策产品路径
 - 结果：`kairos_phase_z2_kronos_val_score_decision_results_cn.md`
+
+## Phase AA → AA2（成本感知 TopK 可交易规则）— 非 mfe10 决策
+
+- **AA（2026-10-02）**：短密封 OOS 18d 上 `topk50_tp10_nostop` mean_net≈+0.559%；Sharpe 因短窗膨胀；**PROPOSE_LONGER_CONFIRM**。
+- **AA2（2026-10-02 12:32 CST）**：冻结先验规则、**不重选** K/止损；Z2 后半 121d + walk-forward 4/4 折成本后仍为正 → **PASS_PROPOSE_PAPER_TRADE**。
+  - late mean_net≈**+1.376%**；random50≈−1.06%；EW≈−1.24%；WF 折净期望均 >0。
+  - 污染警告：Z2 分在 C2 训练窗内，IC 可能偏乐观；确认的是规则机制而非干净模型 OOS。
+- 下一步：廉价纸面/影子盘（Top50 / TP10 nostop / T+1 / 涨停跳过 / 30bps）；**不**深训 / **不**碰 TPU / **不**复活 mfe10。
+- 结果：`kairos_phase_aa2_kronos_longer_sealed_confirm_cn.md`
