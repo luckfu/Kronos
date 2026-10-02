@@ -13,7 +13,7 @@ v2 ERROR: `ModuleNotFoundError: tpu_self_checks` in `train_predictor.py`（校�
 
 - `train_predictor.py`: `import tpu_self_checks` → try/except，GPU 路径不硬依赖；`master_weight_dtype` 同步守卫
 - dual-T4 overlay FILES 补齐 `tpu_self_checks.py` + `drive_cleanup.py`
-- 配方不变：LR 1e-5、dual T4、soft-stop 39600、SwanLab `beta_v2_1_c1_dual_t4` resume allow、`KRONOS_COLLECT_VALIDATION_AUXILIARY=0`
+- 配方不变：LR 1e-5、dual T4、soft-stop 39600、SwanLab `beta_v2_1_c1_dual_t4_v6` resume allow (v6 dens boundary)、`KRONOS_COLLECT_VALIDATION_AUXILIARY=0`
 
 ## 本暂存修复
 
@@ -31,8 +31,8 @@ v2 ERROR: `ModuleNotFoundError: tpu_self_checks` in `train_predictor.py`（校�
 | Accelerator | dual Tesla T4 |
 | LR | `1e-5` warmup_constant |
 | Soft-stop | `39600` s |
-| SwanLab run id | `beta_v2_1_c1_dual_t4` resume allow |
-| URL | https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_dual_t4 |
+| SwanLab run id | `beta_v2_1_c1_dual_t4_v6` resume allow (new dens boundary) |
+| URL | https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_dual_t4_v6 |
 
 重建：`python3 finetune/build_kaggle_beta_v21_c1_dual_t4_kernel.py`
 推送：`kaggle kernels push -p finetune/kaggle_beta_v21_c1_dual_t4_kernel`
@@ -43,3 +43,8 @@ v2 ERROR: `ModuleNotFoundError: tpu_self_checks` in `train_predictor.py`（校�
 - 清空 `KRONOS_BETA_V21_VALIDATION_DENOMINATORS`；`AUTO_CALIBRATE=1`。
 - dens.json 写入 `feeding_mode=shuffled_no_segment_date_sort`；不匹配则 wipe 重校准。
 - 跨版本比 `weighted_forecast_loss`，不比 score；同日 batch 路径仍 TODO。
+
+## v6（2026-10-02）SwanLab 新 run
+
+- 新 SwanLab run id：`beta_v2_1_c1_dual_t4_v6`（resume allow），与 dens 重校准边界对齐，避免污染旧 board 段。
+- `OUTPUT_NAME` / checkpoint 目录仍为 `beta_v2_1_c1_dual_t4`（训练续跑不变）。
