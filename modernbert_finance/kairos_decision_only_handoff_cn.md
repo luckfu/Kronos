@@ -1,7 +1,7 @@
 # Kairos 决策系统交接（Decision-Only Charter）
 
-日期：2026-10-02（北京时间，交接更新 2026-10-02 08:14:16 CST）。  
-状态：**产品路径 = 决策标签 only**；时序切分仍过闸（S/T2/U/V/W secondary）；**主协议 train→val 在 U/V/W（含加长）均 FAIL 闸** → **HARD-CONCLUDE**；排序探针已停作产品。
+日期：2026-10-02（北京时间，交接更新 2026-10-02 10:38:47 CST）。  
+状态：**产品路径 = 决策标签 only**；时序切分曾过闸（S/T2/U/V/W secondary）；**主协议 train→val 在 U/V/W FAIL**；**Phase X Qlib/Alpha158+LGB 主/次协议均 FAIL** → **HARD-CONCLUDE（表格轴 + Qlib/Alpha158 轴）**；排序探针已停作产品。
 
 ## 一句话
 
@@ -32,15 +32,14 @@
 | **Phase W 加长赢家** | Δ≈**−0.028500** | **主协议仍 FAIL**（略好于 U）；预算否证 |
 | Phase Q 随机 mlp_3x | Δ≈−0.052（时序崩溃） | 随机切分不可作过闸证据 |
 
-## 当前状态（Phase W COMPLETE → HARD-CONCLUDE）
+## 当前状态（Phase X COMPLETE → HARD-CONCLUDE Qlib/Alpha158）
 
-- **Phase W COMPLETE（2026-10-02 08:14:16 CST）**：主协议 train→val **FAIL 闸**（blend Δ≈−0.028500；cap 1.2M / MLP 160）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。  
-- **硬结论**：样本量与 MLP 迭代不是 train→val 瓶颈；日线 Base+xsection 表格轴（logistic/enet/blend/hist_gbm；短烟与加长）无法清主协议闸。  
-- Kernel W：`user281434/kairos-mfe10-decision-tabular-phase-w` → COMPLETE  
-- URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-w  
-- SwanLab：`kairos-mfe10-decision-tabular-phase-w-20261002`  
-- **禁止**：Ranking 产品；22 层长训；TPU WIP；同轴再烟测/加长；重启失败序列配方。  
-- **若重启**：需用户选定新证据轴（标签/特征/协议），非本轮已测预算轴。
+- **Phase W COMPLETE（2026-10-02 08:14:16 CST）**：主协议 train→val **FAIL 闸**（blend Δ≈−0.028500）；次协议 val_temporal 仍过闸（Δ≈−0.041793）。表格轴 HARD-CONCLUDE。  
+- **Phase X COMPLETE（2026-10-02 10:38:47 CST）**：Qlib 轴 Alpha158(158)+LGB binary 短烟；主协议 Δ≈**−0.025819 FAIL**；次协议 temporal Δ≈**−0.035231 FAIL**（劣于 S/W 表格 temporal）。  
+- **硬结论**：Alpha158+树二分类未清主闸且未保住时序次闸 → **HARD-CONCLUDE Qlib/Alpha158 对本 mfe10 标签**；不加长 confirm。  
+- 结果：`modernbert_finance/kairos_phase_x_qlib_alpha158_decision_results_cn.md`  
+- **禁止**：Ranking 产品；ModernBERT 复活；TPU WIP `beta_v21_c1*`；同 Alpha158/表格轴空转；用 IC/TopK 回救。  
+- **若重启**：换标签定义，或用户显式点名短名单 #2+（需异于已死序列配方）；默认建议停。
 
 ## 明确不做
 
