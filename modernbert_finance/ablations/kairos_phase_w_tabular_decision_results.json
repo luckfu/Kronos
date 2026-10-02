@@ -1,0 +1,201 @@
+{
+  "phase": "W_tabular_longer_train_to_val_winners",
+  "kind": "kaggle_cpu_tabular_enet_blend_longer_train_to_val_primary_val_temporal_secondary",
+  "target": "y=1{mfe10>=0.10}",
+  "mfe10_def": "max(high[T+1:T+10])/close[T]-1",
+  "status": "COMPLETE",
+  "kernel_slug": "user281434/kairos-mfe10-decision-tabular-phase-w",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-w",
+  "kernel_status": "COMPLETE",
+  "swanlab_run_id": "kairos-mfe10-decision-tabular-phase-w-20261002",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-w-20261002",
+  "packaging_fix": "git_clone_repo_onto_sys_path_plus_vendor_fallback",
+  "packaging_ok": true,
+  "primary_protocol": "train_to_val",
+  "secondary_protocol": "val_temporal",
+  "train_window": "2023-01-01..2024-12-31",
+  "train_cap": 1200000,
+  "mlp_max_iter": 160,
+  "mlp_n_iter_no_change": 12,
+  "best_model": "blend_lr0.5_mlp0.5",
+  "best_delta_vs_prior": -0.028500119076822594,
+  "gate_delta_vs_prior": -0.04,
+  "gate_passed": false,
+  "phase_u_primary_best_delta": -0.027597938051234006,
+  "phase_v_primary_best_delta": -0.02272150397385786,
+  "phase_s_temporal_best_delta": -0.04179349770224905,
+  "phase_t2_temporal_best_delta": -0.04179349770224905,
+  "vs_phase_u_primary": {
+    "phase_u_best_delta": -0.027597938051234006,
+    "phase_w_best_delta": -0.028500119076822594,
+    "improved_vs_u": true,
+    "delta_w_minus_u": -0.0009021810255885887,
+    "note": "more negative = better; W slightly better than U but still far from gate"
+  },
+  "budget_vs_phase_u": {
+    "train_cap_u": 500000,
+    "train_cap_w": 1200000,
+    "mlp_max_iter_u": 80,
+    "mlp_max_iter_w": 160,
+    "dropped_hist_gbm": true
+  },
+  "train_to_val": {
+    "split": "train_to_val",
+    "best_model": "blend_lr0.5_mlp0.5",
+    "best_delta_vs_prior": -0.028500119076822594,
+    "gate_passed": false,
+    "n_train": 1200000,
+    "n_test": 123836,
+    "n_train_raw": 2347269,
+    "train_prior": 0.25,
+    "pos_test": 0.2529393714267257,
+    "build_seconds": 203.65372323989868,
+    "train_window": "2023-01-01..2024-12-31",
+    "feature_dim": 26,
+    "models": {
+      "logistic_C0.01": {
+        "delta_vs_prior": -0.022396931412117405,
+        "gate_passed": false,
+        "model_log_loss": 0.5431674427770518,
+        "mean_pred": 0.23607397677092068,
+        "fit_seconds": 10.309789180755615
+      },
+      "enet_C0.01_l1_0.7": {
+        "delta_vs_prior": -0.02198053776247122,
+        "gate_passed": false,
+        "model_log_loss": 0.5435838364266979,
+        "mean_pred": 0.23607746660031134,
+        "fit_seconds": 909.8215308189392
+      },
+      "enet_C0.01_l1_0.5": {
+        "delta_vs_prior": -0.02219834346685534,
+        "gate_passed": false,
+        "model_log_loss": 0.5433660307223138,
+        "mean_pred": 0.2361020052976658,
+        "fit_seconds": 779.2947607040405
+      },
+      "blend_lr0.5_mlp0.5": {
+        "delta_vs_prior": -0.028500119076822594,
+        "gate_passed": false,
+        "model_log_loss": 0.5370642551123466,
+        "mean_pred": 0.2314216647918709,
+        "fit_seconds": 144.29185342788696,
+        "mlp_n_iter": 71,
+        "mlp_max_iter": 160
+      },
+      "blend_lr0.7_mlp0.3": {
+        "delta_vs_prior": -0.027664989840536558,
+        "gate_passed": false,
+        "model_log_loss": 0.5378993843486326,
+        "mean_pred": 0.2332825895834908,
+        "fit_seconds": 144.29185342788696,
+        "mlp_n_iter": 71,
+        "mlp_max_iter": 160
+      },
+      "blend_lr0.8_mlp0.2": {
+        "delta_vs_prior": -0.02660507838480619,
+        "gate_passed": false,
+        "model_log_loss": 0.538959295804363,
+        "mean_pred": 0.23421305197930076,
+        "fit_seconds": 144.29185342788696,
+        "mlp_n_iter": 71,
+        "mlp_max_iter": 160
+      },
+      "blend_lr0.9_mlp0.1": {
+        "delta_vs_prior": -0.02502784150501125,
+        "gate_passed": false,
+        "model_log_loss": 0.5405365326841579,
+        "mean_pred": 0.23514351437511072,
+        "fit_seconds": 144.29185342788696,
+        "mlp_n_iter": 71,
+        "mlp_max_iter": 160
+      }
+    }
+  },
+  "val_temporal": {
+    "best_model": "blend_lr0.5_mlp0.5",
+    "best_delta_vs_prior": -0.04179349770224927,
+    "gate_passed": true,
+    "n_train": 63268,
+    "n_test": 60568,
+    "models": {
+      "logistic_C0.01": {
+        "delta_vs_prior": -0.03981456290575103,
+        "gate_passed": false,
+        "model_log_loss": 0.5336980078653455,
+        "mean_pred": 0.24896863006449552,
+        "fit_seconds": 0.661766767501831
+      },
+      "enet_C0.01_l1_0.7": {
+        "delta_vs_prior": -0.04041940826829771,
+        "gate_passed": true,
+        "model_log_loss": 0.5330931625027988,
+        "mean_pred": 0.24898189026257267,
+        "fit_seconds": 1.2470943927764893
+      },
+      "enet_C0.01_l1_0.5": {
+        "delta_vs_prior": -0.04030393721469949,
+        "gate_passed": true,
+        "model_log_loss": 0.533208633556397,
+        "mean_pred": 0.24890226586623893,
+        "fit_seconds": 1.37801194190979
+      },
+      "blend_lr0.5_mlp0.5": {
+        "delta_vs_prior": -0.04179349770224927,
+        "gate_passed": true,
+        "model_log_loss": 0.5317190730688472,
+        "mean_pred": 0.2483575521594036,
+        "fit_seconds": 3.2584452629089355,
+        "mlp_n_iter": 25,
+        "mlp_max_iter": 160
+      },
+      "blend_lr0.7_mlp0.3": {
+        "delta_vs_prior": -0.041495106634508616,
+        "gate_passed": true,
+        "model_log_loss": 0.5320174641365879,
+        "mean_pred": 0.24860198332144035,
+        "fit_seconds": 3.2584452629089355,
+        "mlp_n_iter": 25,
+        "mlp_max_iter": 160
+      },
+      "blend_lr0.8_mlp0.2": {
+        "delta_vs_prior": -0.041102908421411954,
+        "gate_passed": true,
+        "model_log_loss": 0.5324096623496846,
+        "mean_pred": 0.24872419890245873,
+        "fit_seconds": 3.2584452629089355,
+        "mlp_n_iter": 25,
+        "mlp_max_iter": 160
+      },
+      "blend_lr0.9_mlp0.1": {
+        "delta_vs_prior": -0.040545246570995896,
+        "gate_passed": true,
+        "model_log_loss": 0.5329673242001006,
+        "mean_pred": 0.2488464144834771,
+        "fit_seconds": 3.2584452629089355,
+        "mlp_n_iter": 25,
+        "mlp_max_iter": 160
+      }
+    },
+    "matches_phase_s_temporal": true
+  },
+  "secondary_val_temporal_still_gates": true,
+  "longer_budget_cleared_primary_gate": false,
+  "elapsed_seconds": 2104.048536300659,
+  "report_json": "scratch/kairos_phase_w_outputs/report.json",
+  "log_path": "scratch/kairos_phase_w_outputs/kairos-mfe10-decision-tabular-phase-w.log",
+  "completed_at_cst": "2026-10-02 08:14:16 CST",
+  "kernel_last_run_utc": "2026-10-01 23:25:56 UTC",
+  "commits_launch": [
+    "9ffb8c1",
+    "d916e50"
+  ],
+  "next": "HARD_CONCLUDE",
+  "next_kernel_launched": false,
+  "hard_conclusion": "PRIMARY train→val FAIL after longer budget (cap 1.2M, MLP max_iter 160): best blend_lr0.5_mlp0.5 Δ≈-0.028500 (gate ≤ −0.04). Slightly better than Phase U (Δ≈-0.027598) but still FAIL; far from gate. val_temporal still gates (blend Δ≈−0.041793). HARD-CONCLUDE: train sample / MLP iter budget is NOT the train→val bottleneck on day-bar Base+xsection tabular. No more smoke churn on same tabular axis. Do not revive ranking-as-product; do not start long 22-layer R2; do not touch TPU WIP.",
+  "not_tokenizer_sequence": true,
+  "not_ranking_ic": true,
+  "not_22_layer": true,
+  "not_tpu": true,
+  "not_hist_gbm": true
+}

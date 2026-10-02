@@ -3,7 +3,7 @@
 日期：2026-10-02 07:25:13 CST（北京时间）。  
 前置：Phase T2/S val_temporal **过闸**（blend Δ≈−0.041793）；Phase U train→val **FAIL**（Δ≈−0.027598）；Phase V train2024+hist_gbm **FAIL 且更差**（Δ≈−0.022722）并曾 HARD-STOP。  
 **用户方向**：已过闸配方可做 **适度加长** 训练 —— 不为赢家永远停在短烟测。本 Phase 覆盖 V 的「同轴不再发」禁令，仅做一次赢家加长 confirm。  
-Kernel：`user281434/kairos-mfe10-decision-tabular-phase-w` → **RUNNING**  
+Kernel：`user281434/kairos-mfe10-decision-tabular-phase-w` → **COMPLETE**（结果见 kairos_phase_w_tabular_decision_results_cn.md；HARD-CONCLUDE）  
 URL：https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-w  
 SwanLab：`roc_fu/finance` / `kairos-mfe10-decision-tabular-phase-w-20261002`  
 URL：https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-w-20261002
@@ -50,3 +50,5 @@ U/V 短烟测（cap 500k、MLP 80 epoch）可能不足；对 **已过闸赢家**
 启动：2026-10-02 07:26:04 CST
 Kernel push：version 1
 Commit：`9ffb8c1`
+
+收尾：2026-10-02 08:14:16 CST — 主协议 FAIL（Δ≈−0.028500）；HARD-CONCLUDE。

@@ -52,7 +52,7 @@
   "not_22_layer": true,
   "not_tpu": true,
   "not_hist_gbm": true,
-  "status": "RUNNING",
+  "status": "COMPLETE",
   "kernel_url": "https://www.kaggle.com/code/user281434/kairos-mfe10-decision-tabular-phase-w",
   "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-mfe10-decision-tabular-phase-w-20261002",
   "decision_only_charter": "modernbert_finance/kairos_decision_only_handoff_cn.md",
@@ -66,7 +66,7 @@
     "V_declared_hard_stop": true
   },
   "prepared_at_cst": "2026-10-02 07:25:27 CST",
-  "kernel_status": "RUNNING",
+  "kernel_status": "COMPLETE",
   "kernel_status_at_launch": "RUNNING",
   "launched_at_cst": "2026-10-02 07:26:04 CST",
   "pushed_at_cst": "2026-10-02 07:26:04 CST",
@@ -74,5 +74,11 @@
   "commits": [
     "9ffb8c1"
   ],
-  "kernel_push_version": 1
+  "kernel_push_version": 1,
+  "completed_at_cst": "2026-10-02 08:14:16 CST",
+  "gate_passed": false,
+  "best_delta_vs_prior": -0.028500119076822594,
+  "best_model": "blend_lr0.5_mlp0.5",
+  "hard_conclude": true,
+  "results_json": "modernbert_finance/ablations/kairos_phase_w_tabular_decision_results.json"
 }
