@@ -641,12 +641,12 @@ class QlibDataset(Dataset):
         start = segment_in_pass * self.n_samples
         end = min(start + self.n_samples, self.total_samples)
         self.coverage_start = start
+        # Match small stage2/main feeding: keep shuffled coverage_order segment
+        # order. Do NOT argsort by signal_date_ids when use_beta_v21_auxiliary
+        # or use_stage3_rank — full-segment chronological feed reintroduces
+        # overlapping-window time bias. Same-day ranking batches need a
+        # separate batching path, not whole-segment date sort.
         self.active_positions = self.coverage_order[start:end]
-        if getattr(self, 'use_beta_v21_auxiliary', False) or getattr(self, 'use_stage3_rank', False):
-            date_order = np.argsort(
-                self.signal_date_ids[self.active_positions], kind='stable'
-            )
-            self.active_positions = self.active_positions[date_order]
 
     def coverage_state(self, segment_index: int = 0) -> dict:
         consumed = min((int(segment_index) + 1) * self.n_samples, self.total_samples)

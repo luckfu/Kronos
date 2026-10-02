@@ -124,20 +124,24 @@ def test_ambiguous_same_day_barrier_is_masked_but_backtests_as_stop_loss():
     assert labels['return_targets'].shape == (4,)
 
 
-def test_v21_segment_order_groups_dates_without_changing_coverage():
+def test_v21_segment_keeps_coverage_order_without_date_sort():
     dataset = QlibDataset.__new__(QlibDataset)
     dataset.total_samples = 6
     dataset.n_samples = 6
     dataset.data_type = 'train'
     dataset.use_beta_v21_auxiliary = True
+    dataset.use_stage3_rank = True
     dataset.coverage_order = np.asarray([4, 0, 3, 1, 5, 2])
     dataset.signal_date_ids = np.asarray([2, 1, 2, 1, 3, 3])
 
     dataset.set_epoch_seed(0)
 
+    # Coverage membership unchanged; within-segment order stays shuffled
+    # (not chronological by signal_date_ids).
     assert set(dataset.active_positions.tolist()) == set(range(6))
+    assert dataset.active_positions.tolist() == [4, 0, 3, 1, 5, 2]
     ordered_dates = dataset.signal_date_ids[dataset.active_positions]
-    assert ordered_dates.tolist() == sorted(ordered_dates.tolist())
+    assert ordered_dates.tolist() != sorted(ordered_dates.tolist())
 
 
 def test_auxiliary_state_is_backward_compatible_and_causal_at_asof(tmp_path):
