@@ -1,0 +1,870 @@
+{
+  "phase": "AA2_cost_stress",
+  "purpose": "cost_stress_20_30_40_60_bps_before_paper_shadow",
+  "not_mfe10_decision_product": true,
+  "training_performed": false,
+  "decode_changed": false,
+  "tpu_wip_touched": false,
+  "k_or_stop_repicked": false,
+  "focus_rule_a_priori": "topk50_tp10_nostop",
+  "a_priori_rules": [
+    "topk50_tp10_nostop",
+    "topk50_hold_d10",
+    "topk20_tp10_nostop"
+  ],
+  "cost_levels_bps_per_side": [
+    20,
+    30,
+    40,
+    60
+  ],
+  "cost_convention": {
+    "unit": "bps_per_side_one_way",
+    "round_trip_multiplier": 2,
+    "aa_aa2_baseline_bps_per_side": 30,
+    "charge_per_trade": "2 * cost_per_side"
+  },
+  "limit_up_threshold": 0.095,
+  "execution": {
+    "entry": "T+1 close proxy",
+    "path": "relative to actual_return_d1",
+    "exits": [
+      "take_profit_10pct",
+      "time_d10"
+    ],
+    "stop_loss": null,
+    "cost": "2 * cost_per_side per completed trade"
+  },
+  "score_source": {
+    "checkpoint": "C2 Best Seg@179",
+    "decode": "prod T=0.65 top_p=0.8 N=5",
+    "z2_path": "/workspace/Kronos/scratch/kairos_phase_z2_outputs/predictions_prod_t065_p80_n5.csv.gz"
+  },
+  "splits": {
+    "z2_n_dates": 242,
+    "late_n": 121,
+    "late_date_min": "2025-12-29",
+    "late_date_max": "2026-07-02",
+    "n_walkforward_folds": 4,
+    "fold_size": 60
+  },
+  "levels": {
+    "bps_20": {
+      "cost_per_side": 0.002,
+      "cost_bps_per_side": 20,
+      "cost_bps_round_trip": 40,
+      "cost_convention": "one_way_per_side; round_trip=2*side charged per trade",
+      "z2_late_half": {
+        "meta": {
+          "panel": "z2_late_half",
+          "n_rows": 62105,
+          "n_dates": 121,
+          "n_symbols": 516,
+          "date_min": "2025-12-29",
+          "date_max": "2026-07-02",
+          "score_col": "predicted_return_10d",
+          "spearman_pred_vs_return10d": 0.4785046929469013,
+          "mean_universe": 513.2644628099174,
+          "contaminated_vs_c2_train": true,
+          "rule_selection": "a_priori_frozen_from_AA_no_repick",
+          "role": "primary_confirm_cost_stress"
+        },
+        "focus": {
+          "status": "ok",
+          "n_trades": 5923,
+          "mean_net_return": 0.015755224526917726,
+          "mean_gross_return": 0.01975522452691773,
+          "sharpe_ann_net": 6.685827443093531,
+          "max_drawdown_net": -0.4275607649778086,
+          "hit_rate_net": 0.5667735944622657,
+          "compounded_vintage_return_net": 5.111089437273233,
+          "mean_two_way_name_turnover": 0.9927268538621123,
+          "tp_hit_rate": 0.23349653891608982,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 127,
+          "cost_per_side": 0.002
+        },
+        "random50_tp10_nostop": {
+          "status": "ok",
+          "n_trades": 5932,
+          "mean_net_return": -0.008555086804049457,
+          "mean_gross_return": -0.004555086804049454,
+          "sharpe_ann_net": -3.768033204746944,
+          "max_drawdown_net": -0.7941330461632832,
+          "hit_rate_net": 0.428186109238031,
+          "compounded_vintage_return_net": -0.6787541751776324,
+          "mean_two_way_name_turnover": 1.7894551159116128,
+          "tp_hit_rate": 0.1655428186109238,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 118,
+          "cost_per_side": 0.002
+        },
+        "buy_hold_ew": {
+          "mean_net_return": -0.01040954794822861,
+          "sharpe_ann_net": -4.518813466802926,
+          "max_drawdown_net": -0.8290202440855701,
+          "hit_rate_net": 0.45454545454545453,
+          "status": "ok"
+        },
+        "focus_beats_random_and_ew": true,
+        "a_priori_variants": {
+          "topk50_hold_d10": {
+            "status": "ok",
+            "n_trades": 5923,
+            "mean_net_return": 0.020329813979975398,
+            "mean_gross_return": 0.024329813979975405,
+            "sharpe_ann_net": 7.256226033825298,
+            "max_drawdown_net": -0.4267295643887966,
+            "hit_rate_net": 0.5563059260509877,
+            "compounded_vintage_return_net": 9.279930604850223,
+            "mean_two_way_name_turnover": 0.9927268538621123,
+            "tp_hit_rate": 0.0,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 127,
+            "cost_per_side": 0.002
+          },
+          "topk20_tp10_nostop": {
+            "status": "ok",
+            "n_trades": 2359,
+            "mean_net_return": 0.020026950625909656,
+            "mean_gross_return": 0.024026950625909656,
+            "sharpe_ann_net": 7.531810782693796,
+            "max_drawdown_net": -0.4180875719629248,
+            "hit_rate_net": 0.5752437473505723,
+            "compounded_vintage_return_net": 8.919652614714304,
+            "mean_two_way_name_turnover": 1.1898269980506824,
+            "tp_hit_rate": 0.26706231454005935,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 61,
+            "cost_per_side": 0.002
+          }
+        }
+      },
+      "walkforward": {
+        "folds": [
+          {
+            "fold": 0,
+            "date_min": "2025-07-03",
+            "date_max": "2025-09-24",
+            "n_dates": 60,
+            "focus_mean_net": 0.026806979814680235,
+            "focus_sharpe_ann": 20.787896959906213,
+            "focus_max_dd": -0.03898060564715111,
+            "focus_hit_rate_net": 0.6500168747890651,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": 0.011612186997512059,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.027651557883816066,
+              "topk20_tp10_nostop": 0.03259459229814829
+            }
+          },
+          {
+            "fold": 1,
+            "date_min": "2025-09-25",
+            "date_max": "2025-12-25",
+            "n_dates": 60,
+            "focus_mean_net": 0.020467659563413294,
+            "focus_sharpe_ann": 11.127132760378341,
+            "focus_max_dd": -0.19847530832342541,
+            "focus_hit_rate_net": 0.6231932773109243,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": 0.002459608802405074,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.02077020000710818,
+              "topk20_tp10_nostop": 0.02069174782899879
+            }
+          },
+          {
+            "fold": 2,
+            "date_min": "2025-12-26",
+            "date_max": "2026-03-31",
+            "n_dates": 60,
+            "focus_mean_net": 0.0164126099771933,
+            "focus_sharpe_ann": 6.885507867224678,
+            "focus_max_dd": -0.36617238456848766,
+            "focus_hit_rate_net": 0.5811447811447812,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.004192773886153621,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.016072640208974594,
+              "topk20_tp10_nostop": 0.018462081577237555
+            }
+          },
+          {
+            "fold": 3,
+            "date_min": "2026-04-01",
+            "date_max": "2026-06-30",
+            "n_dates": 60,
+            "focus_mean_net": 0.01639360086753271,
+            "focus_sharpe_ann": 6.765094829386415,
+            "focus_max_dd": -0.4275607649778087,
+            "focus_hit_rate_net": 0.5572019297036527,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.014147887059155822,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.025763645228134412,
+              "topk20_tp10_nostop": 0.023025673931967076
+            }
+          }
+        ],
+        "fold_mean_nets": [
+          0.026806979814680235,
+          0.020467659563413294,
+          0.0164126099771933,
+          0.01639360086753271
+        ],
+        "n_positive": 4,
+        "n_folds": 4,
+        "majority_positive": true
+      },
+      "pass_late_and_wf_gate": true
+    },
+    "bps_30": {
+      "cost_per_side": 0.003,
+      "cost_bps_per_side": 30,
+      "cost_bps_round_trip": 60,
+      "cost_convention": "one_way_per_side; round_trip=2*side charged per trade",
+      "z2_late_half": {
+        "meta": {
+          "panel": "z2_late_half",
+          "n_rows": 62105,
+          "n_dates": 121,
+          "n_symbols": 516,
+          "date_min": "2025-12-29",
+          "date_max": "2026-07-02",
+          "score_col": "predicted_return_10d",
+          "spearman_pred_vs_return10d": 0.4785046929469013,
+          "mean_universe": 513.2644628099174,
+          "contaminated_vs_c2_train": true,
+          "rule_selection": "a_priori_frozen_from_AA_no_repick",
+          "role": "primary_confirm_cost_stress"
+        },
+        "focus": {
+          "status": "ok",
+          "n_trades": 5923,
+          "mean_net_return": 0.013755224526917725,
+          "mean_gross_return": 0.01975522452691773,
+          "sharpe_ann_net": 5.837355681733222,
+          "max_drawdown_net": -0.4495533763493381,
+          "hit_rate_net": 0.5559682593280432,
+          "compounded_vintage_return_net": 3.812900451002066,
+          "mean_two_way_name_turnover": 0.9927268538621123,
+          "tp_hit_rate": 0.23349653891608982,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 127,
+          "cost_per_side": 0.003
+        },
+        "random50_tp10_nostop": {
+          "status": "ok",
+          "n_trades": 5932,
+          "mean_net_return": -0.010555086804049459,
+          "mean_gross_return": -0.004555086804049454,
+          "sharpe_ann_net": -4.637398030560235,
+          "max_drawdown_net": -0.8350429642409749,
+          "hit_rate_net": 0.4184086311530681,
+          "compounded_vintage_return_net": -0.7484831418026208,
+          "mean_two_way_name_turnover": 1.7894551159116128,
+          "tp_hit_rate": 0.1655428186109238,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 118,
+          "cost_per_side": 0.003
+        },
+        "buy_hold_ew": {
+          "mean_net_return": -0.01240954794822861,
+          "sharpe_ann_net": -5.38701898144718,
+          "max_drawdown_net": -0.8630492520528654,
+          "hit_rate_net": 0.4214876033057851,
+          "status": "ok"
+        },
+        "focus_beats_random_and_ew": true,
+        "a_priori_variants": {
+          "topk50_hold_d10": {
+            "status": "ok",
+            "n_trades": 5923,
+            "mean_net_return": 0.018329813979975396,
+            "mean_gross_return": 0.024329813979975405,
+            "sharpe_ann_net": 6.545175836422456,
+            "max_drawdown_net": -0.44764880418080377,
+            "hit_rate_net": 0.5451629241938207,
+            "compounded_vintage_return_net": 7.103945235108739,
+            "mean_two_way_name_turnover": 0.9927268538621123,
+            "tp_hit_rate": 0.0,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 127,
+            "cost_per_side": 0.003
+          },
+          "topk20_tp10_nostop": {
+            "status": "ok",
+            "n_trades": 2359,
+            "mean_net_return": 0.018026950625909654,
+            "mean_gross_return": 0.024026950625909656,
+            "sharpe_ann_net": 6.779137285999231,
+            "max_drawdown_net": -0.43934960670838397,
+            "hit_rate_net": 0.5654938533276812,
+            "compounded_vintage_return_net": 6.819540399042783,
+            "mean_two_way_name_turnover": 1.1898269980506824,
+            "tp_hit_rate": 0.26706231454005935,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 61,
+            "cost_per_side": 0.003
+          }
+        }
+      },
+      "walkforward": {
+        "folds": [
+          {
+            "fold": 0,
+            "date_min": "2025-07-03",
+            "date_max": "2025-09-24",
+            "n_dates": 60,
+            "focus_mean_net": 0.02480697981468023,
+            "focus_sharpe_ann": 19.238713710395622,
+            "focus_max_dd": -0.048628629770357756,
+            "focus_hit_rate_net": 0.6338170772865339,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": 0.00961218699751206,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.02565155788381606,
+              "topk20_tp10_nostop": 0.03059459229814829
+            }
+          },
+          {
+            "fold": 1,
+            "date_min": "2025-09-25",
+            "date_max": "2025-12-25",
+            "n_dates": 60,
+            "focus_mean_net": 0.018467659563413296,
+            "focus_sharpe_ann": 10.043551457486243,
+            "focus_max_dd": -0.21549552219087564,
+            "focus_hit_rate_net": 0.6110924369747899,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": 0.00045960880240507367,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.018770200007108183,
+              "topk20_tp10_nostop": 0.018691747828998788
+            }
+          },
+          {
+            "fold": 2,
+            "date_min": "2025-12-26",
+            "date_max": "2026-03-31",
+            "n_dates": 60,
+            "focus_mean_net": 0.014412609977193298,
+            "focus_sharpe_ann": 6.044417098297645,
+            "focus_max_dd": -0.38096850810908856,
+            "focus_hit_rate_net": 0.568013468013468,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.006192773886153621,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.014072640208974595,
+              "topk20_tp10_nostop": 0.016462081577237553
+            }
+          },
+          {
+            "fold": 3,
+            "date_min": "2026-04-01",
+            "date_max": "2026-06-30",
+            "n_dates": 60,
+            "focus_mean_net": 0.01439360086753271,
+            "focus_sharpe_ann": 5.941892134019452,
+            "focus_max_dd": -0.4495533763493387,
+            "focus_hit_rate_net": 0.5485871812543074,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.016147887059155826,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.02376364522813441,
+              "topk20_tp10_nostop": 0.02102567393196707
+            }
+          }
+        ],
+        "fold_mean_nets": [
+          0.02480697981468023,
+          0.018467659563413296,
+          0.014412609977193298,
+          0.01439360086753271
+        ],
+        "n_positive": 4,
+        "n_folds": 4,
+        "majority_positive": true
+      },
+      "pass_late_and_wf_gate": true
+    },
+    "bps_40": {
+      "cost_per_side": 0.004,
+      "cost_bps_per_side": 40,
+      "cost_bps_round_trip": 80,
+      "cost_convention": "one_way_per_side; round_trip=2*side charged per trade",
+      "z2_late_half": {
+        "meta": {
+          "panel": "z2_late_half",
+          "n_rows": 62105,
+          "n_dates": 121,
+          "n_symbols": 516,
+          "date_min": "2025-12-29",
+          "date_max": "2026-07-02",
+          "score_col": "predicted_return_10d",
+          "spearman_pred_vs_return10d": 0.4785046929469013,
+          "mean_universe": 513.2644628099174,
+          "contaminated_vs_c2_train": true,
+          "rule_selection": "a_priori_frozen_from_AA_no_repick",
+          "role": "primary_confirm_cost_stress"
+        },
+        "focus": {
+          "status": "ok",
+          "n_trades": 5923,
+          "mean_net_return": 0.011755224526917721,
+          "mean_gross_return": 0.01975522452691773,
+          "sharpe_ann_net": 4.988883920372911,
+          "max_drawdown_net": -0.47074390270765154,
+          "hit_rate_net": 0.540942090157015,
+          "compounded_vintage_return_net": 2.788695871997919,
+          "mean_two_way_name_turnover": 0.9927268538621123,
+          "tp_hit_rate": 0.23349653891608982,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 127,
+          "cost_per_side": 0.004
+        },
+        "random50_tp10_nostop": {
+          "status": "ok",
+          "n_trades": 5932,
+          "mean_net_return": -0.01255508680404946,
+          "mean_gross_return": -0.004555086804049454,
+          "sharpe_ann_net": -5.506762856373529,
+          "max_drawdown_net": -0.8678829566789429,
+          "hit_rate_net": 0.4093054619015509,
+          "compounded_vintage_return_net": -0.8031746361682113,
+          "mean_two_way_name_turnover": 1.7894551159116128,
+          "tp_hit_rate": 0.1655428186109238,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 118,
+          "cost_per_side": 0.004
+        },
+        "buy_hold_ew": {
+          "mean_net_return": -0.014409547948228612,
+          "sharpe_ann_net": -6.255224496091434,
+          "max_drawdown_net": -0.8903553996488849,
+          "hit_rate_net": 0.4049586776859504,
+          "status": "ok"
+        },
+        "focus_beats_random_and_ew": true,
+        "a_priori_variants": {
+          "topk50_hold_d10": {
+            "status": "ok",
+            "n_trades": 5923,
+            "mean_net_return": 0.016329813979975398,
+            "mean_gross_return": 0.024329813979975405,
+            "sharpe_ann_net": 5.834125639019613,
+            "max_drawdown_net": -0.4678456298321265,
+            "hit_rate_net": 0.529799088299848,
+            "compounded_vintage_return_net": 5.385559972592648,
+            "mean_two_way_name_turnover": 0.9927268538621123,
+            "tp_hit_rate": 0.0,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 127,
+            "cost_per_side": 0.004
+          },
+          "topk20_tp10_nostop": {
+            "status": "ok",
+            "n_trades": 2359,
+            "mean_net_return": 0.016026950625909652,
+            "mean_gross_return": 0.024026950625909656,
+            "sharpe_ann_net": 6.026463789304666,
+            "max_drawdown_net": -0.46199480936042403,
+            "hit_rate_net": 0.5519287833827893,
+            "compounded_vintage_return_net": 5.1611547247448195,
+            "mean_two_way_name_turnover": 1.1898269980506824,
+            "tp_hit_rate": 0.26706231454005935,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 61,
+            "cost_per_side": 0.004
+          }
+        }
+      },
+      "walkforward": {
+        "folds": [
+          {
+            "fold": 0,
+            "date_min": "2025-07-03",
+            "date_max": "2025-09-24",
+            "n_dates": 60,
+            "focus_mean_net": 0.022806979814680235,
+            "focus_sharpe_ann": 17.689530460885027,
+            "focus_max_dd": -0.058199010141604446,
+            "focus_hit_rate_net": 0.6189672629092137,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": 0.007612186997512055,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.023651557883816066,
+              "topk20_tp10_nostop": 0.02859459229814829
+            }
+          },
+          {
+            "fold": 1,
+            "date_min": "2025-09-25",
+            "date_max": "2025-12-25",
+            "n_dates": 60,
+            "focus_mean_net": 0.01646765956341329,
+            "focus_sharpe_ann": 8.959970154594144,
+            "focus_max_dd": -0.23296237855030255,
+            "focus_hit_rate_net": 0.5959663865546219,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.0015403911975949282,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.016770200007108178,
+              "topk20_tp10_nostop": 0.016691747828998786
+            }
+          },
+          {
+            "fold": 2,
+            "date_min": "2025-12-26",
+            "date_max": "2026-03-31",
+            "n_dates": 60,
+            "focus_mean_net": 0.012412609977193297,
+            "focus_sharpe_ann": 5.203326329370609,
+            "focus_max_dd": -0.40466266609888846,
+            "focus_hit_rate_net": 0.5498316498316498,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.008192773886153625,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.012072640208974592,
+              "topk20_tp10_nostop": 0.014462081577237556
+            }
+          },
+          {
+            "fold": 3,
+            "date_min": "2026-04-01",
+            "date_max": "2026-06-30",
+            "n_dates": 60,
+            "focus_mean_net": 0.012393600867532707,
+            "focus_sharpe_ann": 5.118689438652489,
+            "focus_max_dd": -0.47074390270765154,
+            "focus_hit_rate_net": 0.5365265334252239,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.018147887059155824,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.021763645228134412,
+              "topk20_tp10_nostop": 0.01902567393196707
+            }
+          }
+        ],
+        "fold_mean_nets": [
+          0.022806979814680235,
+          0.01646765956341329,
+          0.012412609977193297,
+          0.012393600867532707
+        ],
+        "n_positive": 4,
+        "n_folds": 4,
+        "majority_positive": true
+      },
+      "pass_late_and_wf_gate": true
+    },
+    "bps_60": {
+      "cost_per_side": 0.006,
+      "cost_bps_per_side": 60,
+      "cost_bps_round_trip": 120,
+      "cost_convention": "one_way_per_side; round_trip=2*side charged per trade",
+      "z2_late_half": {
+        "meta": {
+          "panel": "z2_late_half",
+          "n_rows": 62105,
+          "n_dates": 121,
+          "n_symbols": 516,
+          "date_min": "2025-12-29",
+          "date_max": "2026-07-02",
+          "score_col": "predicted_return_10d",
+          "spearman_pred_vs_return10d": 0.4785046929469013,
+          "mean_universe": 513.2644628099174,
+          "contaminated_vs_c2_train": true,
+          "rule_selection": "a_priori_frozen_from_AA_no_repick",
+          "role": "primary_confirm_cost_stress"
+        },
+        "focus": {
+          "status": "ok",
+          "n_trades": 5923,
+          "mean_net_return": 0.0077552245269177245,
+          "mean_gross_return": 0.01975522452691773,
+          "sharpe_ann_net": 3.2919403976522896,
+          "max_drawdown_net": -0.5108285329027924,
+          "hit_rate_net": 0.5157859192976532,
+          "compounded_vintage_return_net": 1.3444236147912694,
+          "mean_two_way_name_turnover": 0.9927268538621123,
+          "tp_hit_rate": 0.23349653891608982,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 127,
+          "cost_per_side": 0.006
+        },
+        "random50_tp10_nostop": {
+          "status": "ok",
+          "n_trades": 5932,
+          "mean_net_return": -0.016555086804049456,
+          "mean_gross_return": -0.004555086804049454,
+          "sharpe_ann_net": -7.245492508000111,
+          "max_drawdown_net": -0.9153663591959704,
+          "hit_rate_net": 0.3905933917734322,
+          "compounded_vintage_return_net": -0.8796465512518359,
+          "mean_two_way_name_turnover": 1.7894551159116128,
+          "tp_hit_rate": 0.1655428186109238,
+          "n_signal_dates": 121,
+          "n_skipped_limit": 118,
+          "cost_per_side": 0.006
+        },
+        "buy_hold_ew": {
+          "mean_net_return": -0.018409547948228612,
+          "sharpe_ann_net": -7.991635525379939,
+          "max_drawdown_net": -0.930054586323285,
+          "hit_rate_net": 0.35537190082644626,
+          "status": "ok"
+        },
+        "focus_beats_random_and_ew": true,
+        "a_priori_variants": {
+          "topk50_hold_d10": {
+            "status": "ok",
+            "n_trades": 5923,
+            "mean_net_return": 0.012329813979975394,
+            "mean_gross_return": 0.024329813979975405,
+            "sharpe_ann_net": 4.41202524421393,
+            "max_drawdown_net": -0.5061654291578348,
+            "hit_rate_net": 0.5039675839945973,
+            "compounded_vintage_return_net": 2.9590342851419558,
+            "mean_two_way_name_turnover": 0.9927268538621123,
+            "tp_hit_rate": 0.0,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 127,
+            "cost_per_side": 0.006
+          },
+          "topk20_tp10_nostop": {
+            "status": "ok",
+            "n_trades": 2359,
+            "mean_net_return": 0.012026950625909654,
+            "mean_gross_return": 0.024026950625909656,
+            "sharpe_ann_net": 4.521116795915538,
+            "max_drawdown_net": -0.5047049946107365,
+            "hit_rate_net": 0.5281899109792285,
+            "compounded_vintage_return_net": 2.8195220820016087,
+            "mean_two_way_name_turnover": 1.1898269980506824,
+            "tp_hit_rate": 0.26706231454005935,
+            "n_signal_dates": 121,
+            "n_skipped_limit": 61,
+            "cost_per_side": 0.006
+          }
+        }
+      },
+      "walkforward": {
+        "folds": [
+          {
+            "fold": 0,
+            "date_min": "2025-07-03",
+            "date_max": "2025-09-24",
+            "n_dates": 60,
+            "focus_mean_net": 0.01880697981468023,
+            "focus_sharpe_ann": 14.591163961863835,
+            "focus_max_dd": -0.07710871605102487,
+            "focus_hit_rate_net": 0.5862301721228484,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": 0.0036121869975120594,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.019651557883816066,
+              "topk20_tp10_nostop": 0.024594592298148293
+            }
+          },
+          {
+            "fold": 1,
+            "date_min": "2025-09-25",
+            "date_max": "2025-12-25",
+            "n_dates": 60,
+            "focus_mean_net": 0.012467659563413294,
+            "focus_sharpe_ann": 6.792807548809945,
+            "focus_max_dd": -0.3050547007442316,
+            "focus_hit_rate_net": 0.5640336134453782,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.005540391197594926,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.012770200007108183,
+              "topk20_tp10_nostop": 0.01269174782899879
+            }
+          },
+          {
+            "fold": 2,
+            "date_min": "2025-12-26",
+            "date_max": "2026-03-31",
+            "n_dates": 60,
+            "focus_mean_net": 0.008412609977193302,
+            "focus_sharpe_ann": 3.52114479151654,
+            "focus_max_dd": -0.4494979125436508,
+            "focus_hit_rate_net": 0.5202020202020202,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.01219277388615362,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.008072640208974599,
+              "topk20_tp10_nostop": 0.010462081577237554
+            }
+          },
+          {
+            "fold": 3,
+            "date_min": "2026-04-01",
+            "date_max": "2026-06-30",
+            "n_dates": 60,
+            "focus_mean_net": 0.00839360086753271,
+            "focus_sharpe_ann": 3.472284047918563,
+            "focus_max_dd": -0.5108285329027923,
+            "focus_hit_rate_net": 0.5168849069607168,
+            "focus_beats_controls": true,
+            "buy_hold_mean_net": -0.022147887059155824,
+            "a_priori_variants_mean_net": {
+              "topk50_hold_d10": 0.01776364522813441,
+              "topk20_tp10_nostop": 0.015025673931967073
+            }
+          }
+        ],
+        "fold_mean_nets": [
+          0.01880697981468023,
+          0.012467659563413294,
+          0.008412609977193302,
+          0.00839360086753271
+        ],
+        "n_positive": 4,
+        "n_folds": 4,
+        "majority_positive": true
+      },
+      "pass_late_and_wf_gate": true
+    }
+  },
+  "elapsed_sec": 54.25513577461243,
+  "generated_at_cst": "2026-10-02 12:44:31 CST",
+  "hard_conclusion": {
+    "decision": "PAPER_OK_ROBUST_TO_60BPS",
+    "recommend": "paper",
+    "reason": "Frozen `topk50_tp10_nostop` stays positive vs random/EW on Z2 late-half and majority-WF at 20/30/40/60 bps/side. Recommend paper/shadow with book cost ≥40bps/side stress in live kill criteria.",
+    "reason_cn": "先验 `topk50_tp10_nostop` 在 20/30/40/60bps/单边 均过 Z2 后半+WF 门。建议纸面/影子；实盘杀伤标准按 ≥40bps 压力。",
+    "focus_rule": "topk50_tp10_nostop",
+    "a_priori_rules": [
+      "topk50_tp10_nostop",
+      "topk50_hold_d10",
+      "topk20_tp10_nostop"
+    ],
+    "cost_convention": "bps figures are ONE-WAY per side; round-trip = 2× side (AA/AA2 baseline 30bps/side = 60bps RT)",
+    "still_pass_gate_bps": [
+      20,
+      30,
+      40,
+      60
+    ],
+    "still_positive_late_mean_net_bps": [
+      20,
+      30,
+      40,
+      60
+    ],
+    "first_fail_gate_bps": null,
+    "baseline_30bps_pass": true,
+    "pass_20": true,
+    "pass_40": true,
+    "pass_60": true,
+    "hard_table_z2_late_half": [
+      {
+        "bps_per_side": 20,
+        "bps_round_trip": 40,
+        "focus_mean_net": 0.015755224526917726,
+        "focus_sharpe_ann": 6.685827443093531,
+        "focus_mdd": -0.4275607649778086,
+        "focus_hit_rate_net": 0.5667735944622657,
+        "random50_mean_net": -0.008555086804049457,
+        "ew_buyhold_mean_net": -0.01040954794822861,
+        "beats_random_and_ew": true,
+        "wf_n_positive": 4,
+        "wf_n_folds": 4,
+        "wf_fold_mean_nets": [
+          0.026806979814680235,
+          0.020467659563413294,
+          0.0164126099771933,
+          0.01639360086753271
+        ],
+        "pass_late_and_wf_gate": true,
+        "variants_late_mean_net": {
+          "topk50_hold_d10": 0.020329813979975398,
+          "topk20_tp10_nostop": 0.020026950625909656
+        }
+      },
+      {
+        "bps_per_side": 30,
+        "bps_round_trip": 60,
+        "focus_mean_net": 0.013755224526917725,
+        "focus_sharpe_ann": 5.837355681733222,
+        "focus_mdd": -0.4495533763493381,
+        "focus_hit_rate_net": 0.5559682593280432,
+        "random50_mean_net": -0.010555086804049459,
+        "ew_buyhold_mean_net": -0.01240954794822861,
+        "beats_random_and_ew": true,
+        "wf_n_positive": 4,
+        "wf_n_folds": 4,
+        "wf_fold_mean_nets": [
+          0.02480697981468023,
+          0.018467659563413296,
+          0.014412609977193298,
+          0.01439360086753271
+        ],
+        "pass_late_and_wf_gate": true,
+        "variants_late_mean_net": {
+          "topk50_hold_d10": 0.018329813979975396,
+          "topk20_tp10_nostop": 0.018026950625909654
+        }
+      },
+      {
+        "bps_per_side": 40,
+        "bps_round_trip": 80,
+        "focus_mean_net": 0.011755224526917721,
+        "focus_sharpe_ann": 4.988883920372911,
+        "focus_mdd": -0.47074390270765154,
+        "focus_hit_rate_net": 0.540942090157015,
+        "random50_mean_net": -0.01255508680404946,
+        "ew_buyhold_mean_net": -0.014409547948228612,
+        "beats_random_and_ew": true,
+        "wf_n_positive": 4,
+        "wf_n_folds": 4,
+        "wf_fold_mean_nets": [
+          0.022806979814680235,
+          0.01646765956341329,
+          0.012412609977193297,
+          0.012393600867532707
+        ],
+        "pass_late_and_wf_gate": true,
+        "variants_late_mean_net": {
+          "topk50_hold_d10": 0.016329813979975398,
+          "topk20_tp10_nostop": 0.016026950625909652
+        }
+      },
+      {
+        "bps_per_side": 60,
+        "bps_round_trip": 120,
+        "focus_mean_net": 0.0077552245269177245,
+        "focus_sharpe_ann": 3.2919403976522896,
+        "focus_mdd": -0.5108285329027924,
+        "focus_hit_rate_net": 0.5157859192976532,
+        "random50_mean_net": -0.016555086804049456,
+        "ew_buyhold_mean_net": -0.018409547948228612,
+        "beats_random_and_ew": true,
+        "wf_n_positive": 4,
+        "wf_n_folds": 4,
+        "wf_fold_mean_nets": [
+          0.01880697981468023,
+          0.012467659563413294,
+          0.008412609977193302,
+          0.00839360086753271
+        ],
+        "pass_late_and_wf_gate": true,
+        "variants_late_mean_net": {
+          "topk50_hold_d10": 0.012329813979975394,
+          "topk20_tp10_nostop": 0.012026950625909654
+        }
+      }
+    ],
+    "contamination_caveat": "Z2 Kairos-val overlaps C2 train; IC may be inflated. Cost stress tests frozen rule mechanics — not clean model OOS.",
+    "next_step": [
+      "Paper/shadow: Top50 predicted_return_10d, TP10 nostop, T+1, limit-skip",
+      "Book assumed cost ≥ max(pass levels) stress; kill if 20d rolling mean_net<0",
+      "Optional: stride=5/10 sleeves to cut ~1.0 two-way turnover",
+      "Do NOT deep-train / touch TPU WIP / revive mfe10"
+    ]
+  }
+}
