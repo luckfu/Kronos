@@ -8,12 +8,16 @@
   "enable_gpu": true,
   "enable_tpu": false,
   "enable_internet": true,
-  "keywords": ["gpu"],
+  "keywords": [
+    "gpu"
+  ],
   "dataset_sources": [
     "luckfu/a-share-120d-temporal-symbol-holdout"
   ],
   "competition_sources": [],
-  "kernel_sources": [],
+  "kernel_sources": [
+    "user281434/kronos-beta-v2-1-c1-dual-t4"
+  ],
   "model_sources": [],
   "machine_shape": "NvidiaTeslaT4"
 }

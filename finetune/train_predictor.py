@@ -2635,6 +2635,34 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
                 f'condition_lr={family_lrs["condition"]:.10e}.'
             )
+    elif config.get('keep_existing_best', False):
+        best_metric_path = os.path.join(
+            save_dir, 'checkpoints', 'best_model', 'best_metric.json'
+        )
+        if not os.path.isfile(best_metric_path):
+            raise ValueError(
+                'KRONOS_KEEP_EXISTING_BEST requires best_model/best_metric.json; '
+                'refusing to train without the historical Best threshold'
+            )
+        with open(best_metric_path) as handle:
+            existing_best_metric = json.load(handle)
+        best_val_loss = float(existing_best_metric.get(
+            'selection_loss', existing_best_metric.get('objective_loss', float('inf'))
+        ))
+        if not math.isfinite(best_val_loss):
+            raise ValueError(
+                'Existing best_metric.json has no finite selection loss'
+            )
+        if rank == 0:
+            family_lrs = learning_rates_by_family(optimizer)
+            print(
+                'Fresh AdamW on existing best_model weights; '
+                'last_state optimizer moments were not loaded. '
+                f'best_segment={int(existing_best_metric.get("segment", -1))}, '
+                f'best_selection_loss={best_val_loss:.8f}, '
+                f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
+                f'condition_lr={family_lrs["condition"]:.10e}.'
+            )
 
     if rank == 0:
         # Keep the output contract valid even if Kaggle interrupts before the

@@ -203,6 +203,11 @@ class Config:
             if bootstrap_best_val_loss
             else float("inf")
         )
+        # Fresh AdamW on an existing output tree: keep best_metric as the
+        # selection threshold and do not load last_state moments.
+        self.keep_existing_best = os.getenv(
+            "KRONOS_KEEP_EXISTING_BEST", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.reset_size_embedding = os.getenv(
             "KRONOS_RESET_SIZE_EMBEDDING", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
