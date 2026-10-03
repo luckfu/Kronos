@@ -32,8 +32,9 @@
 
 ## Phase 1（2026-10-03）短跑
 
-- v6 已完成 Seg76。下一步不续 v6 checkpoint。
-- 新目录 / SwanLab：`beta_v2_1_c1_dual_t4_p1`（https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_dual_t4_p1）。
+- v6 已完成 Seg76。不续 v6 checkpoint，也不续崩溃的 p1 目录。
+- p1（`beta_v2_1_c1_dual_t4_p1`）Seg1 训练完成，首个 full validation KeyError：`weighted_forecast_loss` 未进入 aux=0 的 LossAccumulator。
+- 重跑目录 / SwanLab：`beta_v2_1_c1_dual_t4_p1b`（https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_dual_t4_p1b）。
 - 纯 forecast（aux=0）。Trunk 1e-6，heads+sector/size 1e-5，`KRONOS_SPLIT_TRUNK_HEAD_LR=1`，warmup_constant，warmup ratio 0，不开 cosine。
 - Best：`forecast`（weighted forecast），不是 `beta_v21_score`。
 - 12 segments，soft-stop 9000s，双 T4，eff batch 64，AMP fp16，full val，collect aux 0。

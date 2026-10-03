@@ -127,8 +127,8 @@ def test_forecast_selection_uses_weighted_forecast():
 def test_phase1_kernel_recipe():
     source = RUNNER.read_text()
     head = source.split("EMBEDDED_KRONOS_ARCHIVE_B64", 1)[0]
-    assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_p1"' in source
-    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_p1"' in source
+    assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_p1b"' in source
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_p1b"' in source
     assert "MAX_SEGMENTS_PER_RUN = 12" in source
     assert "MAX_RUNTIME_SECONDS = 9000" in source
     assert '"KRONOS_USE_BETA_V21_AUXILIARY": "0"' in source

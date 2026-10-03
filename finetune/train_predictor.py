@@ -1294,13 +1294,18 @@ def evaluate_validation(
         'full_sequence_loss': 0.0,
         'history_loss': 0.0,
         'forecast_loss': 0.0,
+        # Horizon-weighted forecast is the forecast-mode training term and the
+        # best-checkpoint metric. compute_predictor_losses always returns it,
+        # including when auxiliary heads are off (KRONOS_USE_BETA_V21_AUXILIARY=0).
+        # Keeping it out of the accumulator keys KeyError'd the first large
+        # validation on the dual-T4 phase-1 run.
+        'weighted_forecast_loss': 0.0,
         'condition_none_forecast_loss': 0.0,
         'condition_shuffled_forecast_loss': 0.0,
     }
     use_beta_v21 = bool(config.get('use_beta_v21_auxiliary', False))
     if use_beta_v21:
         sums.update({
-            'weighted_forecast_loss': 0.0,
             'return_loss': 0.0,
             'return_huber_loss': 0.0,
             'return_bias_loss': 0.0,
@@ -1529,6 +1534,7 @@ def evaluate_validation(
                         'full_sequence_loss': period_losses['full_sequence'],
                         'history_loss': period_losses['history'],
                         'forecast_loss': period_losses['forecast'],
+                        'weighted_forecast_loss': period_losses['weighted_forecast'],
                     }
                     if run_condition_ablation:
                         period_none = compute_predictor_losses(
