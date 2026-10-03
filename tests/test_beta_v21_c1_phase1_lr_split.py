@@ -125,20 +125,21 @@ def test_forecast_selection_uses_weighted_forecast():
 
 
 def test_phase1_kernel_recipe():
+    """WC main-LR chunk recipe (replaces stopped p1/p1b split-LR short run)."""
     source = RUNNER.read_text()
     head = source.split("EMBEDDED_KRONOS_ARCHIVE_B64", 1)[0]
-    assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_p1b"' in source
-    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_p1b"' in source
-    assert "MAX_SEGMENTS_PER_RUN = 12" in source
-    assert "MAX_RUNTIME_SECONDS = 9000" in source
+    assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_wc"' in source
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_wc"' in source
+    assert "MAX_SEGMENTS_PER_RUN = 250" in source
+    assert "MAX_RUNTIME_SECONDS = 39600" in source
     assert '"KRONOS_USE_BETA_V21_AUXILIARY": "0"' in source
-    assert '"KRONOS_PREDICTOR_LEARNING_RATE": "1e-6"' in source
+    assert '"KRONOS_PREDICTOR_LEARNING_RATE": "1e-5"' in source
     assert '"KRONOS_CONDITION_LEARNING_RATE": "1e-5"' in source
     assert '"KRONOS_PREDICTOR_WARMUP_START_LR": "1e-6"' in source
-    assert '"KRONOS_CONDITION_WARMUP_START_LR": "1e-5"' in source
-    assert '"KRONOS_SPLIT_TRUNK_HEAD_LR": "1"' in source
+    assert '"KRONOS_CONDITION_WARMUP_START_LR": "1e-6"' in source
+    assert '"KRONOS_SPLIT_TRUNK_HEAD_LR": "0"' in source
     assert '"KRONOS_SCHEDULER": "warmup_constant"' in source
-    assert '"KRONOS_SCHEDULER_WARMUP_RATIO": "0"' in source
+    assert '"KRONOS_SCHEDULER_WARMUP_RATIO": "0.05"' in source
     assert '"KRONOS_BEST_SELECTION_METRIC": "forecast"' in source
     assert '"KRONOS_HISTORY_LOSS_WEIGHT": "0.02"' in source
     assert "shuffled_no_segment_date_sort" in head
@@ -146,4 +147,6 @@ def test_phase1_kernel_recipe():
     assert '"KRONOS_BATCH_SIZE": "32"' in source
     assert '"KRONOS_AMP_DTYPE": "float16"' in source
     assert "beta_v2_1_c1_dual_t4_v6" not in head
-    assert "KRONOS_SCHEDULER\": \"warmup_cosine\"" not in source
+    assert "beta_v2_1_c1_dual_t4_p1b" not in head
+    assert 'KRONOS_SCHEDULER": "warmup_cosine"' not in source
+    assert 'assert recipe["warmup_ratio"] == "0.05"' in source

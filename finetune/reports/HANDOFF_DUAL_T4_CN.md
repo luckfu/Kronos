@@ -1,5 +1,15 @@
 # Kronos Beta v2.1 C1 双 T4 接手说明（2026-10-02）
 
+## 当前（2026-10-03）WC chunk 1
+
+- **已停** p1/p1b（拆 LR + warmup ratio 0）。**勿 resume** p1 / p1b / v6。
+- 新配方对齐 small stage2 `main` 单 LR：predictor=condition=`1e-5`，`KRONOS_SPLIT_TRUNK_HEAD_LR=0`。
+- `warmup_constant`，warmup start `1e-6`，**warmup ratio `0.05`**，hold `1e-5`；aux=0；best=`forecast`。
+- 长 chunk：`39600s` / 250 seg。输出 / SwanLab：`beta_v2_1_c1_dual_t4_wc`
+- URL：https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_dual_t4_wc
+- Kernel：`user281434/kronos-beta-v2-1-c1-dual-t4`；数据集 `luckfu/a-share-120d-temporal-symbol-holdout`
+
+
 ## 当前方向
 - **已停 TPU**；正式训练走 **双 T4 GPU**。
 - Kernel：`user281434/kronos-beta-v2-1-c1-dual-t4`（**v5**：分母按 shuffled 喂数强制重校准）
