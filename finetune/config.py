@@ -328,6 +328,12 @@ class Config:
         self.condition_learning_rate = float(
             os.getenv("KRONOS_CONDITION_LEARNING_RATE", "1e-4")
         )
+        # Off by default so existing two-speed runs keep heads on the predictor
+        # LR. Phase 1 sets this so trunk stays at predictor LR and
+        # norm/dep_layer/head/return_head/barrier_head share condition LR.
+        self.split_trunk_head_learning_rate = os.getenv(
+            "KRONOS_SPLIT_TRUNK_HEAD_LR", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.scheduler_min_learning_rate = float(
             os.getenv("KRONOS_SCHEDULER_MIN_LR", "1e-6")
         )

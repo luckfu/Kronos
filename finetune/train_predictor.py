@@ -606,6 +606,38 @@ def is_condition_parameter(name):
     return name.startswith(('sector_emb.', 'size_emb.', 'size_mlp.'))
 
 
+# Forecast / auxiliary heads. These are not the transformer trunk. With
+# KRONOS_SPLIT_TRUNK_HEAD_LR they share the condition adapter learning rate
+# instead of predictor_learning_rate.
+ADAPTATION_HEAD_PREFIXES = (
+    'norm.', 'dep_layer.', 'head.', 'return_head.', 'barrier_head.',
+)
+
+
+def is_adaptation_head_parameter(name):
+    return name.startswith(ADAPTATION_HEAD_PREFIXES)
+
+
+def parameter_optimizer_family(name, config):
+    """Map a parameter to an AdamW learning-rate family.
+
+    Historical default: sector/size are ``condition``; the transformer trunk
+    and every head share ``adaptation`` (predictor LR).
+
+    ``split_trunk_head_learning_rate`` (KRONOS_SPLIT_TRUNK_HEAD_LR): trunk
+    stays ``adaptation``. norm / dep_layer / head / return_head / barrier_head
+    join ``condition`` so they use condition_learning_rate with sector/size.
+    """
+    if is_condition_parameter(name):
+        return 'condition'
+    if (
+        config.get('split_trunk_head_learning_rate')
+        and is_adaptation_head_parameter(name)
+    ):
+        return 'condition'
+    return 'adaptation'
+
+
 def parameter_uses_weight_decay(name, parameter):
     lower_name = name.lower()
     return bool(
@@ -679,7 +711,7 @@ def build_optimizer_groups(model, config):
     for name, parameter in model.named_parameters():
         if not parameter.requires_grad:
             continue
-        family = 'condition' if is_condition_parameter(name) else 'adaptation'
+        family = parameter_optimizer_family(name, config)
         grouped[(family, parameter_uses_weight_decay(name, parameter))].append(parameter)
 
     learning_rates = {
@@ -881,7 +913,11 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
     values = {
         'objective': quick_metrics['objective_loss'],
         'full_sequence': quick_metrics['full_sequence_loss'],
-        'forecast': quick_metrics['forecast_loss'],
+        # Horizon-weighted forecast (the training objective's forecast term),
+        # not the unweighted window mean stored as forecast_loss.
+        'forecast': quick_metrics.get(
+            'weighted_forecast_loss', quick_metrics['forecast_loss']
+        ),
         'history': quick_metrics['history_loss'],
         'validation_large_objective': (
             large_metrics['objective_loss'] if large_metrics is not None else None
@@ -1408,10 +1444,10 @@ def evaluate_validation(
                 'full_sequence_loss': losses['full_sequence'],
                 'history_loss': losses['history'],
                 'forecast_loss': losses['forecast'],
+                'weighted_forecast_loss': losses['weighted_forecast'],
             }
             if use_beta_v21:
                 batch_values.update({
-                    'weighted_forecast_loss': losses['weighted_forecast'],
                     'return_loss': auxiliary_losses['return'],
                     'return_huber_loss': auxiliary_losses['return_huber'],
                     'return_bias_loss': auxiliary_losses['return_bias'],
@@ -2138,7 +2174,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     for parameter_name, parameter in core_model.named_parameters():
         if not parameter.requires_grad:
             continue
-        family = 'condition' if is_condition_parameter(parameter_name) else 'adaptation'
+        family = parameter_optimizer_family(parameter_name, config)
         family_named_parameters[family].append((parameter_name, parameter))
     scheduler_steps = sum(
         math.ceil(
@@ -2230,6 +2266,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f"({float(config['condition_fast_decay_ratio']):.2%}) -> "
                 f"{float(config['condition_fast_decay_learning_rate']):.10e}, "
                 "then monotonic cosine tail."
+            )
+        for family_name, named in family_named_parameters.items():
+            modules = sorted({name.split('.')[0] for name, _ in named})
+            parameter_count = sum(parameter.numel() for _, parameter in named)
+            print(
+                f"LR family {family_name}: params={parameter_count:,}, "
+                f"modules={modules}, "
+                f"split_trunk_head_lr="
+                f"{bool(config.get('split_trunk_head_learning_rate', False))}"
             )
         for group in optimizer.param_groups:
             parameter_count = sum(parameter.numel() for parameter in group['params'])
@@ -3068,6 +3113,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f"Validation Forecast/History/Full: {avg_val_forecast_loss:.8f} / "
                 f"{avg_val_history_loss:.8f} / {avg_val_full_loss:.8f}"
             )
+            weighted_val_forecast = primary_metrics.get('weighted_forecast_loss')
+            if weighted_val_forecast is not None:
+                print(
+                    "Validation Weighted Forecast: "
+                    f"{float(weighted_val_forecast):.8f}"
+                )
             if config.get('use_beta_v21_auxiliary', False):
                 print(
                     "Validation v2.1 Score/Return/Bias/Barrier/Rank: "
@@ -3240,6 +3291,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     full_sequence_loss=large_metrics['full_sequence_loss'],
                     history_loss=large_metrics['history_loss'],
                     forecast_loss=large_metrics['forecast_loss'],
+                    weighted_forecast_loss=large_metrics.get('weighted_forecast_loss'),
                     samples=len(valid_dataset),
                     batches=large_metrics['batches'],
                     train_average=epoch_loss_sum / max(epoch_batches, 1),
