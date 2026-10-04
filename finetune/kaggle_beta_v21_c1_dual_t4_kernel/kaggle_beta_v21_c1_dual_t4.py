@@ -12,7 +12,7 @@ beta_v21_score. Forecast loss stays in the step and is still logged.
 Cap 30 segments. Runtime cap 23400s (6.5h) so the job ends before the
 remaining GPU quota dies mid-segment. Time is the binding cap.
 
-SwanLab id is beta_v2_1_c1_dual_t4_rank, not beta_v2_1_c1_dual_t4_wc.
+SwanLab id is beta_v2_1_c1_dual_t4_rank_1e5, not beta_v2_1_c1_dual_t4_wc.
 
 Segment offset 0. Fresh coverage pass from chart Seg1. Same shuffle
 (seed 20261002). Do not continue the v13 chart offset.
@@ -55,7 +55,7 @@ SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 # New board. Resuming beta_v2_1_c1_dual_t4_wc would mix ranking into a
 # forecast-best run whose config still says aux off.
-SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank"
+SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_1e5"
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
 MODEL_REPO = "luckfu/Kronos-A-Share-Beta-V2-1"
 EXPECTED_BEST_SHA256 = (
@@ -903,7 +903,7 @@ def main() -> None:
     assert recipe["max_segments"] == "30", recipe
     assert recipe["max_runtime_seconds"] == "23400", recipe
     assert recipe["output"] == "beta_v2_1_c1_dual_t4_wc", recipe
-    assert recipe["swanlab_run_id"] == "beta_v2_1_c1_dual_t4_rank", recipe
+    assert recipe["swanlab_run_id"] == "beta_v2_1_c1_dual_t4_rank_1e5", recipe
     assert recipe["segment_offset"] == "0", recipe
     assert recipe["coverage_epoch_offset"] == "0", recipe
     assert recipe["feeding_mode"] == "same_day_batch_no_segment_date_sort", recipe
@@ -962,7 +962,7 @@ def main() -> None:
             "n_layers": 12,
             "d_model": 832,
         },
-        "note": "Lower-LR ranking continuation. Weights are chart Seg155 best_model only (weighted_forecast_loss 2.31236787, local segment 26 under the 2e-5 offset 129). v13 ranking weights are refused. last_state is not copied and not loaded. Fresh AdamW. Single LR 1e-5 both sides, warmup_constant from 1e-6, warmup ratio 0.05, min LR 1e-5, no cosine, no split LR. Aux/ranking on. Same-day batches without sorting coverage_order (seed 20261002). Best metric ranking_loss (lower better), not weighted_forecast_loss and not beta_v21_score. Forecast loss stays logged. Segment offset 0 so the next window is chart Seg1 of a new pass. Output folder beta_v2_1_c1_dual_t4_wc. SwanLab id beta_v2_1_c1_dual_t4_rank. Caps 30 segments / 23400s.",
+        "note": "Lower-LR ranking continuation. Weights are chart Seg155 best_model only (weighted_forecast_loss 2.31236787, local segment 26 under the 2e-5 offset 129). v13 ranking weights are refused. last_state is not copied and not loaded. Fresh AdamW. Single LR 1e-5 both sides, warmup_constant from 1e-6, warmup ratio 0.05, min LR 1e-5, no cosine, no split LR. Aux/ranking on. Same-day batches without sorting coverage_order (seed 20261002). Best metric ranking_loss (lower better), not weighted_forecast_loss and not beta_v21_score. Forecast loss stays logged. Segment offset 0 so the next window is chart Seg1 of a new pass. Output folder beta_v2_1_c1_dual_t4_wc. SwanLab id beta_v2_1_c1_dual_t4_rank_1e5. Caps 30 segments / 23400s.",
         "continuation": resume,
         "best_checkpoint": str(predictor),
         "adamw": "fresh",
