@@ -170,8 +170,18 @@ def compose_beta_v21_objective(
     normalizer: DetachedEMANormalizer,
     global_step: int,
     warmup_steps: int = 1000,
+    ranking_weight: float = 0.05,
+    return_weight: float = 0.15,
+    barrier_weight: float = 0.10,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor | float]]:
-    """Build the warm-started, scale-free Beta v2.1 objective."""
+    """Build the warm-started, scale-free Beta v2.1 objective.
+
+    Default aux mix is 0.15 return + 0.10 barrier + 0.05 ranking (sum 0.30).
+    Ranking weight is overridable for ranking-focused recipes; the denominator
+    tracks the aux sum so unit losses still yield objective 1.0.
+    """
+    if ranking_weight <= 0 or return_weight <= 0 or barrier_weight <= 0:
+        raise ValueError('Beta v2.1 auxiliary term weights must be positive')
     normalized = {
         'path': normalizer.normalize('path', path_loss),
         'history': normalizer.normalize('history', history_loss),
@@ -180,13 +190,15 @@ def compose_beta_v21_objective(
         'ranking': normalizer.normalize('ranking', auxiliary_losses['ranking']),
     }
     ramp = min(1.0, max(0.0, float(global_step) / max(1, int(warmup_steps))))
+    base_weight = 0.70
     base = 0.68 * normalized['path'] + 0.02 * normalized['history']
     auxiliary = (
-        0.15 * normalized['return']
-        + 0.10 * normalized['barrier']
-        + 0.05 * normalized['ranking']
+        float(return_weight) * normalized['return']
+        + float(barrier_weight) * normalized['barrier']
+        + float(ranking_weight) * normalized['ranking']
     )
-    objective = (base + ramp * auxiliary) / (0.70 + 0.30 * ramp)
+    aux_weight = float(return_weight) + float(barrier_weight) + float(ranking_weight)
+    objective = (base + ramp * auxiliary) / (base_weight + aux_weight * ramp)
     return objective, {**normalized, 'ramp': ramp}
 
 

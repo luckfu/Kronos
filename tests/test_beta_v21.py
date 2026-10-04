@@ -202,6 +202,50 @@ def test_composite_loss_warms_auxiliary_heads_without_changing_total_scale():
     assert warm_metrics['ramp'] == 1.0
 
 
+def test_composite_loss_honors_higher_ranking_weight_without_changing_unit_scale():
+    scalar = torch.tensor(1.0, requires_grad=True)
+    auxiliary = {
+        'return': scalar,
+        'barrier': scalar,
+        'ranking': scalar,
+    }
+    normalizer = DetachedEMANormalizer(decay=0.99)
+
+    cold, cold_metrics = compose_beta_v21_objective(
+        scalar, scalar, auxiliary, normalizer, global_step=0, ranking_weight=0.5
+    )
+    warm, warm_metrics = compose_beta_v21_objective(
+        scalar, scalar, auxiliary, normalizer, global_step=1000, ranking_weight=0.5
+    )
+
+    assert torch.isclose(cold, torch.tensor(1.0))
+    assert torch.isclose(warm, torch.tensor(1.0))
+    assert cold_metrics['ramp'] == 0.0
+    assert warm_metrics['ramp'] == 1.0
+
+    # Seed EMA scales so ranking=2.0 normalizes above 1 while other terms stay ~1.
+    seeded = DetachedEMANormalizer(decay=0.99)
+    seeded.values = {
+        'path': 1.0, 'history': 1.0, 'return': 1.0, 'barrier': 1.0, 'ranking': 1.0,
+    }
+    path = torch.tensor(1.0)
+    hist = torch.tensor(1.0)
+    aux_skew = {
+        'return': torch.tensor(1.0),
+        'barrier': torch.tensor(1.0),
+        'ranking': torch.tensor(2.0),
+    }
+    default_warm, _ = compose_beta_v21_objective(
+        path, hist, aux_skew, seeded, global_step=1000
+    )
+    seeded_heavy = DetachedEMANormalizer(decay=0.99)
+    seeded_heavy.values = dict(seeded.values)
+    heavy_warm, _ = compose_beta_v21_objective(
+        path, hist, aux_skew, seeded_heavy, global_step=1000, ranking_weight=0.5,
+    )
+    assert float(heavy_warm) > float(default_warm)
+
+
 def test_validation_consistency_reports_bias_and_distribution_drift():
     actual = torch.zeros(3, 4)
     auxiliary = torch.ones(3, 4)

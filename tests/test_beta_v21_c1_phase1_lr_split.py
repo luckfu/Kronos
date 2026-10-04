@@ -140,24 +140,28 @@ def test_ranking_selection_is_ranking_loss_not_score():
 
 
 def test_phase1_kernel_recipe():
-    """Ranking diagnostic recipe: same-day batches, not the forecast-best board."""
+    """Ranking warm recipe: split LR, ranking weight 0.5, same-day batches."""
     source = RUNNER.read_text()
     head = source.split("EMBEDDED_KRONOS_ARCHIVE_B64", 1)[0]
     assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_wc"' in source
-    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank"' in head
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_warm"' in head
     assert "MAX_SEGMENTS_PER_RUN = 30" in source
-    assert "MAX_RUNTIME_SECONDS = 23400" in source
+    assert "MAX_RUNTIME_SECONDS = 10800" in source
     assert '"KRONOS_USE_BETA_V21_AUXILIARY": "1"' in source
     assert '"KRONOS_SAME_DAY_RANKING_BATCHES": "1"' in source
+    assert '"KRONOS_BETA_V21_RANKING_WEIGHT": RANKING_WEIGHT' in source
+    assert 'RANKING_WEIGHT = "0.5"' in head
     assert '"KRONOS_PREDICTOR_LEARNING_RATE": PREDICTOR_LR' in source
-    assert 'PREDICTOR_LR = "1e-5"' in head
-    assert '"KRONOS_CONDITION_LEARNING_RATE": PREDICTOR_LR' in source
-    assert '"KRONOS_PREDICTOR_WARMUP_START_LR": WARMUP_START_LR' in source
-    assert '"KRONOS_CONDITION_WARMUP_START_LR": WARMUP_START_LR' in source
-    assert 'WARMUP_START_LR = "1e-6"' in head
+    assert 'PREDICTOR_LR = "1e-6"' in head
+    assert 'CONDITION_LR = "1e-5"' in head
+    assert '"KRONOS_CONDITION_LEARNING_RATE": CONDITION_LR' in source
+    assert '"KRONOS_PREDICTOR_WARMUP_START_LR": PREDICTOR_WARMUP_START_LR' in source
+    assert '"KRONOS_CONDITION_WARMUP_START_LR": CONDITION_WARMUP_START_LR' in source
+    assert 'PREDICTOR_WARMUP_START_LR = "1e-6"' in head
+    assert 'CONDITION_WARMUP_START_LR = "1e-6"' in head
     assert '"KRONOS_PREDICTOR_MIN_LR": PREDICTOR_LR' in source
-    assert '"KRONOS_CONDITION_MIN_LR": PREDICTOR_LR' in source
-    assert '"KRONOS_SPLIT_TRUNK_HEAD_LR": "0"' in source
+    assert '"KRONOS_CONDITION_MIN_LR": CONDITION_LR' in source
+    assert '"KRONOS_SPLIT_TRUNK_HEAD_LR": "1"' in source
     assert '"KRONOS_SCHEDULER": "warmup_constant"' in source
     assert 'WARMUP_RATIO = "0.05"' in head
     assert '"KRONOS_BEST_SELECTION_METRIC": "ranking"' in source
@@ -171,8 +175,14 @@ def test_phase1_kernel_recipe():
     assert '"KRONOS_AMP_DTYPE": "float16"' in source
     assert "beta_v2_1_c1_dual_t4_v6" not in head
     assert "beta_v2_1_c1_dual_t4_p1b" not in head
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_1e5"' not in head
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank"' not in head
     assert 'KRONOS_SCHEDULER": "warmup_cosine"' not in source
     assert 'assert recipe["warmup_ratio"] == "0.05"' in source
     assert 'assert recipe["segment_offset"] == "0"' in source
-    assert 'assert recipe["max_runtime_seconds"] == "23400"' in source
+    assert 'assert recipe["max_runtime_seconds"] == "10800"' in source
     assert 'assert recipe["best_metric"] == "ranking"' in source
+    assert 'assert recipe["ranking_weight"] == "0.5"' in source
+    assert 'assert recipe["split_trunk_head_lr"] == "1"' in source
+    assert 'assert recipe["predictor_lr"] == "1e-6"' in source
+    assert 'assert recipe["condition_lr"] == "1e-5"' in source

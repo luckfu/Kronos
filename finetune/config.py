@@ -268,6 +268,9 @@ class Config:
         self.beta_v21_auxiliary_warmup_steps = int(
             os.getenv("KRONOS_BETA_V21_AUXILIARY_WARMUP_STEPS", "1000")
         )
+        self.beta_v21_ranking_weight = float(
+            os.getenv("KRONOS_BETA_V21_RANKING_WEIGHT", "0.05")
+        )
         self.beta_v21_ema_decay = float(
             os.getenv("KRONOS_BETA_V21_EMA_DECAY", "0.99")
         )
@@ -332,6 +335,8 @@ class Config:
             )
         if self.beta_v21_auxiliary_warmup_steps < 1:
             raise ValueError("Beta v2.1 auxiliary warmup steps must be positive")
+        if self.beta_v21_ranking_weight <= 0:
+            raise ValueError("Beta v2.1 ranking weight must be positive")
         if not 0.0 <= self.beta_v21_ema_decay < 1.0:
             raise ValueError("Beta v2.1 EMA decay must be in [0, 1)")
         if self.beta_v21_consistency_samples < 0:

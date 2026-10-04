@@ -349,6 +349,7 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
         'validation_large_samples', 'validation_large_interval_segments',
         'validation_full_only',
         'use_beta_v21_auxiliary', 'beta_v21_auxiliary_warmup_steps',
+        'beta_v21_ranking_weight',
         'beta_v21_ema_decay', 'beta_v21_validation_denominators',
         'beta_v21_auto_calibrate', 'collect_validation_auxiliary',
         'beta_v21_consistency_samples', 'beta_v21_consistency_sample_count',
@@ -2932,6 +2933,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         batch_idx_global,
                         warmup_steps=int(
                             config.get('beta_v21_auxiliary_warmup_steps', 1000)
+                        ),
+                        ranking_weight=float(
+                            config.get('beta_v21_ranking_weight', 0.05)
                         ),
                     )
                 else:
