@@ -234,11 +234,12 @@ class Config:
         ).strip().lower()
         if self.best_selection_metric not in {
             "objective", "full_sequence", "forecast", "history",
-            "validation_large_objective", "beta_v21_score"
+            "validation_large_objective", "beta_v21_score", "ranking"
         }:
             raise ValueError(
                 "KRONOS_BEST_SELECTION_METRIC must be objective, full_sequence, "
-                "forecast, history, validation_large_objective, or beta_v21_score"
+                "forecast, history, validation_large_objective, beta_v21_score, "
+                "or ranking"
             )
         forecast_weights = os.getenv("KRONOS_FORECAST_HORIZON_WEIGHTS", "").strip()
         if forecast_weights:
@@ -292,6 +293,11 @@ class Config:
             "KRONOS_BETA_V21_SCORE_FEEDING_MODE",
             "shuffled_no_segment_date_sort",
         ).strip() or "shuffled_no_segment_date_sort"
+        # Pack same-day names into each batch without sorting the segment.
+        # Off by default so shuffled coverage feeding is unchanged.
+        self.same_day_ranking_batches = os.getenv(
+            "KRONOS_SAME_DAY_RANKING_BATCHES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
 
         self.collect_validation_auxiliary = os.getenv(
             "KRONOS_COLLECT_VALIDATION_AUXILIARY", "0"
@@ -315,6 +321,14 @@ class Config:
         ):
             raise ValueError(
                 "Beta v2.1 checkpoint selection requires fixed validation denominators"
+            )
+        if self.best_selection_metric == "ranking" and not self.use_beta_v21_auxiliary:
+            raise ValueError(
+                "ranking best-checkpoint selection requires Beta v2.1 auxiliary"
+            )
+        if self.best_selection_metric == "ranking" and not self.same_day_ranking_batches:
+            raise ValueError(
+                "ranking best-checkpoint selection requires same-day ranking batches"
             )
         if self.beta_v21_auxiliary_warmup_steps < 1:
             raise ValueError("Beta v2.1 auxiliary warmup steps must be positive")

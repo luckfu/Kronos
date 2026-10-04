@@ -11,6 +11,8 @@ for path in (ROOT, FINETUNE):
 
 from train_predictor import (
     DEFAULT_BETA_V21_SCORE_FEEDING_MODE,
+    beta_v21_validation_score,
+    resolve_kept_best_loss,
     should_reuse_saved_beta_v21_denominators,
     validate_resume_guard,
 )
@@ -48,3 +50,37 @@ def test_resume_guard_can_ignore_denominators():
         raise AssertionError("expected mismatch")
     except ValueError as exc:
         assert "beta_v21_validation_denominators" in str(exc)
+
+
+def test_sparse_ranking_denominator_miscalibrates_beta_v21_score():
+    """Dense same-day ranking must not be scored with the sparse denominator.
+
+    Shuffled batches contribute ~0.37 pairs and pull the sample-weighted
+    ranking loss toward 0, so a saved ranking denominator can sit near 0.05.
+    A random pairwise softplus on a real same-day batch is about ln(2).
+    The composite then stops being a ranking metric (and is half forecast).
+    """
+    metrics = {
+        "weighted_forecast_loss": 2.31,
+        "return_loss": 0.40,
+        "barrier_loss": 0.70,
+        "ranking_loss": 0.693147,
+    }
+    sparse = beta_v21_validation_score(
+        metrics,
+        {"beta_v21_validation_denominators": "2.31,1,0.40,0.70,0.05"},
+    )
+    ranking_term = 0.10 * metrics["ranking_loss"] / 0.05
+    # Other terms are ~0.9 at their own denominators; the sparse ranking
+    # denominator alone pushes the composite above 2 and contributes more
+    # than half of it. That is not a ranking loss and not the old forecast best.
+    assert ranking_term > 1.0
+    assert ranking_term > 0.5 * sparse
+    assert sparse > 2.0
+
+
+def test_forecast_threshold_is_not_reused_for_ranking():
+    assert resolve_kept_best_loss("forecast", 2.31236787, "ranking", 0.51) == 0.51
+    assert resolve_kept_best_loss("forecast", 2.31236787, "ranking", None) == float("inf")
+    assert resolve_kept_best_loss("ranking", 0.42, "ranking", 0.90) == 0.42
+    assert resolve_kept_best_loss("forecast", 2.31236787, "forecast", None) == 2.31236787

@@ -9,7 +9,7 @@ from finetune.beta_v21 import (
     same_date_pairwise_ranking_loss,
     same_date_return_bias_loss,
 )
-from finetune.dataset import QlibDataset, build_beta_v21_labels
+from finetune.dataset import QlibDataset, build_beta_v21_labels, build_same_day_ranking_batches
 from model import Kronos
 
 
@@ -223,3 +223,26 @@ def test_bfloat16_generated_values_can_be_exported_to_numpy():
 
     assert exported.dtype == np.float32
     assert exported.shape == (2, 10, 6)
+
+
+def test_same_day_batch_has_ranking_pairs_and_is_not_time_ordered():
+    # Shuffled coverage order: later calendar day is seen first.
+    dates = [20, 5, 20, 5, 20, 9, 5, 9]
+    batches = build_same_day_ranking_batches(dates, batch_size=3, rank=0, world_size=1)
+
+    assert batches[0] == [0, 2, 4]
+    assert all(len({dates[index] for index in batch}) == 1 for batch in batches)
+    assert any(len(batch) >= 2 for batch in batches)
+    flat_dates = [dates[index] for batch in batches for index in batch]
+    assert flat_dates != sorted(flat_dates)
+    assert sorted(index for batch in batches for index in batch) == list(range(len(dates)))
+
+
+def test_same_day_pair_stays_on_one_rank():
+    dates = [4, 4]
+    rank0 = build_same_day_ranking_batches(dates, batch_size=32, rank=0, world_size=2)
+    rank1 = build_same_day_ranking_batches(dates, batch_size=32, rank=1, world_size=2)
+
+    assert len(rank0) == len(rank1) == 1
+    assert rank0[0] == [0, 1]
+    assert len({dates[index] for index in rank0[0]}) == 1

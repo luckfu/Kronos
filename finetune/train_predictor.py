@@ -59,7 +59,7 @@ except ImportError:
 # Ensure project root is in path
 sys.path.append('../')
 from config import Config
-from dataset import QlibDataset
+from dataset import QlibDataset, build_same_day_ranking_batches
 from model.kronos import KronosTokenizer, Kronos, auto_regressive_inference
 from beta_v21 import (
     DetachedEMANormalizer,
@@ -442,6 +442,34 @@ def validate_scheduler_transition_state(source_state, config, amp_dtype_name):
         raise ValueError('Scheduler transition AMP dtype mismatch')
 
 
+
+class SameDayRankingBatchSampler:
+    """Yield same-day index batches from the dataset's current coverage slice.
+
+    Recomputed every iteration so set_epoch_seed can advance the shuffled
+    segment without sorting it. Does not touch active_positions.
+    """
+
+    def __init__(self, dataset, batch_size, rank, world_size):
+        self.dataset = dataset
+        self.batch_size = int(batch_size)
+        self.rank = int(rank)
+        self.world_size = int(world_size)
+
+    def _batches(self):
+        positions = self.dataset.active_positions
+        date_ids = self.dataset.signal_date_ids[positions]
+        return build_same_day_ranking_batches(
+            date_ids, self.batch_size, self.rank, self.world_size,
+        )
+
+    def __iter__(self):
+        return iter(self._batches())
+
+    def __len__(self):
+        return len(self._batches())
+
+
 def create_dataloaders(config: dict, rank: int, world_size: int):
     """
     Creates and returns distributed dataloaders for training and validation.
@@ -475,7 +503,36 @@ def create_dataloaders(config: dict, rank: int, world_size: int):
             f"Full-only validation size: {len(valid_dataset)}"
         )
 
+    use_same_day_batches = bool(config.get('same_day_ranking_batches', False))
     use_ddp = (dist.is_available() and dist.is_initialized()) or world_size > 1
+    if use_same_day_batches:
+        if rank == 0:
+            print(
+                f"[Rank {rank}] Same-day ranking batches enabled "
+                f"(batch_size={config['batch_size']}, world_size={world_size}). "
+                "Segment order stays shuffled coverage_order; pairs are packed "
+                "inside batches only and are not a signal_date sort."
+            )
+
+        def _same_day_loader(dataset):
+            return DataLoader(
+                dataset,
+                batch_sampler=SameDayRankingBatchSampler(
+                    dataset, config['batch_size'], rank, world_size,
+                ),
+                num_workers=config.get('num_workers', 2),
+                pin_memory=torch.cuda.is_available(),
+            )
+
+        train_loader = _same_day_loader(train_dataset)
+        quick_val_loader = (
+            _same_day_loader(quick_dataset) if quick_dataset is not None else None
+        )
+        large_val_loader = _same_day_loader(valid_dataset)
+        return (
+            train_loader, quick_val_loader, large_val_loader,
+            train_dataset, valid_dataset,
+        )
     train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=False) if use_ddp else None
     quick_val_sampler = (
         DistributedSampler(
@@ -923,10 +980,34 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
             large_metrics['objective_loss'] if large_metrics is not None else None
         ),
         'beta_v21_score': (large_metrics or quick_metrics).get('beta_v21_score'),
+        # Lower is better. Not beta_v21_score: that composite is 50% forecast
+        # and its ranking denominator was calibrated on sparse shuffled pairs
+        # (~0.37 pairs/batch). Dense same-day pairs change the ranking scale,
+        # so the score is not a ranking metric.
+        'ranking': (large_metrics or quick_metrics).get('ranking_loss'),
     }
     if metric not in values:
         raise ValueError(f'Unsupported best selection metric: {metric}')
     return values[metric]
+
+
+
+def resolve_kept_best_loss(
+    saved_metric_name, saved_loss, current_metric, calibration_loss,
+):
+    """Do not treat a forecast selection_loss as a ranking threshold.
+
+    weighted_forecast_loss (~2.3) and same-day ranking loss (~0.7) are not
+    the same number. When the checkpoint objective switches to ranking, the
+    bar is the parent checkpoint's calibration ranking_loss (lower better),
+    or +inf if that calibration was not run. Other metrics keep the saved
+    threshold.
+    """
+    if current_metric == 'ranking' and str(saved_metric_name or '') != 'ranking':
+        if calibration_loss is not None and math.isfinite(float(calibration_loss)):
+            return float(calibration_loss)
+        return float('inf')
+    return float(saved_loss)
 
 
 def resolve_amp_dtype(config, device):
@@ -2101,9 +2182,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         'parent_path': config['pretrained_predictor_path'],
                         'feeding_mode': feeding_mode,
                         'note': (
-                            'Dens are tied to feeding_mode. Sparse same-day ranking '
-                            '(~0.37 pairs/batch after no segment date-sort) shrinks '
-                            'ranking dens; bump feeding_mode when same-day batch path lands.'
+                            'Dens are tied to feeding_mode. Sparse shuffled batches '
+                            '(~0.37 same-day pairs/batch) shrink the ranking denominator '
+                            'and make beta_v21_score incomparable once same-day batches '
+                            'are dense. Do not select checkpoints on that score; use '
+                            'ranking_loss. Bump feeding_mode when the batch path changes.'
                         ),
                         'path': denominator_values[0],
                         'history': denominator_values[1],
@@ -2646,23 +2729,41 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
         with open(best_metric_path) as handle:
             existing_best_metric = json.load(handle)
-        best_val_loss = float(existing_best_metric.get(
+        saved_metric_name = str(existing_best_metric.get('selection_metric') or '')
+        saved_loss = float(existing_best_metric.get(
             'selection_loss', existing_best_metric.get('objective_loss', float('inf'))
         ))
-        if not math.isfinite(best_val_loss):
+        if not math.isfinite(saved_loss):
             raise ValueError(
                 'Existing best_metric.json has no finite selection loss'
             )
+        current_metric = str(config.get('best_selection_metric', 'objective'))
+        calibration_ranking = None
+        if calibration_metrics is not None:
+            calibration_ranking = calibration_metrics.get('ranking_loss')
+        best_val_loss = resolve_kept_best_loss(
+            saved_metric_name, saved_loss, current_metric, calibration_ranking,
+        )
         if rank == 0:
             family_lrs = learning_rates_by_family(optimizer)
             print(
                 'Fresh AdamW on existing best_model weights; '
                 'last_state optimizer moments were not loaded. '
                 f'best_segment={int(existing_best_metric.get("segment", -1))}, '
-                f'best_selection_loss={best_val_loss:.8f}, '
+                f'saved_selection_metric={saved_metric_name or "unset"}, '
+                f'saved_selection_loss={saved_loss:.8f}, '
+                f'active_metric={current_metric}, '
+                f'active_best_threshold={best_val_loss:.8f}, '
                 f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
                 f'condition_lr={family_lrs["condition"]:.10e}.'
             )
+            if current_metric == 'ranking' and saved_metric_name != 'ranking':
+                print(
+                    'Historical forecast best was not reused as the ranking '
+                    f'threshold ({saved_metric_name or "unset"} '
+                    f'{saved_loss:.8f} -> {current_metric}). '
+                    'beta_v21_score is not the selection metric.'
+                )
 
     if rank == 0:
         # Keep the output contract valid even if Kaggle interrupts before the
@@ -2713,6 +2814,21 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             train_sampler.num_samples = math.ceil(len(train_dataset) / world_size)
             train_sampler.total_size = train_sampler.num_samples * world_size
             train_sampler.set_epoch(epoch_idx)
+        if rank == 0 and config.get('same_day_ranking_batches', False):
+            segment_dates = train_dataset.signal_date_ids[
+                train_dataset.active_positions
+            ]
+            packed = build_same_day_ranking_batches(
+                segment_dates, int(config['batch_size']), 0, world_size,
+            )
+            with_pairs = sum(1 for batch in packed if len(set(
+                int(segment_dates[index]) for index in batch
+            )) == 1 and len(batch) >= 2)
+            print(
+                f"Same-day batch pack rank0: batches={len(packed)}, "
+                f"with_pairs={with_pairs}, segment_len={len(segment_dates)}",
+                flush=True,
+            )
 
         if rank == 0:
             write_progress(

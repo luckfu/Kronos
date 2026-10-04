@@ -131,6 +131,51 @@ def build_balanced_coverage_order(bucket_ids, segment_size, seed):
     order[output_start:] = unknown_positions
     return order
 
+def build_same_day_ranking_batches(date_ids, batch_size, rank=0, world_size=1):
+    """Pack coverage-order indices into same-day batches without a timeline sort.
+
+    ``date_ids`` stays in shuffled coverage order. Dates are emitted in
+    first-seen order and are never argsorted, so the batch stream is not
+    chronological. Within a date, index order is that same coverage order.
+    Each batch is a single signal date (a real ranking pair when it has at
+    least two rows). Chunks are dealt round-robin to ranks so a short day is
+    not stride-split into singletons across GPUs. Ranks are padded to the
+    same batch count by repeating that rank's last same-day batch; otherwise
+    DDP deadlocks. Padding is at most one extra batch.
+    """
+    if int(batch_size) < 1:
+        raise ValueError('batch_size must be positive')
+    rank = int(rank)
+    world_size = int(world_size)
+    if world_size < 1 or not 0 <= rank < world_size:
+        raise ValueError('invalid rank/world_size')
+    buckets = {}
+    first_seen = []
+    for index, date_id in enumerate(date_ids):
+        key = int(date_id)
+        if key not in buckets:
+            buckets[key] = []
+            first_seen.append(key)
+        buckets[key].append(int(index))
+    chunks = []
+    for key in first_seen:
+        indices = buckets[key]
+        for start in range(0, len(indices), int(batch_size)):
+            chunks.append(indices[start:start + int(batch_size)])
+    if not chunks:
+        return []
+    mine = [list(chunk) for i, chunk in enumerate(chunks) if i % world_size == rank]
+    target = max(
+        sum(1 for i in range(len(chunks)) if i % world_size == replica)
+        for replica in range(world_size)
+    )
+    if not mine:
+        mine = [list(chunks[0])]
+    while len(mine) < target:
+        mine.append(list(mine[-1]))
+    return mine
+
+
 
 def load_merged_panels(paths):
     """Load one or more panel pickles and join each symbol chronologically."""
@@ -642,13 +687,10 @@ class QlibDataset(Dataset):
         end = min(start + self.n_samples, self.total_samples)
         self.coverage_start = start
         # Match small stage2/main feeding: keep shuffled coverage_order segment
-        # order. Do NOT argsort by signal_date_ids when use_beta_v21_auxiliary
-        # or use_stage3_rank — full-segment chronological feed reintroduces
-        # overlapping-window time bias. Same-day ranking batches need a
-        # separate batching path, not whole-segment date sort.
-        # TODO(same-day-ranking-batch): build independent same-date pair batches
-        # (~dense ranking) without reintroducing whole-segment date sort; then
-        # bump beta_v21_score feeding_mode so dens auto-recalibrate.
+        # order. Do NOT argsort by signal_date_ids. A full-segment chronological
+        # feed reintroduces overlapping-window time bias. Same-day ranking pairs
+        # are packed later by build_same_day_ranking_batches (batch scope only,
+        # first-seen date order, not a timeline sort).
         self.active_positions = self.coverage_order[start:end]
 
     def coverage_state(self, segment_index: int = 0) -> dict:
