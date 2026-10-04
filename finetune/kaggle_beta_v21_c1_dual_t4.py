@@ -1,23 +1,21 @@
-"""Beta v2.1 C1 dual-T4 ranking diagnostic after the 2e-5 forecast probe.
+"""Beta v2.1 C1 dual-T4 lower-LR ranking continuation.
 
-Resume weights from the 2e-5 probe best_model (chart Seg155,
-weighted_forecast_loss 2.31236787) in folder beta_v2_1_c1_dual_t4_wc.
-Not last_state from the 2e-5 or 5e-6 runs, not the pretrained parent.
-AdamW is fresh. Single LR 2e-5 both sides, split trunk/head off.
-warmup_constant holds 2e-5 from step 0 (warmup ratio 0, warmup start and
-min LR 2e-5). No cosine. Aux/ranking heads on. Same-day stocks share a
+Weights are the 2e-5 forecast probe best_model only (chart Seg155,
+weighted_forecast_loss 2.31236787, local segment 26) in folder
+beta_v2_1_c1_dual_t4_wc. Not v13 ranking weights, not any last_state,
+not the pretrained parent. AdamW is fresh. Single LR 1e-5 both sides,
+split trunk/head off. warmup_constant from 1e-6, warmup ratio 0.05, then
+hold 1e-5. No cosine. Aux/ranking heads on. Same-day stocks share a
 batch; coverage_order seed 20261002 is not date-sorted. Best metric is
 ranking_loss (lower better), not weighted_forecast_loss and not
-beta_v21_score (sparse-pair denominators are miscalibrated once pairs are
-dense). Forecast loss stays in the step and is still logged, including
-weighted_forecast_loss. Cap 30 segments, runtime 39600s.
+beta_v21_score. Forecast loss stays in the step and is still logged.
+Cap 30 segments. Runtime cap 23400s (6.5h) so the job ends before the
+remaining GPU quota dies mid-segment. Time is the binding cap.
 
 SwanLab id is beta_v2_1_c1_dual_t4_rank, not beta_v2_1_c1_dual_t4_wc.
-The wc board's best series is the forecast objective; logging a ranking
-best on that id would pretend the new number is the old forecast best.
 
-Segment offset 159. The 2e-5 probe finished chart Seg130–159. Next unread
-window is chart Seg160. Do not reread 130–159 and do not skip 160.
+Segment offset 0. Fresh coverage pass from chart Seg1. Same shuffle
+(seed 20261002). Do not continue the v13 chart offset.
 """
 
 from __future__ import annotations
@@ -45,16 +43,14 @@ BETA_V21_SCORE_FEEDING_MODE = "same_day_batch_no_segment_date_sort"
 PROBE_CHART_OFFSET = 129
 EXPECTED_BEST_CHART_SEGMENT = 155
 EXPECTED_BEST_LOCAL_SEGMENT = EXPECTED_BEST_CHART_SEGMENT - PROBE_CHART_OFFSET
-# 2e-5 probe finished chart Seg130–159 (30 local segments). Next window is
-# chart Seg160. Same shuffled coverage order, seed 20261002.
-LAST_VERIFIED_FINISHED_CHART_SEGMENT = 159
-SEGMENT_OFFSET = LAST_VERIFIED_FINISHED_CHART_SEGMENT
-# Chart segment the 2e-5 probe finished. Logged only; offset above is the gate.
-PRIOR_CHUNK_COMPLETED_CHART_SEGMENT = 159
+# Fresh coverage pass. Offset 0 restarts at chart Seg1 of the same
+# shuffled order (seed 20261002). Do not continue the v13 chart offset.
+SEGMENT_OFFSET = 0
 # Printed to 8 decimals as 2.31236787. Gate uses 1e-8 absolute tolerance.
 EXPECTED_BEST_SELECTION_LOSS = 2.31236787
-PREDICTOR_LR = "2e-5"
-WARMUP_RATIO = "0"
+PREDICTOR_LR = "1e-5"
+WARMUP_START_LR = "1e-6"
+WARMUP_RATIO = "0.05"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 # New board. Resuming beta_v2_1_c1_dual_t4_wc would mix ranking into a
@@ -92,11 +88,11 @@ def globalize_training_log(line: str) -> str:
     return line[:start] + matched + line[end:]
 
 
-# Soft-stop before weekly GPU quota exhaustion; leave export margin.
-# Diagnostic arm: 30 segments so the slope can be judged without a 250-seg
-# chunk. Runtime stays 39600 so a slow segment is not cut off mid-window.
+# Soft-stop before the remaining GPU quota dies mid-segment.
+# 2026-10-04 quota is about 7h; 6.5h (23400s) is the binding cap.
+# Segment cap stays 30. Time ends the job first.
 MAX_SEGMENTS_PER_RUN = 30
-MAX_RUNTIME_SECONDS = 39600  # long dual-T4 chunk; leave Kaggle export margin.
+MAX_RUNTIME_SECONDS = 23400  # 6.5h; leave a margin before quota exhaustion.
 COVERAGE_SEED = "20261002"
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
@@ -250,6 +246,68 @@ def find_continuation(input_root: Path) -> Path | None:
     return root
 
 
+
+def is_seg155_forecast_best(metric: dict) -> bool:
+    """True only for the 2e-5 probe forecast best, never a ranking best."""
+    try:
+        segment = int(metric.get("segment", -1))
+        loss = float(metric.get(
+            "selection_loss", metric.get("objective_loss", float("nan"))
+        ))
+    except (TypeError, ValueError):
+        return False
+    name = str(metric.get("selection_metric") or "")
+    if name == "ranking":
+        return False
+    return (
+        segment in {EXPECTED_BEST_CHART_SEGMENT, EXPECTED_BEST_LOCAL_SEGMENT}
+        and loss == loss
+        and abs(loss - EXPECTED_BEST_SELECTION_LOSS) <= 1e-8
+    )
+
+
+def find_seg155_forecast_best(input_root: Path) -> Path:
+    """Point weights at Seg155 best_model. Do not auto-pick v13 ranking weights."""
+    matches: list[Path] = []
+    rejected_ranking: list[str] = []
+    for metric_path in sorted(input_root.glob("**/best_metric.json")):
+        best_dir = metric_path.parent
+        if best_dir.name != "best_model":
+            continue
+        if OUTPUT_NAME not in best_dir.parts:
+            continue
+        if not (best_dir / "model.safetensors").is_file():
+            continue
+        try:
+            metric = json.loads(metric_path.read_text())
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+        if str(metric.get("selection_metric") or "") == "ranking":
+            rejected_ranking.append(str(best_dir))
+            continue
+        if not is_seg155_forecast_best(metric):
+            continue
+        matches.append(best_dir.resolve())
+    unique = list(dict.fromkeys(matches))
+    if len(unique) != 1:
+        raise SystemExit(
+            "Refusing to auto-pick weights. Need exactly one chart Seg155 "
+            f"best_model (weighted_forecast_loss {EXPECTED_BEST_SELECTION_LOSS}, "
+            f"local segment {EXPECTED_BEST_LOCAL_SEGMENT}) under {OUTPUT_NAME}. "
+            f"found={len(unique)} paths={unique}. "
+            f"ranking bests ignored={rejected_ranking}. "
+            "v13 ranking weights and last_state are not a valid parent."
+        )
+    return unique[0]
+
+
+def ignore_optimizer_state(directory: str, names: list[str]) -> list[str]:
+    """Keep last_state.pt out of the working copy so AdamW cannot resume it."""
+    if Path(directory).name == "checkpoints" and "last_state.pt" in names:
+        return ["last_state.pt"]
+    return []
+
+
 def download_model(runtime: Path) -> tuple[Path, Path]:
     target = runtime / "models" / "Kronos-A-Share-Beta-V1-1"
     phase("download_model_started", repo=MODEL_REPO, target=str(target))
@@ -339,8 +397,8 @@ def build_environment(
             "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
         "KRONOS_PREDICTOR_LEARNING_RATE": PREDICTOR_LR,
         "KRONOS_CONDITION_LEARNING_RATE": PREDICTOR_LR,
-        "KRONOS_PREDICTOR_WARMUP_START_LR": PREDICTOR_LR,
-        "KRONOS_CONDITION_WARMUP_START_LR": PREDICTOR_LR,
+        "KRONOS_PREDICTOR_WARMUP_START_LR": WARMUP_START_LR,
+        "KRONOS_CONDITION_WARMUP_START_LR": WARMUP_START_LR,
         "KRONOS_PREDICTOR_MIN_LR": PREDICTOR_LR,
         "KRONOS_CONDITION_MIN_LR": PREDICTOR_LR,
         "KRONOS_SPLIT_TRUNK_HEAD_LR": "0",
@@ -552,15 +610,15 @@ def start_swanlab(env: dict[str, str]):
         project=SWANLAB_PROJECT,
         workspace=SWANLAB_WORKSPACE,
         experiment_name=OUTPUT_NAME,
-        tags=["kronos-base", "beta-v2.1", "c1", "warmup-constant", "dual-t4", "ranking", "seg155-best", "lr-2e-5"],
+        tags=["kronos-base", "beta-v2.1", "c1", "warmup-constant", "dual-t4", "ranking", "seg155-best", "lr-1e-5"],
         config={
             "parent_kernel": PARENT_KERNEL,
             "checkpoint": "seg155_best_model",
             "adamw": "fresh",
             "predictor_learning_rate": float(PREDICTOR_LR),
             "condition_learning_rate": float(PREDICTOR_LR),
-            "warmup_start_lr": float(PREDICTOR_LR),
-            "scheduler_warmup_ratio": 0.0,
+            "warmup_start_lr": float(WARMUP_START_LR),
+            "scheduler_warmup_ratio": float(WARMUP_RATIO),
             "segment_offset": SEGMENT_OFFSET,
             "split_trunk_head_lr": False,
             "scheduler": "warmup_constant",
@@ -643,8 +701,8 @@ def main() -> None:
         effective_batch_size=64,
         predictor_lr=PREDICTOR_LR,
         condition_lr=PREDICTOR_LR,
-        warmup_start_lr=PREDICTOR_LR,
-        warmup_ratio=0,
+        warmup_start_lr=WARMUP_START_LR,
+        warmup_ratio=float(WARMUP_RATIO),
         segment_offset=SEGMENT_OFFSET,
         split_trunk_head_lr=False,
         scheduler="warmup_constant",
@@ -662,53 +720,37 @@ def main() -> None:
     repo = runtime / "Kronos"
     output_root = runtime / "outputs" / "models" / OUTPUT_NAME
     data_root = find_data_root(input_root)
-    continuation = find_continuation(input_root)
-    if continuation is None:
-        raise SystemExit(
-            "Seg155 best checkpoint was not found under parent kernel "
-            f"{PARENT_KERNEL} output folder {OUTPUT_NAME}. "
-            "Refusing pretrained Beta v2.1 weights and Seg87 last_model."
-        )
-    best_metric_path = continuation / "checkpoints" / "best_model" / "best_metric.json"
-    best_metric = json.loads(best_metric_path.read_text())
+    source_best = find_seg155_forecast_best(input_root)
+    continuation = source_best.parent.parent
+    best_metric = json.loads((source_best / "best_metric.json").read_text())
     best_segment = int(best_metric.get("segment", -1))
     best_loss = float(best_metric.get(
         "selection_loss", best_metric.get("objective_loss", float("nan"))
     ))
-    summary = json.loads((continuation / "summary.json").read_text())
-    completed = int(summary.get("final_result", {}).get("completed_segments", -1))
-    if best_segment not in {EXPECTED_BEST_CHART_SEGMENT, EXPECTED_BEST_LOCAL_SEGMENT} or abs(best_loss - EXPECTED_BEST_SELECTION_LOSS) > 1e-8:
+    summary_path = continuation / "summary.json"
+    completed = -1
+    if summary_path.is_file():
+        summary = json.loads(summary_path.read_text())
+        completed = int(summary.get("final_result", {}).get("completed_segments", -1))
+    if str(best_metric.get("selection_metric") or "") == "ranking":
         raise SystemExit(
-            "Parent best checkpoint is not chart Seg155 / local "
-            f"{EXPECTED_BEST_LOCAL_SEGMENT} weighted_forecast_loss "
-            f"{EXPECTED_BEST_SELECTION_LOSS}: segment={best_segment} loss={best_loss}. "
-            "Refusing last_state weights and the pretrained parent."
+            "Refusing v13 ranking best_model. "
+            f"path={source_best} metric={best_metric}"
         )
-    if completed < 1:
-        raise SystemExit(
-            f"Parent wc summary has no completed segments ({completed}). "
-            "Refusing to continue."
-        )
-    # Pinned offset, not the live summary. v10 was still RUNNING at prepare
-    # time, so summary.completed_segments is not a reliable stop segment.
-    # 1e-5 parents report chart==local (87). 5e-6 parents report a local
-    # count on top of offset 129. Either way the weights must be chart Seg155 best.
+    # Fresh coverage pass. Do not trust summary.completed_segments as the
+    # next window: v13 may have scored later chart segments. Offset stays 0.
     phase(
         "segment_offset_pinned",
-        last_verified_finished_chart_segment=LAST_VERIFIED_FINISHED_CHART_SEGMENT,
         segment_offset=SEGMENT_OFFSET,
         next_chart_segment=SEGMENT_OFFSET + 1,
         parent_summary_completed_segments=completed,
-        prior_chunk_completed_chart_segment=PRIOR_CHUNK_COMPLETED_CHART_SEGMENT,
+        checkpoint="seg155_best_model",
         note=(
-            "Offset 159 because the 2e-5 probe finished chart Seg130-159. "
-            "Next unread coverage window is chart Seg160. Not 160, and do not "
-            "reread 130-159."
+            "Offset 0 restarts coverage at chart Seg1. Same shuffle, seed "
+            "20261002, no signal_date sort. Not a continuation of the v13 "
+            "chart offset. Weights stay on chart Seg155 best_model."
         ),
     )
-    source_best = continuation / "checkpoints" / "best_model"
-    if not (source_best / "model.safetensors").is_file():
-        raise SystemExit(f"Seg155 best weights missing: {source_best / 'model.safetensors'}")
     phase(
         "continuation_ready",
         source=str(continuation),
@@ -719,11 +761,16 @@ def main() -> None:
         completed_segments=completed,
         adamw="fresh",
         adamw_reason=(
-            "2e-5 and 5e-6 last_state.pt moments are not loaded; "
-            "AdamW starts fresh on chart Seg155 best_model"
+            "Seg155 best_model only. v13 ranking weights and every "
+            "last_state.pt are not loaded. AdamW starts fresh."
         ),
     )
-    shutil.copytree(continuation, output_root, dirs_exist_ok=True)
+    shutil.copytree(
+        continuation,
+        output_root,
+        dirs_exist_ok=True,
+        ignore=ignore_optimizer_state,
+    )
     dens_path = output_root / "beta_v21_validation_denominators.json"
     if dens_path.is_file():
         try:
@@ -753,9 +800,16 @@ def main() -> None:
     predictor = output_root / "checkpoints" / "best_model"
     if not (predictor / "model.safetensors").is_file():
         raise SystemExit(f"Copied Seg155 best weights missing: {predictor}")
-    # The mounted last_state is the 5e-6 chunk (or the older Seg87 state).
-    # Drop the copy so resume cannot load those AdamW moments. The input
-    # mount is left untouched. Weights stay on chart Seg155 best_model.
+    # Drop every copied optimizer snapshot. v13 last_state must not load,
+    # and neither should 2e-5 / 5e-6 AdamW moments. The input mount is
+    # left untouched. Weights stay on chart Seg155 best_model.
+    copied_best = output_root / "checkpoints" / "best_model"
+    copied_metric = json.loads((copied_best / "best_metric.json").read_text())
+    if not is_seg155_forecast_best(copied_metric):
+        raise SystemExit(
+            "Working copy best_model is not chart Seg155 forecast best "
+            f"({copied_metric}). Refusing v13 ranking weights."
+        )
     last_state = output_root / "checkpoints" / "last_state.pt"
     if last_state.is_file():
         last_state.unlink()
@@ -835,23 +889,23 @@ def main() -> None:
     recipe["condition_min_lr"] = env["KRONOS_CONDITION_MIN_LR"]
     phase("recipe_verified", **recipe)
     assert recipe["scheduler"] == "warmup_constant", recipe
-    assert recipe["warmup_ratio"] == "0", recipe
-    assert recipe["predictor_lr"] == "2e-5", recipe
-    assert recipe["condition_lr"] == "2e-5", recipe
-    assert recipe["predictor_warmup_start_lr"] == "2e-5", recipe
-    assert recipe["condition_warmup_start_lr"] == "2e-5", recipe
-    assert recipe["predictor_min_lr"] == "2e-5", recipe
-    assert recipe["condition_min_lr"] == "2e-5", recipe
+    assert recipe["warmup_ratio"] == "0.05", recipe
+    assert recipe["predictor_lr"] == "1e-5", recipe
+    assert recipe["condition_lr"] == "1e-5", recipe
+    assert recipe["predictor_warmup_start_lr"] == "1e-6", recipe
+    assert recipe["condition_warmup_start_lr"] == "1e-6", recipe
+    assert recipe["predictor_min_lr"] == "1e-5", recipe
+    assert recipe["condition_min_lr"] == "1e-5", recipe
     assert recipe["aux"] == "1", recipe
     assert recipe["same_day_ranking_batches"] == "1", recipe
     assert recipe["split_trunk_head_lr"] == "0", recipe
     assert recipe["best_metric"] == "ranking", recipe
     assert recipe["max_segments"] == "30", recipe
-    assert recipe["max_runtime_seconds"] == "39600", recipe
+    assert recipe["max_runtime_seconds"] == "23400", recipe
     assert recipe["output"] == "beta_v2_1_c1_dual_t4_wc", recipe
     assert recipe["swanlab_run_id"] == "beta_v2_1_c1_dual_t4_rank", recipe
-    assert recipe["segment_offset"] == "159", recipe
-    assert recipe["coverage_epoch_offset"] == "159", recipe
+    assert recipe["segment_offset"] == "0", recipe
+    assert recipe["coverage_epoch_offset"] == "0", recipe
     assert recipe["feeding_mode"] == "same_day_batch_no_segment_date_sort", recipe
     assert recipe["resume"] == "0", recipe
     assert recipe["keep_existing_best"] == "1", recipe
@@ -883,8 +937,8 @@ def main() -> None:
             "samples_per_segment": 20000,
             "predictor_learning_rate": float(PREDICTOR_LR),
             "condition_learning_rate": float(PREDICTOR_LR),
-            "warmup_start_learning_rate": float(PREDICTOR_LR),
-            "scheduler_warmup_ratio": 0,
+            "warmup_start_learning_rate": float(WARMUP_START_LR),
+            "scheduler_warmup_ratio": float(WARMUP_RATIO),
             "split_trunk_head_lr": False,
             "scheduler": "warmup_constant",
             "adamw": "fresh_on_seg155_best",
@@ -908,7 +962,7 @@ def main() -> None:
             "n_layers": 12,
             "d_model": 832,
         },
-        "note": "Ranking diagnostic. Resume wc folder from chart Seg155 best_model (weighted_forecast_loss 2.31236787, local segment 26 under the 2e-5 offset 129) with fresh AdamW. 2e-5 and 5e-6 last_state moments are deleted in the working copy and not loaded. Single LR 2e-5 both sides from step 0, warmup_constant ratio 0, min LR 2e-5, no cosine, no split LR. Aux/ranking on. Same-day batches without sorting coverage_order (seed 20261002). Best metric ranking_loss (lower better), not beta_v21_score: sparse shuffled dens are miscalibrated once pairs are dense. Forecast loss stays in the step and weighted_forecast_loss is still logged. Segment offset 159 so the next window is chart Seg160. Output folder beta_v2_1_c1_dual_t4_wc. SwanLab id beta_v2_1_c1_dual_t4_rank. Caps 30 segments / 39600s.",
+        "note": "Lower-LR ranking continuation. Weights are chart Seg155 best_model only (weighted_forecast_loss 2.31236787, local segment 26 under the 2e-5 offset 129). v13 ranking weights are refused. last_state is not copied and not loaded. Fresh AdamW. Single LR 1e-5 both sides, warmup_constant from 1e-6, warmup ratio 0.05, min LR 1e-5, no cosine, no split LR. Aux/ranking on. Same-day batches without sorting coverage_order (seed 20261002). Best metric ranking_loss (lower better), not weighted_forecast_loss and not beta_v21_score. Forecast loss stays logged. Segment offset 0 so the next window is chart Seg1 of a new pass. Output folder beta_v2_1_c1_dual_t4_wc. SwanLab id beta_v2_1_c1_dual_t4_rank. Caps 30 segments / 23400s.",
         "continuation": resume,
         "best_checkpoint": str(predictor),
         "adamw": "fresh",
