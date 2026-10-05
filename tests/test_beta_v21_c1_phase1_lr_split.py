@@ -19,6 +19,7 @@ def load_helpers():
         "parameter_optimizer_family",
         "parameter_uses_weight_decay",
         "build_optimizer_groups",
+        "learning_rates_by_family",
         "best_selection_value",
     }
     nodes = []
@@ -191,3 +192,32 @@ def test_phase1_kernel_recipe():
     assert 'assert recipe["split_trunk_head_lr"] == "1"' in source
     assert 'assert recipe["predictor_lr"] == "1e-6"' in source
     assert 'assert recipe["condition_lr"] == "1e-5"' in source
+
+def test_heads_only_missing_adaptation_family_lr_print_safe():
+    """Frozen-trunk heads-only: adaptation group empty; LR print must not KeyError."""
+    helpers = load_helpers()
+    model = _Tiny()
+    # Mimic configure_trainable_parameters heads-only: only return/barrier heads.
+    for name, parameter in model.named_parameters():
+        parameter.requires_grad = name.startswith(('return_head.', 'barrier_head.'))
+    config = _config(True)
+    groups = helpers['build_optimizer_groups'](model, config)
+    assert groups, 'expected non-empty condition groups'
+    assert all(group['family'] == 'condition' for group in groups)
+    optimizer = torch.optim.AdamW(groups, betas=(0.9, 0.95))
+    family_lrs = helpers['learning_rates_by_family'](optimizer)
+    assert 'condition' in family_lrs and family_lrs['condition'] > 0
+    assert family_lrs.get('adaptation', 0.0) == 0.0
+    # Same f-string contract as train_model keep_existing_best / step logs.
+    rendered = (
+        f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
+        f'condition_lr={family_lrs["condition"]:.10e}.'
+    )
+    assert 'adaptation_lr=0.0000000000e+00' in rendered
+    assert 'condition_lr=' in rendered
+    step_line = (
+        f"Adaptation LR {family_lrs['adaptation']:.10e}, "
+        f"Condition LR {family_lrs['condition']:.10e}, Loss: 0.0000"
+    )
+    assert step_line.startswith('Adaptation LR 0.0000000000e+00, Condition LR ')
+

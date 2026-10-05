@@ -900,7 +900,13 @@ def parameter_family_statistics(named_parameters, learning_rate):
 
 
 def learning_rates_by_family(optimizer):
-    result = {}
+    """Return peak applied LR per family; missing families (zero params) are 0.0.
+
+    Frozen-trunk / heads-only builds omit the empty adaptation (or condition)
+    AdamW groups, so callers must not KeyError on absent families when printing
+    or logging split LRs.
+    """
+    result = {'adaptation': 0.0, 'condition': 0.0}
     for group in optimizer.param_groups:
         family = group['family']
         result[family] = max(result.get(family, 0.0), float(group['lr']))
@@ -3212,8 +3218,11 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         core_model.size_mlp[-1].weight.detach().float().norm().item()
                     )
                 for family in ('condition', 'adaptation'):
+                    named = family_named_parameters.get(family) or []
+                    if not named:
+                        continue
                     family_stats = parameter_family_statistics(
-                        family_named_parameters[family], applied_family_lrs[family]
+                        named, applied_family_lrs.get(family, 0.0)
                     )
                     monitoring_stats.update({
                         f'{family}_{name}': value
