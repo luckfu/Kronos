@@ -115,3 +115,27 @@ Pairwise accuracy（分数打平算错）：
 - 最佳选择：验证 pairwise accuracy。rank IC 只记。预报红线仍是 +0.015 vs **2.31236787**（只监控）。另加冻结 sanity：若 weighted_forecast_loss 相对开训校准偏离 **>1e-4**，打响 WARNING（不停跑）；期望每段都停在 ~**2.3124**。
 - 新输出目录 / SwanLab id：`beta_v2_1_c1_dual_t4_rank_frozen`（绝不复用 rank_acc / rank_warm / wc）。
 - 运行：43200s，MAX_SEGMENTS 30，Dual T4 only。
+
+## v18/v19 结果：冻结 trunk 只训头，平台在 ~65.6–65.7%
+
+v18（`458f458`）开训校准后 rank0 因 `family_lrs` 缺 `adaptation` 键 KeyError 崩掉；v19（`492716d`）修复后同配方跑起来。父本 Seg155 forecast best，输出 / SwanLab `beta_v2_1_c1_dual_t4_rank_frozen`。用户在 Seg24 验证途中停掉 `luckfu/kronos-beta-v2-1-c1-dual-t4`（Kaggle 状态 `CANCEL_ACKNOWLEDGED`，2026-10-05 ~18:53 Asia/Shanghai）。
+
+- 可训练参数 **5,831 / 102,443,079**（只有 `return_head` + `barrier_head`）。Head LR warmup_constant 1e-5→1e-4，ratio 0.01。
+- 开训校准（随机初始化的头）：pairwise_accuracy **0.57013560**，rank IC **0.12344884**，weighted_forecast_loss **2.31236782**，ranking_loss **0.68731890**。
+- 头很快学到位：Seg1 **0.63309855** → Seg3 **0.65061199** → Seg4 **0.65411928**。之后 Seg4–Seg24 一直在 **0.6535–0.6574** 窄幅抖动，没有趋势。
+- 最好是 **Seg19**：pairwise_accuracy **0.65735263**，rank IC **0.28358639**，ranking_loss **0.68738239**，weighted_forecast_loss **2.31236782**。`best_model` SHA `1fe7ae4bf6cf…`（201 tensors，含两个头）。
+- 其后：Seg20 0.65599526，Seg21 0.65436458，Seg22 0.65616651，Seg23 0.65612378，Seg24（被停时已出的验证）0.65603442 / rank IC 0.28156092。
+- 预报**完全冻住**：每段 weighted_forecast_loss 都是 **2.31236782**，冻结 sanity abs_delta **0.0**，没有触发 WARNING。
+- 验证 ranking_loss 反而从 Seg2 的 **0.68706856** 缓慢升到 ~**0.6874**，而 accuracy 不再动：头只在 trunk 固定特征上做线性读出，容量到顶。
+
+对比 v17（整树 trunk 1e-6）：v17 accuracy 到 ~0.6643–0.6657 但预报涨到 2.34+；冻结版保住预报，accuracy 低约 **0.8–0.9 个百分点**。结论：剩下的排序增益需要 trunk 动一点，但必须比 v17 的 1e-6 小得多。
+
+## v20 方案（本提交）：解冻全树，trunk 极小 LR
+
+- 父本：v19 **Seg19** `best_model`（pairwise **0.65735263**，rank IC **0.28358639**，weighted forecast **2.31236782**，SHA `1fe7ae4bf6cf…`）。直接把被停的 `luckfu/kronos-beta-v2-1-c1-dual-t4` kernel 输出挂成 `kernel_sources`，路径必须在 `beta_v2_1_c1_dual_t4_rank_frozen/checkpoints/best_model` 下，SHA 校验。Seg155 数据集不再挂。只读权重；AdamW 全新；不读 last_state。
+- **全部参数可训练**：`KRONOS_TRAINABLE_TRANSFORMER_LAYERS=-1`，`KRONOS_TRAIN_BETA_V21_HEADS_ONLY=0`。kernel 若看到 trainable≠total 直接退出。
+- Split LR（`KRONOS_SPLIT_TRUNK_HEAD_LR=1`）：trunk / Adaptation **1e-7 恒定**（warmup_constant，start = peak = 1e-7）；heads + condition / Condition warmup_constant **1e-6 → 1e-5**，ratio **0.05**。
+- Ranking weight **0.5**。same-day batch，coverage seed **20261002**，段内不按 signal_date 排序，offset 0。
+- 最佳选择：验证 pairwise accuracy，沿用 Seg19 的 **0.65735263** 作门槛（`KRONOS_KEEP_EXISTING_BEST=1`），要超过它才写 best_model。rank IC 只记。
+- 预报红线只监控：**2.31236787 + 0.015 = 2.32736787**。另加大声日志：weighted_forecast_loss 比 **2.31236782** 高出 **>0.005** 时打印 `WARNING: [EARLY ]FORECAST DRIFT ALERT` 横幅（前 5 段带 EARLY），并记 SwanLab `validation/forecast_drift_alert`。不停跑。
+- 新输出目录 / SwanLab id：`beta_v2_1_c1_dual_t4_rank_unfreeze`。Dual T4，docker 固定 `sha256:37c64f7dd9…`，上限 30 段 / 43200s。

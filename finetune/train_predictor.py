@@ -1078,6 +1078,52 @@ def resolve_kept_best_loss(
     return float(saved_loss)
 
 
+def forecast_drift_alert_lines(
+    weighted_forecast_loss, alert_base, alert_margin, segment, early_segments,
+    calibration_baseline=None,
+):
+    """Return log lines for the louder forecast-drift alert (never a stop).
+
+    Unfrozen-trunk ranking runs can trade forecast for ranking. When
+    weighted_forecast_loss rises more than ``alert_margin`` above
+    ``alert_base`` print a loud banner, tagged EARLY within the first
+    ``early_segments`` segments. Delta vs the pre-train calibration baseline
+    is always reported when available. Returns [] when no base is set.
+    """
+    if alert_base is None or weighted_forecast_loss is None:
+        return []
+    value = float(weighted_forecast_loss)
+    base = float(alert_base)
+    margin = float(alert_margin if alert_margin is not None else 0.005)
+    delta = value - base
+    lines = []
+    calibration_text = ''
+    if calibration_baseline is not None:
+        calibration_text = (
+            f" calibration_baseline={float(calibration_baseline):.8f} "
+            f"delta_vs_calibration={value - float(calibration_baseline):+.8f}"
+        )
+    lines.append(
+        "Forecast drift monitor (not a stop): "
+        f"segment={int(segment)} weighted_forecast_loss={value:.8f} "
+        f"alert_base={base:.8f} delta={delta:+.8f} alert_margin={margin:.8f}"
+        f"{calibration_text}"
+    )
+    if delta > margin:
+        early = int(segment) <= int(early_segments)
+        tag = 'EARLY ' if early else ''
+        banner = '!' * 78
+        lines.extend([
+            banner,
+            f"WARNING: {tag}FORECAST DRIFT ALERT segment={int(segment)} "
+            f"weighted_forecast_loss={value:.8f} > alert_base {base:.8f} + "
+            f"{margin:.8f} (delta={delta:+.8f}) early={int(early)}. "
+            "Trunk is trading forecast for ranking. Monitoring only; not a stop.",
+            banner,
+        ])
+    return lines
+
+
 def resolve_amp_dtype(config, device):
     """Return the predictor autocast dtype, or None when AMP is disabled.
 
@@ -3549,6 +3595,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                             "Trunk/forecast heads should be frozen; investigate.",
                             flush=True,
                         )
+                for alert_line in forecast_drift_alert_lines(
+                    weighted_val_forecast,
+                    config.get('forecast_drift_alert_base'),
+                    config.get('forecast_drift_alert_margin'),
+                    epoch_idx + 1,
+                    int(config.get('forecast_drift_alert_early_segments', 5) or 0),
+                    calibration_baseline=freeze_baseline,
+                ):
+                    print(alert_line, flush=True)
             if config.get('use_beta_v21_auxiliary', False):
                 print(
                     "Validation v2.1 Score/Return/Bias/Barrier/Rank: "

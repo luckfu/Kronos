@@ -12,12 +12,11 @@
     "gpu"
   ],
   "dataset_sources": [
-    "luckfu/a-share-120d-temporal-symbol-holdout",
-    "luckfu/kronos-beta-v21-c1-seg155-forecast-best"
+    "luckfu/a-share-120d-temporal-symbol-holdout"
   ],
   "competition_sources": [],
   "kernel_sources": [
-    "user281434/kronos-beta-v2-1-c1-dual-t4"
+    "luckfu/kronos-beta-v2-1-c1-dual-t4"
   ],
   "model_sources": [],
   "machine_shape": "NvidiaTeslaT4",

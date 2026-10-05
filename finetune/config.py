@@ -353,6 +353,19 @@ class Config:
                 0.015 if monitor_base else None
             )
         )
+        # Louder early-drift alert (log only, never a stop): print a banner
+        # when weighted_forecast_loss rises more than the margin above base.
+        drift_base = os.getenv("KRONOS_FORECAST_DRIFT_ALERT_BASE", "").strip()
+        self.forecast_drift_alert_base = float(drift_base) if drift_base else None
+        drift_margin = os.getenv("KRONOS_FORECAST_DRIFT_ALERT_MARGIN", "").strip()
+        self.forecast_drift_alert_margin = (
+            float(drift_margin) if drift_base and drift_margin else (
+                0.005 if drift_base else None
+            )
+        )
+        self.forecast_drift_alert_early_segments = int(
+            os.getenv("KRONOS_FORECAST_DRIFT_ALERT_EARLY_SEGMENTS", "5")
+        )
         self.log_pairwise_ranking_metrics = os.getenv(
             "KRONOS_LOG_PAIRWISE_RANKING_METRICS", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
