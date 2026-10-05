@@ -266,79 +266,89 @@ def top_bottom_spread(scores: np.ndarray, utilities: np.ndarray, frac: float = 0
 
 def summarize_checkpoint(rows: list[dict]) -> dict:
     frame = pd.DataFrame(rows)
-    scores = torch.as_tensor(frame["score"].to_numpy(np.float32))
-    utilities = torch.as_tensor(frame["utility"].to_numpy(np.float32))
-    date_ids = torch.as_tensor(frame["date_id"].to_numpy(np.int64))
-    pairwise, pair_count = same_date_pairwise_accuracy(
-        scores, utilities, date_ids, minimum_gap=MINIMUM_UTILITY_GAP
-    )
-    rank_ic, rank_ic_dates = mean_within_date_spearman(scores, utilities, date_ids)
+    score_mode = str(frame["score_mode"].iloc[0]) if "score_mode" in frame else "expected_utility"
+    has_scores = frame["score"].notna().all() if len(frame) else False
 
     daily = []
-    for asof, group in frame.groupby("asof_date"):
-        if len(group) < 2:
-            continue
-        g_scores = torch.as_tensor(group["score"].to_numpy(np.float32))
-        g_utils = torch.as_tensor(group["utility"].to_numpy(np.float32))
-        g_dates = torch.as_tensor(group["date_id"].to_numpy(np.int64))
-        day_ic, _ = mean_within_date_spearman(g_scores, g_utils, g_dates)
-        day_pw, day_pairs = same_date_pairwise_accuracy(
-            g_scores, g_utils, g_dates, minimum_gap=MINIMUM_UTILITY_GAP
+    pairwise = None
+    pair_count = 0
+    rank_ic = None
+    rank_ic_dates = 0
+    mean_ic = None
+    ic_std = None
+    positive_rate = None
+    mean_tb_util = None
+    mean_tb_ret = None
+
+    if has_scores:
+        scores = torch.as_tensor(frame["score"].to_numpy(np.float32))
+        utilities = torch.as_tensor(frame["utility"].to_numpy(np.float32))
+        date_ids = torch.as_tensor(frame["date_id"].to_numpy(np.int64))
+        pairwise, pair_count = same_date_pairwise_accuracy(
+            scores, utilities, date_ids, minimum_gap=MINIMUM_UTILITY_GAP
         )
-        daily.append(
-            {
-                "asof_date": asof,
-                "samples": int(len(group)),
-                "rank_ic": day_ic,
-                "pairwise_accuracy": day_pw,
-                "pairwise_pairs": day_pairs,
-                "top_bottom_utility_spread": top_bottom_spread(
-                    group["score"].to_numpy(np.float64),
-                    group["utility"].to_numpy(np.float64),
-                ),
-                "top_bottom_return10d_spread": top_bottom_spread(
-                    group["score"].to_numpy(np.float64),
-                    group["return_10d"].to_numpy(np.float64),
-                ),
-            }
-        )
-    daily_frame = pd.DataFrame(daily)
-    ic_series = daily_frame["rank_ic"].dropna()
-    ic_std = float(ic_series.std(ddof=1)) if len(ic_series) > 1 else None
-    mean_ic = float(ic_series.mean()) if len(ic_series) else None
+        rank_ic, rank_ic_dates = mean_within_date_spearman(scores, utilities, date_ids)
+        for asof, group in frame.groupby("asof_date"):
+            if len(group) < 2:
+                continue
+            g_scores = torch.as_tensor(group["score"].to_numpy(np.float32))
+            g_utils = torch.as_tensor(group["utility"].to_numpy(np.float32))
+            g_dates = torch.as_tensor(group["date_id"].to_numpy(np.int64))
+            day_ic, _ = mean_within_date_spearman(g_scores, g_utils, g_dates)
+            day_pw, day_pairs = same_date_pairwise_accuracy(
+                g_scores, g_utils, g_dates, minimum_gap=MINIMUM_UTILITY_GAP
+            )
+            daily.append(
+                {
+                    "asof_date": asof,
+                    "samples": int(len(group)),
+                    "rank_ic": day_ic,
+                    "pairwise_accuracy": day_pw,
+                    "pairwise_pairs": day_pairs,
+                    "top_bottom_utility_spread": top_bottom_spread(
+                        group["score"].to_numpy(np.float64),
+                        group["utility"].to_numpy(np.float64),
+                    ),
+                    "top_bottom_return10d_spread": top_bottom_spread(
+                        group["score"].to_numpy(np.float64),
+                        group["return_10d"].to_numpy(np.float64),
+                    ),
+                }
+            )
+        daily_frame = pd.DataFrame(daily)
+        ic_series = daily_frame["rank_ic"].dropna() if len(daily_frame) else pd.Series(dtype=float)
+        ic_std = float(ic_series.std(ddof=1)) if len(ic_series) > 1 else None
+        mean_ic = float(ic_series.mean()) if len(ic_series) else None
+        positive_rate = float((ic_series > 0).mean()) if len(ic_series) else None
+        if len(daily_frame):
+            mean_tb_util = float(daily_frame["top_bottom_utility_spread"].mean())
+            mean_tb_ret = float(daily_frame["top_bottom_return10d_spread"].mean())
+    else:
+        for asof, group in frame.groupby("asof_date"):
+            daily.append({"asof_date": asof, "samples": int(len(group))})
+
     return {
         "samples": int(len(frame)),
         "signal_dates": int(frame["asof_date"].nunique()),
+        "score_mode": score_mode,
+        "has_ranking_scores": bool(has_scores),
         "pairwise_accuracy": pairwise,
         "pairwise_pairs": int(pair_count),
         "rank_ic": rank_ic,
         "rank_ic_dates": int(rank_ic_dates),
         "rank_icir": (mean_ic / ic_std) if mean_ic is not None and ic_std else None,
-        "rank_ic_positive_rate": float((ic_series > 0).mean()) if len(ic_series) else None,
+        "rank_ic_positive_rate": positive_rate,
         "mean_daily_rank_ic": mean_ic,
-        "mean_top_bottom_utility_spread": float(
-            daily_frame["top_bottom_utility_spread"].mean()
-        )
-        if len(daily_frame)
-        else None,
-        "mean_top_bottom_return10d_spread": float(
-            daily_frame["top_bottom_return10d_spread"].mean()
-        )
-        if len(daily_frame)
-        else None,
+        "mean_top_bottom_utility_spread": mean_tb_util,
+        "mean_top_bottom_return10d_spread": mean_tb_ret,
         "forecast_loss": float(
-            np.average(
-                frame["forecast_loss"],
-                weights=frame["batch_samples"],
-            )
+            np.average(frame["forecast_loss"], weights=frame["batch_samples"])
         ),
         "history_loss": float(
             np.average(frame["history_loss"], weights=frame["batch_samples"])
         ),
         "weighted_forecast_loss": float(
-            np.average(
-                frame["weighted_forecast_loss"], weights=frame["batch_samples"]
-            )
+            np.average(frame["weighted_forecast_loss"], weights=frame["batch_samples"])
         ),
         "by_signal_date": daily,
     }
@@ -360,8 +370,14 @@ def evaluate_checkpoint(
         .to(device)
         .eval()
     )
-    if not bool(getattr(model, "use_beta_v21_auxiliary", False)):
-        raise RuntimeError(f"{label} missing use_beta_v21_auxiliary=True")
+    use_aux = bool(getattr(model, "use_beta_v21_auxiliary", False))
+    score_mode = "expected_utility" if use_aux else "forecast_only_no_ranking_score"
+    if not use_aux:
+        print(
+            f"{label}: use_beta_v21_auxiliary=False (forecast-floor checkpoint). "
+            "Will report WFL/forecast only; pairwise/rank_ic left null.",
+            flush=True,
+        )
     started = time.time()
     rows = []
     loss_accum = defaultdict(float)
@@ -386,18 +402,22 @@ def evaluate_checkpoint(
                     size_percentile=batch["percentile"],
                     use_teacher_forcing=True,
                     s1_targets=token_out[0],
-                    return_auxiliary=True,
+                    return_auxiliary=use_aux,
                     asof_index=LOOKBACK - 1,
                 )
-            logits, auxiliary = model_output
+            if use_aux:
+                logits, auxiliary = model_output
+                auxiliary = {key: value.float() for key, value in auxiliary.items()}
+                scores = expected_utility_score(
+                    auxiliary["return"],
+                    auxiliary["barrier"],
+                    batch["labels"]["return_scales"],
+                )
+            else:
+                logits = model_output
+                scores = None
             logits = [part.float() for part in logits]
-            auxiliary = {key: value.float() for key, value in auxiliary.items()}
             losses = batch_token_losses(logits, token_out)
-            scores = expected_utility_score(
-                auxiliary["return"],
-                auxiliary["barrier"],
-                batch["labels"]["return_scales"],
-            )
         for index, item in enumerate(items):
             rows.append(
                 {
@@ -407,13 +427,14 @@ def evaluate_checkpoint(
                     "target_date": item["target_date"],
                     "direction": item["direction"],
                     "return_10d": item["return_10d"],
-                    "score": float(scores[index].item()),
+                    "score": None if scores is None else float(scores[index].item()),
                     "utility": float(batch["labels"]["utility"][index].item()),
                     "date_id": int(batch["labels"]["date_id"][index].item()),
                     "forecast_loss": losses["forecast_loss"],
                     "history_loss": losses["history_loss"],
                     "weighted_forecast_loss": losses["weighted_forecast_loss"],
                     "batch_samples": losses["batch_samples"],
+                    "score_mode": score_mode,
                 }
             )
         sample_accum += losses["batch_samples"]
@@ -440,6 +461,8 @@ def evaluate_checkpoint(
             "minimum_utility_gap": MINIMUM_UTILITY_GAP,
             "forecast_horizon_weights": list(FORECAST_HORIZON_WEIGHTS),
             "evaluation_name": EXPECTED_EVALUATION_NAME,
+            "score_mode": score_mode,
+            "has_ranking_scores": bool(use_aux),
         }
     )
     del model
@@ -455,20 +478,31 @@ def evaluate_checkpoint(
 
 
 def pick_best(summaries: list[dict]) -> dict:
-    """Primary: pairwise accuracy; tie-break: rank IC then lower WFL."""
+    """Primary: pairwise among ranking-capable models; else lowest WFL."""
+
+    ranking_capable = [item for item in summaries if item.get("has_ranking_scores")]
+    pool = ranking_capable or summaries
 
     def key(item):
+        has_rank = 1.0 if item.get("has_ranking_scores") else 0.0
         return (
-            float(item["pairwise_accuracy"] or -1.0),
-            float(item["rank_ic"] or -1.0),
+            has_rank,
+            float(item["pairwise_accuracy"] if item.get("pairwise_accuracy") is not None else -1.0),
+            float(item["rank_ic"] if item.get("rank_ic") is not None else -1.0),
             -float(item["weighted_forecast_loss"] or 1e9),
         )
 
-    ordered = sorted(summaries, key=key, reverse=True)
+    ordered = sorted(pool, key=key, reverse=True)
+    all_ordered = sorted(summaries, key=key, reverse=True)
     return {
-        "ranking_rule": "pairwise_accuracy desc, rank_ic desc, weighted_forecast_loss asc",
+        "ranking_rule": (
+            "ranking-capable first; then pairwise_accuracy desc, rank_ic desc, "
+            "weighted_forecast_loss asc. Forecast-only (no aux heads) cannot win "
+            "on pairwise."
+        ),
         "best_label": ordered[0]["label"],
-        "ordered_labels": [item["label"] for item in ordered],
+        "ordered_labels": [item["label"] for item in all_ordered],
+        "ranking_capable_labels": [item["label"] for item in ranking_capable],
     }
 
 
@@ -569,6 +603,8 @@ def main(argv=None):
         comparison_rows.append(
             {
                 "label": label,
+                "score_mode": result["summary"].get("score_mode"),
+                "has_ranking_scores": result["summary"].get("has_ranking_scores"),
                 "pairwise_accuracy": result["summary"]["pairwise_accuracy"],
                 "rank_ic": result["summary"]["rank_ic"],
                 "rank_icir": result["summary"]["rank_icir"],

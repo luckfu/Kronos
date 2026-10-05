@@ -21,7 +21,7 @@ v20 `rank_unfreeze` 已停。不在训练 val 上挑模型，而是用密封 **t
 
 | 标签 | Dataset | Val 备注（仅对照，非 OOS） |
 |---|---|---|
-| `seg155_forecast_best` | `luckfu/kronos-beta-v21-c1-seg155-forecast-best` | WFL 地板 2.31236787；包内 segment 字段=26 |
+| `seg155_forecast_best` | `luckfu/kronos-beta-v21-c1-seg155-forecast-best` | WFL 地板 2.31236787；包内 segment=26；**`use_beta_v21_auxiliary=False`**（无 return/barrier heads）→ OOS 只报 WFL/forecast，pairwise/rank IC 为 null |
 | `seg19_rank_frozen_best` | `luckfu/kronos-beta-v21-c1-rank-frozen-seg19-best` | pairwise 0.65735，WFL 2.31236782 |
 | `seg8_rank_unfreeze_best` | `luckfu/kronos-beta-v21-c1-rank-unfreeze-seg8-best` | pairwise 0.65897，WFL 2.32550 |
 
@@ -59,3 +59,9 @@ kaggle kernels push -p finetune/kaggle_beta_v21_c1_rank_oos_kernel
 ## 密封提醒
 
 此 OOS 一旦用于改 LR / 配方 / 提前停训规则，即消耗 sealed status。本 kernel 只报告、不训练。
+
+## Seg155 注意（2026-10-05 修）
+
+首跑 ERROR：`RuntimeError: seg155_forecast_best missing use_beta_v21_auxiliary=True`。
+Seg155 是 WC forecast-only 地板，config 明确 `use_beta_v21_auxiliary=False`，权重里也没有 heads。
+评测改为：aux 模型走 `expected_utility`；forecast-only 只报 CE/WFL，不参与 pairwise 夺冠。
