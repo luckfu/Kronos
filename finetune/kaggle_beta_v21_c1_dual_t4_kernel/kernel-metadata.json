@@ -19,5 +19,6 @@
     "user281434/kronos-beta-v2-1-c1-dual-t4"
   ],
   "model_sources": [],
-  "machine_shape": "NvidiaTeslaT4"
+  "machine_shape": "NvidiaTeslaT4",
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461"
 }
