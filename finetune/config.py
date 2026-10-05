@@ -234,12 +234,13 @@ class Config:
         ).strip().lower()
         if self.best_selection_metric not in {
             "objective", "full_sequence", "forecast", "history",
-            "validation_large_objective", "beta_v21_score", "ranking"
+            "validation_large_objective", "beta_v21_score", "ranking",
+            "pairwise_accuracy",
         }:
             raise ValueError(
                 "KRONOS_BEST_SELECTION_METRIC must be objective, full_sequence, "
                 "forecast, history, validation_large_objective, beta_v21_score, "
-                "or ranking"
+                "ranking, or pairwise_accuracy"
             )
         forecast_weights = os.getenv("KRONOS_FORECAST_HORIZON_WEIGHTS", "").strip()
         if forecast_weights:
@@ -333,6 +334,28 @@ class Config:
             raise ValueError(
                 "ranking best-checkpoint selection requires same-day ranking batches"
             )
+        if self.best_selection_metric == "pairwise_accuracy" and not self.use_beta_v21_auxiliary:
+            raise ValueError(
+                "pairwise_accuracy best-checkpoint selection requires Beta v2.1 auxiliary"
+            )
+        if (
+            self.best_selection_metric == "pairwise_accuracy"
+            and not self.same_day_ranking_batches
+        ):
+            raise ValueError(
+                "pairwise_accuracy best-checkpoint selection requires same-day ranking batches"
+            )
+        monitor_base = os.getenv("KRONOS_FORECAST_MONITOR_BASE", "").strip()
+        self.forecast_monitor_base = float(monitor_base) if monitor_base else None
+        monitor_margin = os.getenv("KRONOS_FORECAST_MONITOR_MARGIN", "").strip()
+        self.forecast_monitor_margin = (
+            float(monitor_margin) if monitor_base and monitor_margin else (
+                0.015 if monitor_base else None
+            )
+        )
+        self.log_pairwise_ranking_metrics = os.getenv(
+            "KRONOS_LOG_PAIRWISE_RANKING_METRICS", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         if self.beta_v21_auxiliary_warmup_steps < 1:
             raise ValueError("Beta v2.1 auxiliary warmup steps must be positive")
         if self.beta_v21_ranking_weight <= 0:

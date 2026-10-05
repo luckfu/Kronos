@@ -66,7 +66,10 @@ from beta_v21 import (
     compose_beta_v21_objective,
     compute_auxiliary_losses,
     consistency_statistics,
+    expected_utility_score,
     generated_return_targets,
+    mean_within_date_spearman,
+    same_date_pairwise_accuracy,
 )
 # Import shared utilities
 from utils.training_utils import (
@@ -986,6 +989,9 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
         # (~0.37 pairs/batch). Dense same-day pairs change the ranking scale,
         # so the score is not a ranking metric.
         'ranking': (large_metrics or quick_metrics).get('ranking_loss'),
+        # Higher is better. Same pair rule as ranking_loss, but ties in score
+        # count as wrong. Not the training loss.
+        'pairwise_accuracy': (large_metrics or quick_metrics).get('pairwise_accuracy'),
     }
     if metric not in values:
         raise ValueError(f'Unsupported best selection metric: {metric}')
@@ -993,17 +999,45 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
 
 
 
+HIGHER_IS_BETTER_SELECTION_METRICS = frozenset({'pairwise_accuracy'})
+
+
+def selection_metric_higher_is_better(metric):
+    return str(metric or '') in HIGHER_IS_BETTER_SELECTION_METRICS
+
+
+def selection_is_improvement(metric, value, best):
+    """True when value beats best. pairwise_accuracy is higher-better."""
+    if value is None:
+        return False
+    value = float(value)
+    if not math.isfinite(value):
+        return False
+    if selection_metric_higher_is_better(metric):
+        return value > float(best)
+    return value < float(best)
+
+
 def resolve_kept_best_loss(
     saved_metric_name, saved_loss, current_metric, calibration_loss,
 ):
-    """Do not treat a forecast selection_loss as a ranking threshold.
+    """Do not treat a foreign selection_loss as the new metric's threshold.
 
     weighted_forecast_loss (~2.3) and same-day ranking loss (~0.7) are not
     the same number. When the checkpoint objective switches to ranking, the
     bar is the parent checkpoint's calibration ranking_loss (lower better),
-    or +inf if that calibration was not run. Other metrics keep the saved
-    threshold.
+    or +inf if that calibration was not run.
+
+    pairwise_accuracy is higher-better. A saved ranking_loss or forecast
+    loss is not an accuracy. Switching into it uses the parent calibration
+    pairwise accuracy, or -inf when that calibration was not run, so the
+    first evaluated segment can become best. A saved pairwise_accuracy is
+    kept. Other metrics keep the saved threshold.
     """
+    if current_metric == 'pairwise_accuracy' and str(saved_metric_name or '') != 'pairwise_accuracy':
+        if calibration_loss is not None and math.isfinite(float(calibration_loss)):
+            return float(calibration_loss)
+        return float('-inf')
     if current_metric == 'ranking' and str(saved_metric_name or '') != 'ranking':
         if calibration_loss is not None and math.isfinite(float(calibration_loss)):
             return float(calibration_loss)
@@ -1364,6 +1398,78 @@ class Float32Tokenizer:
         return getattr(self._tokenizer, name)
 
 
+def _pad_gather_1d(local_cpu, device):
+    """All-gather a 1d CPU tensor across torch.distributed ranks."""
+    local = local_cpu.reshape(-1)
+    world = dist.get_world_size()
+    reduce_device = device if getattr(device, 'type', 'cpu') != 'mps' else 'cpu'
+    count = torch.tensor([local.numel()], dtype=torch.long, device=reduce_device)
+    counts = [torch.zeros(1, dtype=torch.long, device=reduce_device) for _ in range(world)]
+    dist.all_gather(counts, count)
+    sizes = [int(item.item()) for item in counts]
+    width = max(sizes) if sizes else 0
+    if width == 0:
+        return local
+    padded = torch.zeros(width, dtype=local.dtype, device=reduce_device)
+    if local.numel():
+        padded[:local.numel()] = local.to(reduce_device)
+    gathered = [torch.zeros(width, dtype=local.dtype, device=reduce_device) for _ in range(world)]
+    dist.all_gather(gathered, padded)
+    parts = []
+    for piece, size in zip(gathered, sizes):
+        if size:
+            parts.append(piece[:size].cpu())
+    if not parts:
+        return torch.empty(0, dtype=local.dtype)
+    return torch.cat(parts)
+
+
+def _xla_pad_gather_1d(local_cpu, device):
+    """All-gather a 1d tensor across XLA workers. Shapes are padded."""
+    local = local_cpu.reshape(-1).to(device)
+    count = torch.tensor([local.numel()], dtype=torch.long, device=device)
+    max_count = int(xm.all_reduce(xm.REDUCE_MAX, count).cpu().item())
+    if max_count == 0:
+        return local_cpu.reshape(-1)
+    padded = torch.zeros(max_count, dtype=local.dtype, device=device)
+    if local.numel():
+        padded[:local.numel()] = local
+    gathered = xm.all_gather(padded, dim=0).cpu()
+    sizes = [int(item) for item in xm.all_gather(count, dim=0).cpu().tolist()]
+    parts = []
+    for index, size in enumerate(sizes):
+        if size:
+            parts.append(gathered[index * max_count:index * max_count + size])
+    if not parts:
+        return torch.empty(0, dtype=local_cpu.dtype)
+    return torch.cat(parts)
+
+
+def gather_ranking_column(local_cpu, device):
+    """Return the global 1d column. No-op when this process is alone."""
+    local_cpu = local_cpu.reshape(-1).cpu()
+    if dist.is_available() and dist.is_initialized():
+        return _pad_gather_1d(local_cpu, device)
+    if (
+        getattr(device, 'type', 'cpu') == 'xla'
+        and xm is not None
+        and get_xla_world_size() > 1
+    ):
+        return _xla_pad_gather_1d(local_cpu, device)
+    return local_cpu
+
+
+def attach_pairwise_ranking_metrics(result, scores, utilities, date_ids):
+    """Write validation pairwise accuracy and mean within-date Spearman."""
+    accuracy, pair_count = same_date_pairwise_accuracy(scores, utilities, date_ids)
+    rank_ic, rank_ic_dates = mean_within_date_spearman(scores, utilities, date_ids)
+    result['pairwise_accuracy'] = accuracy
+    result['pairwise_pairs'] = int(pair_count)
+    result['rank_ic'] = rank_ic
+    result['rank_ic_dates'] = int(rank_ic_dates)
+    return result
+
+
 def evaluate_validation(
     model, tokenizer, loader, device, config, amp_dtype, run_condition_ablation=False,
     period_names=None, rank=0,
@@ -1434,6 +1540,12 @@ def evaluate_validation(
         and bool(config.get('collect_validation_auxiliary', False))
     )
     validation_auxiliary = []
+    log_pairwise_ranking_metrics = bool(
+        config.get('log_pairwise_ranking_metrics', False)
+    ) or str(config.get('best_selection_metric', '')) == 'pairwise_accuracy'
+    ranking_score_parts = []
+    ranking_utility_parts = []
+    ranking_date_parts = []
     period_names = dict(period_names or {})
     # fp32 losses -> float64 sample-weighted sums (see validation_precision).
     loss_accumulator = ValidationLossAccumulator(sums, device)
@@ -1511,6 +1623,22 @@ def evaluate_validation(
                     auxiliary_predictions['barrier'],
                     to_float32(auxiliary_labels),
                 )
+                if log_pairwise_ranking_metrics:
+                    # Same fp32 scores the ranking loss just used. Kept as
+                    # three 1d columns (~1.5MB for the full holdout), not the
+                    # sample-level aux gather that SIGKILL'd dual-T4.
+                    ranking_scores = expected_utility_score(
+                        auxiliary_predictions['return'],
+                        auxiliary_predictions['barrier'],
+                        auxiliary_labels['return_scales'],
+                    )
+                    ranking_score_parts.append(ranking_scores.detach().float().cpu())
+                    ranking_utility_parts.append(
+                        auxiliary_labels['utility'].detach().float().cpu()
+                    )
+                    ranking_date_parts.append(
+                        auxiliary_labels['date_id'].detach().to(dtype=torch.int64).cpu()
+                    )
                 if collect_validation_auxiliary:
                     validation_auxiliary.append((
                         auxiliary_predictions['return'].detach().float().cpu(),
@@ -1700,6 +1828,30 @@ def evaluate_validation(
                     'ranking_loss': float(global_auxiliary_losses['ranking'].item()),
                 })
         result['beta_v21_score'] = beta_v21_validation_score(result, config)
+        if log_pairwise_ranking_metrics:
+            if ranking_score_parts:
+                local_scores = torch.cat(ranking_score_parts)
+                local_utilities = torch.cat(ranking_utility_parts)
+                local_dates = torch.cat(ranking_date_parts)
+            else:
+                local_scores = torch.empty(0)
+                local_utilities = torch.empty(0)
+                local_dates = torch.empty(0, dtype=torch.int64)
+            attach_pairwise_ranking_metrics(
+                result,
+                gather_ranking_column(local_scores, device),
+                gather_ranking_column(local_utilities, device),
+                gather_ranking_column(local_dates, device),
+            )
+            if rank == 0:
+                print(
+                    "Validation Pairwise Accuracy/RankIC: "
+                    f"{format_validation_value(result.get('pairwise_accuracy'))} / "
+                    f"{format_validation_value(result.get('rank_ic'))} "
+                    f"(pairs={int(result.get('pairwise_pairs') or 0)}, "
+                    f"rank_ic_dates={int(result.get('rank_ic_dates') or 0)})",
+                    flush=True,
+                )
         if rank == 0:
             print(
                 "[VAL] Scalar validation complete: "
@@ -1916,6 +2068,8 @@ def run_eval_only_validation(
             return_loss=metrics.get('return_loss'),
             barrier_loss=metrics.get('barrier_loss'),
             ranking_loss=metrics.get('ranking_loss'),
+            pairwise_accuracy=metrics.get('pairwise_accuracy'),
+            rank_ic=metrics.get('rank_ic'),
             samples=metrics['samples'],
             batches=metrics['batches'],
         )
@@ -2376,7 +2530,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f"weight_decay={float(group['weight_decay']):.4f}"
             )
 
-    best_val_loss = float('inf')
+    if selection_metric_higher_is_better(
+        config.get('best_selection_metric', 'objective')
+    ):
+        best_val_loss = float('-inf')
+    else:
+        best_val_loss = float('inf')
     epochs_without_improvement = 0
     post_coverage_without_improvement = 0
     dt_result = {}
@@ -2643,14 +2802,40 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             exported_best_loss = float(best_metric.get(
                 'selection_loss', best_metric['objective_loss']
             ))
-            if exported_best_loss > best_val_loss and not math.isclose(
+            resume_metric = str(
+                best_metric.get('selection_metric')
+                or config.get('best_selection_metric', 'objective')
+            )
+            if selection_metric_higher_is_better(resume_metric):
+                if (
+                    selection_is_improvement(
+                        resume_metric, best_val_loss, exported_best_loss
+                    )
+                    and not math.isclose(
+                        exported_best_loss, best_val_loss, rel_tol=0.0, abs_tol=1e-12
+                    )
+                ):
+                    raise ValueError(
+                        'last_state.pt claims a better validation metric than best_model: '
+                        f'{best_val_loss} > {exported_best_loss}'
+                    )
+                if selection_is_improvement(
+                    resume_metric, exported_best_loss, best_val_loss
+                ):
+                    print(
+                        'Recovered a Best export committed immediately before an '
+                        'interrupted State update: '
+                        f'{exported_best_loss:.6f} > {best_val_loss:.6f}'
+                    )
+                    best_val_loss = exported_best_loss
+            elif exported_best_loss > best_val_loss and not math.isclose(
                 exported_best_loss, best_val_loss, rel_tol=0.0, abs_tol=1e-12
             ):
                 raise ValueError(
                     'last_state.pt claims a better validation loss than best_model: '
                     f'{best_val_loss} < {exported_best_loss}'
                 )
-            if exported_best_loss < best_val_loss:
+            elif exported_best_loss < best_val_loss:
                 print(
                     'Recovered a Best export committed immediately before an '
                     'interrupted State update: '
@@ -2739,11 +2924,14 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 'Existing best_metric.json has no finite selection loss'
             )
         current_metric = str(config.get('best_selection_metric', 'objective'))
-        calibration_ranking = None
+        calibration_value = None
         if calibration_metrics is not None:
-            calibration_ranking = calibration_metrics.get('ranking_loss')
+            if current_metric == 'pairwise_accuracy':
+                calibration_value = calibration_metrics.get('pairwise_accuracy')
+            elif current_metric == 'ranking':
+                calibration_value = calibration_metrics.get('ranking_loss')
         best_val_loss = resolve_kept_best_loss(
-            saved_metric_name, saved_loss, current_metric, calibration_ranking,
+            saved_metric_name, saved_loss, current_metric, calibration_value,
         )
         if rank == 0:
             family_lrs = learning_rates_by_family(optimizer)
@@ -2764,6 +2952,16 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     f'threshold ({saved_metric_name or "unset"} '
                     f'{saved_loss:.8f} -> {current_metric}). '
                     'beta_v21_score is not the selection metric.'
+                )
+            if (
+                current_metric == 'pairwise_accuracy'
+                and saved_metric_name != 'pairwise_accuracy'
+            ):
+                print(
+                    'Historical selection loss was not reused as the pairwise '
+                    f'accuracy threshold ({saved_metric_name or "unset"} '
+                    f'{saved_loss:.8f} -> {current_metric}). '
+                    'Higher accuracy is better. rank_ic is logged only.'
                 )
 
     if rank == 0:
@@ -2795,7 +2993,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             total_train_windows=train_dataset.total_samples,
             samples_per_segment=train_dataset.n_samples,
             validation_samples=valid_dataset.n_samples,
-            best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+            best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
             device=str(device),
         )
 
@@ -2848,7 +3046,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 unique_windows_covered=completed_coverage_windows(
                     train_dataset, epoch_idx, coverage_passes
                 ),
-                best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+                best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
                 device=str(device),
             )
 
@@ -3063,7 +3261,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     train_full_sequence_loss=epoch_full_loss_sum / epoch_batches,
                     train_history_loss=epoch_history_loss_sum / epoch_batches,
                     train_forecast_loss=epoch_forecast_loss_sum / epoch_batches,
-                    best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+                    best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
                     device=str(device),
                 )
                 append_metric(
@@ -3127,7 +3325,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         train_dataset, epoch_idx, coverage_passes
                     ),
                     train_loss=epoch_loss_sum / max(epoch_batches, 1),
-                    best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+                    best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
                     device=str(device),
                 )
                 write_progress(
@@ -3147,7 +3345,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         train_dataset, epoch_idx, coverage_passes
                     ),
                     train_loss=epoch_loss_sum / max(epoch_batches, 1),
-                    best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+                    best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
                     device=str(device),
                 )
             distributed_barrier(device, 'kronos_training_interrupted')
@@ -3188,7 +3386,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     train_dataset, epoch_idx + 1, coverage_passes
                 ),
                 train_loss=epoch_loss_sum / max(epoch_batches, 1),
-                best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+                best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
                 device=str(device),
             )
         ablation_interval = int(config.get('condition_ablation_interval_segments', 0))
@@ -3244,8 +3442,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             selection_metric, primary_metrics, large_metrics
         )
 
-        improved = bool(
-            selection_val_loss is not None and selection_val_loss < best_val_loss
+        improved = selection_is_improvement(
+            selection_metric, selection_val_loss, best_val_loss
         )
         if improved:
             best_val_loss = selection_val_loss
@@ -3273,6 +3471,18 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     "Validation Weighted Forecast: "
                     f"{float(weighted_val_forecast):.8f}"
                 )
+                monitor_base = config.get('forecast_monitor_base')
+                if monitor_base is not None:
+                    red_line = float(monitor_base) + float(
+                        config.get('forecast_monitor_margin') or 0.0
+                    )
+                    exceeded = float(weighted_val_forecast) > red_line
+                    # Monitoring only. Do not stop the run for this line.
+                    print(
+                        "Forecast monitor (not a stop): "
+                        f"weighted_forecast_loss={float(weighted_val_forecast):.8f} "
+                        f"red_line={red_line:.8f} exceeded={int(exceeded)}"
+                    )
             if config.get('use_beta_v21_auxiliary', False):
                 print(
                     "Validation v2.1 Score/Return/Bias/Barrier/Rank: "
@@ -3282,6 +3492,15 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     f"{primary_metrics['barrier_loss']:.8f} / "
                     f"{primary_metrics['ranking_loss']:.8f}"
                 )
+                if (
+                    'pairwise_accuracy' in primary_metrics
+                    or 'rank_ic' in primary_metrics
+                ):
+                    print(
+                        "Validation Pairwise Accuracy/RankIC: "
+                        f"{format_validation_value(primary_metrics.get('pairwise_accuracy'))} / "
+                        f"{format_validation_value(primary_metrics.get('rank_ic'))}"
+                    )
                 print(
                     "Validation Return-Path Consistency JSON: "
                     + json.dumps(
@@ -3465,6 +3684,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     return_bias_loss=large_metrics.get('return_bias_loss'),
                     barrier_loss=large_metrics.get('barrier_loss'),
                     ranking_loss=large_metrics.get('ranking_loss'),
+                    pairwise_accuracy=large_metrics.get('pairwise_accuracy'),
+                    pairwise_pairs=large_metrics.get('pairwise_pairs'),
+                    rank_ic=large_metrics.get('rank_ic'),
+                    rank_ic_dates=large_metrics.get('rank_ic_dates'),
                     return_path_consistency=large_metrics.get(
                         'return_path_consistency'
                     ),
@@ -3576,7 +3799,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             ),
             unique_windows_covered=unique_windows_covered,
             train_loss=dt_result.get('train_loss'),
-            best_val_loss=None if best_val_loss == float('inf') else best_val_loss,
+            best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
             device=str(device),
         )
     return dt_result

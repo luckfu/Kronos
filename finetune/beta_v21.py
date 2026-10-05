@@ -77,6 +77,107 @@ def expected_utility_score(
     )
 
 
+def _same_date_pair_mask(
+    utilities: torch.Tensor,
+    date_ids: torch.Tensor,
+    minimum_gap: float,
+) -> torch.Tensor:
+    """Upper triangle of same-signal-date pairs with |utility gap| >= minimum_gap."""
+    same_date = date_ids[:, None] == date_ids[None, :]
+    utility_delta = utilities[:, None] - utilities[None, :]
+    return same_date & torch.triu(utility_delta.abs() >= minimum_gap, diagonal=1)
+
+
+def same_date_pairwise_accuracy(
+    scores: torch.Tensor,
+    utilities: torch.Tensor,
+    date_ids: torch.Tensor,
+    minimum_gap: float = 0.005,
+) -> tuple[float | None, int]:
+    """Fraction of qualifying pairs whose score order matches utility.
+
+    Same pair rule as the ranking loss: one signal date and
+    |utility gap| >= minimum_gap. A tie in score is wrong. Returns
+    (accuracy, pair_count). Accuracy is None when no pair qualifies.
+    This is a selection statistic, not a training loss.
+    """
+    scores = scores.detach().float().reshape(-1).cpu()
+    utilities = utilities.detach().float().reshape(-1).cpu()
+    date_ids = date_ids.detach().reshape(-1).cpu()
+    if scores.numel() == 0:
+        return None, 0
+    correct = 0
+    total = 0
+    for date_id in torch.unique(date_ids):
+        mask = date_ids == date_id
+        if int(mask.sum()) < 2:
+            continue
+        score = scores[mask]
+        utility = utilities[mask]
+        utility_delta = utility[:, None] - utility[None, :]
+        score_delta = score[:, None] - score[None, :]
+        pair_mask = torch.triu(utility_delta.abs() >= minimum_gap, diagonal=1)
+        total += int(pair_mask.sum().item())
+        correct += int((pair_mask & (score_delta * utility_delta > 0)).sum().item())
+    if total == 0:
+        return None, 0
+    return correct / total, total
+
+
+def _average_ranks(values: torch.Tensor) -> torch.Tensor:
+    """1-based average ranks. Ties share the mean of their rank positions."""
+    count = int(values.numel())
+    order = torch.argsort(values, stable=True)
+    sorted_values = values[order].double()
+    ranks = torch.empty(count, dtype=torch.float64)
+    start = 0
+    while start < count:
+        stop = start + 1
+        while stop < count and sorted_values[stop] == sorted_values[start]:
+            stop += 1
+        # ranks start..stop-1 are the 1-based positions start+1 .. stop
+        average = 0.5 * ((start + 1) + stop)
+        ranks[order[start:stop]] = average
+        start = stop
+    return ranks
+
+
+def mean_within_date_spearman(
+    scores: torch.Tensor,
+    utilities: torch.Tensor,
+    date_ids: torch.Tensor,
+) -> tuple[float | None, int]:
+    """Mean over dates of Spearman(score, utility).
+
+    Dates with fewer than two samples, or with zero rank variance in either
+    series, are skipped. Returns (mean, date_count). Mean is None when no
+    date qualifies. Not a checkpoint-selection metric.
+    """
+    scores = scores.detach().float().reshape(-1).cpu()
+    utilities = utilities.detach().float().reshape(-1).cpu()
+    date_ids = date_ids.detach().reshape(-1).cpu()
+    if scores.numel() == 0:
+        return None, 0
+    total = 0.0
+    counted = 0
+    for date_id in torch.unique(date_ids):
+        mask = date_ids == date_id
+        if int(mask.sum()) < 2:
+            continue
+        score_rank = _average_ranks(scores[mask])
+        utility_rank = _average_ranks(utilities[mask])
+        score_centered = score_rank - score_rank.mean()
+        utility_centered = utility_rank - utility_rank.mean()
+        denominator = score_centered.norm() * utility_centered.norm()
+        if float(denominator) == 0.0:
+            continue
+        total += float((score_centered * utility_centered).sum() / denominator)
+        counted += 1
+    if counted == 0:
+        return None, 0
+    return total / counted, counted
+
+
 def same_date_pairwise_ranking_loss(
     scores: torch.Tensor,
     utilities: torch.Tensor,
@@ -88,9 +189,7 @@ def same_date_pairwise_ranking_loss(
     group_sizes = same_date.sum(dim=1)
     score_delta = scores[:, None] - scores[None, :]
     utility_delta = utilities[:, None] - utilities[None, :]
-    pair_mask = same_date & torch.triu(
-        utility_delta.abs() >= minimum_gap, diagonal=1
-    )
+    pair_mask = _same_date_pair_mask(utilities, date_ids, minimum_gap)
     pair_values = pair_mask.to(scores.dtype)
     pair_counts_by_row = pair_values.sum(dim=1)
     group_pair_counts = same_date.to(scores.dtype) @ pair_counts_by_row

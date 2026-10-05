@@ -140,13 +140,15 @@ def test_ranking_selection_is_ranking_loss_not_score():
 
 
 def test_phase1_kernel_recipe():
-    """Ranking warm recipe: split LR, ranking weight 0.5, same-day batches."""
+    """v17 recipe: split LR, ranking weight 0.5, pairwise accuracy selection."""
     source = RUNNER.read_text()
     head = source.split("EMBEDDED_KRONOS_ARCHIVE_B64", 1)[0]
-    assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_wc"' in source
-    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_warm"' in head
+    assert 'OUTPUT_NAME = "beta_v2_1_c1_dual_t4_rank_acc"' in head
+    assert 'PARENT_OUTPUT_NAME = "beta_v2_1_c1_dual_t4_wc"' in head
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_acc"' in head
+    assert 'KERNEL_VERSION = "v17"' in head
     assert "MAX_SEGMENTS_PER_RUN = 30" in source
-    assert "MAX_RUNTIME_SECONDS = 10800" in source
+    assert "MAX_RUNTIME_SECONDS = 43200" in source
     assert '"KRONOS_USE_BETA_V21_AUXILIARY": "1"' in source
     assert '"KRONOS_SAME_DAY_RANKING_BATCHES": "1"' in source
     assert '"KRONOS_BETA_V21_RANKING_WEIGHT": RANKING_WEIGHT' in source
@@ -164,24 +166,27 @@ def test_phase1_kernel_recipe():
     assert '"KRONOS_SPLIT_TRUNK_HEAD_LR": "1"' in source
     assert '"KRONOS_SCHEDULER": "warmup_constant"' in source
     assert 'WARMUP_RATIO = "0.05"' in head
-    assert '"KRONOS_BEST_SELECTION_METRIC": "ranking"' in source
+    assert '"KRONOS_BEST_SELECTION_METRIC": "pairwise_accuracy"' in source
     assert '"KRONOS_HISTORY_LOSS_WEIGHT": "0.02"' in source
     assert "same_day_batch_no_segment_date_sort" in head
     assert "SEGMENT_OFFSET = 0" in head
     assert "LAST_VERIFIED_FINISHED_CHART_SEGMENT" not in head
-    assert "EXPECTED_BEST_CHART_SEGMENT = 155" in head
+    assert "EXPECTED_PARENT_SEGMENT = 10" in head
+    assert "EXPECTED_PARENT_RANKING_LOSS = 0.68692991" in head
+    assert "find_v16_seg10_ranking_best" in source
     assert '"KRONOS_COLLECT_VALIDATION_AUXILIARY": "0"' in source
     assert '"KRONOS_BATCH_SIZE": "32"' in source
     assert '"KRONOS_AMP_DTYPE": "float16"' in source
     assert "beta_v2_1_c1_dual_t4_v6" not in head
     assert "beta_v2_1_c1_dual_t4_p1b" not in head
     assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_1e5"' not in head
-    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank"' not in head
+    assert 'SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_warm"' not in head
     assert 'KRONOS_SCHEDULER": "warmup_cosine"' not in source
     assert 'assert recipe["warmup_ratio"] == "0.05"' in source
     assert 'assert recipe["segment_offset"] == "0"' in source
-    assert 'assert recipe["max_runtime_seconds"] == "10800"' in source
-    assert 'assert recipe["best_metric"] == "ranking"' in source
+    assert 'assert recipe["max_runtime_seconds"] == "43200"' in source
+    assert 'assert recipe["best_metric"] == "pairwise_accuracy"' in source
+    assert 'assert recipe["kernel_version"] == "v17"' in source
     assert 'assert recipe["ranking_weight"] == "0.5"' in source
     assert 'assert recipe["split_trunk_head_lr"] == "1"' in source
     assert 'assert recipe["predictor_lr"] == "1e-6"' in source

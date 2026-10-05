@@ -6,6 +6,8 @@ from finetune.beta_v21 import (
     class_balanced_barrier_loss,
     compose_beta_v21_objective,
     consistency_statistics,
+    mean_within_date_spearman,
+    same_date_pairwise_accuracy,
     same_date_pairwise_ranking_loss,
     same_date_return_bias_loss,
 )
@@ -290,3 +292,27 @@ def test_same_day_pair_stays_on_one_rank():
     assert len(rank0) == len(rank1) == 1
     assert rank0[0] == [0, 1]
     assert len({dates[index] for index in rank0[0]}) == 1
+
+
+def test_pairwise_accuracy_counts_score_ties_as_wrong_and_ignores_small_gaps():
+    scores = torch.tensor([0.0, 1.0, 0.2, 0.2])
+    utilities = torch.tensor([0.00, 0.02, 0.00, 0.02])
+    date_ids = torch.tensor([1, 1, 2, 2])
+    accuracy, pairs = same_date_pairwise_accuracy(scores, utilities, date_ids)
+    # date 1 is ordered; date 2 is a score tie and counts wrong.
+    assert pairs == 2
+    assert accuracy == 0.5
+    tiny = torch.tensor([0.0, 0.001])
+    accuracy, pairs = same_date_pairwise_accuracy(
+        tiny, tiny, torch.tensor([1, 1])
+    )
+    assert pairs == 0 and accuracy is None
+
+
+def test_mean_within_date_spearman_is_one_for_a_perfect_order():
+    scores = torch.tensor([0.1, 0.2, 0.3, 1.0, 0.0])
+    utilities = torch.tensor([0.0, 0.1, 0.2, 0.4, 0.3])
+    date_ids = torch.tensor([1, 1, 1, 2, 2])
+    rank_ic, dates = mean_within_date_spearman(scores, utilities, date_ids)
+    assert dates == 2
+    assert abs(rank_ic - 1.0) < 1e-12

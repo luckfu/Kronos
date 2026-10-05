@@ -13,6 +13,7 @@ from train_predictor import (
     DEFAULT_BETA_V21_SCORE_FEEDING_MODE,
     beta_v21_validation_score,
     resolve_kept_best_loss,
+    selection_is_improvement,
     should_reuse_saved_beta_v21_denominators,
     validate_resume_guard,
 )
@@ -84,3 +85,22 @@ def test_forecast_threshold_is_not_reused_for_ranking():
     assert resolve_kept_best_loss("forecast", 2.31236787, "ranking", None) == float("inf")
     assert resolve_kept_best_loss("ranking", 0.42, "ranking", 0.90) == 0.42
     assert resolve_kept_best_loss("forecast", 2.31236787, "forecast", None) == 2.31236787
+
+
+def test_pairwise_accuracy_threshold_is_not_a_ranking_loss():
+    assert resolve_kept_best_loss(
+        "ranking", 0.68692991, "pairwise_accuracy", 0.66304848
+    ) == 0.66304848
+    assert resolve_kept_best_loss(
+        "ranking", 0.68692991, "pairwise_accuracy", None
+    ) == float("-inf")
+    assert resolve_kept_best_loss(
+        "pairwise_accuracy", 0.70, "pairwise_accuracy", 0.10
+    ) == 0.70
+    # Forecast runs stay lower-better and keep the saved forecast number.
+    assert resolve_kept_best_loss("forecast", 2.31236787, "forecast", 0.9) == 2.31236787
+    assert selection_is_improvement("forecast", 2.30, 2.31) is True
+    assert selection_is_improvement("forecast", 2.32, 2.31) is False
+    assert selection_is_improvement("pairwise_accuracy", 0.67, 0.66) is True
+    assert selection_is_improvement("pairwise_accuracy", 0.65, 0.66) is False
+    assert selection_is_improvement("ranking", 0.68, 0.69) is True
