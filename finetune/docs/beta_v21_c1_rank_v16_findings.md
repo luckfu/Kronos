@@ -139,3 +139,9 @@ v18（`458f458`）开训校准后 rank0 因 `family_lrs` 缺 `adaptation` 键 Ke
 - 最佳选择：验证 pairwise accuracy，沿用 Seg19 的 **0.65735263** 作门槛（`KRONOS_KEEP_EXISTING_BEST=1`），要超过它才写 best_model。rank IC 只记。
 - 预报红线只监控：**2.31236787 + 0.015 = 2.32736787**。另加大声日志：weighted_forecast_loss 比 **2.31236782** 高出 **>0.005** 时打印 `WARNING: [EARLY ]FORECAST DRIFT ALERT` 横幅（前 5 段带 EARLY），并记 SwanLab `validation/forecast_drift_alert`。不停跑。
 - 新输出目录 / SwanLab id：`beta_v2_1_c1_dual_t4_rank_unfreeze`。Dual T4，docker 固定 `sha256:37c64f7dd9…`，上限 30 段 / 43200s。
+
+## True time-OOS（2026-10-05）
+
+v20 unfreeze 已停。三本对照（Seg155 / Seg19 / Seg8）的密封 OOS 配方与 kernel 见
+`finetune/docs/beta_v21_c1_rank_oos_plan_cn.md`；runner `luckfu/kronos-beta-v21-c1-rank-oos`。
+Seg8 权重 dataset：`luckfu/kronos-beta-v21-c1-rank-unfreeze-seg8-best`。
