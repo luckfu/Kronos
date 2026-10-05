@@ -1,0 +1,61 @@
+# Baseline 2：Beta Seg155 生成式 OHLC → 派生 10 日收益（密封 18d OOS）
+
+更新：2026-10-05 CST
+
+## 假设
+
+C2 的 return10d Rank IC ~0.18 来自 **生成式 AR decode** 路径
+（`auto_regressive_inference` 多样本均值），而不是训练过的 `return_head`。
+Beta 的 `expected_utility_score` / `return_head` 被 ranking 污染，对 raw 10d 收益
+Rank IC 接近 0 / 负。
+
+本 baseline **零训练**：在密封包上用 **我们自己的** Seg155 forecast-best
+走与 C2 同精神的生成式预报，派生 `predicted_return_d10` 再打分。
+
+## 精确 decode 配方（beta-base / Seg155）
+
+| 项 | 值 |
+|---|---|
+| 对象 | 真 AR 采样 `model.kronos.auto_regressive_inference` |
+| 非 | teacher-forcing CE；非 Stage3 soft top-N stitch |
+| `return_samples` | True |
+| 分数定义 | `mean_N ( denorm_close[d10] / last_close - 1 )` |
+| ranking arm | T=0.60 / top_p=0.9 / N=16 / seed=20260906 |
+| production arm | T=0.65 / top_p=0.8 / N=5 / seed=20260906 |
+| 其它 | top_k=0, clip=5, max_context=512, pred_len=10, lookback=120 |
+| 条件 | sector_id + size_percentile（Beta 合同） |
+| 权重 | `luckfu/kronos-beta-v21-c1-seg155-forecast-best` SHA `8b11a759e72d…` |
+| aux | Seg155 `use_beta_v21_auxiliary=False`（干净预报；AR 不用 heads） |
+
+Seg19 trunk 自 Seg155 冻结，生成式预报路径应近似相同；本 kernel **只跑 Seg155**
+以省 GPU，与 Seg19 return_head 数字对照用已密封表。
+
+## 评分合同（与 C2 vs Beta 表同包）
+
+包：`kronos_beta_v2_time_oos_through_20260903`（08-11→09-03 / 92751）
+
+| 指标 | 定义 |
+|---|---|
+| return10d Rank IC | 日均 Spearman(`predicted_return_d10`, `return_10d`) |
+| utility Rank IC | 日均 Spearman(`predicted_return_d10`, package utility) — ablation |
+| Pairwise | 同日 `\|Δutility\|≥0.005`，score=`predicted_return_d10`，平局算错 |
+
+对照：C2 rank decode ~0.18；Seg19 `expected_utility_score`↔return10d ~-0.007。
+
+## Kernel
+
+- slug：`luckfu/kronos-beta-v21-c1-gen-return-oos`（**eval-only**，不覆盖 dual-T4 训练）
+- docker pin：`sha256:37c64f7dd9…`（与 dual-T4 / rank-oos 相同）
+- machine：2× T4，(arm, date) round-robin
+- 重建：
+
+```bash
+python3 finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py
+kaggle kernels push -p finetune/kaggle_beta_v21_c1_gen_return_oos_kernel
+```
+
+## 代码
+
+- 核心：`finetune/evaluate_beta_v21_generative_return_oos.py`
+- Runner：`finetune/kaggle_beta_v21_c1_gen_return_oos.py`
+- Builder：`finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py`
