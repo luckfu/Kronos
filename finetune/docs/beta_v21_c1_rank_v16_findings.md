@@ -132,7 +132,7 @@ v18（`458f458`）开训校准后 rank0 因 `family_lrs` 缺 `adaptation` 键 Ke
 
 ## v20 方案（本提交）：解冻全树，trunk 极小 LR
 
-- 父本：v19 **Seg19** `best_model`（pairwise **0.65735263**，rank IC **0.28358639**，weighted forecast **2.31236782**，SHA `1fe7ae4bf6cf…`）。直接把被停的 `luckfu/kronos-beta-v2-1-c1-dual-t4` kernel 输出挂成 `kernel_sources`，路径必须在 `beta_v2_1_c1_dual_t4_rank_frozen/checkpoints/best_model` 下，SHA 校验。Seg155 数据集不再挂。只读权重；AdamW 全新；不读 last_state。
+- 父本：v19 **Seg19** `best_model`（pairwise **0.65735263**，rank IC **0.28358639**，weighted forecast **2.31236782**，SHA `1fe7ae4bf6cf…`）。先试过把被停的 `luckfu/kronos-beta-v2-1-c1-dual-t4` 自己的输出挂成 `kernel_sources`，Kaggle 推送时拒绝（"not valid kernel sources"，version 5 在父本检查处 fail-fast 退出）。改为把 Seg19 `best_model` 上传成私有数据集 `luckfu/kronos-beta-v21-c1-rank-frozen-seg19-best` 挂载，路径须在该数据集或 `beta_v2_1_c1_dual_t4_rank_frozen` 下，并做 SHA 校验。Seg155 数据集不再挂。只读权重；AdamW 全新；不读 last_state。
 - **全部参数可训练**：`KRONOS_TRAINABLE_TRANSFORMER_LAYERS=-1`，`KRONOS_TRAIN_BETA_V21_HEADS_ONLY=0`。kernel 若看到 trainable≠total 直接退出。
 - Split LR（`KRONOS_SPLIT_TRUNK_HEAD_LR=1`）：trunk / Adaptation **1e-7 恒定**（warmup_constant，start = peak = 1e-7）；heads + condition / Condition warmup_constant **1e-6 → 1e-5**，ratio **0.05**。
 - Ranking weight **0.5**。same-day batch，coverage seed **20261002**，段内不按 signal_date 排序，offset 0。

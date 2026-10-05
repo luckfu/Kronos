@@ -179,7 +179,7 @@ def test_phase1_kernel_recipe():
     assert "EXPECTED_PARENT_PAIRWISE_ACCURACY = 0.65735263" in head
     assert "1fe7ae4bf6cfc2c068be4d6755e2c528550456325bbb81cf900ed064078d3d58" in head
     assert "find_seg19_pairwise_best" in source
-    assert "PARENT_DATASET" not in head
+    assert 'PARENT_DATASET = "luckfu/kronos-beta-v21-c1-rank-frozen-seg19-best"' in head
     assert '"KRONOS_BATCH_SIZE": "32"' in source
     assert '"KRONOS_AMP_DTYPE": "float16"' in source
     assert 'assert recipe["kernel_version"] == "v20"' in source
