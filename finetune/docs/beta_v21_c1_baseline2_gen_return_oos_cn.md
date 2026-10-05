@@ -59,3 +59,14 @@ kaggle kernels push -p finetune/kaggle_beta_v21_c1_gen_return_oos_kernel
 - 核心：`finetune/evaluate_beta_v21_generative_return_oos.py`
 - Runner：`finetune/kaggle_beta_v21_c1_gen_return_oos.py`
 - Builder：`finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py`
+
+## 运行记录（2026-10-05 CST）
+
+- Commit `78b3bda`；`kaggle kernels push` → version 1，**RUNNING**（~23:11 CST 启动）
+- URL：https://www.kaggle.com/code/luckfu/kronos-beta-v21-c1-gen-return-oos
+- 校验：tokenizer SHA `59d85f6a…` ✓；Seg155 SHA `8b11a759e72d…` ✓；18 日 / 92751 ✓
+- 实测吞吐：prod N=5 每个日期 shard ≈ 1,060–1,110 s / T4（effective batch 256）
+- ETA：prod 臂 18 shard / 2 卡 ≈ 9 轮 ≈ 2.7 h → 约 **10-06 02:00 CST**；
+  rank N=16 每 shard ≈ 3.5k s → 9 轮 ≈ 8.7 h，会碰到 39,600 s 截止（约 10-06 10:10 CST），
+  **rank 臂可能只完成 ~16/18 日**（可容忍部分完成：prod 先完整打分；rank 不完整则记为 incomplete）。
+  如 rank 被截断，再单独推 rank-only 补跑。
