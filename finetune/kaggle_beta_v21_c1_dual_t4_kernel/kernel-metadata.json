@@ -12,7 +12,8 @@
     "gpu"
   ],
   "dataset_sources": [
-    "luckfu/a-share-120d-temporal-symbol-holdout"
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/kronos-beta-v21-c1-seg155-forecast-best"
   ],
   "competition_sources": [],
   "kernel_sources": [

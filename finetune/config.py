@@ -487,6 +487,11 @@ class Config:
         self.trainable_transformer_layers = int(
             os.getenv("KRONOS_TRAINABLE_TRANSFORMER_LAYERS", "2")
         )
+        # When set, freeze trunk + forecast/condition modules; train only
+        # return_head and barrier_head (Beta v2.1 ranking heads-only mode).
+        self.train_beta_v21_heads_only = os.getenv(
+            "KRONOS_TRAIN_BETA_V21_HEADS_ONLY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.context_layer = int(os.getenv("KRONOS_CONTEXT_LAYER", "10"))
 
         # Gradient accumulation to simulate a larger batch size.

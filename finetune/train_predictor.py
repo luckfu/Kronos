@@ -585,16 +585,35 @@ def configure_trainable_parameters(model, config):
     for parameter in model.parameters():
         parameter.requires_grad = False
 
-    for module in [
-        model.sector_emb, model.size_emb, model.size_mlp,
-        model.norm, model.dep_layer, model.head,
-        getattr(model, 'return_head', None), getattr(model, 'barrier_head', None),
-    ]:
+    heads_only = bool(config.get('train_beta_v21_heads_only', False))
+    if heads_only:
+        # Frozen trunk: only Beta v2.1 return_head + barrier_head train.
+        # Size/sector condition modules feed forecast, so they stay frozen.
+        trainable_modules = [
+            getattr(model, 'return_head', None),
+            getattr(model, 'barrier_head', None),
+        ]
+        if any(module is None for module in trainable_modules):
+            raise ValueError(
+                'train_beta_v21_heads_only requires use_beta_v21_auxiliary '
+                'with return_head and barrier_head present'
+            )
+    else:
+        trainable_modules = [
+            model.sector_emb, model.size_emb, model.size_mlp,
+            model.norm, model.dep_layer, model.head,
+            getattr(model, 'return_head', None), getattr(model, 'barrier_head', None),
+        ]
+
+    for module in trainable_modules:
         if module is not None:
             for parameter in module.parameters():
                 parameter.requires_grad = True
 
     layer_count = int(config.get('trainable_transformer_layers', 0))
+    if heads_only:
+        # Ignore KRONOS_TRAINABLE_TRANSFORMER_LAYERS=-1 full-train when freezing.
+        layer_count = 0
     if layer_count < 0:
         # Explicit full-Predictor incremental fine-tuning mode.  This mirrors
         # finetune_csv/finetune_base_model.py, while retaining separate LR
@@ -606,9 +625,17 @@ def configure_trainable_parameters(model, config):
             for parameter in layer.parameters():
                 parameter.requires_grad = True
 
+    trainable_names = [
+        name for name, parameter in model.named_parameters() if parameter.requires_grad
+    ]
     trainable = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
     total = sum(parameter.numel() for parameter in model.parameters())
     print(f"Trainable predictor parameters: {trainable:,}/{total:,} ({trainable / total:.1%})")
+    if heads_only:
+        print(
+            "Frozen trunk heads-only mode: trainable modules = "
+            + ", ".join(trainable_names)
+        )
 
 
 def reset_conditioning(model, config):
@@ -2331,6 +2358,17 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             config['beta_v21_validation_denominators'] = denominator_csv
             denominators_recalibrated_this_run = True
             if rank == 0:
+                print(
+                    'Pre-train calibration baseline: '
+                    f"pairwise_accuracy={format_validation_value(calibration_metrics.get('pairwise_accuracy'))} "
+                    f"rank_ic={format_validation_value(calibration_metrics.get('rank_ic'))} "
+                    f"weighted_forecast_loss={float(calibration_metrics['weighted_forecast_loss']):.8f} "
+                    f"ranking_loss={float(calibration_metrics['ranking_loss']):.8f}",
+                    flush=True,
+                )
+                config['_freeze_forecast_baseline'] = float(
+                    calibration_metrics['weighted_forecast_loss']
+                )
                 with open(f'{denominator_path}.tmp', 'w') as handle:
                     json.dump({
                         'source': 'untrained_beta_v21_heads_on_parent_checkpoint',
@@ -3483,6 +3521,25 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         f"weighted_forecast_loss={float(weighted_val_forecast):.8f} "
                         f"red_line={red_line:.8f} exceeded={int(exceeded)}"
                     )
+                freeze_baseline = config.get('_freeze_forecast_baseline')
+                if (
+                    freeze_baseline is not None
+                    and config.get('train_beta_v21_heads_only', False)
+                ):
+                    delta = abs(float(weighted_val_forecast) - float(freeze_baseline))
+                    print(
+                        "Frozen-trunk forecast sanity: "
+                        f"weighted_forecast_loss={float(weighted_val_forecast):.8f} "
+                        f"baseline={float(freeze_baseline):.8f} "
+                        f"abs_delta={delta:.8e}"
+                    )
+                    if delta > 1e-4:
+                        print(
+                            "WARNING: FROZEN TRUNK FORECAST DRIFT "
+                            f"|weighted_forecast_loss - baseline|={delta:.8e} > 1e-4. "
+                            "Trunk/forecast heads should be frozen; investigate.",
+                            flush=True,
+                        )
             if config.get('use_beta_v21_auxiliary', False):
                 print(
                     "Validation v2.1 Score/Return/Bias/Barrier/Rank: "
@@ -3882,7 +3939,17 @@ def main(config: dict):
     if device.type == 'xla':
         run_xla_startup_checks(model, device, rank, world_size)
     if dist.is_available() and dist.is_initialized():
-        model = DDP(model, device_ids=[local_rank], find_unused_parameters=False)
+        find_unused = bool(config.get('train_beta_v21_heads_only', False))
+        model = DDP(
+            model,
+            device_ids=[local_rank],
+            find_unused_parameters=find_unused,
+        )
+        if find_unused and rank == 0:
+            print(
+                'DDP find_unused_parameters=True for beta v2.1 heads-only freeze',
+                flush=True,
+            )
 
     if rank == 0:
         core_model = model.module if isinstance(model, DDP) else model

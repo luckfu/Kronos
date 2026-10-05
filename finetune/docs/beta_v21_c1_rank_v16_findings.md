@@ -96,3 +96,22 @@ Pairwise accuracy（分数打平算错）：
 - 学习率和 v16 相同：ranking weight 0.5；trunk / adaptation 1e-6 保持；head / condition 从 1e-6 warmup_constant 到 1e-5，warmup ratio 0.05。
 - same-day batch，coverage seed 20261002，段内不按 signal_date 排序，offset 0。
 - 2026-10-05 `kaggle quota`：GPU 已用 0.00h，剩余 30.00h，总额 30.00h，刷新 2026-10-10T00:00:00Z。GPU 会话上限 12 小时，所以本轮运行时间上限是 43200s，不是 v16 因额度不够而用的 10800s。
+
+## v17 结果（用户停在 ~Seg17，2026-10-05 ~13:50 Asia/Shanghai）
+
+父本是 v16 Seg10 ranking best。ranking weight **0.5**，trunk LR 1e-6 hold（`KRONOS_SPLIT_TRUNK_HEAD_LR=1`，Adaptation LR），heads / condition warmup_constant 1e-6→1e-5 ratio 0.05。输出 / SwanLab `beta_v2_1_c1_dual_t4_rank_acc`。最佳选择改为验证 pairwise accuracy。
+
+验证 pairwise accuracy 从父本校准约 **0.66304** 升到平台 **~0.6643–0.6657**。`best_model` 里 Seg9 **0.66559216** 被 Seg15 **0.66574077** 盖掉。同时 weighted_forecast_loss 从约 **2.33** 升到 **2.34+**，并且和 accuracy **同向移动**：排序变好时预报也在变差。
+
+结论：**trunk 漂移在用预报换排序**。继续用小 trunk LR 训练整棵树，无法同时保住 Seg155 的预报地板（weighted_forecast_loss **2.31236787**）。
+
+## v18 方案（本提交）：冻结 trunk，只训两个 aux 头
+
+- 父本改回 **Seg155 forecast best**（weighted_forecast_loss **2.31236787**，local segment 26）。user281434 kernel 输出里的 `beta_v2_1_c1_dual_t4_wc/best_model` 已被 v16 Seg10 盖掉，所以把本地 Seg155 副本（SHA `8b11a759e72d…`）做成数据集 `luckfu/kronos-beta-v21-c1-seg155-forecast-best` 挂进 dual-T4 kernel。
+- Seg155 safetensors **没有** `return_head` / `barrier_head` 键（197 tensors；Seg10 ranking best 是 201）。在 `use_beta_v21_auxiliary=True` 下两个头会随机初始化——这对「只训头」是正确起点，不是缺陷。
+- `KRONOS_TRAIN_BETA_V21_HEADS_ONLY=1`：`requires_grad=False` 冻住 trunk、预报头（`norm`/`dep_layer`/`head`）和 size/sector condition（它们进预报通路）。**只有** `return_head`、`barrier_head` 可训练。DDP `find_unused_parameters=True`。
+- Head LR：warmup_constant **1e-5 → 1e-4**，warmup ratio **0.01**。头是很小的 Linear(d_model→4/3)；v17 的 1e-5 偏慢。
+- Loss：与 v17 相同的 total（ranking weight **0.5** + return/barrier aux）。trunk 冻住后预报梯度无效，但 loss 形式不变。same-day ranking，coverage seed **20261002**，段内不按 signal_date 排序。
+- 最佳选择：验证 pairwise accuracy。rank IC 只记。预报红线仍是 +0.015 vs **2.31236787**（只监控）。另加冻结 sanity：若 weighted_forecast_loss 相对开训校准偏离 **>1e-4**，打响 WARNING（不停跑）；期望每段都停在 ~**2.3124**。
+- 新输出目录 / SwanLab id：`beta_v2_1_c1_dual_t4_rank_frozen`（绝不复用 rank_acc / rank_warm / wc）。
+- 运行：43200s，MAX_SEGMENTS 30，Dual T4 only。
