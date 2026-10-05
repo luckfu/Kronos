@@ -1,4 +1,4 @@
-# Beta C1 Ranking OOS vs Small C2（同密封包对比）
+# Beta C1 Ranking OOS vs Small C2（同密封包 · 决定性对比）
 
 更新：2026-10-05 CST
 
@@ -6,64 +6,55 @@
 
 - 包名：`kronos_beta_v2_time_oos_through_20260903`
 - Signal：`2026-08-11` → `2026-09-03`（**18** 个交易日）
-- 样本：**92,751**
-- Dataset：`luckfu/a-share-120d-temporal-symbol-holdout`
-- `return_10d` 定义：`close_h / close_signal - 1`（与 Small D10 实际收益同一合同）
+- 样本：**92,751**（C2↔Beta 按 `symbol,asof_date` **92751/92751** 对齐）
+- `return_10d` / utility 标签来自同一密封包；utility 从 Beta OOS predictions 行 join（零 GPU）
+- C2 预测：`/workspace/kaggle_c2_18d_alpha_oos/kronos_c2_18d_alpha_oos/predictions_*.csv.gz`
+- Beta 预测：`/workspace/kronos_patrol_out/oos_20261005_2215/output/beta_v2_1_c1_rank_oos/results/*_predictions.csv`
 
-**不要**拿 Beta 训练 val（`val_data.pkl`，score↔utility ≈ 0.28）和 Small OOS ≈ 0.18 比。
+**不要**拿 Beta 训练 val（score↔utility ≈ 0.28）或用户粘贴的 **19 日 audit（08-03→08-27）** 和本表 18 日密封包混比。
 
-## 指标合同（读表前先看）
+## 指标合同
 
-| 列 | Beta 含义 | Small 含义 |
+| 列 | 定义 | 诚实说明 |
 |---|---|---|
-| **Utility Rank IC** | 日均 Spearman(`expected_utility_score`, `utility`) | 无（Small 无 ranking/utility 头）→ 表中为 — |
-| **Return10d Rank IC** | 日均 Spearman(`score`, `return_10d`) | 日均 Spearman(`predicted_return_d10`, `actual_return_d10`) = D10 `daily_rank_ic_mean` |
-| **Pairwise** | 同日、`|Δutility| ≥ 0.005`，分数打平算错 | 无（本表不报） |
-| **WFL** | C1 加权 teacher-forcing CE | 本密封对比未重报（C2 有独立 forecast 轨迹） |
+| **Return10d Rank IC** | 日均 Spearman(分数, 10 日收益) | C2=`predicted_return_d10` vs `actual_return_d10`（与已发表 metrics 一致）；Beta=`expected_utility_score` vs 包内 `return_10d` |
+| **Utility Rank IC** | 日均 Spearman(分数, utility) | Beta=训练合同；**C2 无 utility 头** → 用 `predicted_return_d10` 当分数的 **ablation** |
+| **Pairwise** | 同日 `\|Δutility\|≥0.005`，分数打平算错 | Beta=训练合同；C2 同上 ablation（score=`predicted_return_d10`） |
+| **WFL** | C1 加权 teacher-forcing CE | 仅 Beta；C2 本表不报 |
 
-可比的核心列是 **Return10d Rank IC**：同一包、同一 `return_10d`、都是日内 Spearman 再对日等权平均。
+## 决定性并列表（18 日密封包）
 
-## 并列表（主表：日均 Rank IC）
+| 模型 | 分数种类 | Return10d IC（日均） | Return10d IC（pooled） | Utility IC（日均） | Utility IC（pooled） | Pairwise | WFL |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **Small C2 best** rank decode T0.6/p0.9/N16 | `predicted_return_d10` | **0.1796** | **0.2428** | **0.1210**† | **0.1539**† | **56.49%**† | — |
+| Small C2 best prod T0.65/p0.8/N5 | `predicted_return_d10` | 0.1769 | 0.2373 | 0.1208† | 0.1543† | 56.50%† | — |
+| **Beta Seg19** rank-frozen | `expected_utility_score` | **-0.0073** | 0.0305 | **0.0300** | 0.0774 | **51.54%** | **2.43604** |
+| Beta Seg8 rank-unfreeze | `expected_utility_score` | -0.0298 | 0.0065 | 0.0224 | 0.0729 | 51.09% | 2.44870 |
+| Beta Seg155 forecast | （无 ranking score） | — | — | — | — | — | 2.43604 |
 
-数据来源：
-
-- Beta：`/workspace/kronos_patrol_out/oos_20261005_2215/output/beta_v2_1_c1_rank_oos/results/*_predictions.csv` 本地重算（无需新 kernel）
-- Small：`finetune/reports/c2_18d_alpha_oos_metrics_rank.json` / `c2_18d_alpha_oos_summary.json`
-- 机器可读汇总：`finetune/reports/beta_v21_c1_rank_oos_vs_small_c2_return10d.json`
-
-| 模型 | Utility Rank IC（日均） | Return10d Rank IC（日均） | Return10d Rank IC（pooled） | Pairwise | WFL |
-|---|---:|---:|---:|---:|---:|
-| **Small C2 best seg179**（rank decode T0.6/p0.9/N16） | — | **0.1796** | **0.2428** | — | — |
-| Small C2 best（prod T0.65/p0.8/N5） | — | 0.1769 | 0.2373 | — | — |
-| **Beta Seg19** rank-frozen best | **0.0300** | **-0.0073** | 0.0305 | **51.54%** | **2.43604** |
-| Beta Seg8 rank-unfreeze best | 0.0224 | -0.0298 | 0.0065 | 51.09% | 2.44870 |
-| Beta Seg155 forecast best | —（无 ranking score） | — | — | — | 2.43604 |
+† C2 的 Utility IC / Pairwise 是 **return-score ablation**（把 `predicted_return_d10` 接到包内 utility 标签），**不是**训练过的 utility 头。Pairwise 合格 pair 数 ≈ **1.2487e8**（与 Beta 同量级）。
 
 补充：
 
-- Seg19 utility ICIR **0.327**，IC+ 日占比 **66.7%**；return10d ICIR **-0.069**，正 IC 日仅 **33.3%**。
-- Seg8 utility ICIR 0.249；return10d ICIR -0.289，正 IC 日 33.3%。
-- Seg155：`use_beta_v21_auxiliary=False`，predictions 里 `score` 全空，不能报 Rank IC / pairwise；WFL 与 Seg19 相同（冻结 trunk 预报地板）。
+- C2 rank：utility ICIR **0.856**，IC+ 日 **77.8%**；return10d ICIR **1.668**，IC+ 日 **88.9%**。
+- Seg19：utility ICIR **0.327**，IC+ 日 **66.7%**；return10d ICIR **-0.069**，IC+ 日仅 **33.3%**。
+- C2 对包内 `return_10d` 日均 IC 为 0.1793（与 `actual_return_d10` 的 0.1796 几乎相同；~173 行涨跌停/重建异常）。
 
-## 结论
+机器可读：`finetune/reports/beta_v21_c1_rank_oos_vs_small_c2_return10d.json`
 
-1. 用户记得的 Small「~0.2」≈ 同包 D10 **日均 Return Rank IC ~0.18**（pooled ~0.24）。不是 utility IC，也不是方向准确率。
-2. Beta 报告的 **0.0300** 是 **Utility Rank IC**，合同不同，不能直接和 0.18 比。
-3. **即便换成同一 Return10d 合同，Seg19 日均 IC 为 -0.007**，仍远弱于 Small ~0.18。因此：既是指标口径差异，也是 Beta ranking 头在收益截面上明显更弱。
-4. Seg19 仍略优于 Seg8（utility IC / pairwise / WFL）；Seg155 只能当预报地板对照。
+## 这证明什么 / 不证明什么
 
-## 以后 OOS 怎么记
+1. **同包 Return10d Rank IC（真正 apples-to-apples）**：C2 **~0.18** ≫ Seg19 **-0.007**。Beta ranking 头在原始 10 日收益截面上基本无效。
+2. **同包 Utility 合同（C2 为 ablation）**：即便只用收益预测当分数，C2 的 utility IC **0.121**、pairwise **56.5%** 仍高于 Seg19 训练后的 **0.030 / 51.5%**。说明当前 Beta aux ranking 在密封 OOS 上弱于「用 C2 收益预测硬套 utility」这一朴素基线。
+3. **不证明**：C2 有更好的 utility 模型（它没有）；也不证明 val 上 0.28 的 utility IC 可外推。
+4. **用户 19 日数字**（dir 50.69%、pooled 0.169、daily 0.162）来自 audit **08-03→08-27 combined_19**，不是本密封 18 日包。
 
-`finetune/evaluate_beta_v21_time_oos.py` 已同时写出：
+## 以后 OOS
 
-- `rank_ic` / `pooled_rank_ic`（vs utility）
-- `return10d_rank_ic` / `pooled_return10d_rank_ic`（vs return_10d）
-
-下次跑 `luckfu/kronos-beta-v21-c1-rank-oos` 无需手工重算。
+`finetune/evaluate_beta_v21_time_oos.py` 已同时记录 utility 与 return10d Rank IC。C2 侧复用本 JSON 的 join 公式即可，无需新 GPU kernel。
 
 ## 相关路径
 
-- 评测脚本：`finetune/evaluate_beta_v21_time_oos.py`
-- OOS 计划：`finetune/docs/beta_v21_c1_rank_oos_plan_cn.md`
 - 本对比 JSON：`finetune/reports/beta_v21_c1_rank_oos_vs_small_c2_return10d.json`
-- Small 18d：`finetune/reports/c2_18d_alpha_oos_summary.json`
+- OOS 计划：`finetune/docs/beta_v21_c1_rank_oos_plan_cn.md`
+- 评测脚本：`finetune/evaluate_beta_v21_time_oos.py`

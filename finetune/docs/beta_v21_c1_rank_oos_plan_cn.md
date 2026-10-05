@@ -69,9 +69,15 @@ Seg155 是 WC forecast-only 地板，config 明确 `use_beta_v21_auxiliary=False
 
 ## 与 Small C2 同包对比（2026-10-05）
 
-密封 18 日包上已补 **Return10d Rank IC**，并与 Small C2 并列表见
-`finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md` 与
+密封 18 日包上已补全 **C2 utility Rank IC + 合格 pairwise**（零 GPU：join 包内 utility 标签）。
+详见 `finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md` 与
 `finetune/reports/beta_v21_c1_rank_oos_vs_small_c2_return10d.json`。
 
-要点：Beta Seg19 utility rank IC **0.0300**；同包 return10d rank IC **-0.0073**；
-Small C2 D10 日均 **~0.18**。口径不同 + 收益截面上 Beta 更弱。
+决定性数字（同包 08-11→09-03 / 92751）：
+
+| | Return10d IC 日均 | Utility IC 日均 | Pairwise |
+|---|---:|---:|---:|
+| C2 rank decode | **0.1796** | **0.1210**† | **56.49%**† |
+| Beta Seg19 | **-0.0073** | **0.0300** | **51.54%** |
+
+† C2 utility/pairwise 是 `predicted_return_d10` ablation，非训练 utility 头。
