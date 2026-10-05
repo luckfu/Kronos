@@ -1,0 +1,105 @@
+{
+  "evaluation_name": "kronos_beta_v2_time_oos_through_20260903",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-09-03",
+  "signal_dates": 18,
+  "samples": 92751,
+  "package_shared_with_small_c2_18d": true,
+  "metrics_contract": {
+    "utility_rank_ic": "mean within-date Spearman(score, utility); score=expected_utility_score",
+    "return10d_rank_ic": "mean within-date Spearman(score, return_10d); return_10d=close_h/close_signal-1 (same as small D10)",
+    "small_d10_rank_ic": "mean within-date Spearman(predicted_return_d10, actual_return_d10)",
+    "pairwise_accuracy": "same-day pairs |utility gap|>=0.005; score ties wrong",
+    "note": "Seg155 forecast-only has no ranking score; utility/return10d rank IC null"
+  },
+  "beta_checkpoints": [
+    {
+      "label": "seg19_rank_frozen_best",
+      "score_mode": "expected_utility",
+      "has_ranking_scores": true,
+      "samples": 92751,
+      "signal_dates": 18,
+      "pairwise_accuracy": 0.5153679052244999,
+      "weighted_forecast_loss": 2.4360358587494653,
+      "utility_rank_ic_daily": 0.029951721395212755,
+      "utility_rank_ic_pooled": 0.07739584933932216,
+      "utility_rank_icir": 0.3274237358290803,
+      "utility_rank_ic_pos_rate": 0.6666666666666666,
+      "return10d_rank_ic_daily": -0.007326050761061286,
+      "return10d_rank_ic_pooled": 0.030482327509254097,
+      "return10d_rank_icir": -0.06891124807787861,
+      "return10d_rank_ic_pos_rate": 0.3333333333333333,
+      "mean_top_bottom_utility_spread": 0.0030266901975230004,
+      "mean_top_bottom_return10d_spread": -0.0003005163656298147,
+      "reported_rank_ic": 0.029951721395212755
+    },
+    {
+      "label": "seg8_rank_unfreeze_best",
+      "score_mode": "expected_utility",
+      "has_ranking_scores": true,
+      "samples": 92751,
+      "signal_dates": 18,
+      "pairwise_accuracy": 0.5109271215885886,
+      "weighted_forecast_loss": 2.4487027280596796,
+      "utility_rank_ic_daily": 0.022391787140379812,
+      "utility_rank_ic_pooled": 0.07293881919460009,
+      "utility_rank_icir": 0.2492902660978068,
+      "utility_rank_ic_pos_rate": 0.5555555555555556,
+      "return10d_rank_ic_daily": -0.029805021470810735,
+      "return10d_rank_ic_pooled": 0.0065250721731093175,
+      "return10d_rank_icir": -0.28943992896159665,
+      "return10d_rank_ic_pos_rate": 0.3333333333333333,
+      "mean_top_bottom_utility_spread": 0.0021843975400170712,
+      "mean_top_bottom_return10d_spread": -0.005128684934060102,
+      "reported_rank_ic": 0.022391787140379805
+    },
+    {
+      "label": "seg155_forecast_best",
+      "score_mode": "forecast_only_no_ranking_score",
+      "has_ranking_scores": false,
+      "samples": 92751,
+      "signal_dates": 18,
+      "pairwise_accuracy": null,
+      "weighted_forecast_loss": 2.4360358587494653,
+      "utility_rank_ic_daily": null,
+      "utility_rank_ic_pooled": null,
+      "utility_rank_icir": null,
+      "utility_rank_ic_pos_rate": null,
+      "return10d_rank_ic_daily": null,
+      "return10d_rank_ic_pooled": null,
+      "return10d_rank_icir": null,
+      "return10d_rank_ic_pos_rate": null,
+      "mean_top_bottom_utility_spread": null,
+      "mean_top_bottom_return10d_spread": null,
+      "reported_rank_ic": null
+    }
+  ],
+  "small_c2_best_seg179": {
+    "label": "c2_best_segment_179",
+    "source": "finetune/reports/c2_18d_alpha_oos_metrics_rank.json + c2_18d_alpha_oos_summary.json",
+    "protocol_rank": {
+      "name": "rank_t060_p90_n16",
+      "return10d_rank_ic_daily": 0.17962559658922883,
+      "return10d_rank_ic_pooled": 0.24282853356579281,
+      "return10d_rank_icir": 1.668447079558197,
+      "return10d_rank_ic_pos_rate": 0.8888888888888888,
+      "direction_accuracy_d10": 0.5441774212676952
+    },
+    "protocol_prod": {
+      "name": "prod_t065_p80_n5",
+      "return10d_rank_ic_daily": 0.1768718542617823,
+      "return10d_rank_ic_pooled": 0.2372795397036252,
+      "return10d_rank_icir": 1.6894654324803522,
+      "return10d_rank_ic_pos_rate": 0.8888888888888888
+    },
+    "utility_rank_ic_daily": null,
+    "pairwise_accuracy": null,
+    "weighted_forecast_loss": null,
+    "note": "Small C2 has no utility ranking heads; only return10d Rank IC is comparable to beta return10d column"
+  },
+  "inputs": {
+    "beta_oos_dir": "/workspace/kronos_patrol_out/oos_20261005_2215/output/beta_v2_1_c1_rank_oos",
+    "recomputed_from_predictions_csv": true,
+    "no_new_kernel": true
+  }
+}

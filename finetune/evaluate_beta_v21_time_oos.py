@@ -7,7 +7,8 @@ and scores one or more checkpoints with the training contract:
 - teacher-forcing CE (forecast + weighted_forecast with C1 horizon weights)
 - expected_utility_score from return+barrier heads
 - same-day pairwise accuracy with |utility gap| >= 0.005
-- mean within-date Spearman rank IC (+ ICIR, % positive days)
+- mean within-date Spearman rank IC vs utility (+ ICIR, % positive days)
+- mean within-date Spearman rank IC vs return_10d (same contract as Small D10)
 
 Never uses val_data.pkl. Never trains.
 """
@@ -280,21 +281,41 @@ def summarize_checkpoint(rows: list[dict]) -> dict:
     mean_tb_util = None
     mean_tb_ret = None
 
+    return10d_rank_ic = None
+    return10d_rank_ic_dates = 0
+    mean_ret_ic = None
+    ret_ic_std = None
+    return10d_positive_rate = None
+    pooled_utility_rank_ic = None
+    pooled_return10d_rank_ic = None
+
     if has_scores:
         scores = torch.as_tensor(frame["score"].to_numpy(np.float32))
         utilities = torch.as_tensor(frame["utility"].to_numpy(np.float32))
+        returns = torch.as_tensor(frame["return_10d"].to_numpy(np.float32))
         date_ids = torch.as_tensor(frame["date_id"].to_numpy(np.int64))
         pairwise, pair_count = same_date_pairwise_accuracy(
             scores, utilities, date_ids, minimum_gap=MINIMUM_UTILITY_GAP
         )
         rank_ic, rank_ic_dates = mean_within_date_spearman(scores, utilities, date_ids)
+        return10d_rank_ic, return10d_rank_ic_dates = mean_within_date_spearman(
+            scores, returns, date_ids
+        )
+        pooled_utility_rank_ic = float(
+            frame["score"].corr(frame["utility"], method="spearman")
+        )
+        pooled_return10d_rank_ic = float(
+            frame["score"].corr(frame["return_10d"], method="spearman")
+        )
         for asof, group in frame.groupby("asof_date"):
             if len(group) < 2:
                 continue
             g_scores = torch.as_tensor(group["score"].to_numpy(np.float32))
             g_utils = torch.as_tensor(group["utility"].to_numpy(np.float32))
+            g_returns = torch.as_tensor(group["return_10d"].to_numpy(np.float32))
             g_dates = torch.as_tensor(group["date_id"].to_numpy(np.int64))
             day_ic, _ = mean_within_date_spearman(g_scores, g_utils, g_dates)
+            day_ret_ic, _ = mean_within_date_spearman(g_scores, g_returns, g_dates)
             day_pw, day_pairs = same_date_pairwise_accuracy(
                 g_scores, g_utils, g_dates, minimum_gap=MINIMUM_UTILITY_GAP
             )
@@ -303,6 +324,7 @@ def summarize_checkpoint(rows: list[dict]) -> dict:
                     "asof_date": asof,
                     "samples": int(len(group)),
                     "rank_ic": day_ic,
+                    "return10d_rank_ic": day_ret_ic,
                     "pairwise_accuracy": day_pw,
                     "pairwise_pairs": day_pairs,
                     "top_bottom_utility_spread": top_bottom_spread(
@@ -320,6 +342,16 @@ def summarize_checkpoint(rows: list[dict]) -> dict:
         ic_std = float(ic_series.std(ddof=1)) if len(ic_series) > 1 else None
         mean_ic = float(ic_series.mean()) if len(ic_series) else None
         positive_rate = float((ic_series > 0).mean()) if len(ic_series) else None
+        ret_series = (
+            daily_frame["return10d_rank_ic"].dropna()
+            if len(daily_frame)
+            else pd.Series(dtype=float)
+        )
+        ret_ic_std = float(ret_series.std(ddof=1)) if len(ret_series) > 1 else None
+        mean_ret_ic = float(ret_series.mean()) if len(ret_series) else None
+        return10d_positive_rate = (
+            float((ret_series > 0).mean()) if len(ret_series) else None
+        )
         if len(daily_frame):
             mean_tb_util = float(daily_frame["top_bottom_utility_spread"].mean())
             mean_tb_ret = float(daily_frame["top_bottom_return10d_spread"].mean())
@@ -339,6 +371,15 @@ def summarize_checkpoint(rows: list[dict]) -> dict:
         "rank_icir": (mean_ic / ic_std) if mean_ic is not None and ic_std else None,
         "rank_ic_positive_rate": positive_rate,
         "mean_daily_rank_ic": mean_ic,
+        "pooled_rank_ic": pooled_utility_rank_ic,
+        "return10d_rank_ic": return10d_rank_ic,
+        "return10d_rank_ic_dates": int(return10d_rank_ic_dates),
+        "return10d_rank_icir": (
+            (mean_ret_ic / ret_ic_std) if mean_ret_ic is not None and ret_ic_std else None
+        ),
+        "return10d_rank_ic_positive_rate": return10d_positive_rate,
+        "mean_daily_return10d_rank_ic": mean_ret_ic,
+        "pooled_return10d_rank_ic": pooled_return10d_rank_ic,
         "mean_top_bottom_utility_spread": mean_tb_util,
         "mean_top_bottom_return10d_spread": mean_tb_ret,
         "forecast_loss": float(
@@ -470,7 +511,9 @@ def evaluate_checkpoint(
         torch.cuda.empty_cache()
     print(
         f"{label} DONE pairwise={summary['pairwise_accuracy']} "
-        f"rank_ic={summary['rank_ic']} WFL={summary['weighted_forecast_loss']:.8f} "
+        f"rank_ic={summary['rank_ic']} "
+        f"ret10d_ic={summary.get('return10d_rank_ic')} "
+        f"WFL={summary['weighted_forecast_loss']:.8f} "
         f"in {summary['seconds']:.1f}s",
         flush=True,
     )
@@ -609,11 +652,23 @@ def main(argv=None):
                 "rank_ic": result["summary"]["rank_ic"],
                 "rank_icir": result["summary"]["rank_icir"],
                 "rank_ic_positive_rate": result["summary"]["rank_ic_positive_rate"],
+                "pooled_rank_ic": result["summary"].get("pooled_rank_ic"),
+                "return10d_rank_ic": result["summary"].get("return10d_rank_ic"),
+                "return10d_rank_icir": result["summary"].get("return10d_rank_icir"),
+                "return10d_rank_ic_positive_rate": result["summary"].get(
+                    "return10d_rank_ic_positive_rate"
+                ),
+                "pooled_return10d_rank_ic": result["summary"].get(
+                    "pooled_return10d_rank_ic"
+                ),
                 "weighted_forecast_loss": result["summary"]["weighted_forecast_loss"],
                 "forecast_loss": result["summary"]["forecast_loss"],
                 "mean_top_bottom_utility_spread": result["summary"][
                     "mean_top_bottom_utility_spread"
                 ],
+                "mean_top_bottom_return10d_spread": result["summary"].get(
+                    "mean_top_bottom_return10d_spread"
+                ),
                 "seconds": result["summary"]["seconds"],
                 "model_sha256": result["summary"]["model_sha256"],
             }
@@ -630,6 +685,10 @@ def main(argv=None):
         "metrics_contract": {
             "pairwise_accuracy": "same-day pairs with |utility gap| >= 0.005; score ties count wrong",
             "rank_ic": "mean within-date Spearman(score, utility)",
+            "return10d_rank_ic": (
+                "mean within-date Spearman(score, return_10d); "
+                "return_10d=close_h/close_signal-1 (same as Small D10)"
+            ),
             "weighted_forecast_loss": "C1 horizon weights 1.364..0.455 teacher-forcing CE",
             "score": "expected_utility_score(return_head, barrier_head, return_scales)",
         },

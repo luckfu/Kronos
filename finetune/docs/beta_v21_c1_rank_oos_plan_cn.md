@@ -65,3 +65,13 @@ kaggle kernels push -p finetune/kaggle_beta_v21_c1_rank_oos_kernel
 首跑 ERROR：`RuntimeError: seg155_forecast_best missing use_beta_v21_auxiliary=True`。
 Seg155 是 WC forecast-only 地板，config 明确 `use_beta_v21_auxiliary=False`，权重里也没有 heads。
 评测改为：aux 模型走 `expected_utility`；forecast-only 只报 CE/WFL，不参与 pairwise 夺冠。
+
+
+## 与 Small C2 同包对比（2026-10-05）
+
+密封 18 日包上已补 **Return10d Rank IC**，并与 Small C2 并列表见
+`finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md` 与
+`finetune/reports/beta_v21_c1_rank_oos_vs_small_c2_return10d.json`。
+
+要点：Beta Seg19 utility rank IC **0.0300**；同包 return10d rank IC **-0.0073**；
+Small C2 D10 日均 **~0.18**。口径不同 + 收益截面上 Beta 更弱。
