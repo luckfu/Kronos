@@ -1,0 +1,125 @@
+{
+  "phase": "G2_buy_worth_mfe10pct",
+  "n_samples": 123836,
+  "base_dim": 20,
+  "xsec_dim": 6,
+  "xsec_cols": [
+    "cs_rank_ret5",
+    "cs_rank_ret20",
+    "cs_rank_vol20",
+    "ind_rel_ret5",
+    "ind_rel_ret20",
+    "ind_rel_vol20"
+  ],
+  "seed": 20261001,
+  "threshold": 0.1,
+  "definition": {
+    "primary": "y = 1{mfe10 >= 0.10} where mfe10 = max(high[T+1:T+10]) / close[T] - 1",
+    "phase_g_wrong_target": "Phase G used y = 1{fwd_ret_10 >= 0.10} where fwd_ret_10 = close[T+10]/close[T]-1 (close-to-close; not path MFE)",
+    "mfe10_formula": "max(high[T+1:T+10]) / close[T] - 1",
+    "matches_decision_system": "worth-it if path reaches +10% within 10 sessions (max favorable excursion from entry ≥ 10%)",
+    "horizon": 10,
+    "threshold": 0.1,
+    "definition_ok": true
+  },
+  "label_prevalence": {
+    "buy_worth_mfe10pct_rate": 0.2529393714267257,
+    "buy_worth_mfe10pct_n_pos": 31323,
+    "buy_worth_mfe10pct_n": 123836,
+    "mfe10_mean": 0.0783576283481941,
+    "mfe10_std": 0.09367347806598841,
+    "mfe10_p50": 0.0497545562684536,
+    "mfe10_p75": 0.10048363357782364,
+    "mfe10_p90": 0.18221739679574966,
+    "mfe10_p95": 0.252782441675663,
+    "mfe10_p99": 0.4578871071338652,
+    "mfe_sign_up_rate": 0.9592444846409768,
+    "phase_g_close_to_close_pos_rate": 0.11042023321166704
+  },
+  "logistic": {
+    "buy_worth_mfe10pct_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.5655501394685833,
+      "model_log_loss": 0.5454407914605744,
+      "delta_model_minus_prior": -0.020109348008008898,
+      "beats_prior": true,
+      "positive_rate_test": 0.25294744662295293
+    },
+    "buy_worth_mfe10pct_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.5655501394685833,
+      "model_log_loss": 0.5314197033367793,
+      "delta_model_minus_prior": -0.034130436131804,
+      "beats_prior": true,
+      "positive_rate_test": 0.25294744662295293
+    },
+    "mfe_sign_up_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.17036333341844784,
+      "model_log_loss": 0.16861431804323943,
+      "delta_model_minus_prior": -0.0017490153752084125,
+      "beats_prior": true,
+      "positive_rate_test": 0.9592364094447495
+    },
+    "mfe_sign_up_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "prior_log_loss": 0.17036333341844784,
+      "model_log_loss": 0.16821639617766146,
+      "delta_model_minus_prior": -0.0021469372407863785,
+      "beats_prior": true,
+      "positive_rate_test": 0.9592364094447495
+    }
+  },
+  "decision": {
+    "lifts_enough": true,
+    "verdict": "buy_worth_mfe10pct__lifts_enough_for_next_step",
+    "recommend_next": "MFE买入值得(+10%/10日路径触及)二分类过关：可做短 sidecar 标签重建 + 线性确认；仍不要全量 R2 八头重启 / Kaggle 长训。注意 MFE≠可成交高点（成本未建模）。",
+    "train_yes_no": "yes_short_sidecar_only",
+    "diagnostic_notes": [
+      "Primary positive rate=0.2529 (n_pos=31323/123836); threshold=0.10 on mfe10 = max(high[T+1:T+10]) / close[T] - 1.",
+      "Definition matches max favorable excursion from entry over next 10 sessions (Phase D mfe10 field / build_targets).",
+      "Phase G close-to-close pos_rate=0.1104 vs G2 MFE pos_rate=0.2529 (MFE≥thr ⊇ path-touch; typically higher than close-to-close).",
+      "Phase G comb Δ=-0.015359; G2 comb Δ=-0.034130; Δ(G2−G)=-0.018771 (G2 better).",
+      "Train panel not on disk locally; ablation uses validation panel only (n=123836).",
+      "Costs/slippage not modeled: MFE is path high-touch, not a guaranteed exit fill at the high; round-trip cost would lower economic hit rate (memo note only).",
+      "Primary comb Δ=-0.034130 vs bar -0.04; best Phase E/F binary Δ=-0.012270859304657045."
+    ],
+    "thresholds": {
+      "logit_delta_bar": -0.04,
+      "lift_delta_vs_phase_ef_binary": -0.02,
+      "profit_threshold": 0.1,
+      "rare_pos_rate_flag": 0.05,
+      "imbalance_warn_rate": 0.1,
+      "primary_head": "buy_worth_mfe10pct logistic (comb)",
+      "wrong_phase_g_head": "buy_profit_10pct close-to-close (Phase G)"
+    },
+    "phase_g_buy_profit_10pct_base_delta": -0.008599478298647378,
+    "phase_g_buy_profit_10pct_comb_delta": -0.015359321769126855,
+    "phase_g_pos_rate": 0.11042023321166704,
+    "phase_g_verdict": "buy_profit_10pct__no_lift__do_not_train",
+    "better_than_phase_g_close_to_close": true,
+    "delta_vs_phase_g_comb": -0.018771114362677144,
+    "phase_e_fwd_sign_up_comb_delta": -0.0033075507187767528,
+    "phase_e_fwd_cs_top20_comb_delta": -0.012270859304657045,
+    "phase_e_verdict": "none_lift_enough__do_not_justify_relabel_train_yet",
+    "phase_f_ind_resid_sign_up_mean_comb_delta": -0.002215324511504857,
+    "phase_f_ind_resid_cs_top20_comb_delta": -0.010187678560042601,
+    "phase_f_verdict": "industry_neutral__no_lift__do_not_train",
+    "best_phase_ef_binary_delta": -0.012270859304657045,
+    "primary_logit_delta": -0.034130436131804,
+    "base_logit_delta": -0.020109348008008898,
+    "beats_abs_delta_bar": false,
+    "clearly_better_than_phase_ef_binary": true,
+    "class_too_rare": false,
+    "class_imbalanced": false,
+    "rationale": "Primary: y=1{mfe10>=0.1} with mfe10=max(high[T+1:T+10]) / close[T] - 1 (path MFE / decision-system worth-it). Pass if Δ≤-0.04 or clearly better than best Phase E/F binary (Δ more negative by 0.02). Phase G close-to-close was the wrong target; reported for comparison only."
+  }
+}

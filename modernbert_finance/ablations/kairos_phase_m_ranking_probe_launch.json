@@ -1,0 +1,30 @@
+{
+  "phase": "M_ranking_probe_launch",
+  "kind": "short_identity_rank_head",
+  "target": "mfe10_continuous",
+  "metrics": [
+    "rank_ic_mean",
+    "topk_lift"
+  ],
+  "backbone_mode": "identity",
+  "freeze_backbone": false,
+  "max_segments": 3,
+  "segment_samples": 20000,
+  "gpu_budget_seconds": 3600,
+  "rank_ic_bar": 0.05,
+  "topk_lift_bar": 0.05,
+  "kernel_slug": "user281434/kairos-ranking-probe-short-phase-m",
+  "swanlab_run_id": "kairos-ranking-probe-short-phase-m-20261001",
+  "not_22_layer_binary": true,
+  "not_tpu": true,
+  "phase_l_best_arm": "ridge_mfe_cs_comb",
+  "phase_l_best_rank_ic": 0.27620045257688736,
+  "status": "COMPLETE",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-m",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-m-20261001",
+  "commit": "93e8738",
+  "gate_passed": true,
+  "final_rank_ic_mean": 0.08525129172480793,
+  "final_topk_lift": 0.05686906618296045,
+  "results_json": "modernbert_finance/ablations/kairos_phase_m_ranking_probe_results.json"
+}

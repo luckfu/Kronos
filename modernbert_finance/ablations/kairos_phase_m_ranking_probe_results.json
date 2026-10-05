@@ -1,0 +1,67 @@
+{
+  "phase": "M_ranking_probe_results",
+  "kind": "short_identity_rank_head",
+  "status": "RANKING_PROBE_COMPLETE",
+  "kernel_slug": "user281434/kairos-ranking-probe-short-phase-m",
+  "kernel_status": "COMPLETE",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-m",
+  "swanlab_run_id": "kairos-ranking-probe-short-phase-m-20261001",
+  "swanlab_state": "FINISHED",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-m-20261001",
+  "target": "mfe10_continuous",
+  "backbone_mode": "identity",
+  "freeze_backbone": false,
+  "learning_rate": 0.0001,
+  "max_segments": 3,
+  "segment_samples": 20000,
+  "processed_samples": 60000,
+  "stop_reason": "segment_limit",
+  "segments_this_run": 3,
+  "rank_ic_bar": 0.05,
+  "topk_lift_bar": 0.05,
+  "gate_passed": true,
+  "final_rank_ic_mean": 0.08525129172480793,
+  "final_rank_ic_std": 0.10038102204905887,
+  "final_rank_ic_n_days": 242,
+  "final_topk_hit": 0.25686906618296046,
+  "final_topk_lift": 0.05686906618296045,
+  "final_mse": 0.008863908578638759,
+  "final_pooled_spearman_vs_mfe": 0.0795313338433011,
+  "phase_l_ridge_mfe_comb_rank_ic": 0.2734396296793431,
+  "phase_l_best_arm": "ridge_mfe_cs_comb",
+  "phase_l_best_rank_ic": 0.27620045257688736,
+  "segment_table": [
+    {"seg": 1, "rank_ic_mean": 0.04495237074865491, "topk_lift": 0.03239690952244598, "gate_passed": false},
+    {"seg": 2, "rank_ic_mean": 0.07256530284406149, "topk_lift": 0.054415844766502186, "gate_passed": true},
+    {"seg": 3, "rank_ic_mean": 0.08525129172480793, "topk_lift": 0.05686906618296045, "gate_passed": true}
+  ],
+  "splits": {
+    "2025H2": {"rank_ic_mean": 0.05193485014648782, "topk_lift": 0.0314877451402579, "gate_passed": true},
+    "2026H1": {"rank_ic_mean": 0.12026178965456803, "topk_lift": 0.08354096287190205, "gate_passed": true}
+  },
+  "best_metric_json_bug": {
+    "note": "init Rank IC was NaN (n_days=0) so best_score stayed NaN; best_metric.json not trustworthy. Use final validation / seg3 as authoritative.",
+    "best_metric_rank_ic_mean": null,
+    "best_metric_topk_lift_stale": 0.005526130487768427
+  },
+  "runtime_note": "GPU 2xT4; wall ~3.5min train (14:43–14:46 UTC / 22:43–22:46 CST); budget 60min unused.",
+  "decision": {
+    "verdict": "ranking_probe__gate_passed__weak_vs_ridge",
+    "train_yes_no": "yes_next_short_pairwise_or_light_backbone_rank",
+    "clears_rank_ic_bar": true,
+    "clears_topk_lift_bar": true,
+    "gate_passed": true,
+    "recommend_next": "短 identity+MSE rank head 已过闸（Rank IC≈0.085 / TopK lift≈0.057），但远低于 Phase L Ridge mfe≈0.273。下一步：极短 pairwise/listwise 损失探针，或轻量非 identity（冻结 tokenizer embeds + 浅头）；勿开 22 层二分类 / 全量 R2；勿碰 TPU WIP。",
+    "diagnostic_notes": [
+      "Kernel COMPLETE; SwanLab FINISHED; gate_passed=true from seg2 onward.",
+      "Authoritative Rank IC mean=0.08525129172480793; TopK lift=0.05686906618296045 (seg3 / final).",
+      "Phase L ridge mfe_comb Rank IC≈0.273; neural identity head ~3× weaker.",
+      "2026H1 Rank IC≈0.120 stronger than 2025H2≈0.052.",
+      "best_metric.json NaN bug from init Rank IC; ignore for selection.",
+      "No 22-layer train; no TPU WIP; Kairos-only."
+    ]
+  },
+  "not_22_layer_binary": true,
+  "not_tpu": true,
+  "artifacts_local": "artifacts/kairos_ranking_probe/phase_m_out/"
+}

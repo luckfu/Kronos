@@ -1,0 +1,36 @@
+{
+  "phase": "I_results_and_J_next",
+  "kernel_phase_i": "user281434/kairos-mfe10-sidecar-short-phase-i",
+  "status": "COMPLETE",
+  "gate_passed": false,
+  "best_delta_vs_prior_init": 1.3803802001444154e-07,
+  "best_post_train_delta_seg3": 7.84083254024015e-06,
+  "last_delta_seg4": 0.007942878380007956,
+  "compare": {
+    "broken_short_best_delta": 0.008022,
+    "logistic_base_xsection_delta": -0.03413,
+    "linear_bce_frozen_features_delta": -0.031446,
+    "gate": -0.04
+  },
+  "checkpoint_last_phase_i": {
+    "gate": 1.0112093687057495,
+    "sigmoid_head_bias": 0.25433681502527816,
+    "head_bias_vs_logit_prior_abs": 0.005157808312788559,
+    "head_w_norm": 0.044741448014974594,
+    "patch_held": true
+  },
+  "diagnosis": {
+    "H1_gate_stuck": "resolved_in_phase_i",
+    "H2_bias_not_prior": "resolved_in_phase_i",
+    "H3_fresh_deep_underfit": "primary_now"
+  },
+  "next_cheap_step": {
+    "phase": "J",
+    "kernel": "user281434/kairos-mfe10-sidecar-short-phase-j-freeze-bb",
+    "freeze_backbone": true,
+    "learning_rate": 0.0001,
+    "budget": "4x20000",
+    "not_long_train": true,
+    "not_tpu": true
+  }
+}

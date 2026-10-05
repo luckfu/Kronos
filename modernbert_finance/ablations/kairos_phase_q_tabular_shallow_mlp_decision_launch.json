@@ -1,0 +1,12 @@
+{
+  "phase": "Q_tabular_shallow_mlp_decision",
+  "kind": "cpu_tabular_base_xsection_shallow_mlp",
+  "status": "COMPLETE",
+  "completed_at_cst": "2026-10-01 16:14:17 CST",
+  "best_delta_vs_prior_random_split": -0.05244913167027376,
+  "gate_passed_random_split": true,
+  "caveat": "random_75_25_optimistic; use Phase R/S temporal for product judgment",
+  "results_json": "modernbert_finance/ablations/kairos_phase_q_tabular_shallow_mlp_decision_results.json",
+  "not_kaggle": true,
+  "local_cpu": true
+}

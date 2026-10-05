@@ -1,0 +1,17 @@
+{
+  "id": "user281434/kronos-c2-seg179-kairos-val-prod-scores",
+  "title": "Kronos C2 Seg179 Kairos Val Prod Scores",
+  "code_file": "c2_kairos_val_prod_scores.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "user281434/kronos-small-0-1-cosine-c2-best-seg179"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

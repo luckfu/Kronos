@@ -1,0 +1,16 @@
+{
+  "id": "user281434/kairos-mfe10-decision-tabular-phase-w",
+  "title": "Kairos MFE10 Decision Tabular Phase W",
+  "code_file": "train_tabular_decision.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/ashare120d-modernbert-targets"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

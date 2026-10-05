@@ -1,0 +1,247 @@
+{
+  "phase": "L_ranking_target",
+  "n_samples": 123836,
+  "base_dim": 20,
+  "xsec_dim": 6,
+  "seed": 20261001,
+  "topk_frac": 0.2,
+  "bars": {
+    "rank_ic_bar": 0.05,
+    "topk_lift_bar": 0.05,
+    "binary_gate": -0.04
+  },
+  "binary_path_refs": {
+    "phase_g2_comb_delta": -0.034130436131804,
+    "phase_g2_verdict": "buy_worth_mfe10pct__lifts_enough_for_next_step",
+    "phase_k_best_delta": -0.002970473307763233,
+    "phase_k_gate_passed": false,
+    "binary_failed_absolute_gate": true
+  },
+  "ridge_ranking": {
+    "fwd_ret_10_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "pooled_spearman_pred_vs_y": 0.09817423500691203,
+      "rank_ic": {
+        "n_days": 242,
+        "mean": 0.05295561071201229,
+        "std": 0.16266289953440063,
+        "median": 0.05607672034393796
+      },
+      "topk": {
+        "n_days": 242,
+        "frac": 0.2,
+        "mean_hit": 0.26033256884718037,
+        "chance": 0.2,
+        "lift_vs_chance": 0.06033256884718036
+      },
+      "pairwise": {
+        "n_pairs": 48002,
+        "accuracy": 0.5188950460397483,
+        "chance": 0.5,
+        "lift_vs_chance": 0.018895046039748342
+      }
+    },
+    "fwd_ret_10_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "pooled_spearman_pred_vs_y": 0.09039131074166627,
+      "rank_ic": {
+        "n_days": 242,
+        "mean": 0.056944468409006084,
+        "std": 0.16480739431650154,
+        "median": 0.07561689593855328
+      },
+      "topk": {
+        "n_days": 242,
+        "frac": 0.2,
+        "mean_hit": 0.26663736026070617,
+        "chance": 0.2,
+        "lift_vs_chance": 0.06663736026070616
+      },
+      "pairwise": {
+        "n_pairs": 48002,
+        "accuracy": 0.5218949210449565,
+        "chance": 0.5,
+        "lift_vs_chance": 0.021894921044956495
+      }
+    },
+    "mfe10_base": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "pooled_spearman_pred_vs_y": 0.24332558035587173,
+      "rank_ic": {
+        "n_days": 242,
+        "mean": 0.2590284628075285,
+        "std": 0.13635958233707524,
+        "median": 0.26810762828965984
+      },
+      "topk": {
+        "n_days": 242,
+        "frac": 0.2,
+        "mean_hit": 0.3674830917834855,
+        "chance": 0.2,
+        "lift_vs_chance": 0.16748309178348547
+      },
+      "pairwise": {
+        "n_pairs": 47995,
+        "accuracy": 0.5898947807063236,
+        "chance": 0.5,
+        "lift_vs_chance": 0.08989478070632362
+      }
+    },
+    "mfe10_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "pooled_spearman_pred_vs_y": 0.26737170270616173,
+      "rank_ic": {
+        "n_days": 242,
+        "mean": 0.2734396296793431,
+        "std": 0.14092338773067467,
+        "median": 0.28079098787947454
+      },
+      "topk": {
+        "n_days": 242,
+        "frac": 0.2,
+        "mean_hit": 0.37436270462689325,
+        "chance": 0.2,
+        "lift_vs_chance": 0.17436270462689324
+      },
+      "pairwise": {
+        "n_pairs": 47995,
+        "accuracy": 0.59668715491197,
+        "chance": 0.5,
+        "lift_vs_chance": 0.09668715491197
+      }
+    },
+    "fwd_cs_rank_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "pooled_spearman_pred_vs_y": 0.10067871784886503,
+      "rank_ic": {
+        "n_days": 242,
+        "mean": 0.10106863571465546,
+        "std": 0.1256227901952555,
+        "median": 0.10399445162865426
+      },
+      "topk": {
+        "n_days": 242,
+        "frac": 0.2,
+        "mean_hit": 0.1854553769212891,
+        "chance": 0.2,
+        "lift_vs_chance": -0.014544623078710905
+      },
+      "pairwise": {
+        "n_pairs": 48002,
+        "accuracy": 0.5323736510978709,
+        "chance": 0.5,
+        "lift_vs_chance": 0.03237365109787094
+      }
+    },
+    "mfe_cs_rank_comb": {
+      "skipped": false,
+      "n_train": 92877,
+      "n_test": 30959,
+      "pooled_spearman_pred_vs_y": 0.278944028336629,
+      "rank_ic": {
+        "n_days": 242,
+        "mean": 0.27620045257688736,
+        "std": 0.14427826492441315,
+        "median": 0.2809041621561925
+      },
+      "topk": {
+        "n_days": 242,
+        "frac": 0.2,
+        "mean_hit": 0.3716422315498217,
+        "chance": 0.2,
+        "lift_vs_chance": 0.17164223154982167
+      },
+      "pairwise": {
+        "n_pairs": 47995,
+        "accuracy": 0.600270861548078,
+        "chance": 0.5,
+        "lift_vs_chance": 0.10027086154807796
+      }
+    }
+  },
+  "pairwise_logistic": {
+    "fwd_ret_10_comb": {
+      "skipped": false,
+      "n_train_pairs": 54194,
+      "n_train_days": 181,
+      "n_test_days": 61,
+      "train_pair_accuracy": 0.5335646012473706,
+      "rank_ic": {
+        "n_days": 61,
+        "mean": 0.10465028805847287,
+        "std": 0.089864655370411,
+        "median": 0.09939895380591568
+      },
+      "topk": {
+        "n_days": 61,
+        "frac": 0.2,
+        "mean_hit": 0.18970738789619848,
+        "chance": 0.2,
+        "lift_vs_chance": -0.01029261210380153
+      },
+      "pairwise": {
+        "n_pairs": 12174,
+        "accuracy": 0.5357318876293741,
+        "chance": 0.5,
+        "lift_vs_chance": 0.03573188762937407
+      },
+      "pooled_spearman": 0.08058065309425555
+    },
+    "mfe10_comb": {
+      "skipped": false,
+      "n_train_pairs": 54186,
+      "n_train_days": 181,
+      "n_test_days": 61,
+      "train_pair_accuracy": 0.5981249769313107,
+      "rank_ic": {
+        "n_days": 61,
+        "mean": 0.2527878348440885,
+        "std": 0.13552025945070661,
+        "median": 0.2689494300251247
+      },
+      "topk": {
+        "n_days": 61,
+        "frac": 0.2,
+        "mean_hit": 0.3628804041328323,
+        "chance": 0.2,
+        "lift_vs_chance": 0.16288040413283228
+      },
+      "pairwise": {
+        "n_pairs": 12174,
+        "accuracy": 0.5829636931164778,
+        "chance": 0.5,
+        "lift_vs_chance": 0.08296369311647778
+      },
+      "pooled_spearman": 0.24412170583295
+    }
+  },
+  "decision": {
+    "verdict": "ranking_target__clear_lift_vs_binary__prefer_rank_path",
+    "recommend_next": "截面排序目标（fwd_ret/mfe 连续或分位）在 Base+xsection 上给出相对二分类路径更清晰的 Rank IC / TopK 抬升；下一步可做极短 listwise/pairwise 探针，不要再开 mfe≥10% 二分类长训 / 22 层 sidecar。",
+    "train_yes_no": "yes_short_ranking_probe_only",
+    "ranking_signal": true,
+    "clear_lift_vs_binary": true,
+    "best_arm": "ridge_mfe_cs_comb",
+    "best_rank_ic_mean": 0.27620045257688736,
+    "best_topk_lift": 0.17164223154982167,
+    "clears_rank_ic_bar": true,
+    "clears_topk_lift_bar": true,
+    "diagnostic_notes": [
+      "n_samples=123836; seed=20261001; TopK frac=0.2.",
+      "Binary refs: G2 comb Δ=-0.034130436131804; Phase K best Δ=-0.002970473307763233; gate=-0.04.",
+      "Best ranking arm=ridge_mfe_cs_comb; Rank IC mean=0.27620045257688736; TopK lift=0.17164223154982167.",
+      "Train panel not on disk; val panel only (same as Phase D–H).",
+      "No 22-layer train; no TPU WIP."
+    ]
+  }
+}

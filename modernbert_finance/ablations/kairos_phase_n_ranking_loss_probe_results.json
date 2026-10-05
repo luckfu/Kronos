@@ -1,0 +1,104 @@
+{
+  "phase": "N_ranking_loss_probe_results",
+  "kind": "short_identity_pairwise_rank_loss",
+  "status": "RANKING_PROBE_COMPLETE",
+  "kernel_slug": "user281434/kairos-ranking-probe-short-phase-n",
+  "kernel_status": "COMPLETE",
+  "kernel_url": "https://www.kaggle.com/code/user281434/kairos-ranking-probe-short-phase-n",
+  "swanlab_run_id": "kairos-ranking-probe-short-phase-n-20261001",
+  "swanlab_state": "FINISHED",
+  "swanlab_url": "https://swanlab.cn/@roc_fu/finance/runs/kairos-ranking-probe-short-phase-n-20261001",
+  "target": "mfe10_continuous",
+  "backbone_mode": "identity",
+  "loss_mode": "pairwise",
+  "pairwise_min_gap": 0.005,
+  "freeze_backbone": false,
+  "learning_rate": 0.0001,
+  "batch_size": 64,
+  "max_segments": 3,
+  "segment_samples": 20000,
+  "processed_samples": 60000,
+  "stop_reason": "segment_limit",
+  "segments_this_run": 3,
+  "runtime_elapsed_seconds": 147.33008790016174,
+  "rank_ic_bar": 0.05,
+  "topk_lift_bar": 0.05,
+  "gate_passed": true,
+  "final_rank_ic_mean": 0.08171161247975986,
+  "final_rank_ic_std": 0.07760180801972417,
+  "final_rank_ic_n_days": 242,
+  "final_topk_hit": 0.2644258093425859,
+  "final_topk_lift": 0.0644258093425859,
+  "final_mse": 0.029202074349792356,
+  "final_pooled_spearman_vs_mfe": 0.07959922907965326,
+  "phase_m_mse_rank_ic": 0.08525129172480793,
+  "phase_m_topk_lift": 0.05686906618296045,
+  "delta_vs_phase_m_rank_ic": -0.003539679245048069,
+  "delta_vs_phase_m_topk_lift": 0.007556743159625456,
+  "phase_l_ridge_mfe_comb_rank_ic": 0.2734396296793431,
+  "phase_l_best_arm": "ridge_mfe_cs_comb",
+  "phase_l_best_rank_ic": 0.27620045257688736,
+  "segment_table": [
+    {
+      "seg": 1,
+      "rank_ic_mean": 0.08094371957931283,
+      "topk_lift": 0.06642715611465339,
+      "gate_passed": true
+    },
+    {
+      "seg": 2,
+      "rank_ic_mean": 0.07492321186148992,
+      "topk_lift": 0.06057786557886147,
+      "gate_passed": true
+    },
+    {
+      "seg": 3,
+      "rank_ic_mean": 0.08171161247975986,
+      "topk_lift": 0.0644258093425859,
+      "gate_passed": true
+    }
+  ],
+  "splits": {
+    "2025H2": {
+      "rank_ic_mean": 0.08192096707643778,
+      "topk_lift": 0.06437882486096747,
+      "gate_passed": true
+    },
+    "2026H1": {
+      "rank_ic_mean": 0.08149161273409829,
+      "topk_lift": 0.06447518286564241,
+      "gate_passed": true
+    }
+  },
+  "best_metric": {
+    "rank_ic_mean": 0.08171161247975986,
+    "topk_lift": 0.0644258093425859,
+    "mse": 0.029202074349792356,
+    "gate_passed": true,
+    "segment_index": 3
+  },
+  "runtime_note": "GPU 2xT4; wall ~2.5min train (14:55–14:57 UTC / 22:55–22:57 CST); budget 60min unused. SwanLab train/loss_mode string scalar parse noise.",
+  "decision": {
+    "verdict": "pairwise__gate_passed__ic_flat_vs_mse__still_weak_vs_ridge",
+    "train_yes_no": "yes_next_shallow_non_identity_or_optional_listwise",
+    "clears_rank_ic_bar": true,
+    "clears_topk_lift_bar": true,
+    "gate_passed": true,
+    "beats_phase_m_rank_ic": false,
+    "beats_phase_m_topk_lift": true,
+    "recommend_next": "pairwise 过闸但 Rank IC≈0.082 未超 Phase M MSE≈0.085；TopK 略升至≈0.064，半年度更均衡。identity 短预算天花板约 0.08。主推：冻结 embeds + 浅非 identity rank 头；可选 listwise 收束；勿开 22 层二分类 / 全量 R2；勿碰 TPU WIP。",
+    "diagnostic_notes": [
+      "Kernel COMPLETE; SwanLab FINISHED; gate_passed=true from seg1.",
+      "Authoritative Rank IC mean=0.08171161247975986; TopK lift=0.0644258093425859 (seg3 / final).",
+      "vs Phase M MSE Rank IC 0.0853 (Δ≈−0.0035); TopK 0.0569 (Δ≈+0.0076).",
+      "Phase L ridge mfe_comb Rank IC≈0.273; neural identity+pairwise still ~3× weaker.",
+      "2025H2/2026H1 Rank IC≈0.082/0.081 balanced vs Phase M 0.052/0.120.",
+      "No 22-layer train; no TPU WIP; Kairos-only."
+    ]
+  },
+  "not_22_layer_binary": true,
+  "not_tpu": true,
+  "artifacts_local": "artifacts/kairos_ranking_probe/phase_n_out/",
+  "memo_cn": "modernbert_finance/kairos_phase_n_ranking_loss_probe_cn.md",
+  "recorded_at_cst": "2026-10-01 23:14:55 CST"
+}
