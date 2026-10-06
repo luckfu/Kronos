@@ -97,3 +97,12 @@ kaggle kernels push -p finetune/kaggle_beta_v21_c1_gen_return_oos_kernel
 C2 0.1796 / Seg19 return_head −0.0073。最后 3 日（09-01..09-03）转负。
 完整表、逐日 IC、结论见 `finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md`；JSON `finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json`。
 保险 kernel `-prod` 逐日 IC 与 A 的 prod 臂一致（同 seed 确定性），属冗余。
+
+## 跟进（2026-10-06，零 GPU）：核心数、Top-Bottom、尾部
+
+- **核心数**：prod **0.117** / rank **0.124**（完整 18 日）。前 6 天早期读数 0.196 / 0.208 **已纠正**，不再引用（同期 C2 为 0.252）。
+- **同一个 checkpoint**：prod 和 rank 都是 Seg155，只是 decode 不同（N5 vs N16）。两臂一致只说明对 decode 不敏感，不说明换 checkpoint 也稳定。
+- **Top-Bottom 十分位价差**（18 日均值，不含成本）：prod **+2.07%** / rank **+2.37%** vs C2 +2.83% / +2.85%。前 15 日 +3.12% / +3.52% vs C2 +3.98%。尾 3 日四个模型全负（−2.8% 到 −3.4%）。
+- **尾部判断**：以市场状态为主（全市场 10 日收益均值 −2.64%、上涨占比 23%；C2 的极端组价差同样翻负；尾部我们和 C2 的 IC 差 −0.058 ≈ 全期差距 −0.060，没有放大）。但 3 天标签窗口重叠，只相当于约 1 个独立观测，需要扩展密封窗口。
+- **与 C2 的差距**：配对 t 约 −7（prod）/ −5（rank）；不配对约 2.4–2.7 SE；有效独立窗口约 2 个，保守结论是「约 2–3 SE、方向稳定」。
+- **可交易性暂缓**。完整表格和待解问题 (a)(b)(c) 见 `finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md`。
