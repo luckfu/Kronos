@@ -490,9 +490,19 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
         staging = shard.with_name(shard.name + ".tmp")
         result.to_csv(staging, index=False, compression="gzip")
         staging.replace(shard)
+        day = {}
+        try:
+            day_metrics = score_predictions(result)["by_signal_date"]
+            day = day_metrics[0] if day_metrics else {}
+        except Exception as exc:  # metrics are best-effort; shard is already saved
+            day = {"metric_error": repr(exc)}
         print(json.dumps({"phase": "shard_done", "rank": rank, "arm": arm["name"],
                           "date": task["date"], "rows": int(len(result)),
-                          "seconds": round(time.time() - started, 1)}), flush=True)
+                          "seconds": round(time.time() - started, 1),
+                          "return10d_rank_ic": day.get("return10d_rank_ic"),
+                          "utility_rank_ic": day.get("utility_rank_ic"),
+                          "pairwise_accuracy": day.get("pairwise_accuracy"),
+                          "pairwise_pairs": day.get("pairwise_pairs")}), flush=True)
     del model
     gc.collect()
     torch.cuda.empty_cache()

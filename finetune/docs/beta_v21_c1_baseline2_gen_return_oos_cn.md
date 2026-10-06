@@ -70,3 +70,17 @@ kaggle kernels push -p finetune/kaggle_beta_v21_c1_gen_return_oos_kernel
   rank N=16 每 shard ≈ 3.5k s → 9 轮 ≈ 8.7 h，会碰到 39,600 s 截止（约 10-06 10:10 CST），
   **rank 臂可能只完成 ~16/18 日**（可容忍部分完成：prod 先完整打分；rank 不完整则记为 incomplete）。
   如 rank 被截断，再单独推 rank-only 补跑。
+
+## 保险：prod-only kernel（2026-10-06 CST）
+
+担心原 kernel（两臂、末尾才打分，预计 ~10:55–11:00 收尾 vs 12h 硬杀 ~11:11）被杀，另起：
+
+- slug：`luckfu/kronos-beta-v21-c1-gen-return-oos-prod`（eval-only，不动正在跑的原 kernel）
+- 只跑 production 臂 T=0.65 / top_p=0.8 / N=5 / seed 20260906；同 Seg155 SHA、同密封包、dual T4、docker `37c64f7dd9…`
+- 构建：`python3 finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py --variant prod`
+
+### Runner 教训（共享 runner 已改）
+
+- 父进程轮询 shards，**每个臂 decode 完立即打分**并写 summary / predictions / comparison.json（`final=false`），最后再写 `final=true`
+- 每个日期 shard 落盘即保留（`shards/<arm>_<date>.csv.gz`），`shard_done` 日志行带当日 return10d IC / utility IC / pairwise，kill 后日志里仍有部分结果
+- `arm_scored` 行含 daily/pooled return10d IC、ICIR、正 IC 日占比、utility IC、pairwise 及对 C2 / Seg19 差值

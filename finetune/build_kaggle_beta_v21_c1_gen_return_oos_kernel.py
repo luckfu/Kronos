@@ -11,9 +11,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos.py"
-STAGING = ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_kernel"
-KERNEL_ID = "luckfu/kronos-beta-v21-c1-gen-return-oos"
-KERNEL_TITLE = "Kronos Beta V21 C1 Gen Return OOS"
+VARIANTS = {
+    "both": {
+        "staging": ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_kernel",
+        "kernel_id": "luckfu/kronos-beta-v21-c1-gen-return-oos",
+        "title": "Kronos Beta V21 C1 Gen Return OOS",
+        "output_name": "beta_v2_1_c1_gen_return_oos",
+        "arm_filter": None,
+    },
+    "prod": {
+        "staging": ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_prod_kernel",
+        "kernel_id": "luckfu/kronos-beta-v21-c1-gen-return-oos-prod",
+        "title": "Kronos Beta V21 C1 Gen Return OOS Prod",
+        "output_name": "beta_v2_1_c1_gen_return_oos_prod",
+        "arm_filter": ("prod_t065_p80_n5",),
+    },
+}
 
 FILES = (
     "finetune/evaluate_beta_v21_generative_return_oos.py",
@@ -43,10 +56,10 @@ def build_bundle() -> bytes:
     return buffer.getvalue()
 
 
-def build_metadata() -> dict:
+def build_metadata(variant: dict) -> dict:
     return {
-        "id": KERNEL_ID,
-        "title": KERNEL_TITLE,
+        "id": variant["kernel_id"],
+        "title": variant["title"],
         "code_file": RUNNER.name,
         "language": "python",
         "kernel_type": "script",
@@ -71,35 +84,45 @@ def build_metadata() -> dict:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--variant", choices=sorted(VARIANTS), default="both")
+    args = parser.parse_args()
+    variant = VARIANTS[args.variant]
+
     payload = base64.b64encode(build_bundle()).decode("ascii")
     source = RUNNER.read_text()
-    if 'EMBEDDED_KRONOS_ARCHIVE_B64 = """' not in source:
-        raise RuntimeError("Runner missing EMBEDDED_KRONOS_ARCHIVE_B64")
     updated, count = re.subn(
         r'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n.*?\n"""',
-        f'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n{payload}\n"""',
+        lambda _m: f'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n{payload}\n"""',
         source,
         count=1,
         flags=re.DOTALL,
     )
     if count != 1:
-        updated, count = re.subn(
-            r'EMBEDDED_KRONOS_ARCHIVE_B64 = """\nPLACEHOLDER_ARCHIVE\n"""',
-            f'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n{payload}\n"""',
-            source,
-            count=1,
-        )
-    if count != 1:
         raise RuntimeError("Failed to embed archive into gen-return OOS runner")
+    # Keep the tracked runner generic (archive refreshed, constants untouched).
     RUNNER.write_text(updated)
-    STAGING.mkdir(parents=True, exist_ok=True)
-    (STAGING / RUNNER.name).write_text(updated)
-    (STAGING / "kernel-metadata.json").write_text(
-        json.dumps(build_metadata(), indent=2) + "\n"
+    staged = updated
+    for pattern, value in (
+        (r'^OUTPUT_NAME = ".*"$', f'OUTPUT_NAME = "{variant["output_name"]}"'),
+        (r'^EXPERIMENT_NAME = ".*"$', f'EXPERIMENT_NAME = "{variant["output_name"]}"'),
+        (r'^KERNEL_ID = ".*"$', f'KERNEL_ID = "{variant["kernel_id"]}"'),
+        (r'^ARM_FILTER = .*$', f'ARM_FILTER = {variant["arm_filter"]!r}'),
+    ):
+        staged, n = re.subn(pattern, lambda _m, v=value: v, staged, count=1, flags=re.M)
+        if n != 1:
+            raise RuntimeError(f"Failed to set {pattern}")
+    staging = variant["staging"]
+    staging.mkdir(parents=True, exist_ok=True)
+    (staging / RUNNER.name).write_text(staged)
+    (staging / "kernel-metadata.json").write_text(
+        json.dumps(build_metadata(variant), indent=2) + "\n"
     )
     print(f"embedded {len(payload)} b64 chars")
-    print(f"staged -> {STAGING}")
-    print(f"kernel_id={KERNEL_ID}")
+    print(f"staged -> {staging}")
+    print(f"kernel_id={variant['kernel_id']} arm_filter={variant['arm_filter']}")
 
 
 if __name__ == "__main__":
