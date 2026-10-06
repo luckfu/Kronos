@@ -3717,6 +3717,46 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     f"Best model saved to {save_path} "
                     f"({selection_metric}: {best_val_loss:.8f})"
                 )
+            # Optional periodic weight snapshots (KRONOS_SNAPSHOT_EVERY_SEGMENTS).
+            # Weights + config only (no AdamW); written after Best so a later
+            # eval can score Seg N independently of best-by-forecast.
+            snapshot_every = int(os.environ.get('KRONOS_SNAPSHOT_EVERY_SEGMENTS', '0') or 0)
+            if snapshot_every > 0 and int(next_segment) % snapshot_every == 0:
+                snapshot_root = (
+                    os.environ.get('KRONOS_SNAPSHOT_DIR', '').strip()
+                    or os.path.join(save_dir, 'snapshots')
+                )
+                snapshot_path = os.path.join(
+                    snapshot_root, f"seg{int(next_segment):03d}"
+                )
+                save_pretrained_with_retry(
+                    core_model, snapshot_path, model_export_config(core_model, config)
+                )
+                with open(os.path.join(snapshot_path, 'snapshot_metric.json'), 'w') as handle:
+                    json.dump({
+                        'segment': int(next_segment),
+                        'forecast_loss': float(avg_val_forecast_loss),
+                        'objective_loss': float(avg_val_loss),
+                        'selection_metric': selection_metric,
+                        'selection_value': (
+                            None if selection_val_loss is None
+                            else float(selection_val_loss)
+                        ),
+                        'weighted_forecast_loss': (
+                            None if not large_metrics
+                            else large_metrics.get('weighted_forecast_loss')
+                        ),
+                        'large_metrics': large_metrics,
+                        'is_new_best': bool(improved),
+                        'learning_rates': [
+                            float(group['lr']) for group in optimizer.param_groups
+                        ],
+                    }, handle, indent=2)
+                print(
+                    f"Snapshot saved to {snapshot_path} "
+                    f"(segment {int(next_segment)}, every {snapshot_every})",
+                    flush=True,
+                )
             # Best is committed before State. If Kaggle interrupts between the
             # two, best_metric.json lets the next run reconcile that transaction.
             persist_resume_checkpoint(next_segment)
