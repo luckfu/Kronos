@@ -1,15 +1,20 @@
 # Beta v2.1 C1 forecast-only 余弦退火 pilot（12 seg，双 T4）
 
-更新：2026-10-06 CST（kernel **COMPLETE**，结果见下方「结果」各节）
+更新：2026-10-07 CST（pilot kernel **COMPLETE**；Seg9 + Seg0 密封 OOS 最终评估 **COMPLETE**，见「密封 OOS 最终评估结果」）
 
-> **状态：COMPLETE（2026-10-06，耗时 15,236 s ≈ 4.2 h）。父本 = Best@475。**
-> 结论：从发布版 Best@475 做余弦退火，val 生成式 return10d IC 有**小幅、方向一致但不确定**的提升
+> **最终结论（2026-10-07，密封 OOS）：val 上的退火收益没有保住，小幅反转。**
+> 密封 18d OOS 生成式 return10d IC 日均：**Seg0 = Best@475 0.1546** > Seg9 0.1455（Seg9 − Seg0 = −0.009，Seg0 赢 12/18）> Seg155 0.1170；C2 prod / rank 0.1766 / 0.1793。
+> val 上 Seg9 − Seg0 = +0.011（t 1.80，5 个 snapshot 中最好）应视为选择噪声；**OOS 最强单模型是未退火的发布版 Best@475**，
+> 与 C2 的差距从 ~0.060（Seg155）缩小到 ~0.02。C1 forecast 训练让 OOS 生成式 IC 掉了约 0.038。尾部 09-01..03 所有模型（含 C2）一起失效，属市场状态。
+> 密封 OOS 已读过 Seg155 / Seg9 / Seg0，**已部分用于选择**。
+>
+> **Pilot 状态：COMPLETE（2026-10-06，耗时 15,236 s ≈ 4.2 h）。父本 = Best@475。**
+> val 结论：从发布版 Best@475 做余弦退火，val 生成式 return10d IC 有**小幅、方向一致但不确定**的提升
 > （Seg6–12 比 Seg0 高约 +0.01，配对 t 1.7–2.0）。val IC 最好的是 **Seg9 0.3254**（Seg0 0.3141）；
 > WFL 最好的 Seg10（2.3178）**又一次不是** IC 最好的；所有 pilot snapshot 在 val 生成式 IC 上都明显高于 Seg155（0.2954）。
 > 按事先写好的判定规则（需高出 ≥ 1 个 SE ≈ 0.025），本结果属于 **「持平」**，退火解释不了与 C2 的差距。
 > Seg9 权重已存为 Kaggle 私有数据集 `luckfu/kronos-beta-v21-c1-cosine-pilot-best475-seg9`。
-> 下一步：GPU 配额恢复后，对 **Seg9 与 Seg0（Best@475）一起做一次性密封 OOS 生成式收益评估**，
-> 作为最终评估，**不是调参循环**（kernel 已备好未推送，见「建议下一步」）。
+> 随后对 **Seg9 与 Seg0（Best@475）做了一次性密封 OOS 生成式收益最终评估**（`wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` v1），结果见上。
 >
 > 背景（2026-10-06 启动时）：Step 1 val 生成式 IC 重选（`luckfu/kronos-beta-v21-c1-val-gen-ic`，见
 > [`beta_v21_c1_val_gen_ic_reselection_cn.md`](beta_v21_c1_val_gen_ic_reselection_cn.md)）显示
@@ -257,7 +262,7 @@ Seg155 的逐日 IC 来自 Step 1 kernel（同 24 个日期、同 decode、同 s
 | config | `use_beta_v21_auxiliary=false`、`num_sectors=86`、`context_layer=10`、`use_size_percentile=true`、d_model 832 / 12 层 |
 | `best_metric.json` | 与 Seg155 数据集同字段（large_metrics 等），另含 val 生成式 IC（0.3254，SE 0.0266）、全量 val WFL 2.3215、SHA、父本、来源 kernel、`sealed_oos_read=false` |
 
-### 建议下一步：Seg9 + Seg0 一次性密封 OOS 最终评估（已于 2026-10-06 22:45 用 wynstonliu 账号推送，见下方启动记录）
+### 建议下一步：Seg9 + Seg0 一次性密封 OOS 最终评估（已于 2026-10-06 22:45 用 wynstonliu 账号推送，2026-10-07 03:56 COMPLETE，结果见「密封 OOS 最终评估结果」）
 
 GPU 配额恢复后，用 Baseline 2 同合同在密封 18d 包上评估 **Seg9（先）和 Seg0 = Best@475（后）**，**只跑一次，作为最终评估**：
 不根据结果再换 checkpoint、改 decode 或再训练（事先登记写在 kernel 的 `PREREGISTRATION` 里）。主比较 = Seg9 − Seg0 逐日配对；
@@ -309,7 +314,106 @@ luckfu 的 GPU 配额已用完，改用 Kronos 项目同学的 Kaggle 账号 **`
 | 启动校验（实时日志） | 2× Tesla T4；tokenizer SHA `59d85f6a…`；Seg9 从 `/kaggle/input/datasets/luckfu/kronos-beta-v21-c1-cosine-pilot-best475-seg9/checkpoints/best_model` 读取，SHA `f9d3da03…e3c8` 一致；Seg0 从 ModelScope 取，SHA `e1bd5584…2f97` 一致；`inputs_resolved` 18 日 / 92,751 样本 / 36 任务；两个 worker 动态认领、22:48:34 均已加载 Seg9 开始第一批日期 |
 | SwanLab | <https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_gen_return_oos_pilot_seg9>（用内置 fallback key；requirements 上传报一次 HTTP 522，不影响运行） |
 | 预计 | Seg9 18 日结果约 **10-07 01:15–01:40** 落盘；全部（含 Seg0）约 **10-07 03:45–04:30** 完成（Asia/Shanghai） |
+| 实际 | **COMPLETE**，10-07 03:56 结束，总 18,477 s；Seg9 约 01:25 落盘（9,404 s），Seg0 03:56 落盘 |
 | 本地日志 | `/workspace/kronos_patrol_out/oos_seg9_1006_2247/` |
+
+## 密封 OOS 最终评估结果（2026-10-07，kernel COMPLETE）
+
+> **一句话：val 上 +0.011 的退火收益在密封 OOS 上没有保住，反而小幅反转（Seg9 − Seg0 = −0.009）。
+> 目前 OOS 最强的单模型是未退火的发布版 Best@475（Seg0）：日均 IC 0.1546，与 C2 的差距从 ~0.060（Seg155）缩小到 ~0.022–0.025。**
+
+- Kaggle：`wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` **version 1**，**COMPLETE**；2026-10-06 22:45 推送，2026-10-07 03:56 结束（CST），总耗时 18,477 s（≈ 5.1 h），36/36 shard，`incomplete=[]`，`final=true`
+- SwanLab：<https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_gen_return_oos_pilot_seg9>（33,446 条记录上传完成）
+- 原始输出（box）：`/workspace/kronos_patrol_out/oos_seg9_1007_0345/output/beta_v2_1_c1_gen_return_oos_pilot_seg9/`（`shards/` 36 个 csv.gz、`results/`、`comparison.json`、`run.log`）
+- 机器可读：[`finetune/reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json`](../reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json)
+- 合同：密封包 `kronos_beta_v2_time_oos_through_20260903`，18 日（08-11..09-03）/ 92,751 样本；prod T0.65 / p0.8 / N5，seed 20260906；分数 = 生成式 `predicted_return_d10`；标签 = 包内 `return_10d`
+- **复核**：在 box 上从 36 个 shard csv.gz 重新计算，日均 IC、pooled、ICIR、utility IC、pairwise、配对统计与 kernel 输出一致（≤ 1e-6）。
+  Seg155 逐日数据由 `luckfu/kronos-beta-v21-c1-gen-return-oos` v1 的 shard 重新计算；C2 由 C2 预测文件按 `(symbol, asof_date)` join（92,751/92,751）。
+  下表 C2 的 IC 都按包内 `return_10d` 计（0.1766 / 0.1793）；旧文档中的 0.1769 / 0.1796 是对 `actual_return_d10` 的口径，只差约 0.0003。
+  TB 十分位 = 每日按分数取前 / 后 `round(0.1n)` 只股票的平均 `return_10d` 之差（与 kernel 的 `top_bottom_by_date` 相同）；与旧文档 analyze.py 的分组口径相差 ≤ 0.01pp。
+
+### 主表（18 日密封包）
+
+| 模型（prod T0.65/p0.8/N5，除注明） | ret10d IC 日均 | pooled | ICIR | IC+ 日 | utility IC 日均 | Pairwise | TB 十分位 | IC 前15日 | IC 尾3日 | TB 尾3日 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Seg0 = Best@475（发布版，未退火）** | **0.1546** | 0.2189 | 1.47 | 16/18 | 0.0956 | 55.13% | +2.68% | 0.190 | -0.025 | -3.22% |
+| Seg9（余弦 pilot，val 最佳） | 0.1455 | 0.1887 | 1.28 | 16/18 | 0.0981 | 55.24% | +2.69% | 0.185 | -0.050 | -4.23% |
+| Seg155 forecast-best（C1 训练） | 0.1170 | 0.1631 | 1.25 | 15/18 | 0.0757 | 54.06% | +2.06% | 0.149 | -0.045 | -3.17% |
+| C2 prod T0.65/p0.8/N5 | 0.1766 | 0.2369 | 1.69 | 16/18 | 0.1208 | 56.50% | +2.83% | 0.209 | +0.013 | -2.87% |
+| C2 rank T0.6/p0.9/N16 | 0.1793 | 0.2425 | 1.67 | 16/18 | 0.1210 | 56.49% | +2.84% | 0.213 | +0.010 | -2.77% |
+
+### 逐日配对（n = 18）
+
+| 比较（a − b） | IC 均差 | SE | t | a 胜出天数 | 符号检验 p | Wilcoxon p | 前15日均差 | 尾3日均差 | TB 十分位均差 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Seg0 − Seg9**（事先登记的主比较，取反） | +0.0091 | 0.0040 | +2.25 | 12/18 | 0.238 | 0.038 | +0.0059 | +0.0253 | -0.01pp |
+| Seg0 − Seg155 | +0.0376 | 0.0034 | +11.19 | 18/18 | 0.000 | 0.000 | +0.0410 | +0.0207 | +0.61pp |
+| Seg9 − Seg155 | +0.0285 | 0.0062 | +4.57 | 15/18 | 0.008 | 0.001 | +0.0351 | -0.0045 | +0.62pp |
+| Seg0 − C2 prod | -0.0220 | 0.0072 | -3.04 | 5/18 | 0.096 | 0.016 | -0.0189 | -0.0374 | -0.15pp |
+| Seg9 − C2 prod | -0.0311 | 0.0063 | -4.91 | 1/18 | 0.000 | 0.000 | -0.0248 | -0.0626 | -0.14pp |
+| Seg0 − C2 rank | -0.0247 | 0.0078 | -3.17 | 5/18 | 0.096 | 0.008 | -0.0226 | -0.0350 | -0.17pp |
+| Seg9 − C2 rank | -0.0338 | 0.0067 | -5.04 | 1/18 | 0.000 | 0.000 | -0.0285 | -0.0603 | -0.15pp |
+
+kernel 内事先登记的主比较写作 Seg9 − Seg0 = **−0.0091**（t −2.25，Seg9 只赢 6/18）。kernel 内 vs C2 用的是 C2 prod 对 `actual_return_d10` 的参照序列（Seg0 −0.0223，t −3.10），与上表按包内 `return_10d` 的 −0.0220 一致。
+**配对 t 偏乐观**：相邻日期的 10 日标签窗口重叠，18 个信号日只相当于约 2 个独立 10 日窗口；p 值只作参考。
+
+### 逐日 return10d Rank IC 与 Top-Bottom 十分位（加粗 = 尾 3 日）
+
+| asof | Seg0 IC | Seg9 IC | Seg9−Seg0 | Seg155 IC | C2 prod IC | C2 rank IC | Seg0 TB | Seg9 TB | Seg155 TB | C2 prod TB |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 08-11 | 0.212 | 0.198 | -0.013 | 0.171 | 0.190 | 0.177 | +2.37% | +2.51% | +2.62% | +3.06% |
+| 08-12 | 0.269 | 0.258 | -0.012 | 0.219 | 0.263 | 0.269 | +3.74% | +3.95% | +2.58% | +4.19% |
+| 08-13 | 0.126 | 0.117 | -0.009 | 0.113 | 0.181 | 0.171 | +1.50% | +1.47% | +1.20% | +2.09% |
+| 08-14 | 0.247 | 0.230 | -0.017 | 0.199 | 0.242 | 0.242 | +3.80% | +3.88% | +3.20% | +3.98% |
+| 08-17 | 0.267 | 0.261 | -0.006 | 0.212 | 0.288 | 0.296 | +4.88% | +4.81% | +4.03% | +5.34% |
+| 08-18 | 0.311 | 0.333 | +0.023 | 0.260 | 0.352 | 0.354 | +8.37% | +9.48% | +7.64% | +8.98% |
+| 08-19 | 0.172 | 0.164 | -0.008 | 0.132 | 0.174 | 0.179 | +4.72% | +5.36% | +3.84% | +4.59% |
+| 08-20 | 0.155 | 0.111 | -0.044 | 0.126 | 0.126 | 0.135 | +4.51% | +3.72% | +3.17% | +2.20% |
+| 08-21 | 0.234 | 0.240 | +0.006 | 0.183 | 0.265 | 0.278 | +6.93% | +7.58% | +6.33% | +6.63% |
+| 08-24 | 0.154 | 0.122 | -0.032 | 0.119 | 0.133 | 0.130 | +4.01% | +3.41% | +3.71% | +2.94% |
+| 08-25 | 0.110 | 0.117 | +0.006 | 0.071 | 0.130 | 0.142 | +2.46% | +2.98% | +1.69% | +2.72% |
+| 08-26 | 0.052 | 0.060 | +0.008 | 0.030 | 0.080 | 0.082 | +0.52% | +1.35% | +0.30% | +1.05% |
+| 08-27 | 0.215 | 0.223 | +0.008 | 0.168 | 0.263 | 0.265 | +5.10% | +5.27% | +3.71% | +5.41% |
+| 08-28 | 0.144 | 0.141 | -0.003 | 0.104 | 0.187 | 0.201 | +2.37% | +2.29% | +1.10% | +2.85% |
+| 08-31 | 0.189 | 0.193 | +0.004 | 0.134 | 0.267 | 0.276 | +2.58% | +3.02% | +1.54% | +3.49% |
+| **09-01** | 0.034 | 0.002 | -0.032 | -0.003 | 0.097 | 0.102 | -2.02% | -2.95% | -2.09% | -1.24% |
+| **09-02** | -0.062 | -0.087 | -0.025 | -0.075 | -0.034 | -0.041 | -4.48% | -5.75% | -3.99% | -4.59% |
+| **09-03** | -0.045 | -0.064 | -0.019 | -0.058 | -0.025 | -0.030 | -3.17% | -3.99% | -3.42% | -2.78% |
+
+### 尾部（09-01..09-03）
+
+| 模型 | IC 09-01 / 09-02 / 09-03 | TB 十分位 09-01 / 09-02 / 09-03 |
+|---|---|---|
+| Seg0 Best@475 | +0.034 / -0.062 / -0.045 | -2.02% / -4.48% / -3.17% |
+| Seg9 | +0.002 / -0.087 / -0.064 | -2.95% / -5.75% / -3.99% |
+| Seg155 | -0.003 / -0.075 / -0.058 | -2.09% / -3.99% / -3.42% |
+| C2 prod | +0.097 / -0.034 / -0.025 | -1.24% / -4.59% / -2.78% |
+| C2 rank | +0.102 / -0.041 / -0.030 | -0.69% / -4.53% / -3.08% |
+
+五个模型的尾部**一起翻转**：三天的十分位价差全部为负，09-02 / 09-03 的 IC 全部为负（C2 在 09-01 仍有 +0.10）。
+当时全市场 10 日收益均值为 −4.3% / −2.1% / −1.6%，上涨占比只有 17%–27%，属于普跌行情里的「最差预测反弹」。
+Seg9 的尾部比 Seg0 略差（尾 3 日 IC −0.025/日），Seg0 的尾部比 Seg155 略好。**尾部失效来自市场状态，不是退火造成的。**
+3 个重叠的标签窗口只相当于约 1 个独立观测。
+
+### 结论
+
+1. **val 上的退火收益没有在 OOS 上保住。** val：Seg9 − Seg0 = +0.0113（t 1.80，是 5 个 snapshot 里最好的那个；按事先写好的规则字面上属于「持平」）。
+   OOS：−0.0091（Seg0 赢 12/18）。前 15 日 Seg9 也低 0.006，尾 3 日低 0.025。所以 val 上那 +0.011 应看作**选择噪声 / val 与 OOS 不匹配**，
+   退火不是有效杠杆。这与本文档早先「持平、退火解释不了 C2 差距」的判断一致，只是比那时更弱。
+2. **OOS 最强的单模型是未退火的发布版 Best@475（Seg0）**：日均 IC **0.1546**，pooled 0.2189，ICIR 1.47，IC+ 16/18，TB 十分位 **+2.68%**。
+3. **C1 forecast 训练（Seg155）让 OOS 生成式 IC 掉了约 0.038**（Seg0 − Seg155 +0.0376，18/18 天）。方向与 val 一致（val 上 +0.019），
+   再次说明「WFL 更低」不等于「生成式 IC 更高」。
+4. **与 C2 的差距缩小到约 0.02**：Seg0 vs C2 prod −0.022（C2 0.1766）/ vs C2 rank −0.025（C2 0.1793），Seg0 只在 5/18 天胜出；
+   TB 十分位差距很小（+2.68% vs +2.83% / +2.84%）。Seg9 vs C2 为 −0.031 / −0.034，只赢 1/18 天。
+5. 按事先登记，这是 Seg9 与 Seg0 的**最终 OOS 读数**，不再据此换 checkpoint、改 decode 或再训练。
+
+### 注意事项
+
+- **密封 OOS 已部分用于选择**：这个包现在已经读过 Seg155、Seg9、Seg0（以及更早的 C2）。如果据此选 Best@475，就等于用 OOS 做了一次模型选择，
+  0.1546 作为前瞻估计略偏乐观；之后在这个包上的任何模型比较都要注明这一点。要得到无偏读数，需要 09-03 之后的新密封窗口。
+- 只跑了 prod N5 一臂、一个 seed；rank 臂（T0.6/p0.9/N16）没有跑（Seg155 上 rank 比 prod 高约 0.007）。
+- Top-Bottom 不含换手和成本；utility IC / pairwise 是 return-score ablation（没有 utility 头）。
+- Seg0 带 aux 头（AR decode 不用），Seg9 是 forecast-only。
 
 ## 相关文件
 
@@ -318,7 +422,7 @@ luckfu 的 GPU 配额已用完，改用 Kronos 项目同学的 Kaggle 账号 **`
 - 训练：`finetune/train_predictor.py`（snapshot 钩子 + 父本 key 日志）
 - 单测：`tests/test_forecast_cosine_pilot.py`
 - 父本选择依据：[`beta_v21_c1_val_gen_ic_reselection_cn.md`](beta_v21_c1_val_gen_ic_reselection_cn.md)
-- 结果 JSON：`finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`
+- 结果 JSON：`finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`（val）；密封 OOS 最终评估 `finetune/reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json`
 - 原始输出（box）：`/workspace/kronos_patrol_out/pilot475_final_1006_2116/output/`；Seg9 权重下载：`/workspace/kronos_patrol_out/pilot475_seg9_weights/`
-- 密封 OOS 最终评估 kernel（已推送 `wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` v1）：runner `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot.py`、staging `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel/`、
+- 密封 OOS 最终评估 kernel（`wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` v1，COMPLETE；原始输出 `/workspace/kronos_patrol_out/oos_seg9_1007_0345/`）：runner `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot.py`、staging `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel/`、
   builder `finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py --variant pilot_seg9`、worker `finetune/evaluate_beta_v21_generative_return_oos.py`、单测 `tests/test_gen_return_oos_pilot_seg9.py`

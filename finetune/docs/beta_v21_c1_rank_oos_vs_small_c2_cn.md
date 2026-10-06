@@ -1,6 +1,11 @@
 # Beta C1 Ranking OOS vs Small C2（同密封包 · 决定性对比）
 
-更新：2026-10-06 CST（新增 Baseline 2：Seg155 生成式派生收益，18 日完整结果；新增 val 生成式 IC 重选 checkpoint；新增 Best@475 余弦 pilot val 结果）
+更新：2026-10-07 CST（新增 Best@475 / Seg9 密封 OOS 生成式收益最终评估；此前：Baseline 2 Seg155 生成式派生收益、val 生成式 IC 重选、Best@475 余弦 pilot val 结果）
+
+> **最新头条（2026-10-07）：Beta 线 OOS 最强的模型现在是发布版 Best@475（生成式收益，未退火）：密封 18d return10d IC 日均 0.155 vs C2 0.180（rank）/ 0.177（prod）。**
+> 差距从 Seg155 的 ~0.060 缩小到 ~0.02–0.025（Seg0 只在 5/18 天胜过 C2）；余弦退火 Seg9（0.146）没有超过 Best@475。
+> 详见下方「Best@475 / Seg9 密封 OOS 最终评估」与 [`beta_v21_c1_forecast_cosine_pilot_cn.md`](beta_v21_c1_forecast_cosine_pilot_cn.md)。
+> 注意：这个密封包已读过 Seg155、Seg9、Seg0，**已部分用于选择**。
 
 ## 密封包（两边相同）
 
@@ -191,9 +196,39 @@ Seg155 父本的余弦 pilot 因此暂缓。
 
 12 段 forecast-only uniform_cosine 1e-5→1e-6（`luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475`，COMPLETE）。同上 val 合同：
 Seg0（Best@475）0.3141 → Seg6 0.3245 / **Seg9 0.3254** / Seg12 0.3234（Seg9 − Seg0 配对 +0.011，t 1.80）；WFL 最好的 Seg10 0.3196。
-退火在 val 上只多带来约 +0.01，**补不上**密封 OOS 上 C2 − Seg155 ≈ 0.060 的差距。Seg9 与 Best@475 的密封 OOS 均未测；
-已备好一次性最终评估 kernel `luckfu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9`（Seg9 先、Seg0 后，prod N5，未推送，等 GPU 配额）。
+退火在 val 上只多带来约 +0.01，**补不上**密封 OOS 上 C2 − Seg155 ≈ 0.060 的差距。随后的一次性密封 OOS 最终评估（`wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` v1，COMPLETE）：
+Seg0（Best@475）**0.1546** > Seg9 0.1455，val 上的退火收益没有保住，见下节。
 详见 `finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`；JSON `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`。
+
+### Best@475 / Seg9 密封 OOS 最终评估（2026-10-07，生成式收益，prod N5）
+
+Kernel `wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` v1 **COMPLETE**（2026-10-07 03:56 CST，18,477 s）。同包、同 Baseline 2 合同（prod T0.65/p0.8/N5，seed 20260906，
+分数 = 生成式 `predicted_return_d10`），事先登记为**一次性最终评估**。下表全部按包内 `return_10d` 在 box 上从 shard 重新计算（与 kernel 输出一致）。
+
+| 模型 | ret10d IC 日均 | pooled | ICIR | IC+ 日 | utility IC 日均 | Pairwise | TB 十分位 | IC 尾3日 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Beta Best@475（Seg0，发布版，未退火）** | **0.1546** | 0.2189 | 1.47 | 16/18 | 0.0956 | 55.13% | +2.68% | -0.025 |
+| Beta 余弦 pilot Seg9 | 0.1455 | 0.1887 | 1.28 | 16/18 | 0.0981 | 55.24% | +2.69% | -0.050 |
+| Beta Seg155 forecast-best | 0.1170 | 0.1631 | 1.25 | 15/18 | 0.0757 | 54.06% | +2.06% | -0.045 |
+| Small C2 prod T0.65/p0.8/N5 | 0.1766 | 0.2369 | 1.69 | 16/18 | 0.1208 | 56.50% | +2.83% | +0.013 |
+| Small C2 rank T0.6/p0.9/N16 | 0.1793 | 0.2425 | 1.67 | 16/18 | 0.1210 | 56.49% | +2.84% | +0.010 |
+
+逐日配对（n = 18，t 偏乐观，原因是 10 日标签窗口重叠）：
+Seg0 − Seg9 **+0.0091**（Seg0 赢 12/18，t +2.25）；
+Seg0 − Seg155 **+0.0376**（18/18）；
+Seg0 − C2 prod **-0.0220**（5/18）、− C2 rank **-0.0247**（5/18）；
+Seg9 − C2 prod -0.0311（1/18）、− C2 rank -0.0338（1/18）。
+
+要点：
+
+1. **Best@475 是目前 Beta 线 OOS 最强的单模型**，与 C2 的差距约 0.02–0.025（Seg155 时约 0.060）；TB 十分位已接近 C2（+2.68% vs +2.83% / +2.84%）。
+2. **C1 forecast 训练让 OOS 生成式 IC 掉了约 0.038**（Seg0 − Seg155，18/18 天）。
+3. **余弦退火（Seg9）没有帮助**：val 上 +0.011，OOS 上 −0.009，属于选择噪声。
+4. **尾部 09-01..09-03 所有模型（含 C2）一起失效**，属市场状态；Seg0 尾 3 日 IC −0.025，好于 Seg155（−0.045）与 Seg9（−0.050），但仍差于 C2（+0.01）。
+5. 密封包已读过 Seg155 / Seg9 / Seg0：用这些数字选 Best@475 本身就是一次选择，0.155 作为前瞻估计略偏乐观；无偏读数要等 09-03 之后的新窗口。
+
+逐日 IC / TB 表、尾部表、完整结论与注意事项：[`beta_v21_c1_forecast_cosine_pilot_cn.md`](beta_v21_c1_forecast_cosine_pilot_cn.md)「密封 OOS 最终评估结果」；
+JSON：[`finetune/reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json`](../reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json)。
 
 ## 这证明什么 / 不证明什么
 
@@ -214,3 +249,4 @@ Seg0（Best@475）0.3141 → Seg6 0.3245 / **Seg9 0.3254** / Seg12 0.3234（Seg9
 - Baseline 2 生成式收益：`finetune/evaluate_beta_v21_generative_return_oos.py`；结果 JSON `finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json`
 - Val 生成式 IC 重选：`finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`；JSON `finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`
 - 余弦 pilot（Best@475）：`finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`；JSON `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`
+- Best@475 / Seg9 密封 OOS 最终评估：JSON `finetune/reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json`

@@ -1,6 +1,8 @@
 # Beta v2.1 C1：val 生成式 IC 重新选 checkpoint（Step 1 结果）
 
-更新：2026-10-06 CST
+更新：2026-10-07 CST
+
+> **2026-10-07 密封 OOS 确认**：Best@475 在密封 18d OOS 上生成式 return10d IC 日均 **0.1546** > Seg155 0.1170（+0.038，18/18 天），val 上的排序得到 OOS 确认；余弦 pilot Seg9 在 val 上的 +0.011 收益**没有保住**（OOS 0.1455，Seg9 − Seg0 = −0.009）。详见 [`beta_v21_c1_forecast_cosine_pilot_cn.md`](beta_v21_c1_forecast_cosine_pilot_cn.md)「密封 OOS 最终评估结果」。
 
 ## 一句话结论
 
