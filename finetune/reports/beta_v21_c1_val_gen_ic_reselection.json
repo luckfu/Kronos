@@ -1,0 +1,509 @@
+{
+ "title": "Beta v2.1 C1 validation generative return10d IC checkpoint reselection",
+ "updated": "2026-10-06 CST",
+ "kernel": "luckfu/kronos-beta-v21-c1-val-gen-ic",
+ "kernel_status": "COMPLETE",
+ "elapsed_sec": 4513.9,
+ "training": false,
+ "sealed_oos_read": false,
+ "source_dir": "/workspace/kronos_patrol_out/valgenic_final_1006_1425/output/beta_v2_1_c1_val_gen_ic",
+ "contract": {
+  "val_dataset": "temporal_symbol_validation_v1",
+  "val_data_sha256": "4cce31bc3e70eab83d5b7ea05f19fce04aa57a87f3acf00b882ddfbac4219bf7",
+  "val_signal_range": [
+   "2025-07-01",
+   "2026-07-02"
+  ],
+  "val_full_windows": 123836,
+  "val_full_dates": 242,
+  "subsample_rule": "np.linspace(0, n_dates-1, k).round() over sorted signal dates; all symbols per date",
+  "subsample_dates": [
+   "2025-07-03",
+   "2025-07-17",
+   "2025-08-01",
+   "2025-08-15",
+   "2025-09-01",
+   "2025-09-15",
+   "2025-09-30",
+   "2025-10-22",
+   "2025-11-06",
+   "2025-11-20",
+   "2025-12-05",
+   "2025-12-19",
+   "2026-01-07",
+   "2026-01-21",
+   "2026-02-05",
+   "2026-02-27",
+   "2026-03-16",
+   "2026-03-30",
+   "2026-04-15",
+   "2026-04-29",
+   "2026-05-19",
+   "2026-06-02",
+   "2026-06-17",
+   "2026-07-02"
+  ],
+  "subsample_windows": 12256,
+  "decode": {
+   "name": "prod_t065_p80_n5",
+   "sample_count": 5,
+   "temperature": 0.65,
+   "top_p": 0.8,
+   "seed": 20260906,
+   "protocol": "production"
+  },
+  "score": "predicted_return_d10 = mean_N5 AR samples (denorm_close_d10/last_close - 1)",
+  "label": "return_10d = close[asof+10]/close[asof] - 1",
+  "wfl": "teacher-forcing CE, C1 horizon weights 1.364..0.455, per-sample mean on subsample"
+ },
+ "checkpoint_order": [
+  "beta_v21_release_best475",
+  "seg8_rank_unfreeze_best",
+  "seg155_forecast_best"
+ ],
+ "headline": {
+  "beta_v21_release_best475": {
+   "model_sha256": "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97",
+   "use_beta_v21_auxiliary": true,
+   "note": "released Beta v2.1 Best@475 = C1 line parent before C1 forecast fine-tune",
+   "return10d_rank_ic_daily": 0.31447,
+   "return10d_rank_ic_pooled": 0.457377,
+   "return10d_rank_icir": 2.544175,
+   "return10d_rank_ic_pos_rate": 1.0,
+   "return10d_rank_ic_se": 0.025231,
+   "top_bottom_decile_return10d": 0.071724,
+   "top_bottom_quintile_return10d": 0.060585,
+   "utility_rank_ic_daily": 0.145456,
+   "weighted_forecast_loss_subsample": 2.320456,
+   "forecast_loss_subsample": 2.309108,
+   "full_val_weighted_forecast_loss": null
+  },
+  "seg8_rank_unfreeze_best": {
+   "model_sha256": "8a29277a856e84d9300188c1325f13c9fa88d96d38cafc1868f975dbda0a9892",
+   "use_beta_v21_auxiliary": true,
+   "note": "v20 unfreeze from Seg19: trunk trained (1e-7) with ranking aux; forecast path changed",
+   "return10d_rank_ic_daily": 0.298942,
+   "return10d_rank_ic_pooled": 0.437504,
+   "return10d_rank_icir": 2.344273,
+   "return10d_rank_ic_pos_rate": 1.0,
+   "return10d_rank_ic_se": 0.02603,
+   "top_bottom_decile_return10d": 0.060276,
+   "top_bottom_quintile_return10d": 0.056695,
+   "utility_rank_ic_daily": 0.146178,
+   "weighted_forecast_loss_subsample": 2.322107,
+   "forecast_loss_subsample": 2.312039,
+   "full_val_weighted_forecast_loss": 2.325495
+  },
+  "seg155_forecast_best": {
+   "model_sha256": "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c",
+   "use_beta_v21_auxiliary": false,
+   "note": "C1 wc forecast floor (global Seg155 = local segment 26); forecast-only, no aux",
+   "return10d_rank_ic_daily": 0.295374,
+   "return10d_rank_ic_pooled": 0.43121,
+   "return10d_rank_icir": 2.398514,
+   "return10d_rank_ic_pos_rate": 1.0,
+   "return10d_rank_ic_se": 0.025138,
+   "top_bottom_decile_return10d": 0.062402,
+   "top_bottom_quintile_return10d": 0.05846,
+   "utility_rank_ic_daily": 0.143833,
+   "weighted_forecast_loss_subsample": 2.30912,
+   "forecast_loss_subsample": 2.298871,
+   "full_val_weighted_forecast_loss": 2.312368
+  }
+ },
+ "paired_diffs": {
+  "beta_v21_release_best475_minus_seg155_forecast_best": {
+   "return10d_rank_ic_daily": {
+    "mean_diff": 0.019096,
+    "sd": 0.025675,
+    "se": 0.005241,
+    "t": 3.644,
+    "p_two_sided_t23": 0.00136,
+    "wins": 19,
+    "n_dates": 24,
+    "sign_test_p": 0.00661,
+    "min_diff": -0.0425,
+    "max_diff": 0.0676
+   },
+   "top_bottom_decile_return10d": {
+    "mean_diff": 0.009322,
+    "sd": 0.016572,
+    "se": 0.003383,
+    "t": 2.756,
+    "p_two_sided_t23": 0.01126,
+    "wins": 17,
+    "n_dates": 24,
+    "sign_test_p": 0.06391,
+    "min_diff": -0.0162,
+    "max_diff": 0.0576
+   }
+  },
+  "beta_v21_release_best475_minus_seg8_rank_unfreeze_best": {
+   "return10d_rank_ic_daily": {
+    "mean_diff": 0.015528,
+    "sd": 0.021389,
+    "se": 0.004366,
+    "t": 3.557,
+    "p_two_sided_t23": 0.00168,
+    "wins": 20,
+    "n_dates": 24,
+    "sign_test_p": 0.00154,
+    "min_diff": -0.038,
+    "max_diff": 0.0639
+   },
+   "top_bottom_decile_return10d": {
+    "mean_diff": 0.011448,
+    "sd": 0.012757,
+    "se": 0.002604,
+    "t": 4.397,
+    "p_two_sided_t23": 0.00021,
+    "wins": 19,
+    "n_dates": 24,
+    "sign_test_p": 0.00661,
+    "min_diff": -0.01,
+    "max_diff": 0.0397
+   }
+  },
+  "seg8_rank_unfreeze_best_minus_seg155_forecast_best": {
+   "return10d_rank_ic_daily": {
+    "mean_diff": 0.003568,
+    "sd": 0.02204,
+    "se": 0.004499,
+    "t": 0.793,
+    "p_two_sided_t23": 0.43589,
+    "wins": 13,
+    "n_dates": 24,
+    "sign_test_p": 0.83882,
+    "min_diff": -0.0576,
+    "max_diff": 0.0555
+   },
+   "top_bottom_decile_return10d": {
+    "mean_diff": -0.002126,
+    "sd": 0.011195,
+    "se": 0.002285,
+    "t": -0.93,
+    "p_two_sided_t23": 0.3618,
+    "wins": 11,
+    "n_dates": 24,
+    "sign_test_p": 0.83882,
+    "min_diff": -0.0347,
+    "max_diff": 0.0178
+   }
+  }
+ },
+ "paired_note": "Per-signal-date paired difference, iid t with df=23; 10d label windows overlap (dates ~10-15 trading days apart) and single decode seed, so t/p are optimistic.",
+ "rankings": {
+  "rank_by_wfl_subsample": [
+   "seg155_forecast_best",
+   "beta_v21_release_best475",
+   "seg8_rank_unfreeze_best"
+  ],
+  "rank_by_wfl_full_val_logged": [
+   "seg155_forecast_best",
+   "seg8_rank_unfreeze_best"
+  ],
+  "rank_by_gen_return10d_ic": [
+   "beta_v21_release_best475",
+   "seg8_rank_unfreeze_best",
+   "seg155_forecast_best"
+  ],
+  "divergence_wfl_subsample_vs_ic": true,
+  "divergence_wfl_full_vs_ic": true,
+  "best_by_ic": "beta_v21_release_best475",
+  "best_by_wfl_subsample": "seg155_forecast_best"
+ },
+ "per_date": [
+  {
+   "asof_date": "2025-07-03",
+   "samples": 477,
+   "ic_beta_v21_release_best475": 0.2849,
+   "ic_seg8_rank_unfreeze_best": 0.2676,
+   "ic_seg155_forecast_best": 0.2459,
+   "tb_decile_beta_v21_release_best475": 0.0499,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0359,
+   "tb_decile_seg155_forecast_best": 0.0406,
+   "mkt_mean_return10d": 0.0236
+  },
+  {
+   "asof_date": "2025-07-17",
+   "samples": 510,
+   "ic_beta_v21_release_best475": 0.1873,
+   "ic_seg8_rank_unfreeze_best": 0.1769,
+   "ic_seg155_forecast_best": 0.1759,
+   "tb_decile_beta_v21_release_best475": 0.0425,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0421,
+   "tb_decile_seg155_forecast_best": 0.0406,
+   "mkt_mean_return10d": 0.014
+  },
+  {
+   "asof_date": "2025-08-01",
+   "samples": 511,
+   "ic_beta_v21_release_best475": 0.2536,
+   "ic_seg8_rank_unfreeze_best": 0.2386,
+   "ic_seg155_forecast_best": 0.2083,
+   "tb_decile_beta_v21_release_best475": 0.0387,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0281,
+   "tb_decile_seg155_forecast_best": 0.0156,
+   "mkt_mean_return10d": 0.0457
+  },
+  {
+   "asof_date": "2025-08-15",
+   "samples": 510,
+   "ic_beta_v21_release_best475": 0.3801,
+   "ic_seg8_rank_unfreeze_best": 0.3484,
+   "ic_seg155_forecast_best": 0.3601,
+   "tb_decile_beta_v21_release_best475": 0.0794,
+   "tb_decile_seg8_rank_unfreeze_best": 0.068,
+   "tb_decile_seg155_forecast_best": 0.0718,
+   "mkt_mean_return10d": 0.0237
+  },
+  {
+   "asof_date": "2025-09-01",
+   "samples": 511,
+   "ic_beta_v21_release_best475": 0.3013,
+   "ic_seg8_rank_unfreeze_best": 0.3259,
+   "ic_seg155_forecast_best": 0.3095,
+   "tb_decile_beta_v21_release_best475": 0.0436,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0536,
+   "tb_decile_seg155_forecast_best": 0.0565,
+   "mkt_mean_return10d": 0.0013
+  },
+  {
+   "asof_date": "2025-09-15",
+   "samples": 512,
+   "ic_beta_v21_release_best475": 0.2661,
+   "ic_seg8_rank_unfreeze_best": 0.2559,
+   "ic_seg155_forecast_best": 0.2533,
+   "tb_decile_beta_v21_release_best475": 0.0613,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0678,
+   "tb_decile_seg155_forecast_best": 0.061,
+   "mkt_mean_return10d": -0.0056
+  },
+  {
+   "asof_date": "2025-09-30",
+   "samples": 512,
+   "ic_beta_v21_release_best475": 0.599,
+   "ic_seg8_rank_unfreeze_best": 0.565,
+   "ic_seg155_forecast_best": 0.5722,
+   "tb_decile_beta_v21_release_best475": 0.107,
+   "tb_decile_seg8_rank_unfreeze_best": 0.1076,
+   "tb_decile_seg155_forecast_best": 0.1082,
+   "mkt_mean_return10d": 0.0041
+  },
+  {
+   "asof_date": "2025-10-22",
+   "samples": 511,
+   "ic_beta_v21_release_best475": 0.1918,
+   "ic_seg8_rank_unfreeze_best": 0.1903,
+   "ic_seg155_forecast_best": 0.1982,
+   "tb_decile_beta_v21_release_best475": 0.0387,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0296,
+   "tb_decile_seg155_forecast_best": 0.044,
+   "mkt_mean_return10d": 0.018
+  },
+  {
+   "asof_date": "2025-11-06",
+   "samples": 512,
+   "ic_beta_v21_release_best475": 0.3487,
+   "ic_seg8_rank_unfreeze_best": 0.3457,
+   "ic_seg155_forecast_best": 0.3514,
+   "tb_decile_beta_v21_release_best475": 0.0539,
+   "tb_decile_seg8_rank_unfreeze_best": 0.045,
+   "tb_decile_seg155_forecast_best": 0.057,
+   "mkt_mean_return10d": -0.0143
+  },
+  {
+   "asof_date": "2025-11-20",
+   "samples": 512,
+   "ic_beta_v21_release_best475": 0.1937,
+   "ic_seg8_rank_unfreeze_best": 0.1855,
+   "ic_seg155_forecast_best": 0.1902,
+   "tb_decile_beta_v21_release_best475": 0.0489,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0305,
+   "tb_decile_seg155_forecast_best": 0.0255,
+   "mkt_mean_return10d": -0.0147
+  },
+  {
+   "asof_date": "2025-12-05",
+   "samples": 511,
+   "ic_beta_v21_release_best475": 0.1734,
+   "ic_seg8_rank_unfreeze_best": 0.1488,
+   "ic_seg155_forecast_best": 0.1696,
+   "tb_decile_beta_v21_release_best475": 0.0703,
+   "tb_decile_seg8_rank_unfreeze_best": 0.047,
+   "tb_decile_seg155_forecast_best": 0.0565,
+   "mkt_mean_return10d": -0.0043
+  },
+  {
+   "asof_date": "2025-12-19",
+   "samples": 513,
+   "ic_beta_v21_release_best475": 0.4204,
+   "ic_seg8_rank_unfreeze_best": 0.4214,
+   "ic_seg155_forecast_best": 0.4128,
+   "tb_decile_beta_v21_release_best475": 0.0839,
+   "tb_decile_seg8_rank_unfreeze_best": 0.079,
+   "tb_decile_seg155_forecast_best": 0.07,
+   "mkt_mean_return10d": 0.0416
+  },
+  {
+   "asof_date": "2026-01-07",
+   "samples": 512,
+   "ic_beta_v21_release_best475": 0.2485,
+   "ic_seg8_rank_unfreeze_best": 0.2265,
+   "ic_seg155_forecast_best": 0.215,
+   "tb_decile_beta_v21_release_best475": 0.0297,
+   "tb_decile_seg8_rank_unfreeze_best": 0.028,
+   "tb_decile_seg155_forecast_best": 0.0211,
+   "mkt_mean_return10d": 0.0576
+  },
+  {
+   "asof_date": "2026-01-21",
+   "samples": 514,
+   "ic_beta_v21_release_best475": 0.2566,
+   "ic_seg8_rank_unfreeze_best": 0.2272,
+   "ic_seg155_forecast_best": 0.2238,
+   "tb_decile_beta_v21_release_best475": 0.018,
+   "tb_decile_seg8_rank_unfreeze_best": -0.0002,
+   "tb_decile_seg155_forecast_best": 0.0021,
+   "mkt_mean_return10d": -0.0065
+  },
+  {
+   "asof_date": "2026-02-05",
+   "samples": 511,
+   "ic_beta_v21_release_best475": 0.4029,
+   "ic_seg8_rank_unfreeze_best": 0.4409,
+   "ic_seg155_forecast_best": 0.4454,
+   "tb_decile_beta_v21_release_best475": 0.1161,
+   "tb_decile_seg8_rank_unfreeze_best": 0.1179,
+   "tb_decile_seg155_forecast_best": 0.1324,
+   "mkt_mean_return10d": 0.0486
+  },
+  {
+   "asof_date": "2026-02-27",
+   "samples": 514,
+   "ic_beta_v21_release_best475": 0.3879,
+   "ic_seg8_rank_unfreeze_best": 0.3745,
+   "ic_seg155_forecast_best": 0.3839,
+   "tb_decile_beta_v21_release_best475": 0.0564,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0587,
+   "tb_decile_seg155_forecast_best": 0.0663,
+   "mkt_mean_return10d": -0.0349
+  },
+  {
+   "asof_date": "2026-03-16",
+   "samples": 514,
+   "ic_beta_v21_release_best475": 0.1942,
+   "ic_seg8_rank_unfreeze_best": 0.1911,
+   "ic_seg155_forecast_best": 0.1493,
+   "tb_decile_beta_v21_release_best475": 0.0291,
+   "tb_decile_seg8_rank_unfreeze_best": 0.011,
+   "tb_decile_seg155_forecast_best": 0.0095,
+   "mkt_mean_return10d": -0.05
+  },
+  {
+   "asof_date": "2026-03-30",
+   "samples": 513,
+   "ic_beta_v21_release_best475": 0.3394,
+   "ic_seg8_rank_unfreeze_best": 0.3401,
+   "ic_seg155_forecast_best": 0.3475,
+   "tb_decile_beta_v21_release_best475": 0.0799,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0661,
+   "tb_decile_seg155_forecast_best": 0.0697,
+   "mkt_mean_return10d": 0.0211
+  },
+  {
+   "asof_date": "2026-04-15",
+   "samples": 514,
+   "ic_beta_v21_release_best475": 0.276,
+   "ic_seg8_rank_unfreeze_best": 0.2459,
+   "ic_seg155_forecast_best": 0.2396,
+   "tb_decile_beta_v21_release_best475": 0.0612,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0555,
+   "tb_decile_seg155_forecast_best": 0.0555,
+   "mkt_mean_return10d": 0.0239
+  },
+  {
+   "asof_date": "2026-04-29",
+   "samples": 508,
+   "ic_beta_v21_release_best475": 0.43,
+   "ic_seg8_rank_unfreeze_best": 0.4048,
+   "ic_seg155_forecast_best": 0.4113,
+   "tb_decile_beta_v21_release_best475": 0.1186,
+   "tb_decile_seg8_rank_unfreeze_best": 0.1078,
+   "tb_decile_seg155_forecast_best": 0.1233,
+   "mkt_mean_return10d": 0.0279
+  },
+  {
+   "asof_date": "2026-05-19",
+   "samples": 515,
+   "ic_beta_v21_release_best475": 0.2062,
+   "ic_seg8_rank_unfreeze_best": 0.1423,
+   "ic_seg155_forecast_best": 0.1999,
+   "tb_decile_beta_v21_release_best475": 0.0537,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0166,
+   "tb_decile_seg155_forecast_best": 0.0513,
+   "mkt_mean_return10d": -0.0571
+  },
+  {
+   "asof_date": "2026-06-02",
+   "samples": 514,
+   "ic_beta_v21_release_best475": 0.2956,
+   "ic_seg8_rank_unfreeze_best": 0.258,
+   "ic_seg155_forecast_best": 0.2464,
+   "tb_decile_beta_v21_release_best475": 0.1094,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0804,
+   "tb_decile_seg155_forecast_best": 0.0746,
+   "mkt_mean_return10d": -0.0128
+  },
+  {
+   "asof_date": "2026-06-17",
+   "samples": 512,
+   "ic_beta_v21_release_best475": 0.2565,
+   "ic_seg8_rank_unfreeze_best": 0.2123,
+   "ic_seg155_forecast_best": 0.1939,
+   "tb_decile_beta_v21_release_best475": 0.0913,
+   "tb_decile_seg8_rank_unfreeze_best": 0.0516,
+   "tb_decile_seg155_forecast_best": 0.0337,
+   "mkt_mean_return10d": -0.0245
+  },
+  {
+   "asof_date": "2026-07-02",
+   "samples": 513,
+   "ic_beta_v21_release_best475": 0.6531,
+   "ic_seg8_rank_unfreeze_best": 0.6409,
+   "ic_seg155_forecast_best": 0.5855,
+   "tb_decile_beta_v21_release_best475": 0.2396,
+   "tb_decile_seg8_rank_unfreeze_best": 0.2189,
+   "tb_decile_seg155_forecast_best": 0.211,
+   "mkt_mean_return10d": -0.0478
+  }
+ ],
+ "reference_sealed_oos_18d": {
+  "package": "kronos_beta_v2_time_oos_through_20260903",
+  "seg155_gen_prod_ic_daily": 0.117,
+  "seg155_gen_rank_ic_daily": 0.1242,
+  "small_c2_prod": 0.1769,
+  "small_c2_rank": 0.1796,
+  "beta_v21_release_best475": null,
+  "note": "Best@475 has NOT been run through sealed OOS generative-return evaluation."
+ },
+ "conclusion": {
+  "best_by_val_gen_ic": "beta_v21_release_best475",
+  "best_by_wfl_subsample": "seg155_forecast_best",
+  "wfl_is_valid_proxy_for_gen_ic_selection": false,
+  "c1_forecast_finetune_effect": "lowered WFL (subsample 2.3205 -> 2.3091) but reduced val generative return10d daily IC (0.3145 -> 0.2954)",
+  "cosine_pilot_status": "on_hold_parent_checkpoint_pending (771d09b, not launched)",
+  "next_step_options": {
+   "A": "cosine pilot with parent switched to Best@475",
+   "B": "first run Best@475 through sealed 18d OOS generative-return (prod arm)",
+   "C": "original Seg155-parent cosine pilot"
+  }
+ },
+ "caveats": [
+  "24-date linspace subsample of 242 validation dates",
+  "single decode seed 20260906 (N5)",
+  "overlapping 10d labels inflate paired t",
+  "val gen IC was optimistic vs sealed OOS for Seg155 (val 0.295 vs OOS 0.117 prod / 0.124 rank)",
+  "Best@475 OOS gen IC unknown; using sealed OOS to choose checkpoint partially spends its evaluation-only status"
+ ]
+}

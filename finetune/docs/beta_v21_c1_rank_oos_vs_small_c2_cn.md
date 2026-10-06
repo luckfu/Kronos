@@ -1,6 +1,6 @@
 # Beta C1 Ranking OOS vs Small C2（同密封包 · 决定性对比）
 
-更新：2026-10-06 CST（新增 Baseline 2：Seg155 生成式派生收益，18 日完整结果）
+更新：2026-10-06 CST（新增 Baseline 2：Seg155 生成式派生收益，18 日完整结果；新增 val 生成式 IC 重选 checkpoint）
 
 ## 密封包（两边相同）
 
@@ -167,6 +167,26 @@ Kernel：`luckfu/kronos-beta-v21-c1-gen-return-oos` v1 **COMPLETE**（42,221 s �
 机器可读：`finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json`（逐日 return/utility IC + pairwise、两臂全指标、参考值、结论）；汇总条目也写进 `beta_v21_c1_rank_oos_vs_small_c2_return10d.json` 的 `beta_seg155_generative_return`。
 配方 / kernel：`finetune/docs/beta_v21_c1_baseline2_gen_return_oos_cn.md`。
 
+## Val 生成式 IC 重选 checkpoint（2026-10-06，零训练，未读密封 OOS）
+
+Kernel `luckfu/kronos-beta-v21-c1-val-gen-ic`（COMPLETE，4514 s）。验证集 24 日 linspace 子样本 / 12,256 窗口，
+Baseline 2 prod 配方（T0.65/p0.8/N5，seed 20260906），主指标 = 生成式 return10d Rank IC 日均。
+
+| checkpoint | val ret10d IC 日均 | pooled | ICIR | TB 十分位 | WFL（子样本） |
+|---|---:|---:|---:|---:|---:|
+| **Best@475（Beta v2.1 发布版，C1 之前）** | **0.3145** | 0.4574 | 2.544 | +7.17% | 2.3205 |
+| Seg8 rank-unfreeze | 0.2989 | 0.4375 | 2.344 | +6.03% | 2.3221 |
+| Seg155 forecast | 0.2954 | 0.4312 | 2.399 | +6.24% | **2.3091** |
+
+配对：Best@475 − Seg155 **+0.0191**（t ≈ 3.64，19/24 天）；Best@475 − Seg8 **+0.0155**（t ≈ 3.56，20/24 天）。
+WFL 排序与 IC 排序相反：C1 forecast 训练降低了 WFL，但让 val 生成式 IC 小幅下降，**WFL 不能用来选生成式 checkpoint**。
+Seg155 父本的余弦 pilot 因此暂缓。
+
+注意：Seg155 的 val IC（0.295）远高于它的密封 OOS IC（0.117 / 0.124），val 偏乐观；**Best@475 还没有跑过密封 OOS**，
+它的 OOS 生成式 IC 未知，不能据此认为它能接近 C2 的 0.18。
+
+详见：`finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`；JSON `finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`。
+
 ## 这证明什么 / 不证明什么
 
 1. **同包 Return10d Rank IC（真正 apples-to-apples）**：C2 **~0.18** ≫ Seg19 **-0.007**。Beta ranking 头在原始 10 日收益截面上基本无效。
@@ -184,3 +204,4 @@ Kernel：`luckfu/kronos-beta-v21-c1-gen-return-oos` v1 **COMPLETE**（42,221 s �
 - OOS 计划：`finetune/docs/beta_v21_c1_rank_oos_plan_cn.md`
 - 评测脚本：`finetune/evaluate_beta_v21_time_oos.py`
 - Baseline 2 生成式收益：`finetune/evaluate_beta_v21_generative_return_oos.py`；结果 JSON `finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json`
+- Val 生成式 IC 重选：`finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`；JSON `finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`

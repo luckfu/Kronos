@@ -2,6 +2,13 @@
 
 更新：2026-10-06 CST
 
+> **状态：暂缓：父 checkpoint 待定。**（2026-10-06）本 pilot **没有在 Kaggle 上启动**。
+> Step 1 val 生成式 IC 重选（`luckfu/kronos-beta-v21-c1-val-gen-ic`）显示：val 生成式 return10d IC 日均
+> Best@475（发布版）**0.3145** > Seg8 0.2989 > Seg155 **0.2954**（Best@475 − Seg155 配对 +0.019，19/24 天更高），
+> 而 WFL 排序正好相反（Seg155 最低）。本 pilot 的父本 Seg155 是按 WFL 选的，因此先停，等决定父本
+> （A：换成 Best@475；B：先让 Best@475 过密封 OOS；C：维持 Seg155）。详见
+> `finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`。
+
 ## 要回答的问题
 
 密封 18d OOS 上，我们 Seg155 的生成式 return10d 日均 Rank IC 是 **0.117**（prod arm），
