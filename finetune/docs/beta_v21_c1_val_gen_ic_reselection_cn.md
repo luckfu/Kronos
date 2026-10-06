@@ -135,6 +135,11 @@ utility IC 是纯收益分数接 utility 标签的 ablation，三者几乎一样
 
 > **2026-10-06 已选 A**：余弦 pilot 父本换成 Best@475，新 slug `luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475`，
 > 见 [`beta_v21_c1_forecast_cosine_pilot_cn.md`](beta_v21_c1_forecast_cosine_pilot_cn.md)。B、C 未执行。
+>
+> **2026-10-06 pilot 结果（COMPLETE）**：同合同 val 生成式 IC 日均 Seg0（Best@475）0.3141 → Seg9 **0.3254**（最高）/ Seg12 0.3234 / Seg6 0.3245；
+> Seg9 − Seg0 配对 +0.0113（t 1.80，15/24），Seg6–12 一致高约 +0.01 但不确定；WFL 最好的 Seg10（2.3178）IC 0.3196，又不是 IC 最好；
+> Seg9 − Seg155 +0.030（t 4.72，21/24）。详见 [`beta_v21_c1_forecast_cosine_pilot_cn.md`](beta_v21_c1_forecast_cosine_pilot_cn.md)、
+> `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`。下一步（GPU 配额恢复后）：Seg9 + Seg0 一次性密封 OOS 最终评估（kernel 已备好未推送）。
 
 
 | 选项 | 做法 | 优点 | 代价 / 风险 |
@@ -146,6 +151,6 @@ utility IC 是纯收益分数接 utility 标签的 ablation，三者几乎一样
 ## 相关路径
 
 - 本文 JSON：`finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`
-- 余弦 pilot（暂缓）：`finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`
+- 余弦 pilot（Best@475 父本，已完成）：`finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`；JSON `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`
 - 密封 OOS 对比 / Baseline 2：`finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md`
 - Kernel 代码：`finetune/kaggle_beta_v21_c1_val_gen_ic.py`、`finetune/evaluate_beta_v21_val_gen_ic.py`

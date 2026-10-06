@@ -1,6 +1,6 @@
 # Beta C1 Ranking OOS vs Small C2（同密封包 · 决定性对比）
 
-更新：2026-10-06 CST（新增 Baseline 2：Seg155 生成式派生收益，18 日完整结果；新增 val 生成式 IC 重选 checkpoint）
+更新：2026-10-06 CST（新增 Baseline 2：Seg155 生成式派生收益，18 日完整结果；新增 val 生成式 IC 重选 checkpoint；新增 Best@475 余弦 pilot val 结果）
 
 ## 密封包（两边相同）
 
@@ -187,6 +187,14 @@ Seg155 父本的余弦 pilot 因此暂缓。
 
 详见：`finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`；JSON `finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`。
 
+### 余弦 pilot（Best@475 父本）val 结果（2026-10-06，未读密封 OOS）
+
+12 段 forecast-only uniform_cosine 1e-5→1e-6（`luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475`，COMPLETE）。同上 val 合同：
+Seg0（Best@475）0.3141 → Seg6 0.3245 / **Seg9 0.3254** / Seg12 0.3234（Seg9 − Seg0 配对 +0.011，t 1.80）；WFL 最好的 Seg10 0.3196。
+退火在 val 上只多带来约 +0.01，**补不上**密封 OOS 上 C2 − Seg155 ≈ 0.060 的差距。Seg9 与 Best@475 的密封 OOS 均未测；
+已备好一次性最终评估 kernel `luckfu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9`（Seg9 先、Seg0 后，prod N5，未推送，等 GPU 配额）。
+详见 `finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`；JSON `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`。
+
 ## 这证明什么 / 不证明什么
 
 1. **同包 Return10d Rank IC（真正 apples-to-apples）**：C2 **~0.18** ≫ Seg19 **-0.007**。Beta ranking 头在原始 10 日收益截面上基本无效。
@@ -205,3 +213,4 @@ Seg155 父本的余弦 pilot 因此暂缓。
 - 评测脚本：`finetune/evaluate_beta_v21_time_oos.py`
 - Baseline 2 生成式收益：`finetune/evaluate_beta_v21_generative_return_oos.py`；结果 JSON `finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json`
 - Val 生成式 IC 重选：`finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`；JSON `finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`
+- 余弦 pilot（Best@475）：`finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`；JSON `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`

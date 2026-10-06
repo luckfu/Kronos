@@ -1,0 +1,870 @@
+{
+  "name": "beta_v21_c1_forecast_cosine_pilot_best475",
+  "updated": "2026-10-06 CST",
+  "kernel": "luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475",
+  "kernel_version": 1,
+  "kernel_status": "COMPLETE",
+  "kernel_elapsed_sec": 15235.6,
+  "kernel_code_commit": "8ec7d0b",
+  "launch_record_commit": "56b2e2b",
+  "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_forecast_cosine_pilot_best475",
+  "local_outputs": "/workspace/kronos_patrol_out/pilot475_final_1006_2116/output/",
+  "sealed_oos_read": false,
+  "training": true,
+  "recipe": {
+    "parent": "beta_v21_release_best475 (ModelScope luckfu/Kronos-A-Share-Beta-V2-1, sha e1bd5584...)",
+    "aux_heads": "dropped (forecast-only model, 197/201 tensors loaded)",
+    "loss": "forecast-only, C1 horizon weights 1.364..0.455, history 0.02",
+    "schedule": "uniform_cosine 1e-5 -> 1e-6, warmup 0, 12 segments x 313 steps, fresh AdamW",
+    "batch": "32 x 2 T4 = 64, AMP fp16",
+    "coverage": "seed 20261002, 20000 samples/segment",
+    "snapshots": "Seg3/6/9/12 + in-training best_model by WFL (Seg10)"
+  },
+  "contract": {
+    "val_dataset": "temporal_symbol_validation_v1",
+    "val_data_sha256": "4cce31bc3e70eab83d5b7ea05f19fce04aa57a87f3acf00b882ddfbac4219bf7",
+    "val_signal_range": [
+      "2025-07-01",
+      "2026-07-02"
+    ],
+    "val_full_windows": 123836,
+    "val_full_dates": 242,
+    "subsample_rule": "np.linspace(0, n_dates-1, k).round() over sorted signal dates; all symbols per date",
+    "subsample_dates": [
+      "2025-07-03",
+      "2025-07-17",
+      "2025-08-01",
+      "2025-08-15",
+      "2025-09-01",
+      "2025-09-15",
+      "2025-09-30",
+      "2025-10-22",
+      "2025-11-06",
+      "2025-11-20",
+      "2025-12-05",
+      "2025-12-19",
+      "2026-01-07",
+      "2026-01-21",
+      "2026-02-05",
+      "2026-02-27",
+      "2026-03-16",
+      "2026-03-30",
+      "2026-04-15",
+      "2026-04-29",
+      "2026-05-19",
+      "2026-06-02",
+      "2026-06-17",
+      "2026-07-02"
+    ],
+    "subsample_windows": 12256,
+    "decode": {
+      "name": "prod_t065_p80_n5",
+      "sample_count": 5,
+      "temperature": 0.65,
+      "top_p": 0.8,
+      "seed": 20260906,
+      "protocol": "production"
+    },
+    "score": "predicted_return_d10 = mean_N5 AR samples (denorm_close_d10/last_close - 1)",
+    "label": "return_10d = close[asof+10]/close[asof] - 1",
+    "wfl": "teacher-forcing CE, C1 horizon weights 1.364..0.455, per-sample mean on subsample",
+    "same_contract_as": "luckfu/kronos-beta-v21-c1-val-gen-ic"
+  },
+  "checkpoints": [
+    {
+      "key": "seg0",
+      "label": "seg000_beta_v21_release_best475",
+      "segment": 0,
+      "model_sha256": "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97",
+      "use_beta_v21_auxiliary": true,
+      "lr_end": null,
+      "return10d_rank_ic_daily": 0.314066,
+      "return10d_rank_ic_se": 0.025234,
+      "return10d_rank_icir": 2.5406,
+      "return10d_rank_ic_pooled": 0.457139,
+      "return10d_rank_ic_pos_rate": 1.0,
+      "utility_rank_ic_daily": 0.145844,
+      "top_bottom_decile_return10d": 0.071643,
+      "wfl_subsample": 2.320456,
+      "wfl_full_val": null,
+      "wfl_full_val_above_red_line": null,
+      "delta_ic_vs_seg0": 0.0
+    },
+    {
+      "key": "seg3",
+      "label": "pilot_seg003",
+      "segment": 3,
+      "model_sha256": "7361424b96290075b24b0d8ed44a492b6f6c33ac8e080d4fc77219e0a3dfe36c",
+      "use_beta_v21_auxiliary": false,
+      "lr_end": 8.681980515339464e-06,
+      "return10d_rank_ic_daily": 0.31403,
+      "return10d_rank_ic_se": 0.024704,
+      "return10d_rank_icir": 2.5948,
+      "return10d_rank_ic_pooled": 0.456091,
+      "return10d_rank_ic_pos_rate": 1.0,
+      "utility_rank_ic_daily": 0.145275,
+      "top_bottom_decile_return10d": 0.066223,
+      "wfl_subsample": 2.320757,
+      "wfl_full_val": 2.324316,
+      "wfl_full_val_above_red_line": false,
+      "delta_ic_vs_seg0": -3.6e-05
+    },
+    {
+      "key": "seg6",
+      "label": "pilot_seg006",
+      "segment": 6,
+      "model_sha256": "a0dec488d78ba889b8e416d7e96dff979491a445cacae97ac7976fe5f70d8ff2",
+      "use_beta_v21_auxiliary": false,
+      "lr_end": 5.5e-06,
+      "return10d_rank_ic_daily": 0.324489,
+      "return10d_rank_ic_se": 0.02543,
+      "return10d_rank_icir": 2.6046,
+      "return10d_rank_ic_pooled": 0.470392,
+      "return10d_rank_ic_pos_rate": 1.0,
+      "utility_rank_ic_daily": 0.156722,
+      "top_bottom_decile_return10d": 0.069659,
+      "wfl_subsample": 2.318174,
+      "wfl_full_val": 2.321958,
+      "wfl_full_val_above_red_line": false,
+      "delta_ic_vs_seg0": 0.010424
+    },
+    {
+      "key": "seg9",
+      "label": "pilot_seg009",
+      "segment": 9,
+      "model_sha256": "f9d3da03f8e5b55824bff28e31e00cc039ee021126d71891bda7b5daeb76e3c8",
+      "use_beta_v21_auxiliary": false,
+      "lr_end": 2.3180194846605362e-06,
+      "return10d_rank_ic_daily": 0.325365,
+      "return10d_rank_ic_se": 0.026552,
+      "return10d_rank_icir": 2.5013,
+      "return10d_rank_ic_pooled": 0.472801,
+      "return10d_rank_ic_pos_rate": 1.0,
+      "utility_rank_ic_daily": 0.154594,
+      "top_bottom_decile_return10d": 0.072113,
+      "wfl_subsample": 2.318186,
+      "wfl_full_val": 2.3215,
+      "wfl_full_val_above_red_line": false,
+      "delta_ic_vs_seg0": 0.0113
+    },
+    {
+      "key": "seg10",
+      "label": "pilot_best_seg010",
+      "segment": 10,
+      "model_sha256": "b4b68a1967038ccfe90d428f9a06b12f4a955b46f34b676ec92d37465a598c91",
+      "use_beta_v21_auxiliary": false,
+      "lr_end": 1.6029e-06,
+      "return10d_rank_ic_daily": 0.319566,
+      "return10d_rank_ic_se": 0.025563,
+      "return10d_rank_icir": 2.5518,
+      "return10d_rank_ic_pooled": 0.467668,
+      "return10d_rank_ic_pos_rate": 1.0,
+      "utility_rank_ic_daily": 0.149513,
+      "top_bottom_decile_return10d": 0.068696,
+      "wfl_subsample": 2.314422,
+      "wfl_full_val": 2.317846,
+      "wfl_full_val_above_red_line": false,
+      "delta_ic_vs_seg0": 0.0055
+    },
+    {
+      "key": "seg12",
+      "label": "pilot_seg012",
+      "segment": 12,
+      "model_sha256": "b769956d81ce1de11c21c3a70bbccef72af5dff6980854ce4d19204574d59234",
+      "use_beta_v21_auxiliary": false,
+      "lr_end": 1e-06,
+      "return10d_rank_ic_daily": 0.323445,
+      "return10d_rank_ic_se": 0.025914,
+      "return10d_rank_icir": 2.5478,
+      "return10d_rank_ic_pooled": 0.468711,
+      "return10d_rank_ic_pos_rate": 1.0,
+      "utility_rank_ic_daily": 0.157276,
+      "top_bottom_decile_return10d": 0.071494,
+      "wfl_subsample": 2.31631,
+      "wfl_full_val": 2.319808,
+      "wfl_full_val_above_red_line": false,
+      "delta_ic_vs_seg0": 0.009379
+    }
+  ],
+  "reference_step1_same_contract": [
+    {
+      "label": "seg155_forecast_best",
+      "return10d_rank_ic_daily": 0.295374,
+      "return10d_rank_ic_se": 0.025138,
+      "wfl_subsample": 2.30912,
+      "wfl_full_val": 2.312368,
+      "model_sha256": "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c"
+    },
+    {
+      "label": "seg8_rank_unfreeze_best",
+      "return10d_rank_ic_daily": 0.298942,
+      "return10d_rank_ic_se": 0.02603,
+      "wfl_subsample": 2.322107,
+      "wfl_full_val": 2.325495,
+      "model_sha256": "8a29277a856e84d9300188c1325f13c9fa88d96d38cafc1868f975dbda0a9892"
+    },
+    {
+      "label": "beta_v21_release_best475",
+      "return10d_rank_ic_daily": 0.31447,
+      "return10d_rank_ic_se": 0.025231,
+      "wfl_subsample": 2.320456,
+      "wfl_full_val": null,
+      "model_sha256": "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97"
+    }
+  ],
+  "full_val_wfl_by_segment": {
+    "1": 2.32169742,
+    "2": 2.32014628,
+    "3": 2.32431641,
+    "4": 2.32180614,
+    "5": 2.32165023,
+    "6": 2.32195794,
+    "7": 2.32509983,
+    "8": 2.31788107,
+    "9": 2.32149964,
+    "10": 2.31784599,
+    "11": 2.32094722,
+    "12": 2.31980831
+  },
+  "wfl_red_line_full_val": 2.32736787,
+  "wfl_red_line_crossed": false,
+  "wfl_max_segment": {
+    "segment": 7,
+    "wfl": 2.32509983
+  },
+  "best_by_ic": "pilot_seg009",
+  "best_by_wfl": "pilot_best_seg010",
+  "wfl_best_is_ic_best": false,
+  "seg0_reproducibility": {
+    "this_kernel": 0.314066,
+    "step1": 0.31447,
+    "paired": {
+      "a": "seg0",
+      "b": "beta_v21_release_best475",
+      "n": 24,
+      "mean_diff": -0.000404,
+      "se_diff": 0.000453,
+      "t": -0.892,
+      "p_two_sided": 0.3817,
+      "wins": 9,
+      "ci95": [
+        -0.001341,
+        0.000533
+      ],
+      "sign_test_p": 0.3075,
+      "wilcoxon_p": 0.4389
+    },
+    "note": "same checkpoint/decode/seed re-run differs by -0.0004 (fp16/GPU nondeterminism); noise floor for paired diffs is far below the ~0.01 pilot gains"
+  },
+  "paired_tests": {
+    "seg3_vs_seg0": {
+      "a": "seg3",
+      "b": "seg0",
+      "n": 24,
+      "mean_diff": -3.6e-05,
+      "se_diff": 0.004416,
+      "t": -0.008,
+      "p_two_sided": 0.9936,
+      "wins": 10,
+      "ci95": [
+        -0.009171,
+        0.009099
+      ],
+      "sign_test_p": 0.5413,
+      "wilcoxon_p": 0.8115
+    },
+    "seg6_vs_seg0": {
+      "a": "seg6",
+      "b": "seg0",
+      "n": 24,
+      "mean_diff": 0.010424,
+      "se_diff": 0.005146,
+      "t": 2.026,
+      "p_two_sided": 0.0545,
+      "wins": 16,
+      "ci95": [
+        -0.000221,
+        0.021068
+      ],
+      "sign_test_p": 0.1516,
+      "wilcoxon_p": 0.0491
+    },
+    "seg9_vs_seg0": {
+      "a": "seg9",
+      "b": "seg0",
+      "n": 24,
+      "mean_diff": 0.0113,
+      "se_diff": 0.006268,
+      "t": 1.803,
+      "p_two_sided": 0.0845,
+      "wins": 15,
+      "ci95": [
+        -0.001666,
+        0.024265
+      ],
+      "sign_test_p": 0.3075,
+      "wilcoxon_p": 0.0951
+    },
+    "seg10_vs_seg0": {
+      "a": "seg10",
+      "b": "seg0",
+      "n": 24,
+      "mean_diff": 0.0055,
+      "se_diff": 0.005043,
+      "t": 1.091,
+      "p_two_sided": 0.2867,
+      "wins": 13,
+      "ci95": [
+        -0.004932,
+        0.015933
+      ],
+      "sign_test_p": 0.8388,
+      "wilcoxon_p": 0.3748
+    },
+    "seg12_vs_seg0": {
+      "a": "seg12",
+      "b": "seg0",
+      "n": 24,
+      "mean_diff": 0.009379,
+      "se_diff": 0.005659,
+      "t": 1.657,
+      "p_two_sided": 0.111,
+      "wins": 14,
+      "ci95": [
+        -0.002328,
+        0.021087
+      ],
+      "sign_test_p": 0.5413,
+      "wilcoxon_p": 0.114
+    },
+    "seg0_vs_old_seg155_forecast_best": {
+      "a": "seg0",
+      "b": "seg155_forecast_best",
+      "n": 24,
+      "mean_diff": 0.018692,
+      "se_diff": 0.005205,
+      "t": 3.591,
+      "p_two_sided": 0.0015,
+      "wins": 19,
+      "ci95": [
+        0.007924,
+        0.029459
+      ],
+      "sign_test_p": 0.0066,
+      "wilcoxon_p": 0.0018
+    },
+    "seg3_vs_old_seg155_forecast_best": {
+      "a": "seg3",
+      "b": "seg155_forecast_best",
+      "n": 24,
+      "mean_diff": 0.018656,
+      "se_diff": 0.005138,
+      "t": 3.631,
+      "p_two_sided": 0.0014,
+      "wins": 20,
+      "ci95": [
+        0.008027,
+        0.029284
+      ],
+      "sign_test_p": 0.0015,
+      "wilcoxon_p": 0.002
+    },
+    "seg6_vs_old_seg155_forecast_best": {
+      "a": "seg6",
+      "b": "seg155_forecast_best",
+      "n": 24,
+      "mean_diff": 0.029115,
+      "se_diff": 0.005899,
+      "t": 4.936,
+      "p_two_sided": 0.0001,
+      "wins": 20,
+      "ci95": [
+        0.016912,
+        0.041318
+      ],
+      "sign_test_p": 0.0015,
+      "wilcoxon_p": 0.0
+    },
+    "seg9_vs_old_seg155_forecast_best": {
+      "a": "seg9",
+      "b": "seg155_forecast_best",
+      "n": 24,
+      "mean_diff": 0.029991,
+      "se_diff": 0.006352,
+      "t": 4.721,
+      "p_two_sided": 0.0001,
+      "wins": 21,
+      "ci95": [
+        0.01685,
+        0.043132
+      ],
+      "sign_test_p": 0.0003,
+      "wilcoxon_p": 0.0
+    },
+    "seg10_vs_old_seg155_forecast_best": {
+      "a": "seg10",
+      "b": "seg155_forecast_best",
+      "n": 24,
+      "mean_diff": 0.024192,
+      "se_diff": 0.005974,
+      "t": 4.05,
+      "p_two_sided": 0.0005,
+      "wins": 20,
+      "ci95": [
+        0.011834,
+        0.03655
+      ],
+      "sign_test_p": 0.0015,
+      "wilcoxon_p": 0.0002
+    },
+    "seg12_vs_old_seg155_forecast_best": {
+      "a": "seg12",
+      "b": "seg155_forecast_best",
+      "n": 24,
+      "mean_diff": 0.028071,
+      "se_diff": 0.005206,
+      "t": 5.392,
+      "p_two_sided": 0.0,
+      "wins": 22,
+      "ci95": [
+        0.017302,
+        0.03884
+      ],
+      "sign_test_p": 0.0,
+      "wilcoxon_p": 0.0
+    },
+    "seg9_vs_seg10": {
+      "a": "seg9",
+      "b": "seg10",
+      "n": 24,
+      "mean_diff": 0.005799,
+      "se_diff": 0.002297,
+      "t": 2.525,
+      "p_two_sided": 0.0189,
+      "wins": 17,
+      "ci95": [
+        0.001049,
+        0.01055
+      ],
+      "sign_test_p": 0.0639,
+      "wilcoxon_p": 0.0211
+    },
+    "seg9_vs_seg6": {
+      "a": "seg9",
+      "b": "seg6",
+      "n": 24,
+      "mean_diff": 0.000876,
+      "se_diff": 0.003015,
+      "t": 0.291,
+      "p_two_sided": 0.774,
+      "wins": 13,
+      "ci95": [
+        -0.005362,
+        0.007114
+      ],
+      "sign_test_p": 0.8388,
+      "wilcoxon_p": 0.6634
+    },
+    "seg9_vs_seg12": {
+      "a": "seg9",
+      "b": "seg12",
+      "n": 24,
+      "mean_diff": 0.00192,
+      "se_diff": 0.002496,
+      "t": 0.769,
+      "p_two_sided": 0.4495,
+      "wins": 10,
+      "ci95": [
+        -0.003243,
+        0.007084
+      ],
+      "sign_test_p": 0.5413,
+      "wilcoxon_p": 0.9441
+    },
+    "seg0_vs_old_beta_v21_release_best475": {
+      "a": "seg0",
+      "b": "beta_v21_release_best475",
+      "n": 24,
+      "mean_diff": -0.000404,
+      "se_diff": 0.000453,
+      "t": -0.892,
+      "p_two_sided": 0.3817,
+      "wins": 9,
+      "ci95": [
+        -0.001341,
+        0.000533
+      ],
+      "sign_test_p": 0.3075,
+      "wilcoxon_p": 0.4389
+    }
+  },
+  "paired_tests_note": "paired by date over 24 val dates; t with 23 df; adjacent dates ~10.5 trading days apart so 10d label windows nearly abut (small overlap) and regimes autocorrelate -> p values optimistic; Seg9 is the max of 5 pilot snapshots (selection/winner's-curse bias)",
+  "per_date_return10d_rank_ic": [
+    {
+      "asof_date": "2025-07-03",
+      "samples": 477,
+      "seg0": 0.288515,
+      "seg3": 0.268177,
+      "seg6": 0.290673,
+      "seg9": 0.249697,
+      "seg10": 0.256303,
+      "seg12": 0.260061,
+      "seg155": 0.245908,
+      "seg9_minus_seg0": -0.038818
+    },
+    {
+      "asof_date": "2025-07-17",
+      "samples": 510,
+      "seg0": 0.186965,
+      "seg3": 0.203106,
+      "seg6": 0.215748,
+      "seg9": 0.249109,
+      "seg10": 0.231677,
+      "seg12": 0.222019,
+      "seg155": 0.175913,
+      "seg9_minus_seg0": 0.062144
+    },
+    {
+      "asof_date": "2025-08-01",
+      "samples": 511,
+      "seg0": 0.253276,
+      "seg3": 0.249145,
+      "seg6": 0.279883,
+      "seg9": 0.280854,
+      "seg10": 0.267859,
+      "seg12": 0.284397,
+      "seg155": 0.208327,
+      "seg9_minus_seg0": 0.027577
+    },
+    {
+      "asof_date": "2025-08-15",
+      "samples": 510,
+      "seg0": 0.381164,
+      "seg3": 0.362358,
+      "seg6": 0.353902,
+      "seg9": 0.360097,
+      "seg10": 0.359505,
+      "seg12": 0.360445,
+      "seg155": 0.360069,
+      "seg9_minus_seg0": -0.021067
+    },
+    {
+      "asof_date": "2025-09-01",
+      "samples": 511,
+      "seg0": 0.296892,
+      "seg3": 0.328671,
+      "seg6": 0.308726,
+      "seg9": 0.326152,
+      "seg10": 0.324723,
+      "seg12": 0.325581,
+      "seg155": 0.309497,
+      "seg9_minus_seg0": 0.02926
+    },
+    {
+      "asof_date": "2025-09-15",
+      "samples": 512,
+      "seg0": 0.264496,
+      "seg3": 0.305433,
+      "seg6": 0.30634,
+      "seg9": 0.318551,
+      "seg10": 0.297644,
+      "seg12": 0.306208,
+      "seg155": 0.25328,
+      "seg9_minus_seg0": 0.054055
+    },
+    {
+      "asof_date": "2025-09-30",
+      "samples": 512,
+      "seg0": 0.598311,
+      "seg3": 0.588834,
+      "seg6": 0.582498,
+      "seg9": 0.597338,
+      "seg10": 0.589386,
+      "seg12": 0.586406,
+      "seg155": 0.572159,
+      "seg9_minus_seg0": -0.000973
+    },
+    {
+      "asof_date": "2025-10-22",
+      "samples": 511,
+      "seg0": 0.191484,
+      "seg3": 0.224686,
+      "seg6": 0.22421,
+      "seg9": 0.225483,
+      "seg10": 0.214008,
+      "seg12": 0.215267,
+      "seg155": 0.198196,
+      "seg9_minus_seg0": 0.033998
+    },
+    {
+      "asof_date": "2025-11-06",
+      "samples": 512,
+      "seg0": 0.348993,
+      "seg3": 0.349849,
+      "seg6": 0.351555,
+      "seg9": 0.355259,
+      "seg10": 0.351494,
+      "seg12": 0.358951,
+      "seg155": 0.35138,
+      "seg9_minus_seg0": 0.006266
+    },
+    {
+      "asof_date": "2025-11-20",
+      "samples": 512,
+      "seg0": 0.193609,
+      "seg3": 0.213225,
+      "seg6": 0.23291,
+      "seg9": 0.231821,
+      "seg10": 0.228492,
+      "seg12": 0.222767,
+      "seg155": 0.190199,
+      "seg9_minus_seg0": 0.038213
+    },
+    {
+      "asof_date": "2025-12-05",
+      "samples": 511,
+      "seg0": 0.175589,
+      "seg3": 0.175298,
+      "seg6": 0.175496,
+      "seg9": 0.162722,
+      "seg10": 0.163643,
+      "seg12": 0.164047,
+      "seg155": 0.169623,
+      "seg9_minus_seg0": -0.012867
+    },
+    {
+      "asof_date": "2025-12-19",
+      "samples": 513,
+      "seg0": 0.416963,
+      "seg3": 0.422593,
+      "seg6": 0.459647,
+      "seg9": 0.467967,
+      "seg10": 0.460153,
+      "seg12": 0.474689,
+      "seg155": 0.412818,
+      "seg9_minus_seg0": 0.051004
+    },
+    {
+      "asof_date": "2026-01-07",
+      "samples": 512,
+      "seg0": 0.246323,
+      "seg3": 0.272588,
+      "seg6": 0.272415,
+      "seg9": 0.262915,
+      "seg10": 0.243708,
+      "seg12": 0.242907,
+      "seg155": 0.214963,
+      "seg9_minus_seg0": 0.016593
+    },
+    {
+      "asof_date": "2026-01-21",
+      "samples": 514,
+      "seg0": 0.254939,
+      "seg3": 0.252864,
+      "seg6": 0.256428,
+      "seg9": 0.253534,
+      "seg10": 0.25521,
+      "seg12": 0.253661,
+      "seg155": 0.223835,
+      "seg9_minus_seg0": -0.001405
+    },
+    {
+      "asof_date": "2026-02-05",
+      "samples": 511,
+      "seg0": 0.405762,
+      "seg3": 0.40348,
+      "seg6": 0.436108,
+      "seg9": 0.428098,
+      "seg10": 0.403291,
+      "seg12": 0.438043,
+      "seg155": 0.445385,
+      "seg9_minus_seg0": 0.022336
+    },
+    {
+      "asof_date": "2026-02-27",
+      "samples": 514,
+      "seg0": 0.38691,
+      "seg3": 0.405459,
+      "seg6": 0.402109,
+      "seg9": 0.40003,
+      "seg10": 0.388825,
+      "seg12": 0.408684,
+      "seg155": 0.38394,
+      "seg9_minus_seg0": 0.01312
+    },
+    {
+      "asof_date": "2026-03-16",
+      "samples": 514,
+      "seg0": 0.188449,
+      "seg3": 0.166876,
+      "seg6": 0.173962,
+      "seg9": 0.156837,
+      "seg10": 0.168411,
+      "seg12": 0.155664,
+      "seg155": 0.149341,
+      "seg9_minus_seg0": -0.031613
+    },
+    {
+      "asof_date": "2026-03-30",
+      "samples": 513,
+      "seg0": 0.33977,
+      "seg3": 0.330806,
+      "seg6": 0.374791,
+      "seg9": 0.376034,
+      "seg10": 0.373527,
+      "seg12": 0.381739,
+      "seg155": 0.347517,
+      "seg9_minus_seg0": 0.036264
+    },
+    {
+      "asof_date": "2026-04-15",
+      "samples": 514,
+      "seg0": 0.277507,
+      "seg3": 0.25399,
+      "seg6": 0.25219,
+      "seg9": 0.2479,
+      "seg10": 0.258649,
+      "seg12": 0.262251,
+      "seg155": 0.239649,
+      "seg9_minus_seg0": -0.029607
+    },
+    {
+      "asof_date": "2026-04-29",
+      "samples": 508,
+      "seg0": 0.428383,
+      "seg3": 0.44135,
+      "seg6": 0.419086,
+      "seg9": 0.43825,
+      "seg10": 0.421923,
+      "seg12": 0.433741,
+      "seg155": 0.411314,
+      "seg9_minus_seg0": 0.009867
+    },
+    {
+      "asof_date": "2026-05-19",
+      "samples": 515,
+      "seg0": 0.20729,
+      "seg3": 0.165067,
+      "seg6": 0.193923,
+      "seg9": 0.199834,
+      "seg10": 0.189367,
+      "seg12": 0.21264,
+      "seg155": 0.199904,
+      "seg9_minus_seg0": -0.007456
+    },
+    {
+      "asof_date": "2026-06-02",
+      "samples": 514,
+      "seg0": 0.297891,
+      "seg3": 0.271288,
+      "seg6": 0.342979,
+      "seg9": 0.331357,
+      "seg10": 0.339111,
+      "seg12": 0.336603,
+      "seg155": 0.246427,
+      "seg9_minus_seg0": 0.033466
+    },
+    {
+      "asof_date": "2026-06-17",
+      "samples": 512,
+      "seg0": 0.255417,
+      "seg3": 0.253779,
+      "seg6": 0.212396,
+      "seg9": 0.204737,
+      "seg10": 0.219724,
+      "seg12": 0.20531,
+      "seg155": 0.193853,
+      "seg9_minus_seg0": -0.05068
+    },
+    {
+      "asof_date": "2026-07-02",
+      "samples": 513,
+      "seg0": 0.652677,
+      "seg3": 0.627787,
+      "seg6": 0.669766,
+      "seg9": 0.684191,
+      "seg10": 0.66295,
+      "seg12": 0.650595,
+      "seg155": 0.585476,
+      "seg9_minus_seg0": 0.031514
+    }
+  ],
+  "pre_registered_decision_rule_check": {
+    "rule": "rise = later snapshots >= Seg0 + 1 SE (SE ~0.025, unpaired) and ~monotone; flat = all within Seg0 +/- 1 SE; fall = decline",
+    "result": "flat by the literal rule: best gain +0.0113 = 0.45 unpaired SE; trajectory Seg3 flat -> Seg6 up -> Seg9/12 plateau",
+    "paired_view": "paired gain ~+0.01 (t 1.7-2.0, 14-16/24 days) across Seg6/9/12: small, consistent, not conclusive",
+    "implication": "annealing is not a meaningful lever for the C2 gap (sealed OOS C2-Seg155 = 0.060; val gain +0.01). OOS eval of Seg9 is justified only as a one-shot final evaluation of the best frozen candidate (Best@475 itself has never been OOS-tested), not as a continuation of the annealing hypothesis or a tuning loop."
+  },
+  "interpretation": [
+    "Annealing from the release gives a small, consistent but not conclusive val gen IC gain (~+0.01, paired t 1.7-2.0) over Seg6-Seg12; Seg3 shows no gain.",
+    "WFL-best (Seg10, 2.3178) is again not IC-best (Seg9 0.3254 vs Seg10 0.3196; Seg9-Seg10 +0.0058, t 2.53).",
+    "All pilot snapshots clearly beat Seg155 on val gen IC (Seg9 +0.030 t 4.72 21/24; Seg12 +0.028 t 5.39 22/24); most of that is the parent choice (Seg0-Seg155 +0.019 t 3.59).",
+    "Full-val WFL never crossed the C1 red line 2.32737 (max 2.3251 at Seg7)."
+  ],
+  "caveats": [
+    "Validation gen IC has been optimistic vs sealed OOS (Seg155: val 0.295 vs OOS 0.117 prod / 0.124 rank); OOS of Seg9 and of Best@475 unknown.",
+    "24-date subsample, single decode seed 20260906, N5; seed variance not measured.",
+    "Seg9 chosen as max over 5 pilot snapshots -> expected val gain overstated; the Seg6/9/12 cluster (~+0.009..+0.011) is a fairer estimate.",
+    "Paired t ignores small label-window overlap and regime autocorrelation.",
+    "Seg9-Seg0 gain is concentrated in 2025H2 (+0.019, 8/12); in 2026H1, closest to the sealed OOS window, it is only +0.004 (7/12)."
+  ],
+  "persisted_weights": {
+    "dataset": "luckfu/kronos-beta-v21-c1-cosine-pilot-best475-seg9",
+    "status": "ready",
+    "private": true,
+    "dataset_id": 12404852,
+    "layout": "best_metric.json + README.md + checkpoints/best_model/{model.safetensors, config.json, best_metric.json, snapshot_metric.json, README.md} (mirrors luckfu/kronos-beta-v21-c1-seg155-forecast-best)",
+    "model_sha256": "f9d3da03f8e5b55824bff28e31e00cc039ee021126d71891bda7b5daeb76e3c8",
+    "size_bytes": 409771056,
+    "verified": "re-downloaded from Kaggle, sha256 matches"
+  },
+  "recommended_next_step": {
+    "action": "one-shot sealed 18d OOS generative-return eval of pilot_seg009 alongside seg000 (Best@475) when GPU quota resets; final evaluation, NOT a tuning loop",
+    "kernel": "luckfu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9",
+    "status": "prepared, NOT pushed (Kaggle GPU quota exhausted)",
+    "staging": "finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel/",
+    "build": "python3 finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py --variant pilot_seg9",
+    "push": "kaggle kernels push -p finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel",
+    "output_dir": "/kaggle/working/beta_v2_1_c1_gen_return_oos_pilot_seg9/",
+    "swanlab": "https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_gen_return_oos_pilot_seg9",
+    "decode": "prod T0.65 / top_p 0.8 / N5 / seed 20260906",
+    "package": "kronos_beta_v2_time_oos_through_20260903 (18 dates / 92,751)",
+    "order": [
+      "pilot_seg009",
+      "seg000_beta_v21_release_best475"
+    ],
+    "runtime_estimate": {
+      "per_date_shard_sec_t4": "973-1,124 (Baseline 2 prod: kernel A 1,063-1,124 mean 1,092; prod-only kernel 973-1,036 mean 1,005)",
+      "shards": 36,
+      "per_gpu_shards": 18,
+      "setup_sec": "~150-300",
+      "seg9_done_h": "~2.5-2.9",
+      "total_h": "~5.0-5.7",
+      "limit_h": 12,
+      "worker_stop_h": 11,
+      "gpu_quota_h": "~5-6"
+    },
+    "code_commit": "98f3d0b"
+  },
+  "paired_tests_extra": {
+    "cluster_mean_seg6_9_12_minus_seg0": {
+      "n": 24,
+      "mean_diff": 0.010367,
+      "se_diff": 0.005479,
+      "t": 1.892,
+      "wins": 15,
+      "note": "average of the three late snapshots vs Seg0; less exposed to max-selection than Seg9 alone"
+    },
+    "seg9_minus_seg0_by_half": {
+      "2025H2_first12": {
+        "mean_diff": 0.019066,
+        "wins": 8
+      },
+      "2026H1_last12": {
+        "mean_diff": 0.003533,
+        "wins": 7
+      },
+      "note": "gain concentrated in the earlier half; the half closest to the sealed OOS window shows ~+0.004 (7/12)"
+    }
+  }
+}
