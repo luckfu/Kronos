@@ -52,7 +52,7 @@ from pathlib import Path
 
 
 # Rewritten by build_kaggle_beta_v21_c1_forecast_cosine_pilot_kernel.py --parent.
-PILOT_PARENT = "seg155"
+PILOT_PARENT = "best475"
 
 STEP1_KERNEL = "luckfu/kronos-beta-v21-c1-val-gen-ic"
 MODEL_REPO = "luckfu/Kronos-A-Share-Beta-V2-1"

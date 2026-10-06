@@ -1,35 +1,37 @@
 """Beta v2.1 C1 forecast-only cosine-annealing pilot (dual T4, 12 segments).
 
-Question: is the C1 vs small-C2 OOS gap (Seg155 gen-return daily IC 0.117 vs
-C2 0.177/0.180) explained by C2's cosine LR annealing? C2 = small stage2
-cosine refinement: uniform_cosine, warmup 0, 1e-5 -> 1e-6, all params, single LR.
+Question: does C2-style cosine LR annealing raise the *validation generative
+return10d IC* of a C1 checkpoint? C2 = small stage2 cosine refinement:
+uniform_cosine, warmup 0, 1e-5 -> 1e-6, all params, single LR.
 
-Recipe (C2-style, on C1 Seg155):
-- Parent: Seg155 forecast-best (global Seg155 = wc local segment 26) from
-  private dataset luckfu/kronos-beta-v21-c1-seg155-forecast-best,
-  checkpoints/best_model, sha 8b11a759..., forecast 2.312367872672933.
-  Weights only; fresh AdamW; no last_state.
-- Forecast-only: KRONOS_USE_BETA_V21_AUXILIARY=0 (ranking off, aux off),
-  KRONOS_SAME_DAY_RANKING_BATCHES=0 (shuffled coverage order; no within-segment
-  signal_date sort).
-- All parameters trainable (TRAINABLE_TRANSFORMER_LAYERS=-1, heads-only off),
-  single LR family (SPLIT_TRUNK_HEAD_LR=0).
-- uniform_cosine 1e-5 -> 1e-6 over exactly 12 segments (EPOCHS=12,
-  REQUIRE_FULL_COVERAGE=0, warmup ratio 0, start == peak == 1e-5).
-- Coverage seed 20261002, coverage offset 0, 20000 samples/segment,
-  batch 32 x 2 GPUs (eff 64), AMP fp16, full val every segment.
-- Best by forecast (weighted forecast loss) with Seg155 2.31236787 kept as the
-  threshold; weight snapshots every 3 segments (Seg3/6/9/12) to
-  outputs/.../snapshots/segNNN (KRONOS_SNAPSHOT_EVERY_SEGMENTS=3).
-- After training, in-kernel: score each snapshot (and best_model if its SHA
-  differs from every snapshot and from the parent) with the Step-1 val
-  generative-IC contract (finetune/val_gen_ic_driver.py; same contract as
-  luckfu/kronos-beta-v21-c1-val-gen-ic). Each checkpoint is scored and saved
-  as soon as its 24 date shards land.
+Parent (selectable, ``PILOT_PARENT`` is rewritten by the builder):
+- ``best475`` (default, slug luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475):
+  Beta v2.1 release Best@475 (ModelScope luckfu/Kronos-A-Share-Beta-V2-1, root
+  model.safetensors sha e1bd5584...), located exactly like the val-gen-ic kernel
+  (``beta_v21_release_best475``). It ranked first on Step-1 val gen IC (0.3145 vs
+  Seg155 0.2954). The release carries aux heads (return_head/barrier_head); this
+  pilot is forecast-only, so the model is built with use_beta_v21_auxiliary=False
+  and only the trunk + forecast head are loaded (the 4 aux tensors are dropped;
+  any other missing/unexpected key aborts before training).
+- ``seg155`` (slug luckfu/kronos-beta-v21-c1-forecast-cosine-pilot): Seg155
+  forecast-best from private dataset luckfu/kronos-beta-v21-c1-seg155-forecast-best.
 
-Decision rule (docs/beta_v21_c1_forecast_cosine_pilot_cn.md): if val gen IC
-rises with annealing vs Seg155 -> OOS-test the best snapshot against 0.117 /
-0.180; if flat -> stop, the gap is not from annealing.
+Recipe (unchanged across parents):
+- Weights only; fresh AdamW; no parent last_state.
+- Forecast-only: KRONOS_USE_BETA_V21_AUXILIARY=0, KRONOS_SAME_DAY_RANKING_BATCHES=0
+  (shuffled coverage order; no within-segment signal_date sort).
+- All parameters trainable, single LR family.
+- uniform_cosine 1e-5 -> 1e-6 over exactly 12 segments, warmup 0.
+- Coverage seed 20261002, offset 0, 20000 samples/segment, batch 32 x 2 GPUs.
+- Training runs in 4 resumable chunks of 3 segments (KRONOS_MAX_SEGMENTS_PER_RUN=3 +
+  last_state resume; the global cosine schedule is one 12-segment plan). Between
+  chunks the GPUs are free and the fresh snapshot is scored immediately with the
+  Step-1 val generative-IC contract (finetune/val_gen_ic_driver.py; same contract
+  as luckfu/kronos-beta-v21-c1-val-gen-ic). The parent itself (Seg0) is scored
+  with the same contract right after the first chunk, before Seg3.
+- Per-checkpoint JSON + cumulative comparison.json are written as soon as each
+  checkpoint's 24 date shards land; pilot_selection.json is rewritten after each.
+- Best = highest val gen return10d daily IC (WFL logged alongside only).
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tarfile
@@ -48,45 +51,103 @@ import time
 from pathlib import Path
 
 
-KERNEL_ID = "luckfu/kronos-beta-v21-c1-forecast-cosine-pilot"
-OUTPUT_NAME = "beta_v2_1_c1_forecast_cosine_pilot"
-KERNEL_VERSION = "pilot_v1"
-PARENT_DATASET = "luckfu/kronos-beta-v21-c1-seg155-forecast-best"
-PARENT_LABEL = "seg155_forecast_best"
-EXPECTED_PARENT_SEGMENT = 26  # wc local segment; global chart Seg155
-EXPECTED_PARENT_FORECAST = 2.312367872672933
-EXPECTED_PARENT_MODEL_SHA256 = (
-    "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c"
-)
-# Step-1 val gen-IC result for the parent is the trend anchor (same contract).
+# Rewritten by build_kaggle_beta_v21_c1_forecast_cosine_pilot_kernel.py --parent.
+PILOT_PARENT = "best475"
+
 STEP1_KERNEL = "luckfu/kronos-beta-v21-c1-val-gen-ic"
+MODEL_REPO = "luckfu/Kronos-A-Share-Beta-V2-1"
+RELEASE_BEST475_SHA256 = (
+    "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97"
+)
+SEG155_SHA256 = "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c"
+SEG155_FORECAST = 2.312367872672933
+# C1 line full-val WFL red line (Seg155 floor 2.31236787 + 0.015), log only.
+C1_WFL_RED_LINE_BASE = "2.31236787"
+C1_WFL_RED_LINE_MARGIN = "0.015"
+AUX_KEY_PREFIXES = ("return_head.", "barrier_head.")
+
+PARENTS = {
+    "best475": {
+        "kernel_id": "luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475",
+        "title": "Kronos Beta V21 C1 Forecast Cosine Pilot Best475",
+        "output_name": "beta_v2_1_c1_forecast_cosine_pilot_best475",
+        "runtime_dir": "kronos_beta_v21_c1_forecast_cosine_pilot_best475",
+        "kernel_version": "pilot_best475_v1",
+        "label": "beta_v21_release_best475",
+        "source": "modelscope",
+        "dataset": None,
+        "sha256": RELEASE_BEST475_SHA256,
+        "segment_local": None,
+        "segment_global": "Best@475 (release)",
+        "full_val_wfl": None,  # never logged on the C1 full-val contract
+        "has_aux_heads": True,
+        "keep_existing_best": "0",
+        # Drift alert vs the C1 red line (Best@475 full-val WFL is unknown).
+        "drift_alert_base": "2.32736787",
+        "step1": {"return10d_rank_ic_daily": 0.31447, "return10d_rank_ic_se": 0.025231,
+                  "weighted_forecast_loss_subsample": 2.320456},
+        "dataset_sources": ["luckfu/a-share-120d-temporal-symbol-holdout"],
+    },
+    "seg155": {
+        "kernel_id": "luckfu/kronos-beta-v21-c1-forecast-cosine-pilot",
+        "title": "Kronos Beta V21 C1 Forecast Cosine Pilot",
+        "output_name": "beta_v2_1_c1_forecast_cosine_pilot",
+        "runtime_dir": "kronos_beta_v21_c1_forecast_cosine_pilot",
+        "kernel_version": "pilot_seg155_v2",
+        "label": "seg155_forecast_best",
+        "source": "dataset",
+        "dataset": "luckfu/kronos-beta-v21-c1-seg155-forecast-best",
+        "sha256": SEG155_SHA256,
+        "segment_local": 26,
+        "segment_global": 155,
+        "full_val_wfl": SEG155_FORECAST,
+        "has_aux_heads": False,
+        "keep_existing_best": "1",
+        "drift_alert_base": "2.31236787",
+        "step1": {"return10d_rank_ic_daily": 0.295374, "return10d_rank_ic_se": 0.025138,
+                  "weighted_forecast_loss_subsample": 2.30912},
+        "dataset_sources": [
+            "luckfu/a-share-120d-temporal-symbol-holdout",
+            "luckfu/kronos-beta-v21-c1-seg155-forecast-best",
+        ],
+    },
+}
+PROFILE = PARENTS[PILOT_PARENT]
+KERNEL_ID = PROFILE["kernel_id"]
+OUTPUT_NAME = PROFILE["output_name"]
+KERNEL_VERSION = PROFILE["kernel_version"]
+PARENT_LABEL = PROFILE["label"]
+PARENT_DATASET = PROFILE["dataset"]
+EXPECTED_PARENT_MODEL_SHA256 = PROFILE["sha256"]
+EXPECTED_PARENT_SEGMENT = PROFILE["segment_local"]
+EXPECTED_PARENT_FORECAST = SEG155_FORECAST  # seg155 best_metric contract only
+SEG0_LABEL = f"seg000_{PARENT_LABEL}"
+
 SEGMENT_OFFSET = 0
 PILOT_SEGMENTS = 12
 SNAPSHOT_EVERY = 3
+CHUNK_SEGMENTS = SNAPSHOT_EVERY  # train 3, score, resume
 PEAK_LR = "1e-5"
 MIN_LR = "1e-6"
 WARMUP_RATIO = "0"
 COVERAGE_SEED = "20261002"
-FORECAST_MONITOR_BASE = "2.31236787"
-FORECAST_MONITOR_MARGIN = "0.015"
-FORECAST_DRIFT_ALERT_BASE = "2.31236787"
+FORECAST_MONITOR_BASE = C1_WFL_RED_LINE_BASE
+FORECAST_MONITOR_MARGIN = C1_WFL_RED_LINE_MARGIN
+FORECAST_DRIFT_ALERT_BASE = PROFILE["drift_alert_base"]
 FORECAST_DRIFT_ALERT_MARGIN = "0.005"
 FORECAST_DRIFT_ALERT_EARLY_SEGMENTS = "3"
-# Training soft-stop leaves >= 3h for the in-kernel val gen-IC eval under the
-# 12h session cap. Expected training ~2-2.6h; expected eval ~20 min/checkpoint.
-MAX_SEGMENTS_PER_RUN = PILOT_SEGMENTS
-MAX_RUNTIME_SECONDS = 30000
-SESSION_HARD_LIMIT_SECONDS = 41400  # 11.5h: eval workers stop taking shards after this
+# Budget (Kaggle kills at 12h). Expected: setup ~6 min, 12 x ~7.3 min training +
+# 4 x ~2.5 min chunk restarts, 5-6 scoring passes x ~27 min -> ~4-4.5h total.
+TRAIN_DEADLINE_SECONDS = 34200   # 9.5h: no new training chunk after this
+SESSION_HARD_LIMIT_SECONDS = 41400  # 11.5h: eval workers stop taking shards
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = OUTPUT_NAME
+SWANLAB_URL = f"https://swanlab.cn/@{SWANLAB_WORKSPACE}/{SWANLAB_PROJECT}/runs/{SWANLAB_RUN_ID}"
 SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
-MODEL_REPO = "luckfu/Kronos-A-Share-Beta-V2-1"
-EXPECTED_BEST_SHA256 = (
-    "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97"
-)
+EXPECTED_BEST_SHA256 = RELEASE_BEST475_SHA256
 EXPECTED_TOKENIZER_SHA256 = (
     "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
 )
@@ -296,7 +357,23 @@ def find_data_root(input_root: Path) -> Path:
     return root
 
 
+def resolve_release_predictor(snapshot: Path, expected: str) -> Path:
+    """Same lookup as kaggle_beta_v21_c1_val_gen_ic.py (beta_v21_release_best475)."""
+    candidates = [snapshot / "best_model", snapshot]
+    candidates += [path.parent for path in sorted(snapshot.glob("**/model.safetensors"))]
+    for candidate in candidates:
+        weights = candidate / "model.safetensors"
+        if candidate.name == "tokenizer" or not weights.is_file():
+            continue
+        if not (candidate / "config.json").is_file():
+            continue
+        if sha256_file(weights) == expected:
+            return candidate.resolve()
+    raise SystemExit(f"Release predictor with sha {expected} not found under {snapshot}")
+
+
 def download_model(runtime: Path) -> tuple[Path, Path]:
+    """ModelScope release snapshot -> (Best@475 predictor dir, tokenizer dir)."""
     target = runtime / "models" / "Kronos-A-Share-Beta-V2-1"
     phase("download_model_started", repo=MODEL_REPO, target=str(target))
     subprocess.run(
@@ -308,26 +385,13 @@ def download_model(runtime: Path) -> tuple[Path, Path]:
 
     target.mkdir(parents=True, exist_ok=True)
     snapshot_download(MODEL_REPO, local_dir=str(target))
-    predictor = target / "best_model"
+    predictor = resolve_release_predictor(target, EXPECTED_BEST_SHA256)
     tokenizer = target / "tokenizer"
-    if not (predictor / "model.safetensors").is_file():
-        predictor = target
     if not (tokenizer / "config.json").is_file():
-        tokenizer = target / "tokenizer"
-    required = [
-        predictor / "config.json",
-        predictor / "model.safetensors",
-        tokenizer / "config.json",
-        tokenizer / "model.safetensors",
-    ]
-    missing = [str(path) for path in required if not path.is_file()]
-    if missing:
-        raise SystemExit(f"ModelScope snapshot is incomplete: {missing}")
-    actual_sha = sha256_file(predictor / "model.safetensors")
-    if actual_sha != EXPECTED_BEST_SHA256:
-        raise SystemExit(
-            f"Beta v2.1 pretrained SHA mismatch: {actual_sha} != {EXPECTED_BEST_SHA256}"
-        )
+        matches = sorted(target.glob("**/tokenizer/config.json"))
+        if not matches:
+            raise SystemExit(f"Tokenizer not found under {target}")
+        tokenizer = matches[0].parent
     tokenizer_sha = sha256_file(tokenizer / "model.safetensors")
     if tokenizer_sha != EXPECTED_TOKENIZER_SHA256:
         raise SystemExit(
@@ -335,16 +399,90 @@ def download_model(runtime: Path) -> tuple[Path, Path]:
         )
     phase(
         "model_ready",
-        checkpoint="pretrained_release",
+        checkpoint="beta_v21_release_best475",
         predictor=str(predictor),
         tokenizer=str(tokenizer),
-        model_sha256=actual_sha,
+        model_sha256=EXPECTED_BEST_SHA256,
         tokenizer_sha256=tokenizer_sha,
     )
     return predictor, tokenizer
 
 
-def stream_training(repo: Path, env: dict[str, str], output_root: Path, run) -> None:
+def safetensors_keys(path: Path) -> dict[str, list[int]]:
+    """Tensor names -> shapes from the safetensors header (no torch needed)."""
+    with path.open("rb") as handle:
+        size = struct.unpack("<Q", handle.read(8))[0]
+        header = json.loads(handle.read(size))
+    header.pop("__metadata__", None)
+    return {name: list(meta["shape"]) for name, meta in header.items()}
+
+
+def is_aux_key(name: str) -> bool:
+    return name.startswith(AUX_KEY_PREFIXES)
+
+
+def classify_parent_keys(
+    parent: dict[str, list[int]], model: dict[str, list[int]]
+) -> dict[str, list[str]]:
+    """Diff parent checkpoint vs model state_dict; aux-head keys are tolerated both ways."""
+    unexpected = sorted(set(parent) - set(model))
+    missing = sorted(set(model) - set(parent))
+    shared = sorted(set(parent) & set(model))
+    return {
+        "dropped_aux": [key for key in unexpected if is_aux_key(key)],
+        "missing_aux": [key for key in missing if is_aux_key(key)],
+        "bad_unexpected": [key for key in unexpected if not is_aux_key(key)],
+        "bad_missing": [key for key in missing if not is_aux_key(key)],
+        "shape_mismatch": [key for key in shared if list(parent[key]) != list(model[key])],
+        "loaded": shared,
+    }
+
+
+def check_parent_state_dict(repo: Path, parent_dir: Path, env: dict[str, str]) -> dict:
+    """Build the forecast-only predictor exactly as train_predictor does and verify the
+    parent loads into it: only aux-head tensors may be dropped/missing."""
+    sys.path.insert(0, str(repo))
+    from model.kronos import Kronos
+
+    kwargs = json.loads((parent_dir / "config.json").read_text())
+    kwargs.update({
+        "num_sectors": int(env["KRONOS_NUM_SECTORS"]),
+        "num_size_buckets": int(env["KRONOS_NUM_SIZE_BUCKETS"]),
+        "context_layer": int(env["KRONOS_CONTEXT_LAYER"]),
+        "use_size_percentile": env["KRONOS_USE_SIZE_PERCENTILE"] == "1",
+        "size_mlp_hidden_dim": int(env["KRONOS_SIZE_MLP_HIDDEN_DIM"]),
+        "use_beta_v21_auxiliary": env["KRONOS_USE_BETA_V21_AUXILIARY"] == "1",
+    })
+    model = Kronos(**kwargs)
+    model_shapes = {name: list(t.shape) for name, t in model.state_dict().items()}
+    del model
+    parent_shapes = safetensors_keys(parent_dir / "model.safetensors")
+    diff = classify_parent_keys(parent_shapes, model_shapes)
+    report = {
+        "parent_dir": str(parent_dir),
+        "parent_config_aux": bool(json.loads(
+            (parent_dir / "config.json").read_text()).get("use_beta_v21_auxiliary", False)),
+        "model_aux": kwargs["use_beta_v21_auxiliary"],
+        "parent_tensors": len(parent_shapes),
+        "model_tensors": len(model_shapes),
+        "loaded_tensors": len(diff["loaded"]),
+        "dropped_aux": diff["dropped_aux"],
+        "missing_aux": diff["missing_aux"],
+        "bad_unexpected": diff["bad_unexpected"],
+        "bad_missing": diff["bad_missing"],
+        "shape_mismatch": diff["shape_mismatch"],
+    }
+    phase("parent_state_dict_checked", **report)
+    if diff["bad_unexpected"] or diff["bad_missing"] or diff["shape_mismatch"]:
+        raise SystemExit(f"Parent weights do not fit the forecast-only predictor: {report}")
+    if kwargs["use_beta_v21_auxiliary"]:
+        raise SystemExit("forecast-only pilot must build the predictor without aux heads")
+    return report
+
+
+def stream_training(
+    repo: Path, env: dict[str, str], output_root: Path, run, chunk: int = 0
+) -> tuple[int, int]:
     command = [
         sys.executable,
         "-u",
@@ -354,7 +492,10 @@ def stream_training(repo: Path, env: dict[str, str], output_root: Path, run) -> 
         "--nproc_per_node=2",
         str(repo / "finetune/train_predictor.py"),
     ]
-    phase("training_started", command=" ".join(command))
+    phase("training_started", command=" ".join(command), chunk=chunk,
+          resume=env.get("KRONOS_RESUME_TRAINING"),
+          max_segments_this_run=env.get("KRONOS_MAX_SEGMENTS_PER_RUN"),
+          max_runtime_seconds=env.get("KRONOS_MAX_RUNTIME_SECONDS"))
     output_root.mkdir(parents=True, exist_ok=True)
     log_path = output_root / "run.log"
     current_segment = 0
@@ -548,6 +689,8 @@ def stream_training(repo: Path, env: dict[str, str], output_root: Path, run) -> 
             if snapshot_match:
                 phase("snapshot_saved", path=snapshot_match.group(1),
                       segment=int(snapshot_match.group(2)))
+                run.log({"snapshot/segment": int(snapshot_match.group(2))},
+                        step=int(snapshot_match.group(2)) * total_steps)
             best_match = BEST_SAVED_RE.search(line)
             if best_match:
                 phase("best_saved", path=best_match.group(1),
@@ -574,7 +717,9 @@ def stream_training(repo: Path, env: dict[str, str], output_root: Path, run) -> 
         output_root=str(output_root),
         live_swanlab_metrics=live_metrics,
         completed_segment=current_segment,
+        chunk=chunk,
     )
+    return current_segment, total_steps
 
 
 def is_seg155_forecast_best(metric: dict) -> bool:
@@ -585,14 +730,14 @@ def is_seg155_forecast_best(metric: dict) -> bool:
         return False
     return (
         str(metric.get("selection_metric") or "") == "forecast"
-        and segment == EXPECTED_PARENT_SEGMENT
-        and abs(value - EXPECTED_PARENT_FORECAST) <= 1e-8
+        and segment == PARENTS["seg155"]["segment_local"]
+        and abs(value - SEG155_FORECAST) <= 1e-8
     )
 
 
 def find_seg155_forecast_best(input_root: Path) -> Path:
     """Only <seg155 dataset>/checkpoints/best_model with the pinned SHA is accepted."""
-    slug = PARENT_DATASET.split("/", 1)[1]
+    slug = PARENTS["seg155"]["dataset"].split("/", 1)[1]
     matches: list[Path] = []
     rejected: list[str] = []
     for metric_path in sorted(input_root.glob("**/best_model/best_metric.json")):
@@ -611,7 +756,7 @@ def find_seg155_forecast_best(input_root: Path) -> Path:
     unique = list(dict.fromkeys(matches))
     if len(unique) != 1:
         raise SystemExit(
-            f"Need exactly one Seg155 forecast best_model under {PARENT_DATASET}; "
+            f"Need exactly one Seg155 forecast best_model under {PARENTS['seg155']['dataset']}; "
             f"found {unique}; rejected={rejected[:8]}"
         )
     return unique[0]
@@ -678,8 +823,9 @@ def build_environment(data_root, predictor, tokenizer, output_root, repo) -> dic
         "KRONOS_COVERAGE_PASSES": "1",
         "KRONOS_EPOCHS": str(PILOT_SEGMENTS),
         "KRONOS_REQUIRE_FULL_COVERAGE": "0",
-        "KRONOS_MAX_SEGMENTS_PER_RUN": str(MAX_SEGMENTS_PER_RUN),
-        "KRONOS_MAX_RUNTIME_SECONDS": str(MAX_RUNTIME_SECONDS),
+        # Chunked: 3 segments per invocation, resumed from last_state.pt.
+        "KRONOS_MAX_SEGMENTS_PER_RUN": str(CHUNK_SEGMENTS),
+        "KRONOS_MAX_RUNTIME_SECONDS": str(TRAIN_DEADLINE_SECONDS),
         "KRONOS_TORCHRUN_NPROC_PER_NODE": "2",
         "KRONOS_BATCH_SIZE": "32",
         "KRONOS_NUM_WORKERS": "2",
@@ -693,7 +839,7 @@ def build_environment(data_root, predictor, tokenizer, output_root, repo) -> dic
         "KRONOS_FORECAST_DRIFT_ALERT_EARLY_SEGMENTS": FORECAST_DRIFT_ALERT_EARLY_SEGMENTS,
         "KRONOS_EARLY_STOPPING_PATIENCE": "0",
         "KRONOS_RESUME_TRAINING": "0",
-        "KRONOS_KEEP_EXISTING_BEST": "1",
+        "KRONOS_KEEP_EXISTING_BEST": PROFILE["keep_existing_best"],
         "KRONOS_SWANLAB_SEGMENT_OFFSET": str(SEGMENT_OFFSET),
         "KRONOS_COVERAGE_EPOCH_OFFSET": str(SEGMENT_OFFSET),
         "KRONOS_SNAPSHOT_EVERY_SEGMENTS": str(SNAPSHOT_EVERY),
@@ -704,47 +850,83 @@ def build_environment(data_root, predictor, tokenizer, output_root, repo) -> dic
     }
 
 
-EXPECTED_RECIPE = {
-    "KRONOS_SCHEDULER": "uniform_cosine",
-    "KRONOS_SCHEDULER_WARMUP_RATIO": "0",
-    "KRONOS_PREDICTOR_LEARNING_RATE": "1e-5",
-    "KRONOS_CONDITION_LEARNING_RATE": "1e-5",
-    "KRONOS_PREDICTOR_WARMUP_START_LR": "1e-5",
-    "KRONOS_CONDITION_WARMUP_START_LR": "1e-5",
-    "KRONOS_PREDICTOR_MIN_LR": "1e-6",
-    "KRONOS_CONDITION_MIN_LR": "1e-6",
-    "KRONOS_USE_BETA_V21_AUXILIARY": "0",
-    "KRONOS_SAME_DAY_RANKING_BATCHES": "0",
-    "KRONOS_SPLIT_TRUNK_HEAD_LR": "0",
-    "KRONOS_TRAIN_BETA_V21_HEADS_ONLY": "0",
-    "KRONOS_TRAINABLE_TRANSFORMER_LAYERS": "-1",
-    "KRONOS_BEST_SELECTION_METRIC": "forecast",
-    "KRONOS_EPOCHS": "12",
-    "KRONOS_REQUIRE_FULL_COVERAGE": "0",
-    "KRONOS_MAX_SEGMENTS_PER_RUN": "12",
-    "KRONOS_COVERAGE_SEED": "20261002",
-    "KRONOS_COVERAGE_EPOCH_OFFSET": "0",
-    "KRONOS_TRAIN_SAMPLES_PER_SEGMENT": "20000",
-    "KRONOS_BATCH_SIZE": "32",
-    "KRONOS_RESUME_TRAINING": "0",
-    "KRONOS_KEEP_EXISTING_BEST": "1",
-    "KRONOS_SNAPSHOT_EVERY_SEGMENTS": "3",
-    "KRONOS_PREDICTOR_SAVE_FOLDER": "beta_v2_1_c1_forecast_cosine_pilot",
-}
+def expected_recipe() -> dict[str, str]:
+    return {
+        "KRONOS_SCHEDULER": "uniform_cosine",
+        "KRONOS_SCHEDULER_WARMUP_RATIO": "0",
+        "KRONOS_PREDICTOR_LEARNING_RATE": "1e-5",
+        "KRONOS_CONDITION_LEARNING_RATE": "1e-5",
+        "KRONOS_PREDICTOR_WARMUP_START_LR": "1e-5",
+        "KRONOS_CONDITION_WARMUP_START_LR": "1e-5",
+        "KRONOS_PREDICTOR_MIN_LR": "1e-6",
+        "KRONOS_CONDITION_MIN_LR": "1e-6",
+        "KRONOS_USE_BETA_V21_AUXILIARY": "0",
+        "KRONOS_SAME_DAY_RANKING_BATCHES": "0",
+        "KRONOS_SPLIT_TRUNK_HEAD_LR": "0",
+        "KRONOS_TRAIN_BETA_V21_HEADS_ONLY": "0",
+        "KRONOS_TRAINABLE_TRANSFORMER_LAYERS": "-1",
+        "KRONOS_BEST_SELECTION_METRIC": "forecast",
+        "KRONOS_EPOCHS": "12",
+        "KRONOS_REQUIRE_FULL_COVERAGE": "0",
+        "KRONOS_MAX_SEGMENTS_PER_RUN": "3",
+        "KRONOS_COVERAGE_SEED": "20261002",
+        "KRONOS_COVERAGE_EPOCH_OFFSET": "0",
+        "KRONOS_TRAIN_SAMPLES_PER_SEGMENT": "20000",
+        "KRONOS_BATCH_SIZE": "32",
+        "KRONOS_KEEP_EXISTING_BEST": PROFILE["keep_existing_best"],
+        "KRONOS_SNAPSHOT_EVERY_SEGMENTS": "3",
+        "KRONOS_PREDICTOR_SAVE_FOLDER": OUTPUT_NAME,
+    }
+
+
+EXPECTED_RECIPE = expected_recipe()
 
 
 def verify_recipe(env: dict[str, str]) -> None:
     actual = {key: env.get(key) for key in EXPECTED_RECIPE}
-    phase("recipe_verified", kernel_version=KERNEL_VERSION, **actual)
+    phase("recipe_verified", kernel_version=KERNEL_VERSION, parent=PILOT_PARENT, **actual)
     bad = {k: (actual[k], v) for k, v in EXPECTED_RECIPE.items() if actual[k] != v}
     if bad:
         raise SystemExit(f"Pilot recipe drift: {bad}")
 
 
+class SafeRun:
+    """SwanLab wrapper: a logging failure must never stop the pilot."""
+
+    def __init__(self, run=None):
+        self.run = run
+        self.errors = 0
+
+    def log(self, payload, step=None) -> None:
+        if self.run is None:
+            return
+        try:
+            self.run.log(payload, step=step)
+        except Exception as error:  # noqa: BLE001
+            self.errors += 1
+            if self.errors <= 5:
+                phase("swanlab_log_error", error=repr(error), keys=sorted(payload)[:6])
+
+
+def resolve_swanlab_key(env: dict[str, str]) -> tuple[str, str]:
+    key = env.get("SWANLAB_API_KEY", "").strip()
+    if key:
+        return key, "env"
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        key = (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+        if key:
+            return key, "kaggle_secret"
+    except Exception:  # noqa: BLE001 - secret not attached to this kernel
+        pass
+    return SWANLAB_API_KEY_FALLBACK, "fallback"
+
+
 def start_swanlab(env: dict[str, str]):
     import swanlab
 
-    api_key = env.get("SWANLAB_API_KEY", "").strip() or SWANLAB_API_KEY_FALLBACK
+    api_key, key_source = resolve_swanlab_key(env)
     swanlab.login(api_key=api_key)
     run = swanlab.init(
         project=SWANLAB_PROJECT,
@@ -752,138 +934,241 @@ def start_swanlab(env: dict[str, str]):
         experiment_name=OUTPUT_NAME,
         id=SWANLAB_RUN_ID,
         resume="allow",
+        tags=["kronos-base", "beta-v2.1", "c1", "forecast-only", "uniform-cosine",
+              "dual-t4", "pilot", f"parent-{PILOT_PARENT}"],
         config={key.lower(): value for key, value in EXPECTED_RECIPE.items()} | {
+            "parent": PILOT_PARENT,
+            "parent_label": PARENT_LABEL,
+            "parent_source": PROFILE["source"],
             "parent_dataset": PARENT_DATASET,
-            "parent_segment_local": EXPECTED_PARENT_SEGMENT,
-            "parent_forecast": EXPECTED_PARENT_FORECAST,
             "parent_model_sha256": EXPECTED_PARENT_MODEL_SHA256,
+            "parent_has_aux_heads": PROFILE["has_aux_heads"],
+            "aux_heads_loaded": False,
+            "parent_step1_val_gen_ic": PROFILE["step1"]["return10d_rank_ic_daily"],
             "kernel": KERNEL_ID,
             "kernel_version": KERNEL_VERSION,
             "adamw": "fresh",
             "effective_batch_size": 64,
+            "chunk_segments": CHUNK_SEGMENTS,
+            "selection": "val gen return10d daily IC (WFL logged only)",
         },
     )
-    phase("swanlab_ready", project=SWANLAB_PROJECT, run_id=SWANLAB_RUN_ID)
-    return swanlab, run
+    phase("swanlab_ready", project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
+          run_id=SWANLAB_RUN_ID, url=SWANLAB_URL, key_source=key_source)
+    return swanlab, SafeRun(run)
 
 
-class _NullRun:
-    def log(self, *_args, **_kwargs) -> None:
-        return None
+class _NullRun(SafeRun):
+    def __init__(self):
+        super().__init__(None)
 
 
-def collect_eval_checkpoints(output_root: Path) -> list[dict]:
-    """Snapshots in segment order, then best_model if its weights are distinct."""
-    items: list[dict] = []
-    seen: dict[str, str] = {EXPECTED_PARENT_MODEL_SHA256: PARENT_LABEL}
-    for path in sorted((output_root / "snapshots").glob("seg[0-9][0-9][0-9]")):
-        weights = path / "model.safetensors"
-        if not weights.is_file():
-            continue
+def red_line_value() -> float:
+    return float(C1_WFL_RED_LINE_BASE) + float(C1_WFL_RED_LINE_MARGIN)
+
+
+def build_selection(summaries: list[dict]) -> dict:
+    """Best by val gen return10d daily IC; WFL (subsample + full val) logged alongside."""
+    usable = [s for s in summaries if s.get("return10d_rank_ic_daily") is not None]
+    parent = next((s for s in usable if s.get("label") == SEG0_LABEL), None)
+    parent_ic = (parent or {}).get("return10d_rank_ic_daily")
+    red_line = red_line_value()
+    rows = []
+    for summary in usable:
+        full_wfl = summary.get("full_val_weighted_forecast_loss")
+        ic = summary["return10d_rank_ic_daily"]
+        rows.append({
+            "label": summary["label"],
+            "segment": summary.get("segment"),
+            "return10d_rank_ic_daily": ic,
+            "return10d_rank_ic_se": summary.get("return10d_rank_ic_se"),
+            "return10d_rank_icir": summary.get("return10d_rank_icir"),
+            "top_bottom_decile_return10d": summary.get("top_bottom_decile_return10d"),
+            "wfl_subsample": summary.get("weighted_forecast_loss_subsample"),
+            "wfl_full_val_logged": full_wfl,
+            "wfl_full_val_above_red_line": (
+                None if full_wfl is None else bool(float(full_wfl) > red_line)
+            ),
+            "delta_ic_vs_seg0": None if parent_ic is None else ic - parent_ic,
+        })
+    rows.sort(key=lambda row: (row["segment"] is None, row["segment"] or 0))
+    best = max(rows, key=lambda row: row["return10d_rank_ic_daily"]) if rows else None
+    return {
+        "kernel": KERNEL_ID,
+        "parent": PILOT_PARENT,
+        "seg0_label": SEG0_LABEL,
+        "selection_metric": "val generative return10d rank IC, daily mean (higher is better)",
+        "wfl_role": "logged only; not a selection criterion (Step 1: WFL is not a valid IC proxy)",
+        "wfl_red_line_full_val": red_line,
+        "wfl_red_line_note": (
+            f"C1 line red line = Seg155 full-val WFL {C1_WFL_RED_LINE_BASE} + "
+            f"{C1_WFL_RED_LINE_MARGIN}; flagged per checkpoint, never used to select or stop"
+        ),
+        "step1_reference": {
+            "kernel": STEP1_KERNEL,
+            "parent_label": PARENT_LABEL,
+            **PROFILE["step1"],
+        },
+        "candidates": rows,
+        "best_by_ic": None if best is None else best["label"],
+        "best_by_ic_segment": None if best is None else best["segment"],
+        "best_is_seg0": None if best is None else best["label"] == SEG0_LABEL,
+        "updated_unix": time.time(),
+        "elapsed_sec": round(time.time() - KERNEL_START, 1),
+    }
+
+
+class PilotScorer:
+    """Scores checkpoints between training chunks; outputs accumulate in one dir."""
+
+    def __init__(self, repo: Path, output_root: Path, tokenizer: Path, input_root: Path, run):
+        self.repo = repo
+        self.output_root = output_root
+        self.tokenizer = tokenizer
+        self.input_root = input_root
+        self.run = run
+        self.eval_dir = output_root / "val_gen_ic"
+        self.items: list[dict] = []
+        self.summaries: dict[str, dict] = {}
+        self.scored_sha: dict[str, str] = {}
+        self.total_steps = 1
+
+    def snapshot_item(self, path: Path) -> dict:
         metric = {}
         metric_file = path / "snapshot_metric.json"
         if metric_file.is_file():
             metric = json.loads(metric_file.read_text())
-        sha = sha256_file(weights)
-        label = f"pilot_{path.name}"
-        seen.setdefault(sha, label)
-        items.append({
-            "label": label,
+        return {
+            "label": f"pilot_{path.name}",
             "path": str(path),
-            "sha256": sha,
+            "sha256": sha256_file(path / "model.safetensors"),
             "segment": int(metric.get("segment", int(path.name[3:]))),
             "full_val_wfl": metric.get("weighted_forecast_loss"),
             "note": f"cosine pilot snapshot; lr_end={metric.get('learning_rates')}",
-        })
-    best = output_root / "checkpoints" / "best_model"
-    if (best / "model.safetensors").is_file():
-        sha = sha256_file(best / "model.safetensors")
-        metric = json.loads((best / "best_metric.json").read_text())
-        phase("pilot_best_model", sha256=sha, segment=metric.get("segment"),
-              selection_loss=metric.get("selection_loss"),
-              same_as=seen.get(sha))
-        if sha not in seen:
-            items.append({
-                "label": f"pilot_best_seg{int(metric.get('segment', -1)):03d}",
-                "path": str(best),
-                "sha256": sha,
-                "segment": metric.get("segment"),
-                "full_val_wfl": (metric.get("large_metrics") or {}).get(
-                    "weighted_forecast_loss", metric.get("selection_loss")),
-                "note": "cosine pilot best_model by forecast",
-            })
-    return items
+        }
+
+    def new_snapshots(self) -> list[dict]:
+        known = {item["label"] for item in self.items}
+        found = []
+        for path in sorted((self.output_root / "snapshots").glob("seg[0-9][0-9][0-9]")):
+            if (path / "model.safetensors").is_file() and f"pilot_{path.name}" not in known:
+                found.append(self.snapshot_item(path))
+        return found
+
+    def score(self, new_items: list[dict]) -> None:
+        new_items = [item for item in new_items if item["label"] not in self.summaries]
+        if not new_items:
+            return
+        remaining = KERNEL_START + SESSION_HARD_LIMIT_SECONDS - time.time()
+        if remaining < 900:
+            phase("valgenic_skipped", reason="session budget exhausted",
+                  labels=[item["label"] for item in new_items],
+                  remaining_seconds=round(remaining))
+            return
+        for item in new_items:
+            if item["label"] not in {known["label"] for known in self.items}:
+                self.items.append(item)
+        spec = {
+            "kernel": KERNEL_ID,
+            "output_dir": str(self.eval_dir),
+            "tokenizer_dir": str(self.tokenizer),
+            "input_root": str(self.input_root),
+            "deadline": KERNEL_START + SESSION_HARD_LIMIT_SECONDS,
+            "world": 2,
+            "effective_batch": 256,
+            # Cumulative: already-scored checkpoints keep their shards (skipped by
+            # workers) so comparison.json always ranks every checkpoint so far.
+            "checkpoints": self.items,
+            "reference": {
+                "parent": PARENT_LABEL,
+                "parent_sha256": EXPECTED_PARENT_MODEL_SHA256,
+                "seg0_label": SEG0_LABEL,
+                "parent_scored_in": f"this kernel (Seg0) and {STEP1_KERNEL}",
+                "step1": PROFILE["step1"],
+            },
+        }
+        self.eval_dir.mkdir(parents=True, exist_ok=True)
+        spec_path = self.eval_dir / "spec.json"
+        spec_path.write_text(json.dumps(spec, indent=2) + "\n")
+        labels = [item["label"] for item in new_items]
+        phase("valgenic_started", new=labels, cumulative=[c["label"] for c in self.items],
+              remaining_seconds=round(remaining))
+        started = time.time()
+        try:
+            subprocess.run(
+                [sys.executable, "-u", str(self.repo / "finetune/val_gen_ic_driver.py"),
+                 "--spec", str(spec_path)],
+                cwd=self.repo,
+                env={**os.environ, "PYTHONUNBUFFERED": "1",
+                     "PYTHONPATH": os.pathsep.join([str(self.repo),
+                                                    str(self.repo / "finetune")])},
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            phase("valgenic_failed", new=labels, returncode=error.returncode)
+        self.collect(labels)
+        phase("valgenic_finished", new=labels, seconds=round(time.time() - started, 1),
+              comparison=str(self.eval_dir / "comparison.json"))
+
+    def collect(self, labels: list[str]) -> None:
+        results = self.eval_dir / "results"
+        for label in labels:
+            path = results / f"{label}_val_summary.json"
+            if not path.is_file():
+                phase("valgenic_missing_summary", label=label)
+                continue
+            summary = json.loads(path.read_text())
+            self.summaries[label] = summary
+            segment = int(summary.get("segment") or 0)
+            ic = summary.get("return10d_rank_ic_daily")
+            payload = {
+                "valgenic/return10d_ic_daily": ic,
+                "valgenic/return10d_ic_se": summary.get("return10d_rank_ic_se"),
+                "valgenic/return10d_icir": summary.get("return10d_rank_icir"),
+                "valgenic/top_bottom_decile": summary.get("top_bottom_decile_return10d"),
+                "valgenic/wfl_subsample": summary.get("weighted_forecast_loss_subsample"),
+                "valgenic/segment": segment,
+            }
+            if summary.get("full_val_weighted_forecast_loss") is not None:
+                payload["valgenic/wfl_full_val"] = summary["full_val_weighted_forecast_loss"]
+            seg0 = self.summaries.get(SEG0_LABEL)
+            if seg0 is not None and ic is not None:
+                payload["valgenic/delta_ic_vs_seg0"] = ic - seg0["return10d_rank_ic_daily"]
+            self.run.log({k: v for k, v in payload.items() if v is not None},
+                         step=segment * self.total_steps)
+            phase("checkpoint_val_gen_ic", label=label, segment=segment,
+                  return10d_ic_daily=ic, se=summary.get("return10d_rank_ic_se"),
+                  wfl_subsample=summary.get("weighted_forecast_loss_subsample"),
+                  wfl_full_val=summary.get("full_val_weighted_forecast_loss"))
+        selection = build_selection(list(self.summaries.values()))
+        target = self.output_root / "pilot_selection.json"
+        target.write_text(json.dumps(selection, ensure_ascii=False, indent=2) + "\n")
+        phase("pilot_selection_updated", best_by_ic=selection["best_by_ic"],
+              best_segment=selection["best_by_ic_segment"],
+              best_is_seg0=selection["best_is_seg0"], scored=len(selection["candidates"]))
 
 
-def run_val_gen_ic(repo: Path, output_root: Path, tokenizer: Path, input_root: Path) -> None:
-    checkpoints = collect_eval_checkpoints(output_root)
-    if not checkpoints:
-        phase("valgenic_skipped", reason="no snapshots or distinct best_model")
-        return
-    eval_dir = output_root / "val_gen_ic"
-    spec = {
-        "kernel": KERNEL_ID,
-        "output_dir": str(eval_dir),
-        "tokenizer_dir": str(tokenizer),
-        "input_root": str(input_root),
-        "deadline": KERNEL_START + SESSION_HARD_LIMIT_SECONDS,
-        "world": 2,
-        "effective_batch": 256,
-        "checkpoints": checkpoints,
-        "reference": {
-            "parent": PARENT_LABEL,
-            "parent_sha256": EXPECTED_PARENT_MODEL_SHA256,
-            "parent_scored_in": STEP1_KERNEL,
-            "note": "Parent val gen IC comes from the Step-1 kernel (same contract, same seed).",
-        },
-    }
-    eval_dir.mkdir(parents=True, exist_ok=True)
-    spec_path = eval_dir / "spec.json"
-    spec_path.write_text(json.dumps(spec, indent=2) + "\n")
-    phase("valgenic_started", checkpoints=[c["label"] for c in checkpoints],
-          remaining_seconds=round(spec["deadline"] - time.time()))
-    subprocess.run(
-        [sys.executable, "-u", str(repo / "finetune/val_gen_ic_driver.py"),
-         "--spec", str(spec_path)],
-        cwd=repo,
-        env={**os.environ, "PYTHONUNBUFFERED": "1",
-             "PYTHONPATH": os.pathsep.join([str(repo), str(repo / "finetune")])},
-        check=True,
-    )
-    phase("valgenic_finished", output=str(eval_dir / "comparison.json"))
-
-
-def main() -> None:
-    phase(
-        "started",
-        kernel=KERNEL_ID,
-        experiment=OUTPUT_NAME,
-        kernel_version=KERNEL_VERSION,
-        parent_dataset=PARENT_DATASET,
-        checkpoint="seg155_forecast_best",
-        adamw="fresh",
-        trainable="all",
-        scheduler=f"uniform_cosine {PEAK_LR}->{MIN_LR} over {PILOT_SEGMENTS} segments, warmup 0",
-        aux=False,
-        ranking=False,
-        same_day_batches=False,
-        snapshots=f"every {SNAPSHOT_EVERY} segments",
-        post_training_eval="val generative IC (Step-1 contract)",
-    )
-    runtime = Path("/kaggle/working/kronos_beta_v21_c1_forecast_cosine_pilot")
-    input_root = Path("/kaggle/input")
-    repo = runtime / "Kronos"
-    output_root = runtime / "outputs" / "models" / OUTPUT_NAME
-    data_root = find_data_root(input_root)
+def prepare_parent(input_root: Path, output_root: Path, release_predictor: Path) -> tuple[Path, Path]:
+    """Return (training predictor path, Seg0 scoring path)."""
+    if output_root.exists():
+        shutil.rmtree(output_root)
+    if PILOT_PARENT == "best475":
+        model_sha = sha256_file(release_predictor / "model.safetensors")
+        if model_sha != EXPECTED_PARENT_MODEL_SHA256:
+            raise SystemExit(f"Best@475 SHA mismatch: {model_sha}")
+        config = json.loads((release_predictor / "config.json").read_text())
+        phase("parent_ready", parent=PILOT_PARENT, label=PARENT_LABEL,
+              source=f"modelscope:{MODEL_REPO}", path=str(release_predictor),
+              model_sha256=model_sha, parent_config_aux=bool(config.get("use_beta_v21_auxiliary")),
+              aux_heads_trained=False, adamw="fresh", last_state_loaded=False,
+              kept_best_threshold=None,
+              note="release weights loaded with use_beta_v21_auxiliary=False; "
+                   "return_head/barrier_head tensors are dropped")
+        return release_predictor, release_predictor
     source_best = find_seg155_forecast_best(input_root)
     model_sha = sha256_file(source_best / "model.safetensors")
     if model_sha != EXPECTED_PARENT_MODEL_SHA256:
         raise SystemExit(f"Seg155 SHA mismatch: {model_sha}")
-    parent_config = json.loads((source_best / "config.json").read_text())
-    if parent_config.get("use_beta_v21_auxiliary"):
-        raise SystemExit("Seg155 parent unexpectedly carries aux heads")
-    if output_root.exists():
-        shutil.rmtree(output_root)
     predictor = output_root / "checkpoints" / "best_model"
     predictor.mkdir(parents=True, exist_ok=True)
     for name in ("model.safetensors", "config.json", "best_metric.json", "README.md"):
@@ -893,11 +1178,51 @@ def main() -> None:
         raise SystemExit("Working copy Seg155 SHA mismatch")
     if not is_seg155_forecast_best(json.loads((predictor / "best_metric.json").read_text())):
         raise SystemExit("Working copy best_metric is not Seg155 forecast best")
-    phase("parent_ready", source=str(source_best), model_sha256=model_sha,
-          kept_best_threshold=EXPECTED_PARENT_FORECAST, adamw="fresh",
+    phase("parent_ready", parent=PILOT_PARENT, label=PARENT_LABEL, source=str(source_best),
+          model_sha256=model_sha, kept_best_threshold=SEG155_FORECAST, adamw="fresh",
           last_state_loaded=False)
+    return predictor, source_best
 
-    _, tokenizer = download_model(runtime)
+
+def chunk_environment(env: dict[str, str], chunk: int) -> dict[str, str]:
+    remaining = int(KERNEL_START + TRAIN_DEADLINE_SECONDS - time.time())
+    return {
+        **env,
+        "KRONOS_RESUME_TRAINING": "1" if chunk > 0 else "0",
+        "KRONOS_MAX_RUNTIME_SECONDS": str(max(900, remaining)),
+    }
+
+
+def main() -> None:
+    phase(
+        "started",
+        kernel=KERNEL_ID,
+        experiment=OUTPUT_NAME,
+        kernel_version=KERNEL_VERSION,
+        parent=PILOT_PARENT,
+        parent_label=PARENT_LABEL,
+        parent_source=PROFILE["source"],
+        parent_dataset=PARENT_DATASET,
+        parent_sha256=EXPECTED_PARENT_MODEL_SHA256,
+        adamw="fresh",
+        trainable="all",
+        scheduler=f"uniform_cosine {PEAK_LR}->{MIN_LR} over {PILOT_SEGMENTS} segments, warmup 0",
+        aux=False,
+        ranking=False,
+        same_day_batches=False,
+        chunks=f"{PILOT_SEGMENTS // CHUNK_SEGMENTS} x {CHUNK_SEGMENTS} segments (resume)",
+        snapshots=f"every {SNAPSHOT_EVERY} segments",
+        scoring="Seg0 (parent) + each snapshot right after its chunk; best_model if distinct",
+        swanlab=SWANLAB_URL,
+    )
+    runtime = Path("/kaggle/working") / PROFILE["runtime_dir"]
+    input_root = Path("/kaggle/input")
+    repo = runtime / "Kronos"
+    output_root = runtime / "outputs" / "models" / OUTPUT_NAME
+    data_root = find_data_root(input_root)
+    release_predictor, tokenizer = download_model(runtime)
+    predictor, seg0_path = prepare_parent(input_root, output_root, release_predictor)
+
     clone_repo(repo)
     overlay_embedded_sources(repo)
     phase("install_dependencies_started", torch=TORCH_VERSION)
@@ -917,19 +1242,27 @@ def main() -> None:
 
     env = build_environment(data_root, predictor, tokenizer, output_root, repo)
     verify_recipe(env)
+    key_report = check_parent_state_dict(repo, predictor, env)
     manifest = {
         "experiment": OUTPUT_NAME,
         "kernel": KERNEL_ID,
         "kernel_version": KERNEL_VERSION,
         "parent": {
+            "name": PILOT_PARENT,
+            "label": PARENT_LABEL,
+            "source": PROFILE["source"],
             "dataset": PARENT_DATASET,
-            "checkpoint": "checkpoints/best_model",
+            "modelscope_repo": MODEL_REPO if PROFILE["source"] == "modelscope" else None,
+            "path": str(seg0_path),
             "segment_local": EXPECTED_PARENT_SEGMENT,
-            "segment_global": 155,
-            "selection_metric": "forecast",
-            "selection_value": EXPECTED_PARENT_FORECAST,
+            "segment_global": PROFILE["segment_global"],
             "model_sha256": EXPECTED_PARENT_MODEL_SHA256,
+            "full_val_wfl": PROFILE["full_val_wfl"],
+            "has_aux_heads": PROFILE["has_aux_heads"],
+            "aux_heads_trained": False,
+            "dropped_aux_tensors": key_report["dropped_aux"],
             "adamw": "fresh",
+            "step1_val_gen_ic": PROFILE["step1"],
         },
         "data": {
             "root": str(data_root),
@@ -937,14 +1270,18 @@ def main() -> None:
             "val_sha256": sha256_file(data_root / "processed_datasets/val_data.pkl"),
         },
         "recipe": EXPECTED_RECIPE,
+        "chunks": {"segments_per_chunk": CHUNK_SEGMENTS, "resume": "last_state.pt"},
         "lr_at_segment_end_expected": {
             "seg3": 8.68e-6, "seg6": 5.5e-6, "seg9": 2.32e-6, "seg12": 1.0e-6,
         },
-        "post_training_eval": "finetune/val_gen_ic_driver.py (Step-1 contract)",
-        "decision_rule": (
-            "val gen IC rises with annealing -> OOS test best vs 0.117/0.180; "
-            "flat -> stop (gap not from annealing)"
-        ),
+        "scoring": {
+            "contract": "finetune/val_gen_ic_driver.py (Step-1 contract, 24 dates, N5)",
+            "order": [SEG0_LABEL, "pilot_seg003", "pilot_seg006", "pilot_seg009",
+                      "pilot_seg012", "best_model if distinct"],
+            "selection": "max val gen return10d daily IC; WFL logged only",
+            "wfl_red_line_full_val": red_line_value(),
+        },
+        "swanlab": SWANLAB_URL,
     }
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "experiment_manifest.json").write_text(
@@ -955,15 +1292,41 @@ def main() -> None:
     except Exception as error:  # SwanLab must never block the pilot.
         phase("swanlab_unavailable", error=repr(error))
         swanlab, swanlab_run = None, _NullRun()
+    scorer = PilotScorer(repo, output_root, tokenizer, input_root, swanlab_run)
+    seg0_item = {
+        "label": SEG0_LABEL,
+        "path": str(seg0_path),
+        "sha256": EXPECTED_PARENT_MODEL_SHA256,
+        "segment": 0,
+        "full_val_wfl": PROFILE["full_val_wfl"],
+        "note": f"Seg0 = parent {PARENT_LABEL} (same contract as {STEP1_KERNEL})",
+    }
+
     training_error = None
-    try:
-        stream_training(repo, env, output_root, swanlab_run)
-    except subprocess.CalledProcessError as error:
-        # Still score whatever snapshots landed before the failure.
-        training_error = error
-        phase("training_failed", returncode=error.returncode)
-    if swanlab is not None:
-        swanlab.finish()
+    completed = 0
+    for chunk in range(PILOT_SEGMENTS // CHUNK_SEGMENTS):
+        if completed >= PILOT_SEGMENTS:
+            break
+        if time.time() > KERNEL_START + TRAIN_DEADLINE_SECONDS:
+            phase("training_deadline", completed_segment=completed)
+            break
+        try:
+            segment, total_steps = stream_training(
+                repo, chunk_environment(env, chunk), output_root, swanlab_run, chunk=chunk
+            )
+            scorer.total_steps = max(1, total_steps)
+        except subprocess.CalledProcessError as error:
+            # Still score whatever snapshots landed before the failure.
+            training_error = error
+            phase("training_failed", chunk=chunk, returncode=error.returncode)
+            segment = completed
+        progressed = segment > completed
+        completed = max(completed, segment)
+        new_items = ([seg0_item] if chunk == 0 else []) + scorer.new_snapshots()
+        scorer.score(new_items)
+        if training_error is not None or not progressed:
+            break
+
     try:
         subprocess.run([sys.executable, str(repo / "finetune/export_last_model.py"),
                         "--repo-root", str(repo), "--output-root", str(output_root)],
@@ -971,7 +1334,29 @@ def main() -> None:
         phase("export_finished", output_root=str(output_root))
     except subprocess.CalledProcessError as error:
         phase("export_failed", returncode=error.returncode)
-    run_val_gen_ic(repo, output_root, tokenizer, input_root)
+    # Late snapshots (e.g. after a failure) and best-by-forecast if it is distinct.
+    extra = scorer.new_snapshots()
+    best = output_root / "checkpoints" / "best_model"
+    if (best / "model.safetensors").is_file() and (best / "best_metric.json").is_file():
+        sha = sha256_file(best / "model.safetensors")
+        metric = json.loads((best / "best_metric.json").read_text())
+        known = {item["sha256"]: item["label"] for item in scorer.items + extra}
+        known.setdefault(EXPECTED_PARENT_MODEL_SHA256, SEG0_LABEL)
+        phase("pilot_best_model", sha256=sha, segment=metric.get("segment"),
+              selection_loss=metric.get("selection_loss"), same_as=known.get(sha))
+        if sha not in known:
+            extra.append({
+                "label": f"pilot_best_seg{int(metric.get('segment', -1)):03d}",
+                "path": str(best),
+                "sha256": sha,
+                "segment": metric.get("segment"),
+                "full_val_wfl": (metric.get("large_metrics") or {}).get(
+                    "weighted_forecast_loss", metric.get("selection_loss")),
+                "note": "cosine pilot best_model by full-val forecast loss",
+            })
+    scorer.score(extra)
+    if swanlab is not None:
+        swanlab.finish()
     # Keep /kaggle/working small: drop optimizer state (not needed for scoring).
     last_state = output_root / "checkpoints" / "last_state.pt"
     if last_state.is_file():
@@ -979,7 +1364,8 @@ def main() -> None:
         phase("last_state_removed", reason="pilot output keeps weights only")
     if training_error is not None:
         raise training_error
-    phase("done", total_seconds=round(time.time() - KERNEL_START, 1))
+    phase("done", total_seconds=round(time.time() - KERNEL_START, 1),
+          completed_segment=completed, swanlab=SWANLAB_URL)
 
 
 if __name__ == "__main__":

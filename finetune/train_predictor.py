@@ -3966,6 +3966,35 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     return dt_result
 
 
+def report_parent_weight_keys(model, predictor_path):
+    """Log (never raise) how parent tensors mapped onto the configured model.
+
+    Kronos.from_pretrained loads non-strictly, so a release checkpoint with
+    Beta v2.1 aux heads (return_head/barrier_head) loads into a forecast-only
+    model by dropping those tensors, and an aux model built from a forecast-only
+    parent keeps freshly initialized heads. This makes both directions visible.
+    """
+    try:
+        from safetensors import safe_open
+
+        weights = os.path.join(predictor_path, 'model.safetensors')
+        with safe_open(weights, framework='pt') as handle:
+            parent_keys = set(handle.keys())
+        model_keys = set(model.state_dict().keys())
+        unexpected = sorted(parent_keys - model_keys)
+        missing = sorted(model_keys - parent_keys)
+        print(
+            f"Parent weights: loaded {len(parent_keys & model_keys)}/{len(model_keys)} "
+            f"model tensors from {len(parent_keys)} parent tensors; "
+            f"use_beta_v21_auxiliary={bool(getattr(model, 'use_beta_v21_auxiliary', False))}; "
+            f"dropped (in parent, not in model)={unexpected}; "
+            f"kept at init (in model, not in parent)={missing}",
+            flush=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics only
+        print(f"Parent weights: key report unavailable ({exc!r})", flush=True)
+
+
 def main(config: dict):
     """Main function to orchestrate the DDP training process."""
     try:
@@ -4037,6 +4066,8 @@ def main(config: dict):
         ),
     })
     model = Kronos.from_pretrained(config['pretrained_predictor_path'], **model_kwargs)
+    if rank == 0:
+        report_parent_weight_keys(model, config['pretrained_predictor_path'])
     reset_conditioning(model, config)
     configure_trainable_parameters(model, config)
     model.to(device)

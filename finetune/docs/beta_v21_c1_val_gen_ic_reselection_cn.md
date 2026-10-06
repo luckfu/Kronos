@@ -131,7 +131,11 @@ utility IC 是纯收益分数接 utility 标签的 ablation，三者几乎一样
   这份 OOS 就部分失去「只用于评估」的地位（等于用它做了一次模型选择）。
 - Best@475 的全量 val WFL 本 kernel 没有记录（只有子样本 WFL 2.3205）。
 
-## 下一步选项（待决定，未执行）
+## 下一步选项
+
+> **2026-10-06 已选 A**：余弦 pilot 父本换成 Best@475，新 slug `luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475`，
+> 见 [`beta_v21_c1_forecast_cosine_pilot_cn.md`](beta_v21_c1_forecast_cosine_pilot_cn.md)。B、C 未执行。
+
 
 | 选项 | 做法 | 优点 | 代价 / 风险 |
 |---|---|---|---|
