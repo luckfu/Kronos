@@ -84,3 +84,16 @@ kaggle kernels push -p finetune/kaggle_beta_v21_c1_gen_return_oos_kernel
 - 父进程轮询 shards，**每个臂 decode 完立即打分**并写 summary / predictions / comparison.json（`final=false`），最后再写 `final=true`
 - 每个日期 shard 落盘即保留（`shards/<arm>_<date>.csv.gz`），`shard_done` 日志行带当日 return10d IC / utility IC / pairwise，kill 后日志里仍有部分结果
 - `arm_scored` 行含 daily/pooled return10d IC、ICIR、正 IC 日占比、utility IC、pairwise 及对 C2 / Seg19 差值
+
+## 结果（2026-10-06，kernel A COMPLETE）
+
+原 kernel `luckfu/kronos-beta-v21-c1-gen-return-oos` 在 42,221 s（~10:55 CST）完成，两臂都已打分，未被 12h 硬杀：
+
+| 臂 | ret10d IC 日均 / pooled | ICIR | IC+ 日 | utility IC | Pairwise |
+|---|---|---:|---:|---:|---:|
+| prod T0.65/p0.8/N5 | **0.1170** / 0.1631 | 1.25 | 15/18 | 0.0757 | 54.06% |
+| rank T0.6/p0.9/N16 | **0.1242** / 0.1764 | 1.19 | 15/18 | 0.0773 | 54.16% |
+
+C2 0.1796 / Seg19 return_head −0.0073。最后 3 日（09-01..09-03）转负。
+完整表、逐日 IC、结论见 `finetune/docs/beta_v21_c1_rank_oos_vs_small_c2_cn.md`；JSON `finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json`。
+保险 kernel `-prod` 逐日 IC 与 A 的 prod 臂一致（同 seed 确定性），属冗余。

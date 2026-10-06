@@ -132,5 +132,36 @@
     "return10d": "C2 daily ~0.18 vs Seg19 score↔return10d ~-0.007 on same package → Beta ranking does not transfer to raw 10d return ranking.",
     "utility_ablation": "C2 return-pred still gets positive utility Rank IC and >50% pairwise as ablation; compare carefully to Beta trained expected_utility_score.",
     "not_19d_doc": "User 19d numbers are combined_19 08-03..08-27, not sealed 18d 08-11..09-03."
-  }
+  },
+  "beta_seg155_generative_return": [
+    {
+      "model": "seg155_forecast_best_prod_t065_p80_n5",
+      "score_kind": "predicted_return_d10_generative_ar_mean",
+      "samples": 92751,
+      "signal_dates": 18,
+      "return10d_rank_ic_daily": 0.11701994950966209,
+      "return10d_rank_ic_pooled": 0.16310088943912615,
+      "return10d_rank_icir": 1.2499719024550555,
+      "return10d_rank_ic_pos_rate": 0.8333333333333334,
+      "utility_rank_ic_daily": 0.07566652975036854,
+      "utility_rank_ic_pooled": 0.10614768702459343,
+      "pairwise_accuracy": 0.5406073801054329,
+      "pairwise_pairs": 124867376
+    },
+    {
+      "model": "seg155_forecast_best_rank_t060_p90_n16",
+      "score_kind": "predicted_return_d10_generative_ar_mean",
+      "samples": 92751,
+      "signal_dates": 18,
+      "return10d_rank_ic_daily": 0.12415009633630852,
+      "return10d_rank_ic_pooled": 0.1764103275868165,
+      "return10d_rank_icir": 1.1912890621317898,
+      "return10d_rank_ic_pos_rate": 0.8333333333333334,
+      "utility_rank_ic_daily": 0.07728671828001649,
+      "utility_rank_ic_pooled": 0.1109866326030729,
+      "pairwise_accuracy": 0.541608025782491,
+      "pairwise_pairs": 124867376
+    }
+  ],
+  "beta_seg155_generative_return_detail": "finetune/reports/beta_v21_c1_baseline2_gen_return_oos_18d.json"
 }

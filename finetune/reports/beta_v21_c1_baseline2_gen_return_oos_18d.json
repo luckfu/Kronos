@@ -1,0 +1,425 @@
+{
+  "evaluation_name": "kronos_beta_v2_time_oos_through_20260903",
+  "signal_start": "2026-08-11",
+  "signal_end": "2026-09-03",
+  "signal_dates": 18,
+  "samples": 92751,
+  "baseline": "baseline_2_generative_return",
+  "training": false,
+  "checkpoint": "seg155_forecast_best",
+  "model_sha256": "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c",
+  "score_definition": "predicted_return_d10 = mean_N AR samples of (denorm_close_d10 / last_close - 1); NOT return_head; NOT teacher-forcing",
+  "kernel": "luckfu/kronos-beta-v21-c1-gen-return-oos",
+  "kernel_version": 1,
+  "kernel_status": "COMPLETE",
+  "kernel_elapsed_sec": 42212.4712574482,
+  "kernel_end_cst": "2026-10-06 ~10:55",
+  "code_commit": "78b3bda",
+  "runner_fix_commit": "cbd4b0a",
+  "local_outputs": "/workspace/kronos_patrol_out/genret_A_final_1006_1057/output/beta_v2_1_c1_gen_return_oos",
+  "arms": [
+    {
+      "samples": 92751,
+      "signal_dates": 18,
+      "score_kind": "predicted_return_d10_generative_ar_mean",
+      "decode": {
+        "arm": "prod_t065_p80_n5",
+        "protocol": "production",
+        "temperature": 0.65,
+        "top_p": 0.8,
+        "sample_count": 5,
+        "seed": 20260906,
+        "teacher_forcing": false,
+        "definition": "mean_over_AR_samples(denorm_close[d10] / last_close - 1); same spirit as C2 predicted_return_d10"
+      },
+      "return10d_rank_ic_daily": 0.11701994950966209,
+      "return10d_rank_ic_pooled": 0.16310088943912615,
+      "return10d_rank_icir": 1.2499719024550555,
+      "return10d_rank_ic_pos_rate": 0.8333333333333334,
+      "utility_rank_ic_daily": 0.07566652975036854,
+      "utility_rank_ic_pooled": 0.10614768702459343,
+      "utility_rank_icir": 0.7946990172086185,
+      "utility_rank_ic_pos_rate": 0.7222222222222222,
+      "pairwise_accuracy": 0.5406073801054329,
+      "pairwise_pairs": 124867376,
+      "pairwise_contract": "same-day |Δutility|>=0.005; score=predicted_return_d10; ties wrong",
+      "vs_c2_same_arm_return10d_ic": -0.059851904752120225,
+      "vs_c2_rank_return10d_ic": -0.06260564707956674,
+      "vs_seg19_return_head_return10d_ic": 0.12434600027072337,
+      "model_sha256": "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c",
+      "seconds": 42161.32964038849,
+      "model": "seg155_forecast_best_prod_t065_p80_n5",
+      "by_signal_date": [
+        {
+          "asof_date": "2026-08-11",
+          "samples": 5165,
+          "return10d_rank_ic": 0.17131899873675063,
+          "utility_rank_ic": -0.09407233610328797,
+          "pairwise_accuracy": 0.4524760349359243,
+          "pairwise_pairs": 7628709
+        },
+        {
+          "asof_date": "2026-08-12",
+          "samples": 5165,
+          "return10d_rank_ic": 0.21905815123116057,
+          "utility_rank_ic": 0.007282515699517024,
+          "pairwise_accuracy": 0.5043209723929759,
+          "pairwise_pairs": 5339076
+        },
+        {
+          "asof_date": "2026-08-13",
+          "samples": 5166,
+          "return10d_rank_ic": 0.11251587345084842,
+          "utility_rank_ic": -0.01220926557545722,
+          "pairwise_accuracy": 0.4945929231106301,
+          "pairwise_pairs": 7467066
+        },
+        {
+          "asof_date": "2026-08-14",
+          "samples": 5164,
+          "return10d_rank_ic": 0.19913686782712164,
+          "utility_rank_ic": 0.011849203626839819,
+          "pairwise_accuracy": 0.5071258616367713,
+          "pairwise_pairs": 7428014
+        },
+        {
+          "asof_date": "2026-08-17",
+          "samples": 5161,
+          "return10d_rank_ic": 0.21199460228539985,
+          "utility_rank_ic": 0.13216337404513617,
+          "pairwise_accuracy": 0.5855605529094534,
+          "pairwise_pairs": 4929053
+        },
+        {
+          "asof_date": "2026-08-18",
+          "samples": 5156,
+          "return10d_rank_ic": 0.2602706330649286,
+          "utility_rank_ic": 0.19210857522944588,
+          "pairwise_accuracy": 0.6191948382623664,
+          "pairwise_pairs": 5353856
+        },
+        {
+          "asof_date": "2026-08-19",
+          "samples": 5156,
+          "return10d_rank_ic": 0.131724750803478,
+          "utility_rank_ic": 0.16718986398607563,
+          "pairwise_accuracy": 0.5856532224407659,
+          "pairwise_pairs": 7744192
+        },
+        {
+          "asof_date": "2026-08-20",
+          "samples": 5155,
+          "return10d_rank_ic": 0.12638527980181152,
+          "utility_rank_ic": 0.13853491127517242,
+          "pairwise_accuracy": 0.5706284570324133,
+          "pairwise_pairs": 7807455
+        },
+        {
+          "asof_date": "2026-08-21",
+          "samples": 5151,
+          "return10d_rank_ic": 0.18315106959107824,
+          "utility_rank_ic": 0.19273035782965578,
+          "pairwise_accuracy": 0.5977990371292164,
+          "pairwise_pairs": 7677458
+        },
+        {
+          "asof_date": "2026-08-24",
+          "samples": 5153,
+          "return10d_rank_ic": 0.11893624069780888,
+          "utility_rank_ic": 0.1741689588227688,
+          "pairwise_accuracy": 0.5937313040085631,
+          "pairwise_pairs": 7015207
+        },
+        {
+          "asof_date": "2026-08-25",
+          "samples": 5152,
+          "return10d_rank_ic": 0.07127787863202364,
+          "utility_rank_ic": 0.11300619455696138,
+          "pairwise_accuracy": 0.5538824905677248,
+          "pairwise_pairs": 8544863
+        },
+        {
+          "asof_date": "2026-08-26",
+          "samples": 5153,
+          "return10d_rank_ic": 0.030141521112139184,
+          "utility_rank_ic": -0.0446699288343209,
+          "pairwise_accuracy": 0.47791906537259815,
+          "pairwise_pairs": 8281375
+        },
+        {
+          "asof_date": "2026-08-27",
+          "samples": 5152,
+          "return10d_rank_ic": 0.1683416079746463,
+          "utility_rank_ic": 0.18943180662872802,
+          "pairwise_accuracy": 0.5908564643582889,
+          "pairwise_pairs": 8381528
+        },
+        {
+          "asof_date": "2026-08-28",
+          "samples": 5142,
+          "return10d_rank_ic": 0.10397109087006906,
+          "utility_rank_ic": -0.026198981049719492,
+          "pairwise_accuracy": 0.485833899965019,
+          "pairwise_pairs": 7578409
+        },
+        {
+          "asof_date": "2026-08-31",
+          "samples": 5140,
+          "return10d_rank_ic": 0.1341491341152549,
+          "utility_rank_ic": 0.14373807180404902,
+          "pairwise_accuracy": 0.5785604286131361,
+          "pairwise_pairs": 6730545
+        },
+        {
+          "asof_date": "2026-09-01",
+          "samples": 5140,
+          "return10d_rank_ic": -0.003088855930134748,
+          "utility_rank_ic": -0.028225471285688652,
+          "pairwise_accuracy": 0.48139179005347654,
+          "pairwise_pairs": 5774118
+        },
+        {
+          "asof_date": "2026-09-02",
+          "samples": 5140,
+          "return10d_rank_ic": -0.075193924755302,
+          "utility_rank_ic": 0.034398873990974174,
+          "pairwise_accuracy": 0.5214844613897108,
+          "pairwise_pairs": 5471210
+        },
+        {
+          "asof_date": "2026-09-03",
+          "samples": 5140,
+          "return10d_rank_ic": -0.057731828335165214,
+          "utility_rank_ic": 0.07077081085978397,
+          "pairwise_accuracy": 0.5426692343036393,
+          "pairwise_pairs": 5715242
+        }
+      ],
+      "return10d_pos_days": 15,
+      "last3_return10d_rank_ic": {
+        "2026-09-01": -0.003088855930134748,
+        "2026-09-02": -0.075193924755302,
+        "2026-09-03": -0.057731828335165214
+      },
+      "first6_return10d_rank_ic_mean": 0.1957158544327016
+    },
+    {
+      "samples": 92751,
+      "signal_dates": 18,
+      "score_kind": "predicted_return_d10_generative_ar_mean",
+      "decode": {
+        "arm": "rank_t060_p90_n16",
+        "protocol": "ranking",
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "sample_count": 16,
+        "seed": 20260906,
+        "teacher_forcing": false,
+        "definition": "mean_over_AR_samples(denorm_close[d10] / last_close - 1); same spirit as C2 predicted_return_d10"
+      },
+      "return10d_rank_ic_daily": 0.12415009633630852,
+      "return10d_rank_ic_pooled": 0.1764103275868165,
+      "return10d_rank_icir": 1.1912890621317898,
+      "return10d_rank_ic_pos_rate": 0.8333333333333334,
+      "utility_rank_ic_daily": 0.07728671828001649,
+      "utility_rank_ic_pooled": 0.1109866326030729,
+      "utility_rank_icir": 0.7534867063380526,
+      "utility_rank_ic_pos_rate": 0.6666666666666666,
+      "pairwise_accuracy": 0.541608025782491,
+      "pairwise_pairs": 124867376,
+      "pairwise_contract": "same-day |Δutility|>=0.005; score=predicted_return_d10; ties wrong",
+      "vs_c2_same_arm_return10d_ic": -0.05547550025292031,
+      "vs_c2_rank_return10d_ic": -0.05547550025292031,
+      "vs_seg19_return_head_return10d_ic": 0.13147614709736982,
+      "model_sha256": "8b11a759e72d4125cb0c3307c482f1931ddc65be612023b422d66c52e4f8609c",
+      "seconds": 42200.468297719955,
+      "model": "seg155_forecast_best_rank_t060_p90_n16",
+      "by_signal_date": [
+        {
+          "asof_date": "2026-08-11",
+          "samples": 5165,
+          "return10d_rank_ic": 0.1793364152184521,
+          "utility_rank_ic": -0.11202301175347641,
+          "pairwise_accuracy": 0.44323056496190905,
+          "pairwise_pairs": 7628709
+        },
+        {
+          "asof_date": "2026-08-12",
+          "samples": 5165,
+          "return10d_rank_ic": 0.23118787521437495,
+          "utility_rank_ic": -0.0009243313598461811,
+          "pairwise_accuracy": 0.4991953663892404,
+          "pairwise_pairs": 5339076
+        },
+        {
+          "asof_date": "2026-08-13",
+          "samples": 5166,
+          "return10d_rank_ic": 0.11502742430173056,
+          "utility_rank_ic": -0.018865831654427515,
+          "pairwise_accuracy": 0.49123002260861226,
+          "pairwise_pairs": 7467066
+        },
+        {
+          "asof_date": "2026-08-14",
+          "samples": 5164,
+          "return10d_rank_ic": 0.2033688505108887,
+          "utility_rank_ic": 0.0024392187737334032,
+          "pairwise_accuracy": 0.5018014236375968,
+          "pairwise_pairs": 7428014
+        },
+        {
+          "asof_date": "2026-08-17",
+          "samples": 5161,
+          "return10d_rank_ic": 0.2359817858818514,
+          "utility_rank_ic": 0.14160085599421068,
+          "pairwise_accuracy": 0.5921459964013371,
+          "pairwise_pairs": 4929053
+        },
+        {
+          "asof_date": "2026-08-18",
+          "samples": 5156,
+          "return10d_rank_ic": 0.2835806274275179,
+          "utility_rank_ic": 0.19584829792135763,
+          "pairwise_accuracy": 0.6217800777607765,
+          "pairwise_pairs": 5353856
+        },
+        {
+          "asof_date": "2026-08-19",
+          "samples": 5156,
+          "return10d_rank_ic": 0.16745659031285953,
+          "utility_rank_ic": 0.1775613655076755,
+          "pairwise_accuracy": 0.5912290139500673,
+          "pairwise_pairs": 7744192
+        },
+        {
+          "asof_date": "2026-08-20",
+          "samples": 5155,
+          "return10d_rank_ic": 0.14960410519030587,
+          "utility_rank_ic": 0.14788104888934372,
+          "pairwise_accuracy": 0.5755103295504105,
+          "pairwise_pairs": 7807455
+        },
+        {
+          "asof_date": "2026-08-21",
+          "samples": 5151,
+          "return10d_rank_ic": 0.20006011182411204,
+          "utility_rank_ic": 0.2062960874530016,
+          "pairwise_accuracy": 0.6050226520288355,
+          "pairwise_pairs": 7677458
+        },
+        {
+          "asof_date": "2026-08-24",
+          "samples": 5153,
+          "return10d_rank_ic": 0.13395770627488923,
+          "utility_rank_ic": 0.18750912646633247,
+          "pairwise_accuracy": 0.6010472677427765,
+          "pairwise_pairs": 7015207
+        },
+        {
+          "asof_date": "2026-08-25",
+          "samples": 5152,
+          "return10d_rank_ic": 0.07367912287747617,
+          "utility_rank_ic": 0.11966268284931575,
+          "pairwise_accuracy": 0.5572505960598784,
+          "pairwise_pairs": 8544863
+        },
+        {
+          "asof_date": "2026-08-26",
+          "samples": 5153,
+          "return10d_rank_ic": 0.027254962631866903,
+          "utility_rank_ic": -0.04146241049456109,
+          "pairwise_accuracy": 0.47954331255377275,
+          "pairwise_pairs": 8281375
+        },
+        {
+          "asof_date": "2026-08-27",
+          "samples": 5152,
+          "return10d_rank_ic": 0.17770731463667566,
+          "utility_rank_ic": 0.19868288057931988,
+          "pairwise_accuracy": 0.595445126473359,
+          "pairwise_pairs": 8381528
+        },
+        {
+          "asof_date": "2026-08-28",
+          "samples": 5142,
+          "return10d_rank_ic": 0.10200050260249087,
+          "utility_rank_ic": -0.01992863251040293,
+          "pairwise_accuracy": 0.4891305021937982,
+          "pairwise_pairs": 7578409
+        },
+        {
+          "asof_date": "2026-08-31",
+          "samples": 5140,
+          "return10d_rank_ic": 0.1305176794282106,
+          "utility_rank_ic": 0.1427895373875242,
+          "pairwise_accuracy": 0.5779326934148721,
+          "pairwise_pairs": 6730545
+        },
+        {
+          "asof_date": "2026-09-01",
+          "samples": 5140,
+          "return10d_rank_ic": -0.023667460749963697,
+          "utility_rank_ic": -0.041382893352206115,
+          "pairwise_accuracy": 0.4730273956992219,
+          "pairwise_pairs": 5774118
+        },
+        {
+          "asof_date": "2026-09-02",
+          "samples": 5140,
+          "return10d_rank_ic": -0.07921029700550204,
+          "utility_rank_ic": 0.03918031193140813,
+          "pairwise_accuracy": 0.5244602199513453,
+          "pairwise_pairs": 5471210
+        },
+        {
+          "asof_date": "2026-09-03",
+          "samples": 5140,
+          "return10d_rank_ic": -0.07314158252468299,
+          "utility_rank_ic": 0.06629662641199421,
+          "pairwise_accuracy": 0.5398163367360472,
+          "pairwise_pairs": 5715242
+        }
+      ],
+      "return10d_pos_days": 15,
+      "last3_return10d_rank_ic": {
+        "2026-09-01": -0.023667460749963697,
+        "2026-09-02": -0.07921029700550204,
+        "2026-09-03": -0.07314158252468299
+      },
+      "first6_return10d_rank_ic_mean": 0.2080804964258026
+    }
+  ],
+  "reference": {
+    "c2_rank_t060_p90_n16": {
+      "return10d_rank_ic_daily": 0.17962559658922883,
+      "return10d_rank_ic_pooled": 0.24282853356579281,
+      "return10d_rank_icir": 1.668447079558197,
+      "return10d_rank_ic_pos_rate": 0.8888888888888888,
+      "utility_rank_ic_daily": 0.12095893153611573,
+      "pairwise_accuracy": 0.564927890049612
+    },
+    "c2_prod_t065_p80_n5": {
+      "return10d_rank_ic_daily": 0.1768718542617823,
+      "return10d_rank_ic_pooled": 0.2372795397036252,
+      "return10d_rank_icir": 1.6894654324803522,
+      "return10d_rank_ic_pos_rate": 0.8888888888888888,
+      "utility_rank_ic_daily": 0.12083752234483813,
+      "pairwise_accuracy": 0.565004451282918
+    },
+    "seg19_rank_frozen_best_return_head": {
+      "return10d_rank_ic_daily": -0.007326050761061286,
+      "return10d_rank_ic_pooled": 0.030482327509254097,
+      "return10d_rank_icir": -0.06891124807787861,
+      "return10d_rank_ic_pos_rate": 0.3333333333333333,
+      "utility_rank_ic_daily": 0.029951721395212755,
+      "pairwise_accuracy": 0.5153679052244999
+    }
+  },
+  "conclusions": {
+    "direction_alive_head_dead": "Same trunk (Seg19 trunk frozen from Seg155; OOS WFL identical 2.43604): generative-derived return beats return_head by ~0.12-0.13 return10d IC. Next ranking work starts from generative-derived return; no new regression head; trunk frozen.",
+    "scoring_contract": "pure return; primary metric return10d Rank IC (daily mean Spearman vs package return_10d)",
+    "correction": "Early 6-date reading (~0.196 prod, 'C2 level') was premature. Full 18d is ~2/3 of C2 (0.117/0.124 vs 0.180), weaker ICIR (1.19-1.25 vs 1.67) and a negative tail on 09-01..09-03. Distillation from C2 is NOT cancelled; if done, distill C2's ranking (pairwise order) not values, with out-of-time validation from the first segment.",
+    "utility_footnote": "Same pure-return score: C2 ranks utility labels 0.121 vs ours 0.076 — C2 return predictions look more stable across label definitions (tighter tails / better calibration?). Dig here if pure-return IC plateaus.",
+    "process_lessons": "Score/save each arm immediately (runner fixed in cbd4b0a). Run the cheapest decisive arm first: prod N5 ~2.7h vs rank N16 ~8.7h on 2xT4, arms differed by only ~0.007 IC."
+  }
+}
