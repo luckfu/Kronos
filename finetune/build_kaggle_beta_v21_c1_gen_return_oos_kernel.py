@@ -4,6 +4,12 @@ Variants:
   both / prod   Seg155 forecast-best (runner kaggle_beta_v21_c1_gen_return_oos.py)
   pilot_seg9    final one-shot sealed OOS of cosine-pilot Seg9 + Seg0 (Best@475),
                 prod arm only, Seg9 first (runner kaggle_beta_v21_c1_gen_return_oos_pilot.py)
+
+Account options (defaults keep every legacy build byte-identical):
+  --owner          Kaggle account that owns/runs the kernel (kernel id owner); default luckfu
+  --dataset-owner  owner of the attached input datasets; default luckfu (the datasets are
+                   public / shared with the krnons-train group, so other accounts can attach
+                   them directly instead of copying)
 """
 
 from __future__ import annotations
@@ -54,6 +60,25 @@ VARIANTS = {
         ),
     },
 }
+
+DEFAULT_OWNER = "luckfu"
+
+
+def _reown(ref: str, owner: str) -> str:
+    _, slug = ref.split("/", 1)
+    return f"{owner}/{slug}"
+
+
+def resolve_variant(name: str, owner: str = DEFAULT_OWNER,
+                    dataset_owner: str = DEFAULT_OWNER) -> dict:
+    """Variant with kernel id / dataset_sources moved to the given Kaggle accounts."""
+    variant = dict(VARIANTS[name])
+    variant["kernel_id"] = _reown(variant["kernel_id"], owner)
+    variant["dataset_sources"] = tuple(
+        _reown(ref, dataset_owner) for ref in variant["dataset_sources"]
+    )
+    return variant
+
 
 FILES = (
     "finetune/evaluate_beta_v21_generative_return_oos.py",
@@ -112,8 +137,13 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--variant", choices=sorted(VARIANTS), default="both")
+    parser.add_argument("--owner", default=DEFAULT_OWNER,
+                        help="Kaggle account owning the kernel (kernel id owner)")
+    parser.add_argument("--dataset-owner", default=DEFAULT_OWNER,
+                        help="owner of the attached input datasets")
     args = parser.parse_args()
-    variant = VARIANTS[args.variant]
+    variant = resolve_variant(args.variant, owner=args.owner,
+                              dataset_owner=args.dataset_owner)
 
     runner = variant["runner"]
     payload = base64.b64encode(build_bundle()).decode("ascii")
@@ -148,6 +178,7 @@ def main() -> None:
     print(f"embedded {len(payload)} b64 chars")
     print(f"staged -> {staging}")
     print(f"kernel_id={variant['kernel_id']} arm_filter={variant['arm_filter']}")
+    print(f"dataset_sources={list(variant['dataset_sources'])}")
 
 
 if __name__ == "__main__":

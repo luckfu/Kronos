@@ -32,6 +32,7 @@ STAGING = FINETUNE / "kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel"
 STAGED_RUNNER = STAGING / RUNNER.name
 DOCKER_SHA = "37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461"
 SEG9_SHA = "f9d3da03f8e5b55824bff28e31e00cc039ee021126d71891bda7b5daeb76e3c8"
+LAUNCH_OWNER = "wynstonliu"
 BEST475_SHA = "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97"
 for path in (ROOT, FINETUNE):
     if str(path) not in sys.path:
@@ -67,9 +68,16 @@ def test_builder_variant_and_staged_metadata():
         meta = builder.build_metadata(builder.VARIANTS[name])
         assert meta["code_file"] == "kaggle_beta_v21_c1_gen_return_oos.py"
         assert "luckfu/kronos-beta-v21-c1-seg155-forecast-best" in meta["dataset_sources"]
+    # Default owner keeps the legacy ids unchanged.
+    assert builder.resolve_variant("pilot_seg9") == variant
+    for name in ("both", "prod"):
+        assert builder.resolve_variant(name) == builder.VARIANTS[name]
     staged = json.loads((STAGING / "kernel-metadata.json").read_text())
-    assert staged == builder.build_metadata(variant)
-    assert staged["id"] == "luckfu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9"
+    # Staging is built for the launching account (--owner wynstonliu); the input
+    # datasets stay under luckfu (public holdout + group-shared Seg9 weights).
+    assert staged == builder.build_metadata(
+        builder.resolve_variant("pilot_seg9", owner=LAUNCH_OWNER))
+    assert staged["id"] == f"{LAUNCH_OWNER}/kronos-beta-v21-c1-gen-return-oos-pilot-seg9"
     assert staged["code_file"] == RUNNER.name
     assert staged["is_private"] is True
     assert staged["enable_gpu"] is True and staged["enable_tpu"] is False
@@ -81,12 +89,27 @@ def test_builder_variant_and_staged_metadata():
     ]
 
 
+def test_builder_owner_options_reown_kernel_and_datasets():
+    builder = load("gen_return_builder_owner_t", BUILDER)
+    v = builder.resolve_variant("pilot_seg9", owner="someone", dataset_owner="other")
+    assert v["kernel_id"] == "someone/kronos-beta-v21-c1-gen-return-oos-pilot-seg9"
+    assert v["dataset_sources"] == (
+        "other/a-share-120d-temporal-symbol-holdout",
+        "other/kronos-beta-v21-c1-cosine-pilot-best475-seg9",
+    )
+    # resolve_variant must not mutate the module-level table.
+    assert builder.VARIANTS["pilot_seg9"]["kernel_id"].startswith("luckfu/")
+    meta = builder.build_metadata(v)
+    assert meta["id"] == v["kernel_id"]
+    assert meta["dataset_sources"] == list(v["dataset_sources"])
+
+
 def test_staged_runner_matches_tracked_runner_and_constants(runner):
     tracked = RUNNER.read_text()
     staged = STAGED_RUNNER.read_text()
     blob = re.compile(r'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n.*?\n"""', re.S)
     assert blob.search(tracked).group(0) == blob.search(staged).group(0)
-    assert runner.KERNEL_ID == "luckfu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9"
+    assert runner.KERNEL_ID == f"{LAUNCH_OWNER}/kronos-beta-v21-c1-gen-return-oos-pilot-seg9"
     assert runner.OUTPUT_NAME == "beta_v2_1_c1_gen_return_oos_pilot_seg9"
     assert runner.ARM_FILTER == ("prod_t065_p80_n5",)
     assert [c["label"] for c in runner.CHECKPOINTS] == [

@@ -257,7 +257,7 @@ Seg155 的逐日 IC 来自 Step 1 kernel（同 24 个日期、同 decode、同 s
 | config | `use_beta_v21_auxiliary=false`、`num_sectors=86`、`context_layer=10`、`use_size_percentile=true`、d_model 832 / 12 层 |
 | `best_metric.json` | 与 Seg155 数据集同字段（large_metrics 等），另含 val 生成式 IC（0.3254，SE 0.0266）、全量 val WFL 2.3215、SHA、父本、来源 kernel、`sealed_oos_read=false` |
 
-### 建议下一步：Seg9 + Seg0 一次性密封 OOS 最终评估（已备好，未推送）
+### 建议下一步：Seg9 + Seg0 一次性密封 OOS 最终评估（已于 2026-10-06 22:45 用 wynstonliu 账号推送，见下方启动记录）
 
 GPU 配额恢复后，用 Baseline 2 同合同在密封 18d 包上评估 **Seg9（先）和 Seg0 = Best@475（后）**，**只跑一次，作为最终评估**：
 不根据结果再换 checkpoint、改 decode 或再训练（事先登记写在 kernel 的 `PREREGISTRATION` 里）。主比较 = Seg9 − Seg0 逐日配对；
@@ -293,6 +293,24 @@ GPU 配额恢复后，用 Baseline 2 同合同在密封 18d 包上评估 **Seg9�
 | 合计 | **≈ 5.0–5.7 h**，远低于 12 h 上限（11 h 保护线前有 5 h 以上余量）；消耗 GPU 配额约 5–6 h |
 
 
+### 启动记录：密封 OOS 最终评估（Kaggle 账号 wynstonliu）
+
+luckfu 的 GPU 配额已用完，改用 Kronos 项目同学的 Kaggle 账号 **`wynstonliu`** 推送（box 上 Kaggle CLI 已切到该账号，OAUTH）。
+代码与密封合同不变，只改 kernel 所属账号。
+
+| 项 | 值 |
+|---|---|
+| 账号 | `wynstonliu` |
+| Slug | `wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9`（私有，**version 1**，GPU 2× T4，开网） |
+| 推送时间 | 2026-10-06 22:45（Asia/Shanghai）；22:47 状态 `RUNNING` |
+| Docker | pin `gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9…` 在新账号下可用（未回退默认镜像） |
+| 构建 | `python3 finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py --variant pilot_seg9 --owner wynstonliu`（builder 新增 `--owner` / `--dataset-owner`，默认 `luckfu`，旧构建不变） |
+| 数据集 | **未复制**，直接挂 luckfu 的原数据集：`luckfu/a-share-120d-temporal-symbol-holdout`（公开，根目录即密封包 `kronos_beta_v2_time_oos_through_20260903`，仅评估、禁止训练/调参）；`luckfu/kronos-beta-v21-c1-cosine-pilot-best475-seg9`（私有，通过 `krnons-train` 组共享，wynstonliu 可读） |
+| 启动校验（实时日志） | 2× Tesla T4；tokenizer SHA `59d85f6a…`；Seg9 从 `/kaggle/input/datasets/luckfu/kronos-beta-v21-c1-cosine-pilot-best475-seg9/checkpoints/best_model` 读取，SHA `f9d3da03…e3c8` 一致；Seg0 从 ModelScope 取，SHA `e1bd5584…2f97` 一致；`inputs_resolved` 18 日 / 92,751 样本 / 36 任务；两个 worker 动态认领、22:48:34 均已加载 Seg9 开始第一批日期 |
+| SwanLab | <https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_gen_return_oos_pilot_seg9>（用内置 fallback key；requirements 上传报一次 HTTP 522，不影响运行） |
+| 预计 | Seg9 18 日结果约 **10-07 01:15–01:40** 落盘；全部（含 Seg0）约 **10-07 03:45–04:30** 完成（Asia/Shanghai） |
+| 本地日志 | `/workspace/kronos_patrol_out/oos_seg9_1006_2247/` |
+
 ## 相关文件
 
 - Runner / builder：`finetune/kaggle_beta_v21_c1_forecast_cosine_pilot.py`、`finetune/build_kaggle_beta_v21_c1_forecast_cosine_pilot_kernel.py`
@@ -302,5 +320,5 @@ GPU 配额恢复后，用 Baseline 2 同合同在密封 18d 包上评估 **Seg9�
 - 父本选择依据：[`beta_v21_c1_val_gen_ic_reselection_cn.md`](beta_v21_c1_val_gen_ic_reselection_cn.md)
 - 结果 JSON：`finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`
 - 原始输出（box）：`/workspace/kronos_patrol_out/pilot475_final_1006_2116/output/`；Seg9 权重下载：`/workspace/kronos_patrol_out/pilot475_seg9_weights/`
-- 密封 OOS 最终评估 kernel（未推送）：runner `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot.py`、staging `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel/`、
+- 密封 OOS 最终评估 kernel（已推送 `wynstonliu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9` v1）：runner `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot.py`、staging `finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel/`、
   builder `finetune/build_kaggle_beta_v21_c1_gen_return_oos_kernel.py --variant pilot_seg9`、worker `finetune/evaluate_beta_v21_generative_return_oos.py`、单测 `tests/test_gen_return_oos_pilot_seg9.py`
