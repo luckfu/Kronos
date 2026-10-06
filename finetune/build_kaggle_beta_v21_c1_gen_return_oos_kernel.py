@@ -1,4 +1,10 @@
-"""Build dual-T4 Baseline-2 generative-return OOS staging (Seg155, eval-only)."""
+"""Build dual-T4 Baseline-2 generative-return OOS staging (eval-only).
+
+Variants:
+  both / prod   Seg155 forecast-best (runner kaggle_beta_v21_c1_gen_return_oos.py)
+  pilot_seg9    final one-shot sealed OOS of cosine-pilot Seg9 + Seg0 (Best@475),
+                prod arm only, Seg9 first (runner kaggle_beta_v21_c1_gen_return_oos_pilot.py)
+"""
 
 from __future__ import annotations
 
@@ -11,6 +17,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos.py"
+PILOT_RUNNER = ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_pilot.py"
+SEG155_DATASETS = (
+    "luckfu/a-share-120d-temporal-symbol-holdout",
+    "luckfu/kronos-beta-v21-c1-seg155-forecast-best",
+)
 VARIANTS = {
     "both": {
         "staging": ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_kernel",
@@ -18,6 +29,8 @@ VARIANTS = {
         "title": "Kronos Beta V21 C1 Gen Return OOS",
         "output_name": "beta_v2_1_c1_gen_return_oos",
         "arm_filter": None,
+        "runner": RUNNER,
+        "dataset_sources": SEG155_DATASETS,
     },
     "prod": {
         "staging": ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_prod_kernel",
@@ -25,6 +38,20 @@ VARIANTS = {
         "title": "Kronos Beta V21 C1 Gen Return OOS Prod",
         "output_name": "beta_v2_1_c1_gen_return_oos_prod",
         "arm_filter": ("prod_t065_p80_n5",),
+        "runner": RUNNER,
+        "dataset_sources": SEG155_DATASETS,
+    },
+    "pilot_seg9": {
+        "staging": ROOT / "finetune/kaggle_beta_v21_c1_gen_return_oos_pilot_seg9_kernel",
+        "kernel_id": "luckfu/kronos-beta-v21-c1-gen-return-oos-pilot-seg9",
+        "title": "Kronos Beta V21 C1 Gen Return OOS Pilot Seg9",
+        "output_name": "beta_v2_1_c1_gen_return_oos_pilot_seg9",
+        "arm_filter": ("prod_t065_p80_n5",),
+        "runner": PILOT_RUNNER,
+        "dataset_sources": (
+            "luckfu/a-share-120d-temporal-symbol-holdout",
+            "luckfu/kronos-beta-v21-c1-cosine-pilot-best475-seg9",
+        ),
     },
 }
 
@@ -60,7 +87,7 @@ def build_metadata(variant: dict) -> dict:
     return {
         "id": variant["kernel_id"],
         "title": variant["title"],
-        "code_file": RUNNER.name,
+        "code_file": variant["runner"].name,
         "language": "python",
         "kernel_type": "script",
         "is_private": True,
@@ -68,10 +95,7 @@ def build_metadata(variant: dict) -> dict:
         "enable_tpu": False,
         "enable_internet": True,
         "keywords": ["gpu"],
-        "dataset_sources": [
-            "luckfu/a-share-120d-temporal-symbol-holdout",
-            "luckfu/kronos-beta-v21-c1-seg155-forecast-best",
-        ],
+        "dataset_sources": list(variant["dataset_sources"]),
         "competition_sources": [],
         "kernel_sources": [],
         "model_sources": [],
@@ -91,8 +115,9 @@ def main() -> None:
     args = parser.parse_args()
     variant = VARIANTS[args.variant]
 
+    runner = variant["runner"]
     payload = base64.b64encode(build_bundle()).decode("ascii")
-    source = RUNNER.read_text()
+    source = runner.read_text()
     updated, count = re.subn(
         r'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n.*?\n"""',
         lambda _m: f'EMBEDDED_KRONOS_ARCHIVE_B64 = """\n{payload}\n"""',
@@ -103,7 +128,7 @@ def main() -> None:
     if count != 1:
         raise RuntimeError("Failed to embed archive into gen-return OOS runner")
     # Keep the tracked runner generic (archive refreshed, constants untouched).
-    RUNNER.write_text(updated)
+    runner.write_text(updated)
     staged = updated
     for pattern, value in (
         (r'^OUTPUT_NAME = ".*"$', f'OUTPUT_NAME = "{variant["output_name"]}"'),
@@ -116,7 +141,7 @@ def main() -> None:
             raise RuntimeError(f"Failed to set {pattern}")
     staging = variant["staging"]
     staging.mkdir(parents=True, exist_ok=True)
-    (staging / RUNNER.name).write_text(staged)
+    (staging / runner.name).write_text(staged)
     (staging / "kernel-metadata.json").write_text(
         json.dumps(build_metadata(variant), indent=2) + "\n"
     )

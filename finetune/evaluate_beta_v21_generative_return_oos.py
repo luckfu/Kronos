@@ -442,15 +442,73 @@ def build_summary(
     }
 
 
+def shard_name(task: dict) -> str:
+    """Per-(checkpoint, arm, date) shard file name.
+
+    Legacy single-checkpoint plans (no ``checkpoint`` key in the task) keep the
+    original ``<arm>_<date>.csv.gz`` naming so earlier staged kernels are unchanged.
+    """
+    if task.get("checkpoint"):
+        return f"{task['checkpoint']}__{task['arm']}_{task['date']}.csv.gz"
+    return f"{task['arm']}_{task['date']}.csv.gz"
+
+
+def claim_task(claims: Path, task: dict, rank: int) -> bool:
+    """Atomically claim a task (O_CREAT|O_EXCL); False if another worker has it."""
+    import os
+
+    claims.mkdir(parents=True, exist_ok=True)
+    marker = claims / (shard_name(task) + ".claim")
+    try:
+        handle = os.open(str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(handle, "w") as stream:
+        stream.write(json.dumps({"rank": rank, "time": time.time()}))
+    return True
+
+
+def iter_worker_tasks(plan: dict, rank: int, world_size: int):
+    """Static round-robin (legacy) or dynamic in-order claims (``dynamic_claims``).
+
+    Dynamic claims keep the plan order globally: every task of an earlier
+    checkpoint is taken before any task of a later one, so the first checkpoint
+    finishes (and is scored) as early as possible.
+    """
+    tasks = plan["tasks"]
+    if not plan.get("dynamic_claims"):
+        for index, task in enumerate(tasks):
+            if index % world_size == rank:
+                yield task
+        return
+    claims = Path(plan["claims"])
+    for task in tasks:
+        if claim_task(claims, task, rank):
+            yield task
+
+
+def worker_device() -> torch.device:
+    import os
+
+    if torch.cuda.is_available():
+        return torch.device("cuda:0")
+    if os.environ.get("KRONOS_ALLOW_CPU_WORKER") == "1":  # unit tests only
+        return torch.device("cpu")
+    raise RuntimeError("worker has no GPU")
+
+
 def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
-    """Dual-GPU shard worker: (arm, date) round-robin; writes per-shard CSV.gz."""
+    """Dual-GPU shard worker; writes one CSV.gz per (checkpoint, arm, date).
+
+    Plans may carry ``checkpoints`` ({label: dir}) with a ``checkpoint`` label
+    per task (multi-checkpoint kernels); otherwise the single legacy
+    ``checkpoint_dir`` / ``checkpoint_label`` is used for every task.
+    """
     import gc
     import pickle
 
     plan = json.loads(Path(plan_path).read_text())
-    if not torch.cuda.is_available():
-        raise RuntimeError(f"worker {rank} has no GPU")
-    device = torch.device("cuda:0")
+    device = worker_device()
     evaluation_root = Path(plan["evaluation_root"])
     manifest = json.loads((evaluation_root / "evaluation_manifest.json").read_text())
     samples_path = evaluation_root / manifest["artifacts"]["samples_file"]
@@ -460,32 +518,54 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
     all_records = load_incremental_records(samples_path, manifest)
     store = GenReturnWindowStore(panel, manifest["model_contract"]["sector_labels"])
     tokenizer = KronosTokenizer.from_pretrained(plan["tokenizer_dir"]).to(device).eval()
-    model = (
-        Kronos.from_pretrained(plan["checkpoint_dir"], local_files_only=True)
-        .to(device)
-        .eval()
-    )
+    checkpoint_dirs = dict(plan.get("checkpoints") or {})
+    default_label = plan.get("checkpoint_label")
+    if plan.get("checkpoint_dir"):
+        checkpoint_dirs.setdefault(default_label, plan["checkpoint_dir"])
+    loaded_label = None
+    model = None
     arms_by_name = {arm["name"]: arm for arm in ARMS}
     shards = Path(plan["shards"])
     deadline = float(plan["deadline"])
-    tasks = [task for index, task in enumerate(plan["tasks"]) if index % world_size == rank]
-    print(json.dumps({"phase": "worker_started", "rank": rank, "tasks": len(tasks),
-                      "gpu": torch.cuda.get_device_name(0)}), flush=True)
-    for task in tasks:
+    use_amp = device.type == "cuda"
+    print(json.dumps({"phase": "worker_started", "rank": rank,
+                      "mode": "dynamic" if plan.get("dynamic_claims") else "round_robin",
+                      "checkpoints": list(checkpoint_dirs),
+                      "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"}),
+          flush=True)
+    for task in iter_worker_tasks(plan, rank, world_size):
         arm = arms_by_name[task["arm"]]
-        shard = shards / f"{arm['name']}_{task['date']}.csv.gz"
+        label = task.get("checkpoint") or default_label
+        shard = shards / shard_name(task)
         if shard.is_file():
             continue
         if time.time() > deadline:
             print(json.dumps({"phase": "worker_deadline", "rank": rank,
                               "skipped_from": task}), flush=True)
             break
+        if label != loaded_label:
+            if model is not None:
+                del model
+                gc.collect()
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+            model = (
+                Kronos.from_pretrained(checkpoint_dirs[label], local_files_only=True)
+                .to(device)
+                .eval()
+            )
+            loaded_label = label
+            print(json.dumps({"phase": "worker_model_loaded", "rank": rank,
+                              "checkpoint": label, "path": str(checkpoint_dirs[label]),
+                              "use_beta_v21_auxiliary": bool(
+                                  getattr(model, "use_beta_v21_auxiliary", False))}),
+                  flush=True)
         started = time.time()
         date_records = [row for row in all_records if row["asof_date"] == task["date"]]
         result = decode_records(
             arm, model, tokenizer, date_records, store, device,
-            effective_batch=int(plan["effective_batch"]), use_amp=True,
-            label=plan["checkpoint_label"],
+            effective_batch=int(plan["effective_batch"]), use_amp=use_amp,
+            label=label,
         )
         staging = shard.with_name(shard.name + ".tmp")
         result.to_csv(staging, index=False, compression="gzip")
@@ -496,16 +576,19 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
             day = day_metrics[0] if day_metrics else {}
         except Exception as exc:  # metrics are best-effort; shard is already saved
             day = {"metric_error": repr(exc)}
-        print(json.dumps({"phase": "shard_done", "rank": rank, "arm": arm["name"],
+        print(json.dumps({"phase": "shard_done", "rank": rank, "checkpoint": label,
+                          "arm": arm["name"],
                           "date": task["date"], "rows": int(len(result)),
                           "seconds": round(time.time() - started, 1),
                           "return10d_rank_ic": day.get("return10d_rank_ic"),
                           "utility_rank_ic": day.get("utility_rank_ic"),
                           "pairwise_accuracy": day.get("pairwise_accuracy"),
                           "pairwise_pairs": day.get("pairwise_pairs")}), flush=True)
-    del model
+    if model is not None:
+        del model
     gc.collect()
-    torch.cuda.empty_cache()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
     print(json.dumps({"phase": "worker_finished", "rank": rank}), flush=True)
     return 0
 
