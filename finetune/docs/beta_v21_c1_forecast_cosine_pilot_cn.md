@@ -95,6 +95,28 @@ C1 wc 线一直是 warmup_constant hold。本 pilot 只验证一件事：
 
 所以**不削减打分**：5 个点全打，每个都是完整 24 日 / N5。保护：9.5 h 后不再开新训练块；11.5 h 后打分 worker 不再接新 shard。
 
+## 启动记录（2026-10-06）
+
+- Kaggle：`luckfu/kronos-beta-v21-c1-forecast-cosine-pilot-best475` **version 1**，14:38 CST push，状态 RUNNING；
+  kernel 内 `github_ready` commit `8ec7d0b`
+- SwanLab：<https://swanlab.cn/@roc_fu/finance/runs/beta_v2_1_c1_forecast_cosine_pilot_best475>（key 来源 fallback；Kaggle secret 未挂到该 kernel）
+- 加载检查通过：父本 201 个张量，模型 197 个全部加载，丢弃 `barrier_head.{bias,weight}`、`return_head.{bias,weight}`；
+  可训练参数 102,437,248 / 102,437,248；LR 计划 3,756 步（313 步/段 × 12），warmup 0
+- 首批训练日志：
+
+  ```
+  [Rank 0, Segment 1/12, Step 100/313] Adaptation LR 9.9842682191e-06, ..., Loss: 2.1733, Forecast: 2.1205, History: 2.4591
+  [Rank 0, Segment 1/12, Step 200/313] Adaptation LR 9.9371828716e-06, ..., Loss: 2.2328, Forecast: 2.1893, History: 2.4598
+  [Rank 0, Segment 1/12, Step 300/313] Adaptation LR 9.8590731735e-06, ..., Loss: 2.2947, Forecast: 2.2768, History: 2.2898
+  ```
+
+- 第 1 块：每段 7:46–7:52（含 full val）；全量 val WFL Seg1 2.32170 / Seg2 2.32015 / Seg3 2.32431（均低于红线 2.32737）；
+  Seg3 snapshot 落盘后训练进程正常退出（`Chunk limit reached after 3 segment(s)`），随即开始打 Seg0 + Seg3
+- Seg0 前 4 个日期的逐日 IC（0.289 / 0.187 / 0.253 / 0.381）与 Step 1 的 Best@475（0.285 / 0.187 / 0.254 / 0.380）基本一致；
+  每个 shard ~110–118 s，即每个 checkpoint ~23 min
+- 预计：Seg0/Seg3 结果约 16:00 CST，之后每 ~50 min 一个 snapshot（Seg6 ~16:50、Seg9 ~17:40、Seg12 ~18:30），
+  全部结束约 **18:30–19:00 CST**（总 ~4 h）
+
 ## 判定规则
 
 以本 kernel 内 Seg0（Best@475）的 val 生成式 IC 日均为基线（Step 1 为 0.3145，SE 0.025），看 Seg3 → 6 → 9 → 12：
