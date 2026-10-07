@@ -244,3 +244,7 @@ JSON：[`finetune/reports/beta_v21_c1_why_c2_better_analysis.json`](../reports/b
 - 没有逐条 N 样本路径，SIMEX 假设均值噪声服从高斯分布。从 N16 实测与预测的对照看，量级一致，但 T/top_p 不同，无法严格对照。
 - 验证集只有 520 只股票，OOS 约 5,150 只，两边行业中性化的自由度不同。
 - 密封 OOS 已经读过多次：本文全部 OOS 数字都只用于描述，不能用来选择任何东西。
+
+## 后续：验证集 C2 + 路径估计量（2026-10-07）
+
+一句话：路径估计量没有一个通过规则 1，保持 `mean`；N16 也不改变这个结论。秩融合选中 w_C2 = 0.25（验证 IC 0.3188 vs 0.3145，t 1.26）。风格收缩在 C2、Best@475、融合分数上都是 +0.016 到 +0.024（t 3.2–5.1）。验证集在时间上和训练集重叠，可能偏向大模型，所以融合权重很可能低估了 C2。全部候选已冻结，等 09-03 之后的新封存窗口一次性确认。详见 [`beta_v21_c1_val_c2_path_estimators_cn.md`](beta_v21_c1_val_c2_path_estimators_cn.md) 第 9–10 节；JSON [`finetune/reports/beta_v21_c1_val_c2_path_estimators.json`](../reports/beta_v21_c1_val_c2_path_estimators.json)。

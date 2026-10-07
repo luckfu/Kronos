@@ -251,3 +251,4 @@ JSON：[`finetune/reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json`
 - Val 生成式 IC 重选：`finetune/docs/beta_v21_c1_val_gen_ic_reselection_cn.md`；JSON `finetune/reports/beta_v21_c1_val_gen_ic_reselection.json`
 - 余弦 pilot（Best@475）：`finetune/docs/beta_v21_c1_forecast_cosine_pilot_cn.md`；JSON `finetune/reports/beta_v21_c1_forecast_cosine_pilot_best475.json`
 - Best@475 / Seg9 密封 OOS 最终评估：JSON `finetune/reports/beta_v21_c1_gen_return_oos_pilot_seg9_vs_best475.json`
+- 验证集 C2 vs Best@475、路径估计量、秩融合、风格收缩（2026-10-07）：验证集上 C2 比 Best@475 低 0.080，与封存 OOS 上的方向相反。原因很可能是验证集与训练集时间重叠，偏向大模型（未证实的假设）。规则 1 保持 `mean`，融合 w_C2 = 0.25，候选已冻结待新窗口确认。详见 [`beta_v21_c1_val_c2_path_estimators_cn.md`](beta_v21_c1_val_c2_path_estimators_cn.md)；JSON `finetune/reports/beta_v21_c1_val_c2_path_estimators.json`
