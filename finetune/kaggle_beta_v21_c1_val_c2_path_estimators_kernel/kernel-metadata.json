@@ -1,0 +1,22 @@
+{
+  "id": "wynstonliu/kronos-val-c2-and-path-estimators",
+  "title": "Kronos Val C2 And Path Estimators",
+  "code_file": "kaggle_beta_v21_c1_val_c2_path_estimators.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "wynstonliu/kronos-val-c2-path-inputs"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4",
+  "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461"
+}
