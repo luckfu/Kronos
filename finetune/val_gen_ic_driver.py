@@ -14,7 +14,14 @@ Usage (inside a repo checkout, GPUs free):
     python finetune/val_gen_ic_driver.py --spec spec.json
 spec = {"kernel", "output_dir", "tokenizer_dir", "input_root", "deadline",
         "checkpoints": [{"label", "path", "full_val_wfl", "note", ...}],
-        optional "world", "effective_batch", "reference"}
+        optional "world", "effective_batch", "reference", "val_contract"}
+
+Optional ``val_contract`` swaps the validation set while keeping decode, score,
+label and WFL identical (used by the heavy-reg time-disjoint retrain):
+    {"name", "val_data", "val_sha256", "sector_metadata", "signal_start",
+     "signal_end", "expected_samples", "expected_dates", "identities_sha256",
+     "subsample_dates": "all" | int, "same_contract_as"}
+Without it the Step-1 contract above is used unchanged.
 """
 
 from __future__ import annotations
@@ -87,26 +94,52 @@ def run(spec: dict) -> dict:
         emit(log, json.dumps({"phase": "valgenic_checkpoint", "label": item["label"],
                               "path": str(path), "sha256": checkpoints[-1]["sha256"]}))
 
-    val_root = find_val_root(Path(spec["input_root"]))
-    val_data = val_root / "processed_datasets" / "val_data.pkl"
+    override = spec.get("val_contract")
+    if override:
+        val_data = Path(override["val_data"])
+        expected_sha = override["val_sha256"]
+        sector_csv = Path(override["sector_metadata"])
+        signal_range = [override["signal_start"], override["signal_end"]]
+        expected_samples = int(override["expected_samples"])
+        expected_dates = int(override["expected_dates"])
+    else:
+        val_root = find_val_root(Path(spec["input_root"]))
+        val_data = val_root / "processed_datasets" / "val_data.pkl"
+        expected_sha = EXPECTED_VAL_SHA256
+        sector_csv = val_root / "asset_metadata.csv"
+        signal_range = [VAL_SIGNAL_START, VAL_SIGNAL_END]
+        expected_samples = EXPECTED_VAL_SAMPLES
+        expected_dates = EXPECTED_VAL_DATES
     val_sha = sha256_file(val_data)
-    if val_sha != EXPECTED_VAL_SHA256 and not local_test:
-        raise RuntimeError(f"val_data SHA mismatch: {val_sha} != {EXPECTED_VAL_SHA256}")
-    sector_labels = load_sector_labels(val_root / "asset_metadata.csv")
+    if val_sha != expected_sha and not local_test:
+        raise RuntimeError(f"val_data SHA mismatch: {val_sha} != {expected_sha}")
+    sector_labels = load_sector_labels(sector_csv)
     with val_data.open("rb") as handle:
         panel = pickle.load(handle)
-    records = build_val_records(panel)
+    records = build_val_records(panel, *signal_range)
     del panel
     all_dates = sorted({row["asof_date"] for row in records})
     if not local_test and (
-        len(records) != EXPECTED_VAL_SAMPLES or len(all_dates) != EXPECTED_VAL_DATES
+        len(records) != expected_samples or len(all_dates) != expected_dates
     ):
         raise RuntimeError(
             f"Val contract drift: {len(records)} windows / {len(all_dates)} dates"
         )
-    dates = select_subsample_dates(
-        all_dates, int(os.environ.get("KRONOS_VAL_DATES", VAL_SUBSAMPLE_DATES))
-    )
+    if override and override.get("identities_sha256") and not local_test:
+        from build_time_disjoint_val_panel import identities_sha256
+
+        actual_ids = identities_sha256(records)
+        if actual_ids != override["identities_sha256"]:
+            raise RuntimeError(
+                f"Val identities drift: {actual_ids} != {override['identities_sha256']}"
+            )
+    subsample_rule = (override or {}).get("subsample_dates", VAL_SUBSAMPLE_DATES)
+    if subsample_rule == "all":
+        dates = list(all_dates)
+    else:
+        dates = select_subsample_dates(
+            all_dates, int(os.environ.get("KRONOS_VAL_DATES", subsample_rule))
+        )
     chosen = set(dates)
     subsample = [row for row in records if row["asof_date"] in chosen]
     records_file = working / "val_subsample_records.json"
@@ -114,9 +147,9 @@ def run(spec: dict) -> dict:
 
     tasks = [{"checkpoint": c["label"], "date": d} for c in checkpoints for d in dates]
     contract = {
-        "val_dataset": "temporal_symbol_validation_v1",
+        "val_dataset": (override or {}).get("name", "temporal_symbol_validation_v1"),
         "val_data_sha256": val_sha,
-        "val_signal_range": [VAL_SIGNAL_START, VAL_SIGNAL_END],
+        "val_signal_range": signal_range,
         "val_full_windows": len(records),
         "val_full_dates": len(all_dates),
         "subsample_rule": "np.linspace(0, n_dates-1, k).round() over sorted signal dates; all symbols per date",
@@ -126,8 +159,15 @@ def run(spec: dict) -> dict:
         "score": "predicted_return_d10 = mean_N5 AR samples (denorm_close_d10/last_close - 1)",
         "label": "return_10d = close[asof+10]/close[asof] - 1",
         "wfl": "teacher-forcing CE, C1 horizon weights 1.364..0.455, per-sample mean on subsample",
-        "same_contract_as": "luckfu/kronos-beta-v21-c1-val-gen-ic",
+        "same_contract_as": (override or {}).get(
+            "same_contract_as", "luckfu/kronos-beta-v21-c1-val-gen-ic"
+        ),
     }
+    if override:
+        contract["subsample_rule"] = (
+            "all signal dates, all symbols per date" if subsample_rule == "all"
+            else contract["subsample_rule"]
+        )
     plan = {
         "repo": str(REPO),
         "tokenizer_dir": str(spec["tokenizer_dir"]),

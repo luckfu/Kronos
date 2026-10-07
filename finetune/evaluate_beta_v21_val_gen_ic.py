@@ -98,10 +98,12 @@ def load_sector_labels(metadata_csv: Path) -> list[str]:
     return labels
 
 
-def build_val_records(panel: dict) -> list[dict]:
+def build_val_records(
+    panel: dict, signal_start: str = VAL_SIGNAL_START, signal_end: str = VAL_SIGNAL_END
+) -> list[dict]:
     """Mirror QlibDataset('val') eligibility: every full 131-row window with asof in range."""
-    start = np.datetime64(VAL_SIGNAL_START, "D")
-    end = np.datetime64(VAL_SIGNAL_END, "D")
+    start = np.datetime64(signal_start, "D")
+    end = np.datetime64(signal_end, "D")
     records = []
     for symbol in panel:
         frame = panel[symbol]
@@ -309,10 +311,15 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
     import gc
     import pickle
 
+    import os
+
     plan = json.loads(Path(plan_path).read_text())
-    if not torch.cuda.is_available():
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    elif os.environ.get("KRONOS_VALGENIC_ALLOW_CPU") == "1":
+        device = torch.device("cpu")  # local CPU smoke only
+    else:
         raise RuntimeError(f"worker {rank} has no GPU")
-    device = torch.device("cuda:0")
     with Path(plan["val_data"]).open("rb") as handle:
         panel = pickle.load(handle)
     store = ValWindowStore(panel, plan["sector_labels"])
@@ -325,7 +332,8 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
     deadline = float(plan["deadline"])
     tasks = [task for index, task in enumerate(plan["tasks"]) if index % world_size == rank]
     print(json.dumps({"phase": "worker_started", "rank": rank, "tasks": len(tasks),
-                      "gpu": torch.cuda.get_device_name(0)}), flush=True)
+                      "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu"}),
+          flush=True)
     current_label, model = None, None
     for task in tasks:
         label = task["checkpoint"]
@@ -339,7 +347,8 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
             if model is not None:
                 del model
                 gc.collect()
-                torch.cuda.empty_cache()
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
             model = (
                 Kronos.from_pretrained(checkpoints[label]["path"], local_files_only=True)
                 .to(device)
@@ -369,7 +378,8 @@ def worker_from_plan(plan_path: Path, rank: int, world_size: int) -> int:
     if model is not None:
         del model
     gc.collect()
-    torch.cuda.empty_cache()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
     print(json.dumps({"phase": "worker_finished", "rank": rank}), flush=True)
     return 0
 

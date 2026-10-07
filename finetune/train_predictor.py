@@ -326,6 +326,64 @@ def model_export_config(core_model, config):
     return model_config
 
 
+PREDICTOR_DROPOUT_OVERRIDE_KEYS = {
+    'predictor_resid_dropout_p': 'resid_dropout_p',
+    'predictor_ffn_dropout_p': 'ffn_dropout_p',
+    'predictor_attn_dropout_p': 'attn_dropout_p',
+    'predictor_token_dropout_p': 'token_dropout_p',
+}
+
+
+def apply_predictor_dropout_overrides(model_kwargs, config):
+    """Overlay optional KRONOS_*_DROPOUT_P values on the parent config kwargs."""
+    applied = {}
+    for config_key, model_key in PREDICTOR_DROPOUT_OVERRIDE_KEYS.items():
+        value = config.get(config_key)
+        if value is None:
+            continue
+        applied[model_key] = {
+            'parent': model_kwargs.get(model_key),
+            'override': float(value),
+        }
+        model_kwargs[model_key] = float(value)
+    return applied
+
+
+def predictor_dropout_report(model):
+    """Dropout probabilities actually wired into the built predictor modules."""
+    core = model.module if hasattr(model, 'module') else model
+    resid, ffn, attn = set(), set(), set()
+    for block in core.transformer:
+        resid.add(float(block.self_attn.resid_dropout.p))
+        ffn.add(float(block.ffn.ffn_dropout.p))
+        attn.add(float(block.self_attn.attn_dropout_p))
+    return {
+        'resid_dropout_p': sorted(resid),
+        'ffn_dropout_p': sorted(ffn),
+        'attn_dropout_p': sorted(attn),
+        'token_dropout_p': [float(core.token_drop.p)],
+        'config': {
+            'resid_dropout_p': float(core.resid_dropout_p),
+            'ffn_dropout_p': float(core.ffn_dropout_p),
+            'attn_dropout_p': float(core.attn_dropout_p),
+            'token_dropout_p': float(core.token_dropout_p),
+        },
+    }
+
+
+def format_predictor_dropout_line(report):
+    """Single parseable log line (one value per kind when uniform across blocks)."""
+    def one(values):
+        return values[0] if len(values) == 1 else float('nan')
+    return (
+        'Predictor dropout (modules): '
+        f"resid={one(report['resid_dropout_p']):.4f} "
+        f"ffn={one(report['ffn_dropout_p']):.4f} "
+        f"attn={one(report['attn_dropout_p']):.4f} "
+        f"token={one(report['token_dropout_p']):.4f}"
+    )
+
+
 def build_resume_guard(config, effective_epochs, segments_per_coverage):
     """Values that must remain identical when an output tree is continued."""
     keys = (
@@ -366,6 +424,15 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
                 guard[key] = value
     guard['effective_epochs'] = int(effective_epochs)
     guard['segments_per_coverage'] = int(segments_per_coverage)
+    # Opt-in fields: only guarded when used, so older last_state.pt files that
+    # predate them keep resuming unchanged.
+    if config.get('scheduler_type') == 'warmup_constant_cosine':
+        guard['scheduler_decay_start_ratio'] = float(
+            config.get('scheduler_decay_start_ratio', 0.8)
+        )
+    for key in PREDICTOR_DROPOUT_OVERRIDE_KEYS:
+        if config.get(key) is not None:
+            guard[key] = float(config[key])
     return guard
 
 
@@ -757,6 +824,25 @@ def warmup_constant_multiplier(step, warmup_steps, start_lr, peak_lr):
         learning_rate = start_lr + (peak_lr - start_lr) * progress
     else:
         learning_rate = peak_lr
+    return learning_rate / peak_lr
+
+
+def warmup_constant_cosine_multiplier(
+    step, total_steps, warmup_steps, decay_start_steps, start_lr, peak_lr, min_lr
+):
+    """WSD: linear warmup, hold peak, then cosine peak -> min over the tail."""
+    step = max(0, min(int(step), int(total_steps)))
+    decay_start_steps = max(int(warmup_steps), min(int(decay_start_steps), int(total_steps)))
+    if step <= warmup_steps:
+        progress = step / max(1, int(warmup_steps))
+        learning_rate = start_lr + (peak_lr - start_lr) * progress
+    elif step <= decay_start_steps:
+        learning_rate = peak_lr
+    else:
+        progress = (step - decay_start_steps) / max(1, int(total_steps) - decay_start_steps)
+        learning_rate = min_lr + 0.5 * (peak_lr - min_lr) * (
+            1.0 + math.cos(math.pi * min(1.0, progress))
+        )
     return learning_rate / peak_lr
 
 
@@ -2518,11 +2604,20 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         for segment in range(effective_epochs)
     )
     scheduler_type = config.get('scheduler_type', 'warmup_cosine')
-    if scheduler_type not in {'warmup_cosine', 'warmup_constant', 'two_speed', 'uniform_cosine', 'fixed', 'one_cycle'}:
+    if scheduler_type not in {
+        'warmup_cosine', 'warmup_constant', 'two_speed', 'uniform_cosine', 'fixed',
+        'one_cycle', 'warmup_constant_cosine',
+    }:
         raise ValueError('Unsupported v1-beta scheduler type')
     warmup_steps = max(
         0,
         int(round(scheduler_steps * float(config['scheduler_warmup_ratio']))),
+    )
+    decay_start_steps = max(
+        warmup_steps,
+        int(round(
+            scheduler_steps * float(config.get('scheduler_decay_start_ratio', 0.8))
+        )),
     )
     condition_fast_decay_steps = max(
         warmup_steps + 1,
@@ -2552,6 +2647,16 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 float(group['peak_lr']),
             )
         ) if scheduler_type == 'warmup_constant' else (
+            lambda step, group=group: warmup_constant_cosine_multiplier(
+                step,
+                scheduler_steps,
+                warmup_steps,
+                decay_start_steps,
+                float(group['warmup_start_lr']),
+                float(group['peak_lr']),
+                float(group['min_lr']),
+            )
+        ) if scheduler_type == 'warmup_constant_cosine' else (
             lambda step, group=group: two_speed_multiplier(
                 step,
                 scheduler_steps,
@@ -2593,6 +2698,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             f"({float(config['scheduler_warmup_ratio']):.2%}); "
             f"scheduler={scheduler_type}."
         )
+        if scheduler_type == 'warmup_constant_cosine':
+            print(
+                "WSD decay start: "
+                f"step {decay_start_steps:,} "
+                f"({float(config['scheduler_decay_start_ratio']):.4%}) -> "
+                "cosine to min LR at the final step."
+            )
         if scheduler_type == 'two_speed':
             print(
                 "Condition fast-decay milestone: "
@@ -4065,9 +4177,17 @@ def main(config: dict):
             config.get('use_beta_v21_auxiliary', False)
         ),
     })
+    dropout_overrides = apply_predictor_dropout_overrides(model_kwargs, config)
     model = Kronos.from_pretrained(config['pretrained_predictor_path'], **model_kwargs)
     if rank == 0:
         report_parent_weight_keys(model, config['pretrained_predictor_path'])
+        if dropout_overrides:
+            print(
+                'Predictor dropout overrides (parent -> override): '
+                + json.dumps(dropout_overrides, sort_keys=True),
+                flush=True,
+            )
+        print(format_predictor_dropout_line(predictor_dropout_report(model)), flush=True)
     reset_conditioning(model, config)
     configure_trainable_parameters(model, config)
     model.to(device)

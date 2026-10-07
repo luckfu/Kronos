@@ -413,17 +413,31 @@ class Config:
             "KRONOS_SCHEDULER", "warmup_cosine"
         ).strip().lower()
         if self.scheduler_type not in {
-            "warmup_cosine", "warmup_constant", "two_speed", "uniform_cosine", "fixed", "one_cycle"
+            "warmup_cosine", "warmup_constant", "two_speed", "uniform_cosine", "fixed",
+            "one_cycle", "warmup_constant_cosine",
         }:
             raise ValueError(
                 "v1-beta optimized training requires "
-                "KRONOS_SCHEDULER=warmup_cosine, warmup_constant, two_speed, uniform_cosine, fixed, or one_cycle"
+                "KRONOS_SCHEDULER=warmup_cosine, warmup_constant, two_speed, uniform_cosine, "
+                "fixed, one_cycle, or warmup_constant_cosine"
             )
         self.scheduler_warmup_ratio = float(
             os.getenv("KRONOS_SCHEDULER_WARMUP_RATIO", "0.02")
         )
         if not 0 <= self.scheduler_warmup_ratio < 1:
             raise ValueError("KRONOS_SCHEDULER_WARMUP_RATIO must be in [0, 1)")
+        # warmup_constant_cosine (WSD): linear warmup -> hold peak -> cosine to min LR
+        # starting at this fraction of the global optimizer steps. Only read (and only
+        # resume-guarded) for that scheduler, so existing runs are unaffected.
+        self.scheduler_decay_start_ratio = float(
+            os.getenv("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
+        )
+        if self.scheduler_type == "warmup_constant_cosine" and not (
+            self.scheduler_warmup_ratio < self.scheduler_decay_start_ratio < 1
+        ):
+            raise ValueError(
+                "KRONOS_SCHEDULER_DECAY_START_RATIO must be in (warmup ratio, 1)"
+            )
         self.predictor_warmup_start_learning_rate = float(
             os.getenv("KRONOS_PREDICTOR_WARMUP_START_LR", "1e-6")
         )
@@ -516,6 +530,21 @@ class Config:
         self.adam_weight_decay = float(
             os.getenv("KRONOS_ADAM_WEIGHT_DECAY", "0.1")
         )
+
+        # Optional predictor dropout overrides applied on top of the parent
+        # config.json when the pretrained predictor is built (empty = keep parent).
+        # Weights are unaffected; only nn.Dropout / SDPA dropout_p change.
+        for _name, _env in (
+            ("predictor_resid_dropout_p", "KRONOS_RESID_DROPOUT_P"),
+            ("predictor_ffn_dropout_p", "KRONOS_FFN_DROPOUT_P"),
+            ("predictor_attn_dropout_p", "KRONOS_ATTN_DROPOUT_P"),
+            ("predictor_token_dropout_p", "KRONOS_TOKEN_DROPOUT_P"),
+        ):
+            _raw = os.getenv(_env, "").strip()
+            _value = float(_raw) if _raw else None
+            if _value is not None and not 0.0 <= _value < 1.0:
+                raise ValueError(f"{_env} must be in [0, 1)")
+            setattr(self, _name, _value)
 
         # Miscellaneous
         self.seed = 100  # Global random seed for reproducibility.
