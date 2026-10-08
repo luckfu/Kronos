@@ -1,0 +1,13 @@
+{
+  "experiment": "timesfm3-lora-finetune-v7-20261009",
+  "initialization": "fresh google/timesfm-3.0-pytorch; no V6 weights or optimizer",
+  "data_source": "V6 exported train.npz/val.npz only; original split unchanged",
+  "total_gpu_budget_seconds": 16200,
+  "kernel_timeout_seconds": 16200,
+  "step_seconds_reference": 0.685,
+  "arguments": {
+    "max_steps": 21000,
+    "run_budget_seconds": 16200,
+    "finalize_reserve_seconds": 600
+  }
+}
