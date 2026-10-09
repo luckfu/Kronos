@@ -29,7 +29,7 @@ OUTPUT = Path(os.environ.get("RELAY_OUTPUT", "/kaggle/working/relay"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v9sector20261009a"  # 21位唯一ID
+SWANLAB_RUN_ID = "tfm3v9sector20261009c"  # 崭新纯净 Run ID
 EXPERIMENT_NAME = "timesfm3-lora-v9-sector-2xt4"
 
 QUANTILE_INDEX = 4
