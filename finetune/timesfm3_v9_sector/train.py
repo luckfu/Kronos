@@ -114,7 +114,8 @@ class FastStockPool:
             max_start = len(vals) - 130
             start = rng.integers(0, max_start)
             window = vals[start:start + 130]
-            if np.isfinite(window).all():
+            # 剔除停牌/脏数据: OHLC 必须 > 0, 成交量必须 > 0 (停牌日成交量为 0 会导致 RevIN 方差异常)
+            if np.isfinite(window).all() and (window[:, :4] > 0).all() and (window[:, 4] > 0).all():
                 contexts.append(window[:120])
                 targets.append(window[120:130, 3])  # close
                 sectors.append(sec)
@@ -350,7 +351,8 @@ def evaluate(model, val, device, horizon, batch_size, return_weight, sector_embe
 
     model.eval()
     contexts_all, targets_all, sectors_all = val
-    sums, count = {"loss": 0.0, "nmae": 0.0, "nrmse_sq": 0.0, "direction_acc": 0.0}, 0
+    sums, count = {"loss": 0.0, "nmae": 0.0, "nrmse_sq": 0.0, "direction_acc": 0.0,
+                   "naive_nmae": 0.0, "naive_nrmse_sq": 0.0}, 0
     total_batches = (len(targets_all) + batch_size - 1) // batch_size
     print(f"[Eval Start] 评估开始: 样本量={len(targets_all)}, BatchSize={batch_size}, 总批次数={total_batches}", flush=True)
 
@@ -369,14 +371,23 @@ def evaluate(model, val, device, horizon, batch_size, return_weight, sector_embe
             sums["nrmse_sq"] += float(err.square().mean()) * n
             same = torch.sign(torch.diff(p, dim=1)) == torch.sign(torch.diff(t, dim=1))
             sums["direction_acc"] += float(same.float().mean()) * n
+            # 朴素基线: 预测未来 10 天收盘价都等于最后一天收盘价
+            naive_err = (start.unsqueeze(1) - t) / start.clamp_min(1e-3).unsqueeze(1)
+            sums["naive_nmae"] += float(naive_err.abs().mean()) * n
+            sums["naive_nrmse_sq"] += float(naive_err.square().mean()) * n
             count += n
             if batch_idx % 8 == 0 or batch_idx == total_batches:
                 print(f"[Eval Progress] Batch {batch_idx}/{total_batches} ({min(i + batch_size, len(targets_all))}/{len(targets_all)})", flush=True)
 
     model.train()
     metrics = {"loss": sums["loss"] / count, "nmae": sums["nmae"] / count,
-               "nrmse": (sums["nrmse_sq"] / count) ** 0.5, "direction_acc": sums["direction_acc"] / count}
-    print(f"[Eval Done] 评估完成: NRMSE={metrics['nrmse']:.4f}, NMAE={metrics['nmae']:.4f}, DirAcc={metrics['direction_acc']:.4f}", flush=True)
+               "nrmse": (sums["nrmse_sq"] / count) ** 0.5, "direction_acc": sums["direction_acc"] / count,
+               "naive_nmae": sums["naive_nmae"] / count,
+               "naive_nrmse": (sums["naive_nrmse_sq"] / count) ** 0.5}
+    # skill > 0 表示优于"预测不变"; <= 0 表示没有超过朴素基线
+    metrics["skill_nrmse"] = 1.0 - metrics["nrmse"] / max(metrics["naive_nrmse"], 1e-12)
+    print(f"[Eval Done] NRMSE={metrics['nrmse']:.4f} (naive={metrics['naive_nrmse']:.4f}, skill={metrics['skill_nrmse']:+.4f}), "
+          f"NMAE={metrics['nmae']:.4f}, DirAcc={metrics['direction_acc']:.4f}", flush=True)
     return metrics
 
 
@@ -494,6 +505,7 @@ def train(args) -> None:
     model.train()
     rng = np.random.default_rng(args.seed + chunk_index)
     tic, chunk_start_step = time.monotonic(), global_step
+    skipped = 0
 
     while global_step < args.max_steps:
         if time.monotonic() - STARTED >= deadline:
@@ -508,6 +520,7 @@ def train(args) -> None:
         # 容错: 丢弃坏 batch，绝不崩溃退出
         if not torch.isfinite(loss):
             log("warning_skip_non_finite_loss", step=global_step + 1)
+            skipped += 1
             optimizer.zero_grad(set_to_none=True)
             continue
 
@@ -517,6 +530,7 @@ def train(args) -> None:
 
         if not torch.isfinite(grad):
             log("warning_skip_non_finite_grad", step=global_step + 1)
+            skipped += 1
             optimizer.zero_grad(set_to_none=True)
             continue
 
@@ -527,7 +541,7 @@ def train(args) -> None:
             rate = (global_step - chunk_start_step) / max(time.monotonic() - tic, 1e-6)
             row = {"train/loss": float(loss), "train/grad_norm": float(grad),
                    **{f"train/{k}": v for k, v in parts.items()},
-                   "train/steps_per_sec": rate, "relay/chunk_index": chunk_index,
+                   "train/steps_per_sec": rate, "train/skipped_batches": skipped, "relay/chunk_index": chunk_index,
                    **gpu_metrics()}
             run.log(row, step=global_step)
             log("train", step=global_step, **row)
