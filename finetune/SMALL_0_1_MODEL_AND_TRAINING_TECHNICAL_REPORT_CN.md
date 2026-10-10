@@ -10,6 +10,8 @@ Stage 2 已完成至 Cosine refinement 267/267 segments，最终 best 为 Segmen
 
 `small_0.1_stage2_wc_last` 是从 Extend 01 后继续进行的 Warmup-Constant 训练，本轮已完成 534/534 个 segments；其后的 `small_0.1_stage2_wc_dual_t4` continuation 也已完成 534/534 segments，随后进行的 `small_0.1_stage2_cosine_refinement` 退火训练完成 267/267 segments。三者均作为独立阶段记录，不混合不同 scheduler 的结果。
 
+本报告还记录了一次数据质量纠偏：历史 Small 训练数据中保留了 `volume == 0` 的行，这些行被视为停牌/无实际成交记录，因而可能使“连续 131 行”并不等价于“连续 131 个实际成交日”。已完成的清洗删除训练与验证面板中的零成交量行，并按每只股票的实际成交记录重新构造 OOS；但清洗后的 Small 纠偏训练在本报告截稿时尚未执行，因此不能把它写成已获得模型收益的结果。
+
 ## 2. 版本血缘与研究目标
 
 研究目标是在保持 Kronos-small 预训练时序建模能力的基础上，引入 A 股市场的股票行业、市值和时间条件，并使用严格的时间/股票隔离验证方案进行全参数微调。版本关系如下：
@@ -152,7 +154,37 @@ flowchart LR
 
 验证窗口之间允许自然的滚动重叠：同一股票相邻 signal dates 的 120 日 lookback 通常共享约 119 日历史。因此 123,836 是窗口数量，不应被解释为 123,836 个 IID 独立观测；它适合估计验证期平均 NLL，但显著性分析应按 signal date、股票或 block bootstrap 估计有效样本量。
 
-### 4.2 窗口内标准化
+### 4.2 停牌行与零成交量数据质量问题
+
+在准备后续 Small 纠偏训练时，对原始 `train_data.pkl`、`val_data.pkl` 和 OOS 面板进行了数据质量复核。发现部分记录的 `volume == 0`；这些行没有实际成交，不应被当作该股票的有效交易日。若直接沿用行号构造窗口，停牌期间会被当作连续历史输入或未来标签的一部分，导致窗口的“交易日”语义不清晰。特别是长时间停牌时，面板日期间隔可能远大于一个市场交易日，但按行切片仍会生成表面完整的窗口。
+
+这里采用的定义是：模型输入和标签均按每只股票实际有成交的记录计数。停牌期间不补价格、不把零成交量行复制为交易日，也不要求跨股票的日期在日历上连续。这样，单股票的 120 日输入和 10 日标签分别表示该股票最近 120 个实际成交记录及其之后 10 个实际成交记录。全市场交易日仍用于信号日期和报告时间轴，但不改变单股票窗口的成交记录语义。
+
+### 4.3 清洗规则、规模变化与已完成数据版本
+
+清洗脚本 [remove_suspended_rows.py](/Users/fupengcheng/Documents/Kronos/finetune/remove_suspended_rows.py) 对训练和验证面板执行以下规则：
+
+1. 要求每只股票的日期索引已经升序且无重复；
+2. 拒绝缺失或负成交量；
+3. 删除 `volume == 0` 的整行，保留该行之外的所有字段；
+4. 用清洗后的实际成交记录重新计算 `symbol_split.csv` 的行数和验证候选窗口数；
+5. 保留原始数据版本，输出带版本后缀的独立数据包，不覆盖历史训练数据或线上模型。
+
+清洗结果如下：
+
+| 面板/指标 | 清洗前 | 清洗后 | 删除/减少 |
+|---|---:|---:|---:|
+| 训练行数 | 11,333,997 | 11,070,116 | 263,881（2.328%） |
+| 训练窗口（历史 131 行窗口定义） | 10,661,560 | 10,397,679 | 263,881（2.475%） |
+| 验证行数 | 191,223 | 保留清洗版本 | 未作为历史验证结果重算 |
+| 验证窗口 | 123,836 | 清洗包已重算候选集合 | 不回写历史 Stage 2 指标 |
+
+清洗后的训练包为：
+`data/a_share_full_market_v1_beta_temporal_symbol_validation_no_suspension_v1`
+
+“窗口数量减少”不表示删除了等量的独立样本；删除一条中间记录通常会同时改变相邻窗口的边界。因此表中训练窗口减少量是按清洗后窗口生成器的实际计数记录的，历史训练日志仍按原始 10,661,560 个窗口解释。清洗前后模型结果不得直接做成无控制变量的因果比较，后续纠偏训练应从明确的 C2 best 权重分叉，并单独记录数据版本。
+
+### 4.4 窗口内标准化
 
 对每个样本，只使用 lookback 的 120 行计算每个 OHLCVA 列的均值和标准差，并将同一组统计量应用于未来 10 日：
 
@@ -174,7 +206,7 @@ flowchart LR
     F -.禁止参与统计量计算.-> S
 ```
 
-### 4.3 coverage 顺序与可复现性
+### 4.5 coverage 顺序与可复现性
 
 Dataset 初始化时以固定 seed 生成 `coverage_order`，DataLoader 使用 `shuffle=False`。一轮 coverage 中每个窗口原则上恰好出现一次；启用均衡策略时先在 bucket 内打乱，再交错分配并打乱 segment 内顺序。不同训练阶段可以使用不同 `coverage_seed`：Bootstrap/Main 使用默认 seed `100`，Extend 01 使用 `20260907`，Warmup-Constant 使用 `20260908`。因此新阶段会重新排列同一批训练窗口，但不会改变训练数据集合。
 
@@ -704,6 +736,39 @@ C3 的 D10 符号命中率提高，但 H1–H10 的 MAE 全部恶化、pooled Ra
 
 该 negative result 表明，当前条件联合 Top-16 概率加权 OHLCVA Path Alignment 能降低 Token CE 并提高 D10 方向命中率，却不能保留或改善横截面 Alpha；模型的 token 分布变得更集中，但这种确定性没有转化为更好的连续路径、Rank IC 或分组收益。后续候选的验收优先级固定为：`Rank IC → Top-Bottom → ICIR/正 IC 日期比例 → 净收益/Sharpe/回撤 → MAE → Token CE`。若研究新的辅助目标，应以不破坏 C2 表示为约束，直接检验横截面未来收益排序，并严格控制按日期构造、未来收益定义、时间泄漏和交易成本。
 
+### 6.8 清洗数据上的 Small 纠偏训练计划
+
+#### 6.8.1 实验目的与边界
+
+停牌/零成交量行的发现和清洗发生在历史 Stage 2 完成之后。因此本实验不是对历史日志的回填，也不是重新解释 C2 已有的 OOS 结果；它是从当前 C2 best 分叉出来的独立纠偏训练，用于回答：在去除无实际成交记录后，Small 是否能减少由停牌行引入的窗口语义噪声，并在新的 OOS 上保持或改善预测表现。
+
+用户已确定本实验继续使用原始 `small_0.1_stage2_wc_dual_t4` 的训练方法，只替换训练数据版本。为保持归因清晰，实验不引入新模型结构、新 loss、Path Alignment、Rank loss、return/barrier head、新学习率扫描或 OOS 调参。纠偏训练完成前，历史 C2 best 仍是线上/生产参考模型；新分支不得覆盖它。
+
+#### 6.8.2 预注册配置
+
+- 起点：Cosine C2 best，Segment 179；权重 SHA-256 为 `4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a`。
+- 优化器：fresh AdamW，不继承 C2 的 optimizer state、step 或 scheduler 状态。
+- 数据：`a_share_full_market_v1_beta_temporal_symbol_validation_no_suspension_v1`，训练池约 10,397,679 个窗口；历史窗口生成器仍按原 Small 的 131 行契约运行。
+- 目标函数与验证：沿用 `small_0.1_stage2_wc_dual_t4` 的 forecast loss、history weight、全量验证和 validation forecast best 选择逻辑。
+- batch 与精度：2×T4，每卡 batch 32，global batch 64，float16 AMP。
+- 学习率：统一 `1e-5`；scheduler 为 warmup-constant，warm-up 后保持恒定；每 segment 20,000 个窗口。
+- 训练预算：清洗后训练池约 520 个完整 coverage segments；实际运行以 segment 边界接力，并记录完整 global step、coverage cursor、best/last checkpoint。
+- OOS：清洗后的完整 OOS 仅用于最终评估，不参与训练、scheduler、early stopping、best checkpoint 选择或任何超参数决定。
+
+这里的“沿用 131 行契约”是为了严格复现实验代码和历史 Small 训练方法；其语义已经改变为每只股票的 131 个实际成交记录，而不是 131 个全市场日历记录。正式 OOS 则使用 120 个实际成交记录输入加 10 个实际成交记录标签，共 130 行，见第 8.3.1 节。两者是不同的实现边界，不能在论文中混写。
+
+#### 6.8.3 结果记录规范
+
+纠偏训练至少需要同时保存：
+
+1. 清洗前后训练池和验证池的行数、窗口数、数据包 SHA-256；
+2. 每个 segment 的训练 loss、全量验证 forecast、best/last checkpoint 和 global step；
+3. C2 best、纠偏 best、纠偏 last 在同一清洗后 OOS 窗口集合上的 H1–H10 路径误差、D10 方向准确率、pooled/daily Rank IC、ICIR、正 IC 日期比例及 Top-Bottom；
+4. 按 signal date、行业、市值分位和是否经历较长停牌间隔的分组结果；
+5. 清洗前后模型的预测分布、路径波动校准和异常值比例。
+
+在这些结果产生前，只能说“已完成数据清洗并准备纠偏训练”，不能说清洗已经改善模型、扳回线上行为，或已经形成新的 best。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。
@@ -798,7 +863,15 @@ flowchart LR
     TB --> L
 ```
 
-### 8.3 完整 19 日 OOS：统一原始价格口径复算
+### 8.3 历史完整 19 日 OOS：统一原始价格口径复算
+
+#### 8.3.1 清洗后完整 OOS 的实际成交日契约
+
+清洗后的 OOS 包为 `evaluation_oos_full_through_20261009`，覆盖 2026-08-03 至 2026-09-17 的 34 个 signal dates，共 **175,428 个完整窗口**；最晚标签日期为 **2026-10-09**。每个 OOS 窗口包含 120 个实际成交记录作为输入，后接 10 个实际成交记录作为标签，即 130 行，不把停牌期间的零成交量记录作为交易日。
+
+因此，OOS 的“未来 10 日”定义是“未来 10 个该股票实际有成交的记录”，而不是未来 10 个全市场日历交易日。信号日期仍按全市场日期展示，便于横截面比较；某只股票在信号区间内停牌不会被人为填充，也不会因为其他股票在同一天交易而生成该股票的伪标签。该包只用于评估，未参与历史 Stage 2 或计划中的纠偏训练。
+
+这一契约与历史 Small 训练器的 131 行窗口并不矛盾：131 是历史训练代码的窗口实现边界，清洗后每行均代表实际成交记录；OOS 为正式评估单独采用 120+10 的 130 行契约。论文报告指标时必须同时写明窗口长度和行语义。
 
 #### 评估修正与可复现定义
 
@@ -1000,7 +1073,7 @@ Stage 2 已结束，未执行统一起点的 `1e-5`、`2e-5`、`3e-5` 学习率�
 
 ### 10.1 先明确 split protocol
 
-源股票池 5,198 只股票按分层规则抽出 520 只验证股票和 4,678 只主要训练股票；520 只验证股票在 2024-12-31 前的历史仍可用于训练侧，2025-01-01 后的数据只用于验证侧；最终 516 只验证股票形成有效验证窗口。验证 signal 日期为 2025-07-03 至 2026-07-02，当前 OOS signal 覆盖 2026-08-03 至 2026-08-27 的 19 个交易日，属于全市场时间 OOS，不限于 520 只验证股票。标准化统计量只来自各窗口过去 120 日。未来还需进一步审查行业/市值统计的时点可得性及重叠窗口对统计推断的影响。
+源股票池 5,198 只股票按分层规则抽出 520 只验证股票和 4,678 只主要训练股票；520 只验证股票在 2024-12-31 前的历史仍可用于训练侧，2025-01-01 后的数据只用于验证侧；最终 516 只验证股票形成有效验证窗口。历史 Stage 2 的验证 signal 日期为 2025-07-03 至 2026-07-02，旧版 OOS 证据覆盖 2026-08-03 至 2026-08-27 的 19 个日期；清洗后的完整 OOS 进一步覆盖 2026-08-03 至 2026-09-17 的 34 个 signal dates，标签最晚到 2026-10-09。两者均属于全市场时间 OOS，不限于 520 只验证股票。标准化统计量只来自各窗口过去 120 日。未来还需进一步审查行业/市值统计的时点可得性及重叠窗口对统计推断的影响。
 
 ### 10.2 条件分支归因实验（尚未执行）
 
@@ -1052,7 +1125,7 @@ Extend 01 更换 coverage seed 的性质是 optimization continuation，而不�
 
 ### 10.5 OOS、统计稳定性与市场状态
 
-当前已完成 19 个 signal dates、97,916 个窗口/模型的统一原始价格 OOS 复算。C2 best 的 pooled IC 为 0.16910、日均 IC 为 0.16163；不再以早期 Main 的 0.0865 或仅 6 日结果代表最终模型。窗口与日期均有相关性，有效时间样本远小于窗口数量。进一步工作是更长 walk-forward、市场状态分组、置信区间与交易成本评价，而不是把已完成 OOS 重列为待执行。
+历史 C2 结果已完成 19 个 signal dates、97,916 个窗口/模型的统一原始价格 OOS 复算。清洗后的新 OOS 包另有 34 个 signal dates、175,428 个完整窗口，正式用于清洗数据纠偏训练后的独立评估；它不能回写或替代历史 C2 的 19 日结果。所有窗口与日期均有相关性，有效时间样本远小于窗口数量。进一步工作是完成纠偏训练后，在新 OOS 上进行冻结协议的 walk-forward、市场状态分组、置信区间与交易成本评价。
 
 ```mermaid
 flowchart LR
@@ -1079,9 +1152,9 @@ flowchart LR
 
 尚未完成的是同一 C2 best、均匀 CE、无 history、因果验证及相同预算下的 `lambda_path=0` 对照。该对照用于严格区分“Stage 3 的 CE 训练效应”和“Path 辅助项增量”，不是继续投入当前 Path Alignment 方案的前置条件。若未来重新设计 Path 代理或使用 gradient surgery，应作为新预注册实验，不与本轮 C3 接续。
 
-### 11.2 其余后续实验
+### 11.2 清洗数据纠偏与其余后续实验
 
-退火完成后，仍建议在相同起点、相同 seed、相同验证集和相同预算下做 cosine 与 constant 的公平比较；按 forecast horizon 分解验证 loss；比较初始底座与最终 checkpoint 的分层 relative weight drift；扩展 OOS 日期后再评估方向准确率、Rank IC、分组收益及统计显著性。
+首先执行第 6.8 节的清洗数据纠偏训练，并把结果与 C2 best 在同一清洗后 OOS 上比较；在结果完成前，不改变线上模型指向。之后仍可在相同起点、相同 seed、相同验证集和相同预算下做 cosine 与 constant 的公平比较；按 forecast horizon 分解验证 loss；比较初始底座与最终 checkpoint 的分层 relative weight drift；扩展 OOS 日期后再评估方向准确率、Rank IC、分组收益及统计显著性。
 
 ### 11.3 解码协议扫描（已提交，结果待回填）
 
@@ -1095,6 +1168,10 @@ flowchart LR
 
 - 模型定义：[model/kronos.py](/Users/fupengcheng/Documents/Kronos/model/kronos.py)、[model/module.py](/Users/fupengcheng/Documents/Kronos/model/module.py)
 - 数据与窗口：[finetune/dataset.py](/Users/fupengcheng/Documents/Kronos/finetune/dataset.py)
+- 停牌/零成交量清洗：[remove_suspended_rows.py](/Users/fupengcheng/Documents/Kronos/finetune/remove_suspended_rows.py)
+- 实际成交日 OOS 构造：[prepare_actual_traded_oos.py](/Users/fupengcheng/Documents/Kronos/finetune/prepare_actual_traded_oos.py)
+- 清洗后的训练数据包：`data/a_share_full_market_v1_beta_temporal_symbol_validation_no_suspension_v1`
+- 清洗后的完整 OOS 数据包：`data/a_share_full_market_v1_beta_temporal_symbol_validation_no_suspension_v1/evaluation_oos_full_through_20261009`
 - 训练与损失：[finetune/train_predictor.py](/Users/fupengcheng/Documents/Kronos/finetune/train_predictor.py)
 - 配置：[finetune/config.py](/Users/fupengcheng/Documents/Kronos/finetune/config.py)
 - Stage 3 条件候选与损失：[stage3_path_alignment.py](/Users/fupengcheng/Documents/Kronos/finetune/stage3_path_alignment.py)
