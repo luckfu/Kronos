@@ -30,6 +30,7 @@ def main() -> None:
     ap.add_argument("--max-steps", type=int, default=500000)
     ap.add_argument("--val-samples", type=int, default=4096, help="验证集采样数 (默认 4096 条，0 为全量 12.3 万条)")
     ap.add_argument("--eval-every", type=int, default=200, help="每多少步做一次分层验证")
+    ap.add_argument("--reserve", type=int, default=900, help="保留缓冲秒数 (默认 900 秒 / 15分钟)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -37,6 +38,7 @@ def main() -> None:
     build.mkdir(parents=True, exist_ok=True)
     config = {
         "budget_seconds": args.budget,
+        "reserve_seconds": args.reserve,
         "max_steps": args.max_steps,
         "val_samples": args.val_samples,
         "eval_every": args.eval_every,
