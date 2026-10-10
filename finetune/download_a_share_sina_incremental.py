@@ -7,7 +7,8 @@ import argparse
 import json
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from multiprocessing import get_context
 from pathlib import Path
 
 import akshare as ak
@@ -104,6 +105,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--state", type=Path)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument(
+        "--processes",
+        action="store_true",
+        help="Use spawned worker processes instead of threads (safer for AkShare MiniRacer).",
+    )
     parser.add_argument("--retries", type=int, default=4)
     parser.add_argument("--checkpoint-every", type=int, default=25)
     args = parser.parse_args()
@@ -139,7 +145,14 @@ def main() -> None:
     pending = [symbol for symbol in symbols if symbol not in completed]
     buffered_rows: list[dict] = []
     buffered_symbols = 0
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+    if args.processes:
+        pool_factory = lambda: ProcessPoolExecutor(
+            max_workers=args.workers,
+            mp_context=get_context("spawn"),
+        )
+    else:
+        pool_factory = lambda: ThreadPoolExecutor(max_workers=args.workers)
+    with pool_factory() as pool:
         futures = {
             pool.submit(fetch_symbol, symbol, args.start, args.end, args.retries): symbol
             for symbol in pending
