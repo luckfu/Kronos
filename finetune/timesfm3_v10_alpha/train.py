@@ -29,8 +29,8 @@ OUTPUT = Path(os.environ.get("RELAY_OUTPUT", "/kaggle/working/relay"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v10alpha20261010a"  # V10 全新独立 Run ID
-EXPERIMENT_NAME = "timesfm3-v10-alpha-2xt4"
+SWANLAB_RUN_ID = "tfm3v10clean20261010a"  # 纯净版全新 Run ID
+EXPERIMENT_NAME = "timesfm3-v10-clean-2xt4"
 
 QUANTILE_INDEX = 4
 DATA_FEATURES = (
@@ -99,7 +99,7 @@ class FastStockPool:
                 continue
             df = df.sort_index()
             vals = df[list(DATA_FEATURES)].to_numpy(dtype=np.float32)
-            if len(vals) >= 131:
+            if len(vals) >= 130:
                 sec_id = self.symbol2sector.get(symbol, 0)
                 self.stocks.append((vals, sec_id))
         if not self.stocks:
@@ -111,7 +111,7 @@ class FastStockPool:
             idx = rng.integers(0, len(self.stocks))
             vals, sec = self.stocks[idx]
             max_start = len(vals) - 130
-            start = rng.integers(0, max_start)
+            start = 0 if max_start == 0 else rng.integers(0, max_start + 1)
             window = vals[start:start + 130].copy()
 
             # 剔除停牌/脏数据 (全特征有限, 价格正值, 成交量正值)

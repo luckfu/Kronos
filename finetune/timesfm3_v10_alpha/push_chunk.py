@@ -16,7 +16,7 @@ import subprocess
 
 HERE = Path(__file__).parent
 OWNER = "smmt315"
-DATASET_SOURCE = "luckfu/a-share-120d-temporal-symbol-holdout"
+DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
 
 
 def slug(n: int) -> str:
