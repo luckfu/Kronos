@@ -429,9 +429,15 @@ def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_em
         "ic": sums["ic_sum"] / count,
     }
     metrics["skill_nrmse"] = 1.0 - metrics["nrmse"] / max(metrics["naive_nrmse"], 1e-12)
-    print(f"[Eval Done] NRMSE={metrics['nrmse']:.4f} (naive={metrics['naive_nrmse']:.4f}, skill={metrics['skill_nrmse']:+.4f}), "
-          f"DirAcc={metrics['direction_acc']:.4f}, IC={metrics['ic']:+.4f}", flush=True)
+    # 单票走势轨迹综合得分: 兼顾方向胜率 (大趋势) 与 IC (未来10天形态相关度)
+    metrics["trajectory_score"] = float(metrics["direction_acc"] + 0.5 * max(metrics["ic"], 0.0))
+    print(f"[Eval Done] DirAcc={metrics['direction_acc']:.4f}, IC={metrics['ic']:+.4f}, "
+          f"Score={metrics['trajectory_score']:.4f}, NRMSE={metrics['nrmse']:.4f} (naive={metrics['naive_nrmse']:.4f})", flush=True)
     return metrics
+
+
+def compute_trajectory_score(m: dict) -> float:
+    return float(m.get("direction_acc", 0.0) + 0.5 * max(m.get("ic", 0.0), 0.0))
 
 
 def save_state(model, sector_embedding, optimizer, global_step, best, history, args, chunk_index):
@@ -439,7 +445,7 @@ def save_state(model, sector_embedding, optimizer, global_step, best, history, a
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
     state = {
-        "run_id": SWANLAB_RUN_ID, "global_step": global_step, "best": best, "history": history,
+        "run_id": SWANLAB_RUN_ID, "global_step": global_step, "best": best, "best_score": best, "history": history,
         "weights": get_trainable_state(model, sector_embedding), "optimizer": optimizer.state_dict(),
         "torch_rng": torch.get_rng_state(),
         "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
@@ -450,7 +456,8 @@ def save_state(model, sector_embedding, optimizer, global_step, best, history, a
     tmp.replace(OUTPUT / "state.pt")
     (OUTPUT / "relay.json").write_text(json.dumps({
         "run_id": SWANLAB_RUN_ID, "global_step": global_step, "chunk_index": chunk_index,
-        "best_val_nrmse": best, "saved_at": datetime.now(timezone.utc).isoformat(),
+        "best_score": best, "best_val_nrmse": history[-1].get("nrmse", 0.0) if history else 0.0,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
     }, indent=2))
     (OUTPUT / "history.json").write_text(json.dumps(history, indent=2))
 
@@ -492,7 +499,7 @@ def train(args) -> None:
     trainable_params = [p for p in model.parameters() if p.requires_grad] + list(sector_embedding.parameters())
     optimizer = torch.optim.AdamW(trainable_params, lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    global_step, best, history = 0, float("inf"), []
+    global_step, best_score, history = 0, -1.0, []
     if state:
         base_model = model.module if isinstance(model, nn.DataParallel) else model
         saved_weights = state["weights"]
@@ -504,8 +511,14 @@ def train(args) -> None:
         torch.set_rng_state(state["torch_rng"])
         if state["cuda_rng"] and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(state["cuda_rng"])
-        global_step, best, history = state["global_step"], state["best"], state["history"]
-        log("resumed_successfully", global_step=global_step, best_nrmse=best)
+        global_step, history = state["global_step"], state.get("history", [])
+        if "best_score" in state:
+            best_score = float(state["best_score"])
+        elif history:
+            best_score = float(max(compute_trajectory_score(h) for h in history))
+        else:
+            best_score = -1.0
+        log("resumed_successfully", global_step=global_step, best_score=best_score)
 
     if args.multi_gpu and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
         base_attrs = {
@@ -528,7 +541,7 @@ def train(args) -> None:
     # Step 0 基线体检
     if not state:
         metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding)
-        best = metrics["nrmse"]
+        best_score = metrics["trajectory_score"]
         history.append({"step": 0, **metrics})
         base_log = {f"val/{k}": v for k, v in metrics.items()}
         base_log.update(gpu_metrics())
@@ -588,20 +601,30 @@ def train(args) -> None:
             eval_row.update(gpu_metrics())
             run.log(eval_row, step=global_step)
             log("val", step=global_step, **metrics, **gpu_metrics())
-            if metrics["nrmse"] < best:
-                best = metrics["nrmse"]
+            score = metrics["trajectory_score"]
+            if score > best_score:
+                best_score = score
                 torch.save(get_trainable_state(model, sector_embedding), OUTPUT / "best_weights.pt")
                 (OUTPUT / "best_metrics.json").write_text(json.dumps(history[-1], indent=2))
+                log("new_best_trajectory_model", step=global_step, trajectory_score=best_score,
+                    direction_acc=metrics["direction_acc"], ic=metrics["ic"], nrmse=metrics["nrmse"])
 
         if global_step % args.save_every == 0:
-            save_state(model, sector_embedding, optimizer, global_step, best, history, args, chunk_index)
+            save_state(model, sector_embedding, optimizer, global_step, best_score, history, args, chunk_index)
             log("saved", step=global_step)
 
-    save_state(model, sector_embedding, optimizer, global_step, best, history, args, chunk_index)
+    save_state(model, sector_embedding, optimizer, global_step, best_score, history, args, chunk_index)
     torch.save(get_trainable_state(model, sector_embedding), OUTPUT / "last_weights.pt")
-    summary = {"chunk_index": chunk_index, "global_step": global_step, "stop": stop,
-               "best_val_nrmse": best,
-               "next": "push 下一个 chunk 并以本 kernel 为 kernel_source" if stop == "time_budget" else "done"}
+    best_dir = max((h.get("direction_acc", 0.0) for h in history), default=0.0)
+    best_ic = max((h.get("ic", -1.0) for h in history), default=0.0)
+    summary = {
+        "chunk_index": chunk_index, "global_step": global_step, "stop": stop,
+        "best_trajectory_score": best_score,
+        "best_direction_acc": best_dir,
+        "best_ic": best_ic,
+        "best_val_nrmse": min((h.get("nrmse", 999.0) for h in history), default=0.0),
+        "next": "push 下一个 chunk 并以本 kernel 为 kernel_source" if stop == "time_budget" else "done"
+    }
     (OUTPUT / "summary.json").write_text(json.dumps(summary, indent=2))
     run.log({"relay/last_step_of_chunk": global_step, **gpu_metrics()}, step=global_step)
     log("chunk_done", **summary)
