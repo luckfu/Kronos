@@ -30,8 +30,8 @@ OUTPUT = Path(os.environ.get("RELAY_OUTPUT", "/kaggle/working/relay"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v11rank16clean"  # V11 独立全新 Run ID
-EXPERIMENT_NAME = "timesfm3-v11-rank16-2xt4"
+SWANLAB_RUN_ID = "tfm3v11rank16powerlaw"  # V11 幂律重要性采样 + 振幅方差正则
+EXPERIMENT_NAME = "timesfm3-v11-rank16-powerlaw"
 
 QUANTILE_INDEX = 4
 DATA_FEATURES = (
@@ -72,13 +72,81 @@ def gpu_metrics() -> dict[str, float]:
 
 # ----------------------------------------------------------------- 数据集加载与去量纲采样
 
-def discover_dataset(root: Path) -> tuple[Path, Path, Path]:
+def discover_dataset(root: Path) -> tuple[Path, Path, Path, Path | None, Path | None]:
     train_pkls = sorted(root.glob("**/train_data.pkl"))
     val_pkls = sorted(root.glob("**/val_data.pkl"))
     splits = sorted(root.glob("**/symbol_split.csv"))
+    oos_panels = sorted(root.glob("**/evaluation_panel.pkl"))
+    oos_samples = sorted(root.glob("**/evaluation_samples.jsonl"))
     if not train_pkls or not val_pkls or not splits:
         raise FileNotFoundError(f"在 {root} 下未找到完整的原生数据集 (需要 train_data.pkl, val_data.pkl, symbol_split.csv)")
-    return train_pkls[0], val_pkls[0], splits[0]
+    oos_p = oos_panels[0] if oos_panels else None
+    oos_s = oos_samples[0] if oos_samples else None
+    return train_pkls[0], val_pkls[0], splits[0], oos_p, oos_s
+
+
+def build_oos_validation_pool(oos_panel_path: Path, oos_sample_path: Path, symbol_split_csv: Path, max_samples: int = 2048, seed: int = 20261009):
+    import pandas as pd
+
+    df_split = pd.read_csv(symbol_split_csv)
+    sectors = sorted(df_split["sector"].dropna().unique().tolist())
+    sector2id = {s: i for i, s in enumerate(sectors)}
+
+    with oos_panel_path.open("rb") as f:
+        panel = pickle.load(f)
+
+    with oos_sample_path.open("r", encoding="utf-8") as f:
+        lines = [line.strip() for line in f if line.strip()]
+
+    rng = np.random.default_rng(seed)
+    indices = rng.permutation(len(lines))
+
+    contexts, targets, oos_sectors = [], [], []
+    for idx in indices:
+        if len(contexts) >= max_samples:
+            break
+        try:
+            item = json.loads(lines[idx])
+        except Exception:
+            continue
+        sym = item["symbol"]
+        start_idx = item["start_index"]
+
+        if sym not in panel:
+            continue
+        df = panel[sym]
+        if start_idx + 130 > len(df):
+            continue
+
+        vals = df[list(DATA_FEATURES)].iloc[start_idx : start_idx + 130].to_numpy(dtype=np.float32)
+        if not (np.isfinite(vals).all() and (vals[:, :4] > 0).all() and (vals[:, 4] > 0).all()):
+            continue
+
+        p0 = vals[119, 3]
+        if p0 <= 1e-4:
+            continue
+
+        w = vals.copy()
+        w[:, list(PRICE_INDICES)] /= p0
+        vol_med = np.median(w[:120, 4]) + 1e-4
+        amt_med = np.median(w[:120, 5]) + 1e-4
+        w[:, 4] /= vol_med
+        w[:, 5] /= amt_med
+
+        contexts.append(w[:120])
+        targets.append(w[120:130, 3])
+        sec_name = item.get("sector", "unknown")
+        oos_sectors.append(sector2id.get(sec_name, 0))
+
+    if not contexts:
+        return None
+
+    log("oos_val_sampled", requested=max_samples, loaded=len(contexts))
+    return (
+        np.asarray(contexts, dtype=np.float32),
+        np.asarray(targets, dtype=np.float32),
+        np.asarray(oos_sectors, dtype=np.int64),
+    )
 
 
 class FastStockPool:
@@ -106,27 +174,49 @@ class FastStockPool:
         if not self.stocks:
             raise RuntimeError("没有加载到合法的股票训练数据")
 
-    def sample_batch(self, batch_size: int, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def sample_batch(self, batch_size: int, rng: np.random.Generator, power_law_ratio: float = 0.6) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """幂律重要性采样: 60% 采样显著趋势波段 (|R10| >= 5%), 40% 采样正常平稳背景样本。"""
         contexts, targets, sectors = [], [], []
         while len(contexts) < batch_size:
-            idx = rng.integers(0, len(self.stocks))
-            vals, sec = self.stocks[idx]
-            max_start = len(vals) - 130
-            start = 0 if max_start == 0 else rng.integers(0, max_start + 1)
-            window = vals[start:start + 130].copy()
+            want_power_law = (rng.random() < power_law_ratio)
+            chosen_window = None
 
-            # 剔除异常数据 (全特征有限, 价格正值, 成交量正值)
-            if not (np.isfinite(window).all() and (window[:, :4] > 0).all() and (window[:, 4] > 0).all()):
-                continue
+            for _ in range(8 if want_power_law else 1):
+                idx = rng.integers(0, len(self.stocks))
+                vals, sec = self.stocks[idx]
+                max_start = len(vals) - 130
+                start = 0 if max_start == 0 else rng.integers(0, max_start + 1)
+                window = vals[start:start + 130]
 
-            p0 = window[119, 3]  # context 最后一个交易日的收盘价
-            if p0 <= 1e-4:
-                continue
+                if not (np.isfinite(window).all() and (window[:, :4] > 0).all() and (window[:, 4] > 0).all()):
+                    continue
+                p0 = window[119, 3]
+                p10 = window[129, 3]
+                if p0 <= 1e-4:
+                    continue
 
-            # 价格去量纲归一 (OHLC 全部除以 P0，锚定在 1.0)
+                ret10 = abs(p10 / p0 - 1.0)
+                if want_power_law and ret10 < 0.05:
+                    continue
+
+                chosen_window = (window.copy(), sec, p0)
+                break
+
+            if chosen_window is None:
+                idx = rng.integers(0, len(self.stocks))
+                vals, sec = self.stocks[idx]
+                max_start = len(vals) - 130
+                start = 0 if max_start == 0 else rng.integers(0, max_start + 1)
+                window = vals[start:start + 130].copy()
+                if not (np.isfinite(window).all() and (window[:, :4] > 0).all() and (window[:, 4] > 0).all()):
+                    continue
+                p0 = window[119, 3]
+                if p0 <= 1e-4:
+                    continue
+                chosen_window = (window, sec, p0)
+
+            window, sec, p0 = chosen_window
             window[:, list(PRICE_INDICES)] /= p0
-
-            # 成交量与金额以历史窗口中位数归一
             vol_med = np.median(window[:120, 4]) + 1e-4
             amt_med = np.median(window[:120, 5]) + 1e-4
             window[:, 4] /= vol_med
@@ -303,8 +393,8 @@ def forecast(model, contexts, sectors, horizon: int, sector_embedding):
     return logits[:, 0, ctx_patches - 1, :, QUANTILE_INDEX][:, :horizon]
 
 
-def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5):
-    """收益率路径 Huber 损失 + 趋势方向感知损失。"""
+def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5, amp_loss_weight: float = 0.1):
+    """收益率路径 Huber 损失 + 趋势方向感知损失 + 振幅方差校准正则。"""
     import torch
     import torch.nn.functional as F
 
@@ -318,11 +408,17 @@ def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5):
     dir_alignment = (soft_sign_pred * soft_sign_true).mean()
     dir_loss = 1.0 - dir_alignment
 
-    total_loss = ret_loss + dir_loss_weight * dir_loss
+    # 振幅防暴走校准: 预测收益率标准差如果超过真实波动的 1.3 倍，施加软惩罚，稳定 skill_nrmse
+    pred_std = pred_ret.std(dim=-1).mean()
+    true_std = true_ret.std(dim=-1).mean()
+    amp_loss = F.relu(pred_std - 1.3 * true_std)
+
+    total_loss = ret_loss + dir_loss_weight * dir_loss + amp_loss_weight * amp_loss
     return total_loss, {
         "ret_loss": float(ret_loss.detach().cpu()) if torch.isfinite(ret_loss) else 0.0,
         "dir_loss": float(dir_loss.detach().cpu()) if torch.isfinite(dir_loss) else 0.0,
         "dir_alignment": float(dir_alignment.detach().cpu()) if torch.isfinite(dir_alignment) else 0.0,
+        "amp_loss": float(amp_loss.detach().cpu()) if torch.isfinite(amp_loss) else 0.0,
     }
 
 
@@ -369,7 +465,7 @@ def get_trainable_state(model, sector_embedding) -> dict:
 
 # ----------------------------------------------------------------- 评估与训练
 
-def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_embedding) -> dict:
+def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_embedding, amp_loss_weight: float = 0.1) -> dict:
     import torch
 
     model.eval()
@@ -387,7 +483,7 @@ def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_em
             s = torch.from_numpy(sectors_all[i:i + batch_size]).to(device)
             p = forecast(model, c, s, horizon, sector_embedding)
 
-            loss, _ = alpha_loss(p, t, dir_loss_weight)
+            loss, _ = alpha_loss(p, t, dir_loss_weight, amp_loss_weight)
             pred_ret = p - 1.0
             true_ret = t - 1.0
 
@@ -464,7 +560,7 @@ def train(args) -> None:
     from torch import nn
     from timesfm3 import TimesFM3Forecaster
 
-    train_pkl, val_pkl, split_csv = discover_dataset(INPUT_ROOT)
+    train_pkl, val_pkl, split_csv, oos_panel, oos_sample = discover_dataset(INPUT_ROOT)
     resume_path = find_relay_state(INPUT_ROOT)
     state = torch.load(resume_path, map_location="cpu", weights_only=False) if resume_path else None
     chunk_index = state["chunk_index"] + 1 if state else 1
@@ -481,7 +577,11 @@ def train(args) -> None:
     log("loading_data_pools")
     pool = FastStockPool(train_pkl, split_csv)
     val = build_validation_pool(val_pkl, split_csv, max_samples=args.val_samples, seed=args.seed)
-    log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]))
+    val_oos = None
+    if oos_panel and oos_sample and args.val_oos_samples > 0:
+        val_oos = build_oos_validation_pool(oos_panel, oos_sample, split_csv, max_samples=args.val_oos_samples, seed=args.seed)
+    log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]),
+        oos_val_size=len(val_oos[0]) if val_oos else 0)
 
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -543,10 +643,14 @@ def train(args) -> None:
 
     # Step 0 基线体检
     if not state:
-        metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding)
+        metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
         best_score = metrics["trajectory_score"]
         history.append({"step": 0, **metrics})
         base_log = {f"val/{k}": v for k, v in metrics.items()}
+        if val_oos is not None:
+            metrics_oos = evaluate(model, val_oos, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
+            base_log.update({f"val_oos/{k}": v for k, v in metrics_oos.items()})
+            log("baseline_oos", **metrics_oos)
         base_log.update(gpu_metrics())
         run.log(base_log, step=0)
         log("baseline", **metrics, **gpu_metrics())
@@ -564,10 +668,10 @@ def train(args) -> None:
             stop = "time_budget"
             break
 
-        c, t, s = pool.sample_batch(args.batch_size, rng)
+        c, t, s = pool.sample_batch(args.batch_size, rng, power_law_ratio=args.power_law_ratio)
         c, t, s = torch.from_numpy(c).to(device), torch.from_numpy(t).to(device), torch.from_numpy(s).to(device)
         pred = forecast(model, c, s, args.horizon, sector_embedding)
-        loss, parts = alpha_loss(pred, t, args.dir_loss_weight)
+        loss, parts = alpha_loss(pred, t, args.dir_loss_weight, args.amp_loss_weight)
 
         if not torch.isfinite(loss):
             log("warning_skip_non_finite_loss", step=global_step + 1)
@@ -601,9 +705,13 @@ def train(args) -> None:
             log("train", step=global_step, **row)
 
         if global_step % args.eval_every == 0:
-            metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding)
+            metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
             history.append({"step": global_step, **metrics})
             eval_row = {f"val/{k}": v for k, v in metrics.items()}
+            if val_oos is not None:
+                metrics_oos = evaluate(model, val_oos, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
+                eval_row.update({f"val_oos/{k}": v for k, v in metrics_oos.items()})
+                log("val_oos", step=global_step, **metrics_oos)
             eval_row.update(gpu_metrics())
             run.log(eval_row, step=global_step)
             log("val", step=global_step, **metrics, **gpu_metrics())
@@ -648,12 +756,15 @@ def parse_args(argv=None):
     p.add_argument("--min-lr", type=float, default=1e-5)
     p.add_argument("--weight-decay", type=float, default=0.01)
     p.add_argument("--dir-loss-weight", type=float, default=0.5)
+    p.add_argument("--amp-loss-weight", type=float, default=0.1)
+    p.add_argument("--power-law-ratio", type=float, default=0.6)
     p.add_argument("--max-grad-norm", type=float, default=1.0)
     p.add_argument("--lora-rank", type=int, default=16)   # 扩容至 16
     p.add_argument("--lora-alpha", type=int, default=32)  # 对应翻倍至 32
     p.add_argument("--lora-dropout", type=float, default=0.05)
     p.add_argument("--seed", type=int, default=20261009)
     p.add_argument("--val-samples", type=int, default=4096)
+    p.add_argument("--val-oos-samples", type=int, default=2048)
     p.add_argument("--max-steps", type=int, default=100000)
     p.add_argument("--budget-seconds", type=int, default=43200)  # 默认 12 小时大 Chunk
     p.add_argument("--reserve-seconds", type=int, default=300)
