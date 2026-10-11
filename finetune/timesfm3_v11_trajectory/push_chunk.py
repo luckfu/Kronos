@@ -20,7 +20,7 @@ DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
 
 
 def slug(n: int) -> str:
-    return f"kronos-timesfm3-v11-trajectory-c{n:02d}"
+    return f"kronos-timesfm3-v11-clean-c{n:02d}"
 
 
 def main() -> None:
@@ -62,7 +62,7 @@ def main() -> None:
     kernel_sources = [f"{OWNER}/{slug(args.chunk - 1)}"] if args.chunk > 1 else []
     meta = {
         "id": f"{OWNER}/{slug(args.chunk)}",
-        "title": f"Kronos TimesFM3 V11 Trajectory C{args.chunk:02d}",
+        "title": f"Kronos TimesFM3 V11 Clean C{args.chunk:02d}",
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",
