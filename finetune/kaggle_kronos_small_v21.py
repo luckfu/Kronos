@@ -481,9 +481,9 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                         step = int(record.get("step", 0))
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
-                    if run is not None:
-                        chart_segment = swanlab_chart_segment(segment, env)
-                        run.log({
+                        if run is not None:
+                            chart_segment = swanlab_chart_segment(segment, env)
+                            run.log({
                                 "train/loss": float(record["loss"]),
                                 "train/forecast_loss": float(record["forecast_loss"]),
                                 "train/history_loss": float(record["history_loss"]),
@@ -503,6 +503,8 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                     continue
     except Exception as exc:
+        if env.get("KRONOS_REQUIRE_SWANLAB", "0") == "1":
+            raise RuntimeError("SwanLab initialization failed; training was not started") from exc
         # Kaggle background jobs have no TTY and may not have a SwanLab token.
         # Training and local checkpointing must continue without remote tracking.
         print(

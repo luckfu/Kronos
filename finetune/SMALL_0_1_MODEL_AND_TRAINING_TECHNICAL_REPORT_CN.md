@@ -769,6 +769,22 @@ C3 的 D10 符号命中率提高，但 H1–H10 的 MAE 全部恶化、pooled Ra
 
 在这些结果产生前，只能说“已完成数据清洗并准备纠偏训练”，不能说清洗已经改善模型、扳回线上行为，或已经形成新的 best。
 
+#### 6.8.4 首个清洗训练 chunk 提交记录
+
+2026-10-11 提交 `luckfu/kronos-small-clean-wc-dual-t4-c01` 第 1 版后，任务在依赖安装阶段以 `ERROR` 结束。实际云端环境为 Python 3.13；固定的 `pandas==2.2.2` 转入源码构建，随后报 `metadata-generation-failed`。日志确认尚未进入训练，Output 文件列表为空，没有产生 optimizer step 或纠偏结果。
+
+修复版使用 `pandas==2.2.3` 和 `numpy==2.1.3`，对 PyTorch 及主要编译依赖强制使用二进制包。按 Python 3.13/Linux 目标完成全部依赖 wheel 解析；仅 `pwinput==1.0.3` 为纯 Python 源码包，其 wheel 构建已本地通过。原训练参数、验证和接力协议不变，复用原 run id。
+
+第 2 版已成功提交，服务端确认 `RUNNING`，2026-10-11 03:05:15 UTC 实时日志记录入口启动。随后确认 PyTorch、pandas 和 SwanLab 安装成功，双 Tesla T4、CUDA 12.4 与固定看板初始化通过，清洗数据和父模型哈希校验通过。双 rank 均报告 full-only validation size 为 123,836，建立 Segment 0 State 后开始训练。实时日志已核验 Segment 1/520、Step 200/313，global batch 64，batch objective 为 2.1831、forecast 为 2.1143、history 为 2.5511；这些仅为启动核验的 batch 指标，不是完成验证、checkpoint 改善或 OOS 收益。
+
+- 独立 SwanLab 实验：`small_0.1_clean_wc_dual_t4_20261011`，固定 run id `smcl1011`，地址为 <https://swanlab.cn/@roc_fu/finance/runs/smcl1011>。后续 chunk 沿用此标识。
+- 第 1 版自包含源码包 SHA-256：`123f9ebbdcf73b96ae99b19cd62f37e7eb22291957f31ee34b6eac816b6e9e02`；依赖修复版为 `d505207d6d12ac0d5a7443f7e06ac63c46ce8fe312acf00ad41d7fad82d01b57`。基础 Git commit 为 `eca981cf67db64d98d6634b18deb5fab8b548405`，本次工作区实现由源码包哈希绑定。
+- 清洗数据 manifest SHA-256：`b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd`，已与 Kaggle 下载的 manifest 核对一致。按实际 Dataset 构造，训练候选窗口为 10,397,679 个，每段 20,000 个，一遍覆盖共 520 段。
+- 全量验证本地验收：候选窗口数与 Dataset 长度均为 123,836，实际 signal date 范围为 2025-07-03 至 2026-07-02；每段完整训练后执行全量验证，不使用 quick 子集。
+- GPU 会话上限为 43,200 秒，进程预算为 40,500 秒（11 小时 15 分钟），启动准备时间计入预算。`max_segments_per_run=0`，由耗时决定本 chunk 完成多少段；在完整 segment、验证和 checkpoint 保存后的边界判断退出，预留 45 分钟缓冲。
+- C02 打包预演通过，挂载 C01 发布后的完整 Output；只有上游为 `COMPLETE` 且 State/Best/Last、日志、指标和清单全部通过验收后才提交后续 chunk。恢复 optimizer、scheduler、RNG、AMP 和全局 coverage 位置，不重新开始 warm-up。
+- 本地配置与数据 smoke test、自包含源码导入、11 项针对性测试、Python 编译及 `git diff --check` 已通过。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。
