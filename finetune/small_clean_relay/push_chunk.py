@@ -77,8 +77,10 @@ def main():
     if args.chunk > 1:
         previous = HERE / "build" / slug(args.chunk - 1) / "build_manifest.json"
         saved = json.loads(previous.read_text())
-        if saved["source_sha256"] != digest or saved["source_commit"] != commit:
+        if saved["source_sha256"] != digest:
             raise RuntimeError("Source changed across chunks; use the original source bundle")
+        # A Git commit after submission does not change the submitted source bundle.
+        commit = saved["source_commit"]
     parent = INITIAL_PARENT if args.chunk == 1 else f"{OWNER}/{slug(args.chunk - 1)}"
     config = {"chunk": args.chunk, "source_sha256": digest,
               "source_commit": commit, "parent_kernel": parent}

@@ -785,6 +785,18 @@ C3 的 D10 符号命中率提高，但 H1–H10 的 MAE 全部恶化、pooled Ra
 - C02 打包预演通过，挂载 C01 发布后的完整 Output；只有上游为 `COMPLETE` 且 State/Best/Last、日志、指标和清单全部通过验收后才提交后续 chunk。恢复 optimizer、scheduler、RNG、AMP 和全局 coverage 位置，不重新开始 warm-up。
 - 本地配置与数据 smoke test、自包含源码导入、11 项针对性测试、Python 编译及 `git diff --check` 已通过。
 
+#### 6.8.5 C01 完成与 C02 接力
+
+2026-10-12 核验 C01 第 2 版状态为 `COMPLETE`，完整 Output 已发布。任务因 runtime limit 在第 219/520 段训练、全量验证和保存完成后正常退出；累计覆盖 4,380,000 个唯一训练窗口，全局 optimizer step 为 68,547。云端 `output_verified` 确认 `next_epoch=219`、下一段 220，并验收 optimizer、scheduler、AMP、RNG 与段边界一致性。
+
+最佳模型位于第 219 段，全量验证 123,836 个样本，加权 forecast 选模 loss 为 2.2926335502，未加权 forecast 为 2.2843475692，objective 为 2.3430805733。该结果是当前清洗数据训练的验证指标；尚未完成全部 520 段或纠偏后的 OOS 评估。
+
+下载轻量 `metrics.jsonl` 逐段复核：第 1 至 219 段各有一条 `validation_large` 记录，样本数全部为 123,836，没有使用验证子集。第 1 段加权 forecast 为 2.3045894022，第 219 段为 2.2926335502。
+
+C02 挂载 `luckfu/kronos-small-clean-wc-dual-t4-c01` 的完整 Output，从第 220 段继续。源码包哈希仍为 `d505207d6d12ac0d5a7443f7e06ac63c46ce8fe312acf00ad41d7fad82d01b57`，沿用 C01 的源码基础 commit 和相同 recipe；GitHub 提交改变本地 HEAD 时，只要打包源码哈希一致，接力打包器保留原实验的 commit 标识。此项检查修复不进入训练源码包，新增测试同时验证 HEAD 变化可以接力、源码变化仍拒绝；12 项针对性测试通过。
+
+C02 第 1 版已提交并确认 `RUNNING`，北京时间 2026-10-12 00:05:01 启动。云端再次验收 C01 State，确认 `next_epoch=219`、global step 68,547，带入历史 904 条指标并连接同一看板 `smcl1011`。双 rank 均确认全量验证 123,836 个窗口；实时日志已出现 Segment 220/520、Step 53/313，predictor/condition LR 均为 `1e-5`，global batch 64，batch objective 2.4514、forecast 2.3627、history 2.5093。这证明接力训练循环启动，不代表 C02 已完成或形成新的最佳模型。C03 打包预演通过，仅待 C02 正常完成及完整 Output 验收后继续。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。

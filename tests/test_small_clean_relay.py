@@ -1,6 +1,7 @@
 import hashlib
 import json
 import runpy
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,32 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def load_launcher():
     return runpy.run_path(str(ROOT / "finetune/small_clean_relay/launch.py"))
+
+
+def test_relay_preserves_submitted_identity_after_git_commit(tmp_path, monkeypatch):
+    ns = runpy.run_path(str(ROOT / "finetune/small_clean_relay/push_chunk.py"))
+    main = ns["main"]
+    actual_here = main.__globals__["HERE"]
+    previous = tmp_path / "build" / ns["slug"](1) / "build_manifest.json"
+    previous.parent.mkdir(parents=True)
+    previous.write_text(json.dumps({
+        "source_sha256": hashlib.sha256(b"original source").hexdigest(),
+        "source_commit": "submitted-commit",
+    }))
+    monkeypatch.setitem(main.__globals__, "HERE", tmp_path)
+    monkeypatch.setitem(main.__globals__, "source_bundle", lambda: b"original source")
+    monkeypatch.setitem(main.__globals__, "local_credential", lambda: "")
+    monkeypatch.setattr(ns["subprocess"], "check_output", lambda *a, **k: "new-head\n")
+    original_run_path = runpy.run_path
+    monkeypatch.setattr(runpy, "run_path",
+                        lambda path: original_run_path(str(actual_here / "launch.py")))
+    monkeypatch.setattr(sys, "argv", ["push_chunk.py", "2", "--dry-run"])
+    main()
+    built = json.loads((tmp_path / "build" / ns["slug"](2) / "build_manifest.json").read_text())
+    assert built["source_commit"] == "submitted-commit"
+    monkeypatch.setitem(main.__globals__, "source_bundle", lambda: b"changed source")
+    with pytest.raises(RuntimeError, match="Source changed across chunks"):
+        main()
 
 
 def test_flat_kaggle_upload_restores_manifest_layout(tmp_path):
