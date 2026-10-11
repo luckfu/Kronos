@@ -748,8 +748,8 @@ def train(args) -> None:
 def parse_args(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="google/timesfm-3.0-pytorch")
-    p.add_argument("--batch-size", type=int, default=4)
-    p.add_argument("--eval-batch-size", type=int, default=128)
+    p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--eval-batch-size", type=int, default=256)
     p.add_argument("--multi-gpu", action="store_true", default=True)
     p.add_argument("--horizon", type=int, default=10)
     p.add_argument("--learning-rate", type=float, default=1e-4)
