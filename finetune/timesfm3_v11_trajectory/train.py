@@ -72,81 +72,13 @@ def gpu_metrics() -> dict[str, float]:
 
 # ----------------------------------------------------------------- 数据集加载与去量纲采样
 
-def discover_dataset(root: Path) -> tuple[Path, Path, Path, Path | None, Path | None]:
+def discover_dataset(root: Path) -> tuple[Path, Path, Path]:
     train_pkls = sorted(root.glob("**/train_data.pkl"))
     val_pkls = sorted(root.glob("**/val_data.pkl"))
     splits = sorted(root.glob("**/symbol_split.csv"))
-    oos_panels = sorted(root.glob("**/evaluation_panel.pkl"))
-    oos_samples = sorted(root.glob("**/evaluation_samples.jsonl"))
     if not train_pkls or not val_pkls or not splits:
         raise FileNotFoundError(f"在 {root} 下未找到完整的原生数据集 (需要 train_data.pkl, val_data.pkl, symbol_split.csv)")
-    oos_p = oos_panels[0] if oos_panels else None
-    oos_s = oos_samples[0] if oos_samples else None
-    return train_pkls[0], val_pkls[0], splits[0], oos_p, oos_s
-
-
-def build_oos_validation_pool(oos_panel_path: Path, oos_sample_path: Path, symbol_split_csv: Path, max_samples: int = 2048, seed: int = 20261009):
-    import pandas as pd
-
-    df_split = pd.read_csv(symbol_split_csv)
-    sectors = sorted(df_split["sector"].dropna().unique().tolist())
-    sector2id = {s: i for i, s in enumerate(sectors)}
-
-    with oos_panel_path.open("rb") as f:
-        panel = pickle.load(f)
-
-    with oos_sample_path.open("r", encoding="utf-8") as f:
-        lines = [line.strip() for line in f if line.strip()]
-
-    rng = np.random.default_rng(seed)
-    indices = rng.permutation(len(lines))
-
-    contexts, targets, oos_sectors = [], [], []
-    for idx in indices:
-        if len(contexts) >= max_samples:
-            break
-        try:
-            item = json.loads(lines[idx])
-        except Exception:
-            continue
-        sym = item["symbol"]
-        start_idx = item["start_index"]
-
-        if sym not in panel:
-            continue
-        df = panel[sym]
-        if start_idx + 130 > len(df):
-            continue
-
-        vals = df[list(DATA_FEATURES)].iloc[start_idx : start_idx + 130].to_numpy(dtype=np.float32)
-        if not (np.isfinite(vals).all() and (vals[:, :4] > 0).all() and (vals[:, 4] > 0).all()):
-            continue
-
-        p0 = vals[119, 3]
-        if p0 <= 1e-4:
-            continue
-
-        w = vals.copy()
-        w[:, list(PRICE_INDICES)] /= p0
-        vol_med = np.median(w[:120, 4]) + 1e-4
-        amt_med = np.median(w[:120, 5]) + 1e-4
-        w[:, 4] /= vol_med
-        w[:, 5] /= amt_med
-
-        contexts.append(w[:120])
-        targets.append(w[120:130, 3])
-        sec_name = item.get("sector", "unknown")
-        oos_sectors.append(sector2id.get(sec_name, 0))
-
-    if not contexts:
-        return None
-
-    log("oos_val_sampled", requested=max_samples, loaded=len(contexts))
-    return (
-        np.asarray(contexts, dtype=np.float32),
-        np.asarray(targets, dtype=np.float32),
-        np.asarray(oos_sectors, dtype=np.int64),
-    )
+    return train_pkls[0], val_pkls[0], splits[0]
 
 
 class FastStockPool:
@@ -560,7 +492,7 @@ def train(args) -> None:
     from torch import nn
     from timesfm3 import TimesFM3Forecaster
 
-    train_pkl, val_pkl, split_csv, oos_panel, oos_sample = discover_dataset(INPUT_ROOT)
+    train_pkl, val_pkl, split_csv = discover_dataset(INPUT_ROOT)
     resume_path = find_relay_state(INPUT_ROOT)
     state = torch.load(resume_path, map_location="cpu", weights_only=False) if resume_path else None
     chunk_index = state["chunk_index"] + 1 if state else 1
@@ -577,11 +509,7 @@ def train(args) -> None:
     log("loading_data_pools")
     pool = FastStockPool(train_pkl, split_csv)
     val = build_validation_pool(val_pkl, split_csv, max_samples=args.val_samples, seed=args.seed)
-    val_oos = None
-    if oos_panel and oos_sample and args.val_oos_samples > 0:
-        val_oos = build_oos_validation_pool(oos_panel, oos_sample, split_csv, max_samples=args.val_oos_samples, seed=args.seed)
-    log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]),
-        oos_val_size=len(val_oos[0]) if val_oos else 0)
+    log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]))
 
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -647,10 +575,6 @@ def train(args) -> None:
         best_score = metrics["trajectory_score"]
         history.append({"step": 0, **metrics})
         base_log = {f"val/{k}": v for k, v in metrics.items()}
-        if val_oos is not None:
-            metrics_oos = evaluate(model, val_oos, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
-            base_log.update({f"val_oos/{k}": v for k, v in metrics_oos.items()})
-            log("baseline_oos", **metrics_oos)
         base_log.update(gpu_metrics())
         run.log(base_log, step=0)
         log("baseline", **metrics, **gpu_metrics())
@@ -708,10 +632,6 @@ def train(args) -> None:
             metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
             history.append({"step": global_step, **metrics})
             eval_row = {f"val/{k}": v for k, v in metrics.items()}
-            if val_oos is not None:
-                metrics_oos = evaluate(model, val_oos, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
-                eval_row.update({f"val_oos/{k}": v for k, v in metrics_oos.items()})
-                log("val_oos", step=global_step, **metrics_oos)
             eval_row.update(gpu_metrics())
             run.log(eval_row, step=global_step)
             log("val", step=global_step, **metrics, **gpu_metrics())
@@ -749,7 +669,7 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="google/timesfm-3.0-pytorch")
     p.add_argument("--batch-size", type=int, default=8)
-    p.add_argument("--eval-batch-size", type=int, default=256)
+    p.add_argument("--eval-batch-size", type=int, default=512)
     p.add_argument("--multi-gpu", action="store_true", default=True)
     p.add_argument("--horizon", type=int, default=10)
     p.add_argument("--learning-rate", type=float, default=1e-4)
@@ -763,8 +683,7 @@ def parse_args(argv=None):
     p.add_argument("--lora-alpha", type=int, default=32)  # 对应翻倍至 32
     p.add_argument("--lora-dropout", type=float, default=0.05)
     p.add_argument("--seed", type=int, default=20261009)
-    p.add_argument("--val-samples", type=int, default=4096)
-    p.add_argument("--val-oos-samples", type=int, default=2048)
+    p.add_argument("--val-samples", type=int, default=0)  # 0 为 100% 全量 12.3 万条
     p.add_argument("--max-steps", type=int, default=100000)
     p.add_argument("--budget-seconds", type=int, default=43200)  # 默认 12 小时大 Chunk
     p.add_argument("--reserve-seconds", type=int, default=300)

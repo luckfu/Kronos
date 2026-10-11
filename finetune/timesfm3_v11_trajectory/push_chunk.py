@@ -15,8 +15,8 @@ import re
 import subprocess
 
 HERE = Path(__file__).parent
-OWNER = "smmt315"
-DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
+OWNER = "wynstonliu"
+DATASET_SOURCE = "luckfu/a-share-120d-temporal-symbol-holdout"
 
 
 def slug(n: int) -> str:
@@ -26,16 +26,15 @@ def slug(n: int) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("chunk", type=int)
-    ap.add_argument("--budget", type=int, default=1800, help="本段运行秒数 (默认 1800 秒 / 30分钟)")
+    ap.add_argument("--budget", type=int, default=3600, help="本段运行秒数 (默认 3600 秒 / 1小时)")
     ap.add_argument("--max-steps", type=int, default=500000)
     ap.add_argument("--batch-size", type=int, default=8, help="训练批大小 (单卡 8, 双卡 16)")
-    ap.add_argument("--eval-batch-size", type=int, default=256, help="评估推断批大小")
-    ap.add_argument("--val-samples", type=int, default=0, help="验证集采样数 (0 为全量 123,839 条)")
-    ap.add_argument("--val-oos-samples", type=int, default=1024, help="OOS 测试集采样数 (默认 1024 条)")
+    ap.add_argument("--eval-batch-size", type=int, default=512, help="评估推断批大小 (默认 512)")
+    ap.add_argument("--val-samples", type=int, default=0, help="验证集采样数 (0 为 100% 全量 123,839 条)")
     ap.add_argument("--power-law-ratio", type=float, default=0.6, help="幂律大波段采样比例 (默认 0.6)")
     ap.add_argument("--amp-loss-weight", type=float, default=0.1, help="振幅防暴走软约束权重 (默认 0.1)")
-    ap.add_argument("--eval-every", type=int, default=200, help="每多少步做一次全量大考验证 (默认 200 步)")
-    ap.add_argument("--reserve", type=int, default=180, help="保留缓冲秒数 (默认 180 秒 / 3分钟)")
+    ap.add_argument("--eval-every", type=int, default=500, help="每多少步做一次全量大考验证 (默认 500 步)")
+    ap.add_argument("--reserve", type=int, default=300, help="保留缓冲秒数 (默认 300 秒 / 5分钟)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -48,7 +47,6 @@ def main() -> None:
         "batch_size": args.batch_size,
         "eval_batch_size": args.eval_batch_size,
         "val_samples": args.val_samples,
-        "val_oos_samples": args.val_oos_samples,
         "power_law_ratio": args.power_law_ratio,
         "amp_loss_weight": args.amp_loss_weight,
         "eval_every": args.eval_every,
