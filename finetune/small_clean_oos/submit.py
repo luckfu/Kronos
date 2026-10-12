@@ -16,6 +16,16 @@ ROOT = HERE.parents[1]
 KERNEL = "luckfu/kronos-small-clean-vs-c2-full-oos"
 
 
+def published_file_names(api, parent):
+    names, token = set(), None
+    while True:
+        response = api.kernels_list_files(parent, page_token=token, page_size=200)
+        names.update(item.name for item in response.files)
+        token = response.next_page_token
+        if not token:
+            return names
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--submit", action="store_true")
@@ -127,10 +137,8 @@ if child.wait():
         status = subprocess.check_output(["kaggle", "kernels", "status", parent], text=True)
         if "COMPLETE" not in status:
             raise RuntimeError(f"Parent incomplete: {parent}")
-        listing = subprocess.check_output(
-            ["kaggle", "kernels", "files", parent, "--page-size", "200", "--format", "json"],
-            text=True)
-        if "model.safetensors" not in listing:
+        names = published_file_names(api, parent)
+        if not any(name.endswith("model.safetensors") for name in names):
             raise RuntimeError(f"Missing parent weights: {parent}")
     subprocess.run(["kaggle", "kernels", "push", "-p", str(build),
                     "--timeout", "43200", "--accelerator", "NvidiaTeslaT4"], check=True)

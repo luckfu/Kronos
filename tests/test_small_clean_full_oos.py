@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
 import pytest
+from types import SimpleNamespace
 
 from finetune.small_clean_oos.evaluate import WindowStore, paired_comparison
+from finetune.small_clean_oos.submit import published_file_names
 
 
 def fixture_window():
@@ -69,3 +71,17 @@ def test_pairing_guard_rejects_different_sample_or_label():
     clean.loc[0, "actual_return_d10"] = .2
     with pytest.raises(RuntimeError, match="labels differ"):
         paired_comparison(c2, clean)
+
+
+def test_parent_weight_listing_checks_later_pages():
+    class Api:
+        def kernels_list_files(self, parent, page_token, page_size):
+            assert parent == "owner/parent" and page_size == 200
+            if page_token is None:
+                return SimpleNamespace(files=[SimpleNamespace(name="source.py")],
+                                       next_page_token="second")
+            assert page_token == "second"
+            return SimpleNamespace(files=[SimpleNamespace(name="model.safetensors")],
+                                   next_page_token=None)
+
+    assert "model.safetensors" in published_file_names(Api(), "owner/parent")
