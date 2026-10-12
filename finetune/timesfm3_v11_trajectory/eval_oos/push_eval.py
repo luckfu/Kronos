@@ -13,7 +13,7 @@ HERE = Path(__file__).parent
 OWNER = "wynstonliu"
 DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
 KERNEL_SOURCE = "wynstonliu/kronos-timesfm3-v11-clean-c02"
-KERNEL_SLUG = "kronos-timesfm3-v11-audit-oos"
+KERNEL_SLUG = "kronos-timesfm3-v11-clean-oos-audit"
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
 
     meta = {
         "id": f"{OWNER}/{KERNEL_SLUG}",
-        "title": "Kronos TimesFM3 V11 Audit Full Val and OOS",
+        "title": "Kronos TimesFM3 V11 Clean OOS Audit",
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",

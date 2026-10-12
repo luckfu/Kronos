@@ -238,33 +238,35 @@ def forecast(model, contexts, sectors, horizon: int, sector_embedding):
 
 
 def attach_lora(model, rank: int, alpha: int, dropout: float):
+    """将 LoRA 注入到核心投影层 (与 train.py 100% 严格一致)。"""
     import torch
     from torch import nn
 
     class LoRALinear(nn.Module):
-        def __init__(self, base: nn.Linear, r: int, a: int, drop: float):
+        def __init__(self, base: nn.Linear):
             super().__init__()
             self.base = base
-            self.base.weight.requires_grad = False
-            if self.base.bias is not None:
-                self.base.bias.requires_grad = False
-            self.scaling = a / r
-            self.dropout = nn.Dropout(drop) if drop > 0.0 else nn.Identity()
-            self.lora_a = nn.Linear(base.in_features, r, bias=False)
-            self.lora_b = nn.Linear(r, base.out_features, bias=False)
-            nn.init.kaiming_uniform_(self.lora_a.weight, a=5 ** 0.5)
-            nn.init.zeros_(self.lora_b.weight)
+            base.weight.requires_grad_(False)
+            if base.bias is not None:
+                base.bias.requires_grad_(False)
+            kw = {"device": base.weight.device, "dtype": base.weight.dtype}
+            self.lora_a = nn.Parameter(torch.empty(rank, base.in_features, **kw))
+            self.lora_b = nn.Parameter(torch.zeros(base.out_features, rank, **kw))
+            nn.init.kaiming_uniform_(self.lora_a, a=5 ** 0.5)
+            self.scale, self.dropout = alpha / rank, nn.Dropout(dropout)
 
         def forward(self, x):
-            return self.base(x) + self.lora_b(self.dropout(self.lora_a(x))) * self.scaling
+            return self.base(x) + (self.dropout(x) @ self.lora_a.T @ self.lora_b.T) * self.scale
 
-    for name, module in list(model.named_modules()):
-        if isinstance(module, nn.Linear) and any(tag in name for tag in ("q_proj", "k_proj", "v_proj", "o_proj")):
-            parts = name.split(".")
-            parent = model
-            for part in parts[:-1]:
-                parent = getattr(parent, part)
-            setattr(parent, parts[-1], LoRALinear(module, rank, alpha, dropout))
+    for p in model.parameters():
+        p.requires_grad_(False)
+    targets = {"query_proj", "key_proj", "value_proj", "out_proj", "ff0", "ff1"}
+    for _, parent in list(model.named_modules()):
+        for name, child in list(parent.named_children()):
+            if name in targets and isinstance(child, nn.Linear):
+                setattr(parent, name, LoRALinear(child))
+    if not any(p.requires_grad for p in model.parameters()):
+        raise RuntimeError("LoRA 没有匹配到任何 Linear 层")
     return model
 
 
@@ -415,8 +417,17 @@ def main():
     saved_weights = torch.load(weights_path, map_location="cpu", weights_only=False)
     lora_weights = {k.replace("lora.", ""): v for k, v in saved_weights.items() if k.startswith("lora.")}
     sec_weights = {k.replace("sector.", ""): v for k, v in saved_weights.items() if k.startswith("sector.")}
-    model.load_state_dict(lora_weights, strict=False)
-    sector_embedding.load_state_dict(sec_weights)
+
+    lora_params_in_model = {k: v for k, v in model.named_parameters() if "lora_" in k}
+    print(f"[LoRA Check] 模型中注入的 LoRA 参数数量: {len(lora_params_in_model)}, 待加载权重数量: {len(lora_weights)}", flush=True)
+    assert len(lora_params_in_model) == len(lora_weights) == 400, f"LoRA 数量不匹配! 模型: {len(lora_params_in_model)}, 权重: {len(lora_weights)}"
+
+    missing, unexpected = model.load_state_dict(lora_weights, strict=False)
+    print(f"[LoRA Check] 加载完成: missing_non_lora={len(missing)}, unexpected={len(unexpected)}", flush=True)
+    assert len(unexpected) == 0, f"发现多余未匹配权重: {unexpected}"
+
+    sector_embedding.load_state_dict(sec_weights, strict=True)
+    print(f"[Sector Check] 行业嵌入权重 100% 严格匹配加载成功!", flush=True)
 
     if torch.cuda.is_available() and torch.cuda.device_count() >= 2:
         base_attrs = {
@@ -511,7 +522,7 @@ def main():
     try:
         swanlab.login(api_key=SWANLAB_API_KEY)
         run = swanlab.init(project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
-                           experiment_name=EXPERIMENT_NAME, id=SWANLAB_RUN_ID, resume="never")
+                           experiment_name=EXPERIMENT_NAME, id=SWANLAB_RUN_ID, resume="allow")
         swan_log = {
             "val_full/direction_acc": val_metrics["direction_acc_10d"],
             "val_full/pooled_ic": val_metrics["pooled_ic_10d"],
