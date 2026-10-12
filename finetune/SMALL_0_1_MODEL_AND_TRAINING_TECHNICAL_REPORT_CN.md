@@ -797,6 +797,20 @@ C02 挂载 `luckfu/kronos-small-clean-wc-dual-t4-c01` 的完整 Output，从第 
 
 C02 第 1 版已提交并确认 `RUNNING`，北京时间 2026-10-12 00:05:01 启动。云端再次验收 C01 State，确认 `next_epoch=219`、global step 68,547，带入历史 904 条指标并连接同一看板 `smcl1011`。双 rank 均确认全量验证 123,836 个窗口；实时日志已出现 Segment 220/520、Step 53/313，predictor/condition LR 均为 `1e-5`，global batch 64，batch objective 2.4514、forecast 2.3627、history 2.5093。这证明接力训练循环启动，不代表 C02 已完成或形成新的最佳模型。C03 打包预演通过，仅待 C02 正常完成及完整 Output 验收后继续。
 
+#### 6.8.6 C02 完成与 C03 接力核验（2026-10-12）
+
+C02 第 1 版已核验为 `COMPLETE`。下载的 progress、summary、metrics、Best/Last 与完整 `last_state.pt`，以及云端 `output_verified` 日志一致：在第 440/520 段完成训练、全量验证和保存后，因 `runtime_limit` 安全退出。`next_epoch=440`、`resume_step=0`、global step 与 scheduler last_epoch 均为 137,720；optimizer、AMP 与 RNG 状态通过原始 launcher 的完整 Output 验收。
+
+累计覆盖 8,800,000 个训练窗口；第 1–440 段均有一条全量验证记录，样本数全部为 123,836。C02 新完成第 220–440 段，共 221 段。Best 位于第 434 段，加权 forecast 选模 loss 为 2.2833169824，未加权 forecast 为 2.2747053646，objective 为 2.3335845160；相对 C01 Best 的加权 forecast 下降约 0.406%。第 440 段加权 forecast 为 2.2841888467。以上是验证指标改善，尚无纠偏后 OOS 或交易收益结论。
+
+C03 第 1 版已提交至 <https://www.kaggle.com/code/luckfu/kronos-small-clean-wc-dual-t4-c03>，挂载 C02 完整 Output，计划接力第 441–520 段。提交包保持原始源码 SHA-256 `d505207d6d12ac0d5a7443f7e06ac63c46ce8fe312acf00ad41d7fad82d01b57` 和 source commit `eca981cf67db64d98d6634b18deb5fab8b548405`；入口仅调整 chunk、parent kernel，并在执行 launcher 前覆盖 `BUDGET_SECONDS=22500`（6 小时 15 分钟）。提交命令另带 `--timeout 25200`（7 小时）和 `--accelerator NvidiaTeslaT4`。任务时限参数已被提交接受，但服务端实际生效时限尚未独立核验；硬时限不会等待 segment 保存，代码预算与硬时限之间保留 45 分钟。
+
+预算依据是用户当时提供的剩余 GPU 额度 7 小时 16 分钟，并非 API 独立核验值。C02 段间平均耗时约 181.75 秒，最近 20 段约 186.8 秒，剩余 80 段预计训练与验证约 4 小时 2 分钟至 4 小时 9 分钟，另需启动及输出发布时间。
+
+**看板必须接力原实验：** workspace `roc_fu`、project `finance`、experiment `small_0.1_clean_wc_dual_t4_20261011`、run id `smcl1011`，使用 `resume="must"`，地址 <https://swanlab.cn/@roc_fu/finance/runs/smcl1011>。已核验 C03 提交包沿用这些标识；后续 chunk 不新建看板。
+
+**启动状态尚未确认：** 服务端下载的 C03 源码与提交包逐字节一致；状态接口返回 `RUNNING`、failureMessage 为空，日志接口返回 0 字节。用户 2026-10-12 14:51 截图显示计时约 1,967.6 秒、GPU T4×2、Output 0 B，网页同样无日志。入口在依赖安装与恢复之前就会打印并 flush `started`，因此目前没有证据证明已进入训练、恢复或验证，也不能从计时或硬件配置推断 GPU 正在计算。容器/输入准备阻塞与日志链路异常仍只是待核验假设。本轮未停止、覆盖或重复提交 C03。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。
