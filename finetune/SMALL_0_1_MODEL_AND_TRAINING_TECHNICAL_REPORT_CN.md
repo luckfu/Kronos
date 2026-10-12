@@ -811,6 +811,20 @@ C03 第 1 版已提交至 <https://www.kaggle.com/code/luckfu/kronos-small-clean
 
 **启动状态尚未确认：** 服务端下载的 C03 源码与提交包逐字节一致；状态接口返回 `RUNNING`、failureMessage 为空，日志接口返回 0 字节。用户 2026-10-12 14:51 截图显示计时约 1,967.6 秒、GPU T4×2、Output 0 B，网页同样无日志。入口在依赖安装与恢复之前就会打印并 flush `started`，因此目前没有证据证明已进入训练、恢复或验证，也不能从计时或硬件配置推断 GPU 正在计算。容器/输入准备阻塞与日志链路异常仍只是待核验假设。本轮未停止、覆盖或重复提交 C03。
 
+#### 6.8.7 C03 完成与清洗后全量 OOS 比较协议（2026-10-12）
+
+后续终态核验确认 C03 为 `COMPLETE`，summary 状态为 `completed`，累计完成 520/520 段、global step 162,724。2026-10-12 11:05:22 UTC 的 `output_verified` 与 published progress/summary/Best 指标一致。累计 metrics 中第 1–520 段各有一条全量验证记录，样本数均为 123,836；完成一次 10,397,679 个训练窗口的 coverage。上述启动时日志不可见记录是当时的诊断快照，现已由终态证据补全。
+
+最终 Best 为第 518 段，加权 forecast 选模 loss **2.2806119944**，未加权 forecast **2.2718638386**，objective **2.3308097529**；第 520 段加权 forecast 为 2.2822757458。这些数值只说明清洗数据上的验证结果，不能代替 OOS 结论。
+
+评估入口为 `finetune/small_clean_oos/evaluate.py`，固定比较 Clean Best518 与原 Cosine C2 Best179（SHA-256 `4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a`）。双方重新推理相同的 175,428 个窗口、34 个 signal dates（2026-08-03 至 2026-09-17），最晚标签 2026-10-09；不直接拿旧 OOS 汇总指标充当本次基线。训练及验证 pkl 的最晚记录均为 2026-07-17，早于首个 OOS 信号。输入、样本身份、metadata 和 tokenizer 均检查哈希；Clean 权重在云端计算哈希并写入评估 plan，检查 Best segment 与已完成训练 summary。
+
+解码冻结为生产协议 `T=0.65, top_p=0.8, top_k=0, N=5, seed=20260906`；每个日期重新设 seed，双方保持相同窗口顺序及 batch=12（effective batch 64）。架构为 `num_sectors=86, context_layer=6`。行业映射来自训练时的 point-in-time metadata 的完整 86 类排序，不能使用 OOS 仅有的 84 类排序，否则缺少的 G57、N79 等类别会使后续编码错位。
+
+评估窗口严格使用 120+10=130 行；仅输入历史按120日统计量归一化并 clip。预测反归一化后与原始未截断 close 标签比较，分母为原始信号日 close，避免旧 evaluator 将未来标签或信号日价格 clip 后重构造成误差。输出保留 H1–H10 真实标签日期。主指标为全路径方向准确率、相对信号日价格的路径 MAE/RMSE、各 horizon 指标；D10 每日 Rank IC 为辅助指标。配对差值以连续10个 signal-date block bootstrap（2,000 次，seed=20261012）估计区间；仅34个时间观测且标签重叠，已有评估日期不能称为全新盲测。
+
+评估 Kernel 为 `luckfu/kronos-small-clean-vs-c2-full-oos`，双 T4、硬上限12小时、代码预算11小时15分钟（包含安装启动）；按模型/日期原子保存 shard。只有双方均覆盖全部34日期、175,428个唯一身份且标签逐项一致才发布完整比较，否则 summary 标为 partial，不输出胜负结论。独立评估看板 run id 为 `smco1012`，不会写入训练曲线 `smcl1011`。本节先记录协议；评估终态结果待产物验收后补充，线上模型暂未切换。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。
