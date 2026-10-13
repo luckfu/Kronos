@@ -551,7 +551,7 @@ def train(args) -> None:
     model = attach_lora(model, args.lora_rank, args.lora_alpha, args.lora_dropout)
 
     patch_len = int(model.input_patch_len)
-    sector_embedding = nn.Embedding(len(pool.sectors) + 10, patch_len).to(device)
+    sector_embedding = nn.Embedding(len(pool.sectors) + 5, patch_len).to(device)
 
     trainable_params = [p for p in model.parameters() if p.requires_grad] + list(sector_embedding.parameters())
     optimizer = torch.optim.AdamW(trainable_params, lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -573,11 +573,7 @@ def train(args) -> None:
         missing, unexpected = base_model.load_state_dict(lora_weights, strict=False)
         assert len(unexpected) == 0, f"发现多余未匹配权重: {unexpected}"
 
-        if "weight" in sec_weights:
-            w_old = sec_weights["weight"]
-            sector_embedding.weight.data[: w_old.shape[0]] = w_old
-        else:
-            sector_embedding.load_state_dict(sec_weights, strict=False)
+        sector_embedding.load_state_dict(sec_weights, strict=True)
 
         optimizer.load_state_dict(state["optimizer"])
         if state.get("scheduler") and scheduler:
