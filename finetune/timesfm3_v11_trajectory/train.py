@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -82,72 +83,100 @@ def discover_dataset(root: Path) -> tuple[Path, Path, Path]:
 
 
 class FastStockPool:
-    """全市场时序动态池 (输入相对归一化版): 以每个窗口历史末端 P0 锚定去量纲。"""
+    """全市场时序动态池 (C04 有上限的幂律加权混合采样版):
+    1. 窗口级别拉平池 (Window-level Pool)，消除次新股偏见;
+    2. 路径最大波幅 A_i = max(h=1..10, abs(close[119+h]/close[119] - 1.0));
+    3. 40% 均匀基底 + 60% 幂律加权 (4.0倍硬封顶);
+    4. 训练前预冻结确定性抽样计划 (带 SHA-256 哈希校验);
+    5. 独立 UNKNOWN_SECTOR_ID，彻底消除 0 号行业冲突。
+    """
 
     def __init__(self, train_pkl: Path, symbol_split_csv: Path):
         import pandas as pd
         df_split = pd.read_csv(symbol_split_csv)
         self.sectors = sorted(df_split["sector"].dropna().unique().tolist())
         self.sector2id = {s: i for i, s in enumerate(self.sectors)}
-        self.symbol2sector = dict(zip(df_split["symbol"], df_split["sector"].map(self.sector2id).fillna(0).astype(int)))
+        self.unknown_sector_id = len(self.sectors)
+        self.symbol2sector = {
+            row["symbol"]: self.sector2id.get(row["sector"], self.unknown_sector_id)
+            for _, row in df_split.iterrows()
+        }
 
         with train_pkl.open("rb") as f:
             panel = pickle.load(f)
 
         self.stocks = []
+        self.windows = []  # 存放 (stock_idx, start_offset)
+        amplitudes = []
+        lookback, horizon = 120, 10
+        window_len = lookback + horizon
+
+        t0 = time.time()
         for symbol, df in panel.items():
             if not all(col in df.columns for col in DATA_FEATURES):
                 continue
             df = df.sort_index()
             vals = df[list(DATA_FEATURES)].to_numpy(dtype=np.float32)
-            if len(vals) >= 130:
-                sec_id = self.symbol2sector.get(symbol, 0)
-                self.stocks.append((vals, sec_id))
-        if not self.stocks:
+            if len(vals) < window_len:
+                continue
+
+            sec_id = self.symbol2sector.get(symbol, self.unknown_sector_id)
+            s_idx = len(self.stocks)
+            self.stocks.append((vals, sec_id))
+
+            closes = vals[:, 3]
+            max_start = len(vals) - window_len
+            for start in range(max_start + 1):
+                p0 = closes[start + lookback - 1]
+                if p0 <= 1e-4:
+                    continue
+                w_sub = vals[start : start + window_len]
+                if not (np.isfinite(w_sub).all() and (w_sub[:, :4] > 0).all() and (w_sub[:, 4] > 0).all()):
+                    continue
+
+                future_closes = closes[start + lookback : start + window_len]
+                amp = np.max(np.abs(future_closes / p0 - 1.0))
+                self.windows.append((s_idx, start))
+                amplitudes.append(amp)
+
+        if not self.stocks or not self.windows:
             raise RuntimeError("没有加载到合法的股票训练数据")
 
-    def sample_batch(self, batch_size: int, rng: np.random.Generator, power_law_ratio: float = 0.6) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """幂律重要性采样: 60% 采样显著趋势波段 (|R10| >= 5%), 40% 采样正常平稳背景样本。"""
+        self.amplitudes = np.asarray(amplitudes, dtype=np.float64)
+        print(f"[Data Index] 全市场合法滑动窗口构建完成: {len(self.windows)} 个窗口 (来自 {len(self.stocks)} 只股票, 耗时 {time.time() - t0:.2f}s)", flush=True)
+
+    def build_plan(self, total_samples: int, seed: int, ratio: float = 0.6, reference: float = 0.05, exponent: float = 1.0, cap: float = 4.0):
+        """生成 C04 确定性有上限幂律加权混合采样计划并生成 SHA-256 校验码。"""
+        weights = np.minimum(np.maximum(self.amplitudes / reference, 1.0) ** exponent, cap)
+        probabilities = (1.0 - ratio) / len(weights) + ratio * weights / weights.sum()
+
+        self.order = np.random.default_rng(seed).choice(
+            len(weights), size=total_samples, replace=True, p=probabilities
+        )
+        self.sha256 = hashlib.sha256(self.order.astype("<i8").tobytes()).hexdigest()
+        self.plan_ptr = 0
+        self.total_samples = total_samples
+
+        selected_amps = self.amplitudes[self.order]
+        print(f"[Sampling Plan] 预冻结 C04 采样计划生成完成:", flush=True)
+        print(f"  - 计划抽样数: {total_samples}, 候选窗口总数: {len(weights)}", flush=True)
+        print(f"  - SHA-256 校验指纹: {self.sha256}", flush=True)
+        print(f"  - 自然分布波幅 >= 5% 占比: {np.mean(self.amplitudes >= 0.05)*100:.2f}%, 均值: {np.mean(self.amplitudes)*100:.2f}%", flush=True)
+        print(f"  - 抽样后波幅 >= 5% 占比: {np.mean(selected_amps >= 0.05)*100:.2f}%, 均值: {np.mean(selected_amps)*100:.2f}%", flush=True)
+
+    def sample_batch(self, batch_size: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """零拒绝、零重试、确定性高能批次输出。"""
+        if self.plan_ptr + batch_size > len(self.order):
+            self.plan_ptr = 0  # 循环复用
+        batch_indices = self.order[self.plan_ptr : self.plan_ptr + batch_size]
+        self.plan_ptr += batch_size
+
         contexts, targets, sectors = [], [], []
-        while len(contexts) < batch_size:
-            want_power_law = (rng.random() < power_law_ratio)
-            chosen_window = None
-
-            for _ in range(8 if want_power_law else 1):
-                idx = rng.integers(0, len(self.stocks))
-                vals, sec = self.stocks[idx]
-                max_start = len(vals) - 130
-                start = 0 if max_start == 0 else rng.integers(0, max_start + 1)
-                window = vals[start:start + 130]
-
-                if not (np.isfinite(window).all() and (window[:, :4] > 0).all() and (window[:, 4] > 0).all()):
-                    continue
-                p0 = window[119, 3]
-                p10 = window[129, 3]
-                if p0 <= 1e-4:
-                    continue
-
-                ret10 = abs(p10 / p0 - 1.0)
-                if want_power_law and ret10 < 0.05:
-                    continue
-
-                chosen_window = (window.copy(), sec, p0)
-                break
-
-            if chosen_window is None:
-                idx = rng.integers(0, len(self.stocks))
-                vals, sec = self.stocks[idx]
-                max_start = len(vals) - 130
-                start = 0 if max_start == 0 else rng.integers(0, max_start + 1)
-                window = vals[start:start + 130].copy()
-                if not (np.isfinite(window).all() and (window[:, :4] > 0).all() and (window[:, 4] > 0).all()):
-                    continue
-                p0 = window[119, 3]
-                if p0 <= 1e-4:
-                    continue
-                chosen_window = (window, sec, p0)
-
-            window, sec, p0 = chosen_window
+        for b_idx in batch_indices:
+            s_idx, start = self.windows[b_idx]
+            vals, sec = self.stocks[s_idx]
+            window = vals[start : start + 130].copy()
+            p0 = window[119, 3]
             window[:, list(PRICE_INDICES)] /= p0
             vol_med = np.median(window[:120, 4]) + 1e-4
             amt_med = np.median(window[:120, 5]) + 1e-4
@@ -508,8 +537,10 @@ def train(args) -> None:
 
     log("loading_data_pools")
     pool = FastStockPool(train_pkl, split_csv)
+    total_plan_samples = min(args.max_steps * args.batch_size * 2, 500000)
+    pool.build_plan(total_samples=total_plan_samples, seed=args.seed + chunk_index, ratio=args.power_law_ratio)
     val = build_validation_pool(val_pkl, split_csv, max_samples=args.val_samples, seed=args.seed)
-    log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]))
+    log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]), plan_sha256=pool.sha256)
 
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -520,13 +551,14 @@ def train(args) -> None:
     model = attach_lora(model, args.lora_rank, args.lora_alpha, args.lora_dropout)
 
     patch_len = int(model.input_patch_len)
-    sector_embedding = nn.Embedding(len(pool.sectors) + 5, patch_len).to(device)
+    sector_embedding = nn.Embedding(len(pool.sectors) + 10, patch_len).to(device)
 
     trainable_params = [p for p in model.parameters() if p.requires_grad] + list(sector_embedding.parameters())
     optimizer = torch.optim.AdamW(trainable_params, lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    # V11 核心升级: 余弦退火学习率调度器 (1e-4 -> 1e-5)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.max_steps, eta_min=args.min_lr)
+    # 余弦退火学习率调度器 (按 3 小时有效长训步数约 12,000 步精确退火)
+    anneal_steps = 12000
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=anneal_steps, eta_min=args.min_lr)
 
     global_step, best_score, history = 0, -1.0, []
     if state:
@@ -534,11 +566,25 @@ def train(args) -> None:
         saved_weights = state["weights"]
         lora_weights = {k.replace("lora.", ""): v for k, v in saved_weights.items() if k.startswith("lora.")}
         sec_weights = {k.replace("sector.", ""): v for k, v in saved_weights.items() if k.startswith("sector.")}
-        base_model.load_state_dict(lora_weights, strict=False)
-        sector_embedding.load_state_dict(sec_weights)
+
+        # 导师硬审核防御断言: 严格校验 400 个 LoRA 参数数量
+        lora_params_in_model = {k: v for k, v in base_model.named_parameters() if "lora_" in k}
+        assert len(lora_params_in_model) == len(lora_weights) == 400, f"LoRA 数量不匹配! 模型: {len(lora_params_in_model)}, 权重: {len(lora_weights)}"
+        missing, unexpected = base_model.load_state_dict(lora_weights, strict=False)
+        assert len(unexpected) == 0, f"发现多余未匹配权重: {unexpected}"
+
+        if "weight" in sec_weights:
+            w_old = sec_weights["weight"]
+            sector_embedding.weight.data[: w_old.shape[0]] = w_old
+        else:
+            sector_embedding.load_state_dict(sec_weights, strict=False)
+
         optimizer.load_state_dict(state["optimizer"])
         if state.get("scheduler") and scheduler:
-            scheduler.load_state_dict(state["scheduler"])
+            try:
+                scheduler.load_state_dict(state["scheduler"])
+            except Exception as e:
+                print(f"[Scheduler Warning] 重置 scheduler: {e}")
         torch.set_rng_state(state["torch_rng"])
         if state["cuda_rng"] and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(state["cuda_rng"])
@@ -549,7 +595,7 @@ def train(args) -> None:
             best_score = float(max(compute_trajectory_score(h) for h in history))
         else:
             best_score = -1.0
-        log("resumed_successfully", global_step=global_step, best_score=best_score)
+        log("resumed_successfully", global_step=global_step, best_score=best_score, lora_defense_passed=True)
 
     if args.multi_gpu and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
         base_attrs = {
@@ -592,7 +638,7 @@ def train(args) -> None:
             stop = "time_budget"
             break
 
-        c, t, s = pool.sample_batch(args.batch_size, rng, power_law_ratio=args.power_law_ratio)
+        c, t, s = pool.sample_batch(args.batch_size)
         c, t, s = torch.from_numpy(c).to(device), torch.from_numpy(t).to(device), torch.from_numpy(s).to(device)
         pred = forecast(model, c, s, args.horizon, sector_embedding)
         loss, parts = alpha_loss(pred, t, args.dir_loss_weight, args.amp_loss_weight)
