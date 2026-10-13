@@ -34,6 +34,8 @@ def main() -> None:
     ap.add_argument("--power-law-ratio", type=float, default=0.6, help="幂律大波段采样比例 (默认 0.6)")
     ap.add_argument("--amp-loss-weight", type=float, default=0.1, help="振幅防暴走软约束权重 (默认 0.1)")
     ap.add_argument("--eval-every", type=int, default=500, help="每多少步做一次全量大考验证 (默认 500 步)")
+    ap.add_argument("--seed", type=int, default=20261009, help="随机种子 (训练中会自动按 seed + chunk 递增)")
+    ap.add_argument("--learning-rate", type=float, default=None, help="覆盖初始学习率")
     ap.add_argument("--reserve", type=int, default=300, help="保留缓冲秒数 (默认 300 秒 / 5分钟)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -50,7 +52,10 @@ def main() -> None:
         "power_law_ratio": args.power_law_ratio,
         "amp_loss_weight": args.amp_loss_weight,
         "eval_every": args.eval_every,
+        "seed": args.seed,
     }
+    if args.learning_rate is not None:
+        config["learning_rate"] = args.learning_rate
     source = (HERE / "train.py").read_text()
     source, n = re.subn(r"^CHUNK_CONFIG: dict = \{\}.*$",
                         f"CHUNK_CONFIG: dict = {json.dumps(config)}", source, flags=re.M)
