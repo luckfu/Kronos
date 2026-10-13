@@ -1,0 +1,152 @@
+{
+  "c2_best": {
+    "samples": 175428,
+    "path_direction": 0.540222199420845,
+    "path_return_mae": 0.051143364341348,
+    "path_return_rmse": 0.0811144624385047,
+    "horizons": {
+      "1": {
+        "direction": 0.5424219622865221,
+        "return_mae": 0.02382058077813326,
+        "return_rmse": 0.036103724205428255
+      },
+      "2": {
+        "direction": 0.5517648265955264,
+        "return_mae": 0.0327405655293999,
+        "return_rmse": 0.04941496684868581
+      },
+      "3": {
+        "direction": 0.543037599471008,
+        "return_mae": 0.040196742568507124,
+        "return_rmse": 0.06095070206688998
+      },
+      "4": {
+        "direction": 0.5350799188270972,
+        "return_mae": 0.04661952937482721,
+        "return_rmse": 0.07080203297081587
+      },
+      "5": {
+        "direction": 0.5281711015345327,
+        "return_mae": 0.051436523860414265,
+        "return_rmse": 0.07808782698182906
+      },
+      "6": {
+        "direction": 0.5356784549786807,
+        "return_mae": 0.05582942765741133,
+        "return_rmse": 0.08491159575523709
+      },
+      "7": {
+        "direction": 0.5381809061267301,
+        "return_mae": 0.0599639217102922,
+        "return_rmse": 0.09129888077837224
+      },
+      "8": {
+        "direction": 0.5389903550174431,
+        "return_mae": 0.06367483881796525,
+        "return_rmse": 0.09734642858453436
+      },
+      "9": {
+        "direction": 0.5429805960280001,
+        "return_mae": 0.06706066311487023,
+        "return_rmse": 0.10282902461136063
+      },
+      "10": {
+        "direction": 0.5459162733429099,
+        "return_mae": 0.0700908500016597,
+        "return_rmse": 0.10783792214686962
+      }
+    },
+    "d10_daily_rank_ic": 0.14237511309601014
+  },
+  "clean_best": {
+    "samples": 175428,
+    "path_direction": 0.5378001231274369,
+    "path_return_mae": 0.05417979452358873,
+    "path_return_rmse": 0.0861497534887367,
+    "horizons": {
+      "1": {
+        "direction": 0.5365962104111088,
+        "return_mae": 0.02442387449848455,
+        "return_rmse": 0.03695814192420652
+      },
+      "2": {
+        "direction": 0.5446051941537269,
+        "return_mae": 0.03401534250965081,
+        "return_rmse": 0.051508799139147694
+      },
+      "3": {
+        "direction": 0.5422965547119046,
+        "return_mae": 0.041883324541359505,
+        "return_rmse": 0.06390116318531017
+      },
+      "4": {
+        "direction": 0.5356328522242744,
+        "return_mae": 0.04863154159337686,
+        "return_rmse": 0.07434164879294008
+      },
+      "5": {
+        "direction": 0.5297101944957475,
+        "return_mae": 0.05395850997570238,
+        "return_rmse": 0.08210579998269178
+      },
+      "6": {
+        "direction": 0.5366361128212144,
+        "return_mae": 0.058882057308385125,
+        "return_rmse": 0.08946284660776974
+      },
+      "7": {
+        "direction": 0.5381695054381285,
+        "return_mae": 0.06371770204935993,
+        "return_rmse": 0.09677640015051685
+      },
+      "8": {
+        "direction": 0.536898328659051,
+        "return_mae": 0.06808539795263872,
+        "return_rmse": 0.103903369864597
+      },
+      "9": {
+        "direction": 0.5388649474428255,
+        "return_mae": 0.07221089576840461,
+        "return_rmse": 0.11038142302137821
+      },
+      "10": {
+        "direction": 0.5385913309163873,
+        "return_mae": 0.0759892990385249,
+        "return_rmse": 0.11618130856237548
+      }
+    },
+    "d10_daily_rank_ic": 0.1199934126966961
+  },
+  "paired_delta_clean_minus_c2": {
+    "path_direction": {
+      "value": -0.002422076293408182,
+      "block_bootstrap_95ci": [
+        -0.005537523983669276,
+        0.0023069655872324456
+      ]
+    },
+    "path_return_mae": {
+      "value": 0.003036430182240729,
+      "block_bootstrap_95ci": [
+        -0.00019217882486648703,
+        0.007126684835894399
+      ]
+    },
+    "path_return_rmse": {
+      "value": 0.005035291050231996,
+      "block_bootstrap_95ci": [
+        -0.0010373247520661679,
+        0.01196783236932045
+      ]
+    }
+  },
+  "uncertainty": {
+    "signal_dates": 34,
+    "block_length": 10,
+    "replicates": 2000,
+    "seed": 20261012,
+    "overlapping_labels": true,
+    "note": "Only 34 time observations; prior evaluation overlap, not a new blind set."
+  },
+  "status": "complete"
+}
