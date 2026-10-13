@@ -12,8 +12,8 @@ import subprocess
 HERE = Path(__file__).parent
 OWNER = "wynstonliu"
 DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
-KERNEL_SOURCE = "wynstonliu/kronos-timesfm3-v11-clean-c02"
-KERNEL_SLUG = "kronos-timesfm3-v11-clean-oos-audit"
+KERNEL_SOURCE = "wynstonliu/kronos-timesfm3-v11-clean-c03"
+KERNEL_SLUG = "kronos-timesfm3-v11-clean-c03-oos-audit"
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
 
     meta = {
         "id": f"{OWNER}/{KERNEL_SLUG}",
-        "title": "Kronos TimesFM3 V11 Clean OOS Audit",
+        "title": "Kronos TimesFM3 V11 Clean C03 OOS Audit",
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",

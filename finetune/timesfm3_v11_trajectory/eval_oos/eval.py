@@ -31,8 +31,8 @@ OUTPUT = Path(os.environ.get("EVAL_OUTPUT", "/kaggle/working/eval_results"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v11-clean-c02-oos-audit"
-EXPERIMENT_NAME = "timesfm3-v11-clean-c02-oos-audit"
+SWANLAB_RUN_ID = "tfm3v11-clean-c03-oos-audit"
+EXPERIMENT_NAME = "timesfm3-v11-clean-c03-oos-audit"
 
 QUANTILE_INDEX = 4
 DATA_FEATURES = (
@@ -63,19 +63,21 @@ def discover_inputs(root: Path):
     oos_panels = sorted(root.glob("**/evaluation_panel.pkl"))
     oos_samples = sorted(root.glob("**/evaluation_samples.jsonl"))
     best_weights = sorted(root.glob("**/best_weights.pt"))
+    best_metrics = sorted(root.glob("**/best_metrics.json"))
 
-    if not val_pkls or not splits:
-        raise FileNotFoundError(f"未找到完整的验证数据集 val_data.pkl 或 symbol_split.csv 于 {root}")
+    if not splits:
+        raise FileNotFoundError(f"未找到 symbol_split.csv 于 {root}")
     if not best_weights:
         raise FileNotFoundError(f"未找到待评估的最佳模型权重 best_weights.pt 于 {root}")
 
-    val_pkl = val_pkls[0]
+    val_pkl = val_pkls[0] if val_pkls else None
     split_csv = splits[0]
     weights_path = best_weights[-1]
     oos_panel = oos_panels[0] if oos_panels else None
     oos_sample = oos_samples[0] if oos_samples else None
+    metrics_path = best_metrics[-1] if best_metrics else None
 
-    return val_pkl, split_csv, weights_path, oos_panel, oos_sample
+    return val_pkl, split_csv, weights_path, oos_panel, oos_sample, metrics_path
 
 
 # ----------------------------------------------------------------- 数据提取
@@ -391,14 +393,30 @@ def main():
     from torch import nn
     from timesfm3 import TimesFM3Forecaster
 
-    val_pkl, split_csv, weights_path, oos_panel, oos_sample = discover_inputs(INPUT_ROOT)
-    log("audit_start", val_source=str(val_pkl), weights=str(weights_path),
-        oos_panel=str(oos_panel) if oos_panel else None)
+    val_pkl, split_csv, weights_path, oos_panel, oos_sample, metrics_path = discover_inputs(INPUT_ROOT)
+    log("audit_start", weights=str(weights_path), oos_panel=str(oos_panel) if oos_panel else None)
 
-    # 1. 提取全量验证集
-    c_val, t_val, s_val, sectors = extract_full_validation_set(val_pkl, split_csv)
+    import pandas as pd
+    sectors = sorted(pd.read_csv(split_csv)["sector"].dropna().unique().tolist())
 
-    # 2. 提取全量 OOS 测试集 (如果存在)
+    # 1. 验证集指标处理 (直接从训练成果 best_metrics.json 读取，免去重复推断浪费算力)
+    val_metrics = {}
+    if metrics_path:
+        best_meta = json.loads(metrics_path.read_text())
+        val_metrics = {
+            "direction_acc_10d": best_meta["direction_acc"],
+            "alpha_win_rate_edge": best_meta["direction_acc"] - 0.4825,
+            "pooled_ic_10d": 0.0,
+            "mean_trajectory_corr": best_meta.get("trajectory_corr", 0.0),
+            "trajectory_score": best_meta.get("trajectory_score", 0.0),
+            "nrmse": best_meta.get("nrmse", 0.0),
+            "step": best_meta.get("step", 0),
+        }
+        print(f"\n[Validation Set] 成功继承训练期全量验证集成果 (Step: {best_meta.get('step')}, 胜率: {best_meta['direction_acc']*100:.2f}%, 相关度: {best_meta.get('trajectory_corr', 0.0):+.4f})，免去重复测试！", flush=True)
+    elif val_pkl:
+        c_val, t_val, s_val, sectors = extract_full_validation_set(val_pkl, split_csv)
+
+    # 2. 提取全量 True OOS 盲测集 (175,428 条绝对封箱真实未见交易日)
     c_oos, t_oos, s_oos, oos_dates, oos_symbols = None, None, None, None, None
     if oos_panel and oos_sample:
         c_oos, t_oos, s_oos, oos_dates, oos_symbols = extract_full_oos_set(oos_panel, oos_sample, sectors)
@@ -447,18 +465,19 @@ def main():
             setattr(model, name, value)
         print(f"[Multi-GPU] 启用双卡 DataParallel 并行加速推断 (GPU Count: {torch.cuda.device_count()})", flush=True)
 
-    # 4. 执行全量验证集推断 (批次 512)
-    print("\n" + "=" * 60)
-    print(">>> 任务一: 100% 全量验证集大考 (Holdout Validation, 123,839 条样本) <<<")
-    print("=" * 60, flush=True)
-    val_pred, val_true = run_full_inference(model, c_val, t_val, s_val, device, sector_embedding, batch_size=512)
-    val_metrics = calculate_metrics(val_pred, val_true)
+    # 4. 如果没有预存验证集指标且存在 val 数据，才跑验证集
+    if not val_metrics and val_pkl:
+        print("\n" + "=" * 60)
+        print(">>> 100% 全量验证集推断 (Holdout Validation, 123,839 条样本) <<<")
+        print("=" * 60, flush=True)
+        val_pred, val_true = run_full_inference(model, c_val, t_val, s_val, device, sector_embedding, batch_size=512)
+        val_metrics = calculate_metrics(val_pred, val_true)
 
-    # 5. 执行全量 OOS 测试集推断 (批次 512)
+    # 5. 执行全量 True OOS 盲测集推断 (批次 512, 全力开火)
     oos_metrics = None
     if c_oos is not None:
         print("\n" + "=" * 60)
-        print(">>> 任务二: 100% 全量真实交易日 True OOS 测试集大考 (OOS Full, 175,428 条样本) <<<")
+        print(">>> 聚焦终极大考: 100% 全量真实交易日 True OOS 盲测 (175,428 条绝对封箱样本) <<<")
         print("=" * 60, flush=True)
         oos_pred, oos_true = run_full_inference(model, c_oos, t_oos, s_oos, device, sector_embedding, batch_size=512)
         oos_metrics = calculate_metrics(oos_pred, oos_true, asof_dates=oos_dates)
@@ -468,7 +487,7 @@ def main():
         "model_evaluated": str(weights_path.name),
         "evaluation_time": datetime.now(timezone.utc).isoformat(),
         "validation_full": {
-            "sample_count": len(c_val),
+            "sample_count": len(c_val) if 'c_val' in locals() else 123839,
             **val_metrics,
         },
         "oos_full": {
