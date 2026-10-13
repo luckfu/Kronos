@@ -200,7 +200,8 @@ def build_validation_pool(val_pkl: Path, symbol_split_csv: Path, max_samples: in
     df_split = pd.read_csv(symbol_split_csv)
     sectors = sorted(df_split["sector"].dropna().unique().tolist())
     sector2id = {s: i for i, s in enumerate(sectors)}
-    symbol2sector = dict(zip(df_split["symbol"], df_split["sector"].map(sector2id).fillna(0).astype(int)))
+    unknown_sector_id = len(sectors)
+    symbol2sector = dict(zip(df_split["symbol"], df_split["sector"].map(sector2id).fillna(unknown_sector_id).astype(int)))
 
     with val_pkl.open("rb") as f:
         panel = pickle.load(f)
@@ -216,7 +217,7 @@ def build_validation_pool(val_pkl: Path, symbol_split_csv: Path, max_samples: in
         df = df.sort_index()
         vals = df[list(DATA_FEATURES)].to_numpy(dtype=np.float32)
         dates = pd.to_datetime(df.index)
-        sec = symbol2sector.get(symbol, 0)
+        sec = symbol2sector.get(symbol, unknown_sector_id)
 
         valid_mask = (dates >= start_date) & (dates <= end_date)
         valid_indices = np.where(valid_mask)[0]
@@ -710,7 +711,7 @@ def train(args) -> None:
 def parse_args(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="google/timesfm-3.0-pytorch")
-    p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--eval-batch-size", type=int, default=512)
     p.add_argument("--multi-gpu", action="store_true", default=True)
     p.add_argument("--horizon", type=int, default=10)

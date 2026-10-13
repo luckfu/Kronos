@@ -87,7 +87,8 @@ def extract_full_validation_set(val_pkl: Path, symbol_split_csv: Path):
     df_split = pd.read_csv(symbol_split_csv)
     sectors = sorted(df_split["sector"].dropna().unique().tolist())
     sector2id = {s: i for i, s in enumerate(sectors)}
-    symbol2sector = dict(zip(df_split["symbol"], df_split["sector"].map(sector2id).fillna(0).astype(int)))
+    unknown_sector_id = len(sectors)
+    symbol2sector = dict(zip(df_split["symbol"], df_split["sector"].map(sector2id).fillna(unknown_sector_id).astype(int)))
 
     with val_pkl.open("rb") as f:
         panel = pickle.load(f)
@@ -102,7 +103,7 @@ def extract_full_validation_set(val_pkl: Path, symbol_split_csv: Path):
         df = df.sort_index()
         vals = df[list(DATA_FEATURES)].to_numpy(dtype=np.float32)
         dates = pd.to_datetime(df.index)
-        sec = symbol2sector.get(symbol, 0)
+        sec = symbol2sector.get(symbol, unknown_sector_id)
 
         valid_mask = (dates >= start_date) & (dates <= end_date)
         valid_indices = np.where(valid_mask)[0]
@@ -173,7 +174,8 @@ def extract_full_oos_set(oos_panel_pkl: Path, oos_samples_jsonl: Path, sectors: 
             contexts.append(w[:120])
             targets.append(w[120:130, 3])
             sec_name = item.get("sector", "unknown")
-            oos_sectors.append(sector2id.get(sec_name, 0))
+            unknown_sector_id = len(sectors)
+            oos_sectors.append(sector2id.get(sec_name, unknown_sector_id))
             asof_dates.append(asof_date)
             symbols.append(sym)
 

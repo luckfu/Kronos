@@ -28,7 +28,7 @@ def main() -> None:
     ap.add_argument("chunk", type=int)
     ap.add_argument("--budget", type=int, default=3600, help="本段运行秒数 (默认 3600 秒 / 1小时)")
     ap.add_argument("--max-steps", type=int, default=500000)
-    ap.add_argument("--batch-size", type=int, default=8, help="训练批大小 (单卡 8, 双卡 16)")
+    ap.add_argument("--batch-size", type=int, default=32, help="训练批大小 (默认升级为 32: 双卡每卡 16, 抑制梯度噪声)")
     ap.add_argument("--eval-batch-size", type=int, default=512, help="评估推断批大小 (默认 512)")
     ap.add_argument("--val-samples", type=int, default=0, help="验证集采样数 (0 为 100% 全量 123,839 条)")
     ap.add_argument("--power-law-ratio", type=float, default=0.6, help="幂律大波段采样比例 (默认 0.6)")
