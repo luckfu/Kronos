@@ -538,7 +538,7 @@ def train(args) -> None:
 
     log("loading_data_pools")
     pool = FastStockPool(train_pkl, split_csv)
-    total_plan_samples = min(args.max_steps * args.batch_size * 2, 500000)
+    total_plan_samples = min(args.max_steps * args.batch_size * 2, 4000000)
     pool.build_plan(total_samples=total_plan_samples, seed=args.seed + chunk_index, ratio=args.power_law_ratio)
     val = build_validation_pool(val_pkl, split_csv, max_samples=args.val_samples, seed=args.seed)
     log("data_ready", num_sectors=len(pool.sectors), val_size=len(val[0]), plan_sha256=pool.sha256)
