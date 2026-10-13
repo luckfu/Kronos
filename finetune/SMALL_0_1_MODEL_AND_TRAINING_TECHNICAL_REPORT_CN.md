@@ -846,6 +846,16 @@ C03 第 1 版已提交至 <https://www.kaggle.com/code/luckfu/kronos-small-clean
 
 C2权重SHA-256为 `4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a`；Clean best为 `0837035e4cde286240b196cb2c7fda1dc671cacc2b501b00ab7f0ec38d887c9f`。本次评估源码commit为 `411e8dc04b98cf5144226dd62032b195ca0c3555`。正式汇总与运行计划分别归档于 `finetune/reports/small_clean_full_oos_summary_20261013.json`、`finetune/reports/small_clean_full_oos_plan_20261013.json`；预测分片保存在Kaggle Output，本地复算副本位于 `/tmp/small-clean-full-oos-final/small_clean_oos`。
 
+#### 6.8.9 Clean 第二轮采样接力（2026-10-13）
+
+用户决定从C03完整 `last_state.pt` 继续，不重做C2起点尝试；保持原SwanLab run `smcl1011`。第二轮只改变训练采样：40%自然随机与60%有上限的幂律加权分布混合；幅度为未来10日close相对最后输入close的最大绝对变化，权重为 `min(max(A/0.05,1)^1,4)`。保持原模型、行业映射、loss、LR、AdamW、scheduler、AMP及全量验证集；独立采样seed不改变验证顺序。
+
+第二轮计划全局521–720段，每段20,000次有放回抽样，共400万次。生产Dataset预检覆盖3,269,159个唯一训练窗口，约31.44%候选池；A≥5%占比从70.69%增至78.69%。样本身份计划SHA-256已冻结，续训通过计划哈希与段边界恢复。
+
+Kaggle提交账号改为 `user281434`，首个目标为 `user281434/kronos-small-clean-wc-dual-t4-c04`，12小时硬上限、11小时15分钟代码预算。C03实测每段均值185.80秒，200段约10小时19分，另预留准备及发布Output时间。原看板首个新optimizer step为162725，segment为521；保留父模型、优化器动量、scheduler、scaler与RNG，第二轮Best独立记录。
+
+第1版已提交并进入真实训练：双T4、原看板、C03完整State恢复及采样哈希均已云端验证，日志执行到全局第521段step276/313，global step基线162724连续保留。源码包SHA-256为 `23bcf7c5d5897401c899bf0fc19f17853a0d2ddec9b8e8062a53c4af78d8410f`。完整实验定义、预检与提交方式见 `finetune/small_power_relay/ROUND2_CN.md`；启动证据在 `finetune/reports/small_power_round2_startup_20261013.json`，当前未验收第二轮终态，不据此声明预测改善。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。

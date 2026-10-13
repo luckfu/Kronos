@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-10-13T10:16:33.645970+08:00",
+  "kernel": "user281434/kronos-small-clean-wc-dual-t4-c04",
+  "version": 1,
+  "status": "RUNNING",
+  "startup_verified": true,
+  "training_complete": false,
+  "source_sha256": "23bcf7c5d5897401c899bf0fc19f17853a0d2ddec9b8e8062a53c4af78d8410f",
+  "source_commit": "152e47202e94088ef47ec78e60e96e0f1dee1a4a",
+  "working_tree_bundle": true,
+  "hard_timeout_requested_seconds": 43200,
+  "budget_seconds": 40500,
+  "sampling_plan_sha256": "fa746204cda4f373d9b5992f30bfa1c98eb112c604ca471fdcc700d09508d71c",
+  "parent_state_sha256": "f02d051a903aa7d0be0e3e2b4a75097b862f51d6002070a52f1bffef094a137c",
+  "parent_segment": 520,
+  "parent_global_step": 162724,
+  "first_global_step": 162725,
+  "swanlab": {
+    "workspace": "roc_fu",
+    "project": "finance",
+    "run_id": "smcl1011"
+  },
+  "latest_training_evidence": "[Rank 0, Segment 521/720, Step 276/313] Adaptation LR 1.0000000000e-05, Condition LR 1.0000000000e-05, Loss: 2.3429, Forecast: 2.2681, History: 2.5388, GlobalBatch: 64 (32 x 2 replicas)",
+  "mean_segment_seconds_c03": 185.79956257933333,
+  "planned_draws": 4000000,
+  "planned_unique_windows": 3269159,
+  "estimated_training_validation_seconds": 37159.912515866665,
+  "estimated_including_setup_seconds": 37759.912515866665,
+  "last_observed_remaining_gpu_hours": 29.8898377825,
+  "note": "12h submit parameter accepted; eligible quota and real training verified. Completion not yet verified."
+}

@@ -195,6 +195,21 @@ class Config:
         self.coverage_epoch_offset = int(
             os.getenv("KRONOS_COVERAGE_EPOCH_OFFSET", "0")
         )
+        self.train_sampling = os.getenv('KRONOS_TRAIN_SAMPLING', 'coverage')
+        self.sampling_start_segment = int(os.getenv('KRONOS_SAMPLING_START_SEGMENT', '0'))
+        self.sampling_seed = int(os.getenv('KRONOS_SAMPLING_SEED', '20261013'))
+        self.sampling_segments = int(os.getenv('KRONOS_SAMPLING_SEGMENTS', '200'))
+        self.sampling_weighted_ratio = float(os.getenv('KRONOS_SAMPLING_WEIGHTED_RATIO', '0.6'))
+        self.sampling_reference = float(os.getenv('KRONOS_SAMPLING_REFERENCE', '0.05'))
+        self.sampling_exponent = float(os.getenv('KRONOS_SAMPLING_EXPONENT', '1.0'))
+        self.sampling_weight_cap = float(os.getenv('KRONOS_SAMPLING_WEIGHT_CAP', '4.0'))
+        self.expected_sampling_plan_sha256 = os.getenv('KRONOS_SAMPLING_PLAN_SHA256', '').strip()
+        self.sampling_transition_state = os.getenv('KRONOS_SAMPLING_TRANSITION_STATE', '').strip()
+        self.sampling_warmup_steps = int(os.getenv('KRONOS_SAMPLING_WARMUP_STEPS', '1627'))
+        if self.train_sampling not in {'coverage', 'capped_power_mixture_v1'}:
+            raise ValueError('Unsupported training sampling policy')
+        if self.sampling_transition_state and (self.resume_training or self.scheduler_transition_state):
+            raise ValueError('Sampling transition requires a fresh stage Output')
         bootstrap_best_val_loss = os.getenv(
             "KRONOS_BOOTSTRAP_BEST_VAL_LOSS", ""
         ).strip()

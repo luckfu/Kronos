@@ -55,6 +55,17 @@ def globalize_training_log(line, env=None):
     return line[:start] + matched + line[end:]
 
 
+def swanlab_chart_step(segment, step, total_steps, env=None):
+    source = env if env is not None else os.environ
+    if source.get('KRONOS_TRAIN_SAMPLING') == 'capped_power_mixture_v1':
+        boundary = int(source['KRONOS_SAMPLING_START_SEGMENT'])
+        origin = int(source['KRONOS_SAMPLING_PARENT_GLOBAL_STEP'])
+        if int(segment) <= boundary:
+            raise ValueError('Cannot log sampling-stage metrics before parent boundary')
+        return origin + (int(segment) - boundary - 1) * int(total_steps) + int(step)
+    return (swanlab_chart_segment(segment, source) - 1) * int(total_steps) + int(step)
+
+
 STAGES = {
     "bootstrap": {
         "output": "small_0.1_bootstrap",
@@ -477,6 +488,8 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 try:
                     record = json.loads(line)
                     record_type = record.get("type")
+                    if int(record.get('segment', 0)) <= int(env.get('KRONOS_SWANLAB_REPLAY_AFTER_SEGMENT', '-1')):
+                        continue
                     if record_type == "train":
                         step = int(record.get("step", 0))
                         segment = int(record.get("segment", 1))
@@ -488,7 +501,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                                 "train/forecast_loss": float(record["forecast_loss"]),
                                 "train/history_loss": float(record["history_loss"]),
                                 "segment": chart_segment,
-                            }, step=(chart_segment - 1) * total_steps + step)
+                            }, step=swanlab_chart_step(segment, step, total_steps, env))
                     elif record_type in {"validation", "validation_large"}:
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
@@ -499,7 +512,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                                 "validation/history_loss": float(record["history_loss"]),
                                 "validation/full_loss": float(record["full_sequence_loss"]),
                                 "segment": chart_segment,
-                            }, step=chart_segment * total_steps)
+                            }, step=swanlab_chart_step(segment, total_steps, total_steps, env))
                 except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                     continue
     except Exception as exc:
@@ -551,7 +564,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                     run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
                              "train/history_loss": float(history), "train/learning_rate": float(lr),
                              "train/condition_learning_rate": float(condition_lr), "segment": chart_segment},
-                            step=(chart_segment - 1) * total_steps + step)
+                            step=swanlab_chart_step(segment, step, total_steps, env))
             match = VALIDATION_LOG_RE.search(line)
             if match and segment:
                 forecast, history, full = map(float, match.groups())
@@ -559,7 +572,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                     chart_segment = swanlab_chart_segment(segment, env)
                     run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
                              "validation/full_loss": full, "segment": chart_segment},
-                            step=chart_segment * total_steps)
+                            step=swanlab_chart_step(segment, total_steps, total_steps, env))
     finally:
         return_code = child.wait()
         log_handle.close()

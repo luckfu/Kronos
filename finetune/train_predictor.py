@@ -433,6 +433,11 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
     for key in PREDICTOR_DROPOUT_OVERRIDE_KEYS:
         if config.get(key) is not None:
             guard[key] = float(config[key])
+    if config.get('train_sampling', 'coverage') != 'coverage':
+        for key in ('train_sampling', 'sampling_start_segment', 'sampling_segments', 'sampling_seed',
+                    'sampling_weighted_ratio', 'sampling_reference', 'sampling_exponent',
+                    'sampling_weight_cap', 'sampling_warmup_steps', 'sampling_plan_sha256'):
+            guard[key] = config[key]
     return guard
 
 
@@ -511,6 +516,33 @@ def validate_scheduler_transition_state(source_state, config, amp_dtype_name):
         raise ValueError('Scheduler transition AMP mode mismatch')
     if source_state.get('amp_dtype') != amp_dtype_name:
         raise ValueError('Scheduler transition AMP dtype mismatch')
+
+
+def restore_sampling_transition(source_state, config, resume_guard, warmup_steps,
+                                core_model, optimizer, scheduler, scaler, device,
+                                amp_dtype_name):
+    validate_scheduler_transition_state(source_state, config, amp_dtype_name)
+    ignored = {
+        'effective_epochs', 'train_sampling', 'sampling_start_segment', 'sampling_seed',
+        'sampling_segments', 'sampling_weighted_ratio', 'sampling_reference',
+        'sampling_exponent', 'sampling_weight_cap', 'sampling_warmup_steps',
+        'sampling_plan_sha256',
+    }
+    validate_resume_guard(source_state.get('resume_guard'), resume_guard, ignored)
+    if (int(source_state['next_epoch']) != int(config['sampling_start_segment'])
+            or source_state['scheduler_type'] != 'warmup_constant'
+            or int(source_state['scheduler_warmup_steps']) != warmup_steps
+            or int(source_state['scheduler']['last_epoch']) != int(source_state['batch_idx_global'])):
+        raise ValueError('Sampling transition global boundary/scheduler mismatch')
+    refuse_low_precision_checkpoint(source_state, device, 'sampling parent state')
+    core_model.load_state_dict(source_state['model'])
+    optimizer.load_state_dict(source_state['optimizer'])
+    optimizer_to(optimizer, device)
+    scheduler.load_state_dict(source_state['scheduler'])
+    if scaler is not None:
+        scaler.load_state_dict(source_state['amp_scaler'])
+    restore_rng_state(source_state['rng_state'])
+    return int(source_state['next_epoch']), int(source_state['batch_idx_global'])
 
 
 
@@ -721,6 +753,10 @@ def reset_conditioning(model, config):
 
 
 def completed_coverage_windows(dataset, completed_segments, coverage_passes):
+    if getattr(dataset, 'sampling_plan', None) is not None:
+        return dataset.sampling_plan.unique_through(
+            int(completed_segments) - dataset.config.sampling_start_segment
+        )
     segments_per_pass = math.ceil(dataset.total_samples / dataset.n_samples)
     complete_passes, remaining_segments = divmod(
         int(completed_segments), segments_per_pass
@@ -732,6 +768,9 @@ def completed_coverage_windows(dataset, completed_segments, coverage_passes):
 
 
 def segment_sample_count(dataset, segment_index):
+    if (getattr(dataset, 'sampling_plan', None) is not None
+            and segment_index >= dataset.config.sampling_start_segment):
+        return dataset.n_samples
     segments_per_pass = math.ceil(dataset.total_samples / dataset.n_samples)
     segment_in_pass = int(segment_index) % segments_per_pass
     start = segment_in_pass * dataset.n_samples
@@ -2562,6 +2601,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     max_runtime_seconds = max(
         0.0, float(config.get('max_runtime_seconds', 0.0) or 0.0)
     )
+    if getattr(train_dataset, 'sampling_plan', None) is not None:
+        config['sampling_plan_sha256'] = train_dataset.sampling_plan.sha256
     resume_guard = build_resume_guard(
         config, effective_epochs, segments_per_coverage
     )
@@ -2613,6 +2654,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         0,
         int(round(scheduler_steps * float(config['scheduler_warmup_ratio']))),
     )
+    if config.get('train_sampling', 'coverage') != 'coverage':
+        warmup_steps = int(config['sampling_warmup_steps'])
     decay_start_steps = max(
         warmup_steps,
         int(round(
@@ -2825,7 +2868,23 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         )
 
     transition_path = str(config.get('scheduler_transition_state', '')).strip()
-    if transition_path:
+    sampling_transition_path = str(config.get('sampling_transition_state', '')).strip()
+    if sampling_transition_path:
+        if os.path.exists(resume_path) or scheduler_type != 'warmup_constant':
+            raise ValueError('Sampling transition needs fresh Output and warmup_constant')
+        source_state = torch.load(sampling_transition_path, map_location='cpu', weights_only=False)
+        start_epoch, batch_idx_global = restore_sampling_transition(
+            source_state, config, resume_guard, warmup_steps, core_model,
+            optimizer, scheduler, scaler if scale_gradients else None,
+            device, amp_dtype_name,
+        )
+        if config.get('use_beta_v21_auxiliary', False):
+            v21_normalizer.load_state_dict(source_state['beta_v21_loss_ema'])
+        if rank == 0:
+            print(f'Sampling stage resumed: next_segment={start_epoch + 1}, '
+                  f'global_step={batch_idx_global}, optimizer/scheduler/AMP/RNG preserved; '
+                  'new stage Best starts at first validation.', flush=True)
+    elif transition_path:
         if os.path.exists(resume_path):
             raise ValueError(
                 'Scheduler transition requires a new output tree without last_state.pt'

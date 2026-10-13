@@ -11,9 +11,11 @@ from torch.utils.data import Dataset
 try:
     from .config import Config
     from .asset_metadata import AssetMetadata
+    from .power_law_sampler import PowerLawPlan, window_amplitudes
 except ImportError:
     from config import Config
     from asset_metadata import AssetMetadata
+    from power_law_sampler import PowerLawPlan, window_amplitudes
 
 
 def build_beta_v21_labels(raw_window, lookback_window, asof_date):
@@ -464,6 +466,11 @@ class QlibDataset(Dataset):
         replay_ratio = (
             float(self.config.history_replay_ratio) if data_type == 'train' else 0.0
         )
+        self.sampling_plan = None
+        use_power_sampling = data_type == 'train' and self.config.train_sampling == 'capped_power_mixture_v1'
+        amplitude_parts = []
+        if use_power_sampling and replay_ratio:
+            raise ValueError('Power sampling does not support historical replay')
         if not 0.0 <= replay_ratio < 1.0:
             raise ValueError('KRONOS_HISTORY_REPLAY_RATIO must be in [0, 1)')
         signal_start = getattr(self.config, f'{data_type}_signal_start') or None
@@ -529,6 +536,11 @@ class QlibDataset(Dataset):
                     )
                     eligible &= ~excluded
                 eligible_positions = np.flatnonzero(eligible)
+                if use_power_sampling:
+                    amplitude_parts.append(window_amplitudes(
+                        df['close'].to_numpy(), starts[eligible_positions],
+                        self.config.lookback_window, self.config.predict_window,
+                    ))
                 for position in eligible_positions:
                     self.indices.append((symbol, int(starts[position])))
                     bucket_ids.append(int(buckets[position]))
@@ -633,6 +645,18 @@ class QlibDataset(Dataset):
                 self.total_samples
             )
         self.active_positions = self.coverage_order[:self.n_samples]
+        if use_power_sampling:
+            self.sampling_plan = PowerLawPlan(
+                np.concatenate(amplitude_parts), self.n_samples,
+                self.config.sampling_segments, self.config.sampling_seed,
+                self.config.sampling_weighted_ratio, self.config.sampling_reference,
+                self.config.sampling_exponent, self.config.sampling_weight_cap,
+            )
+            expected_plan = self.config.expected_sampling_plan_sha256
+            if expected_plan and self.sampling_plan.sha256 != expected_plan:
+                raise ValueError('Training sampling plan differs from local preflight')
+            self.active_positions = self.sampling_plan.take_segment(0)
+            print('[TRAIN] Sampling plan: ' + json.dumps(self.sampling_plan.report), flush=True)
         self.coverage_start = 0
         self.selection_report = {
             'coverage_seed': coverage_seed,
@@ -660,9 +684,12 @@ class QlibDataset(Dataset):
                 if self.validation_period_codes is not None else {}
             ),
         }
+        if self.sampling_plan is not None:
+            self.selection_report['sampling'] = self.sampling_plan.report
+        sample_kind = 'draws with replacement' if self.sampling_plan is not None else 'unique samples'
         print(
             f"[{data_type.upper()}] Found {self.total_samples} possible samples. "
-            f"Using {self.n_samples} unique samples per segment."
+            f"Using {self.n_samples} {sample_kind} per segment."
         )
         if signal_start is not None or signal_end is not None or replay_samples:
             print(f"[{data_type.upper()}] Selection: {self.selection_report}")
@@ -681,6 +708,12 @@ class QlibDataset(Dataset):
             self.active_positions = self.coverage_order[:self.n_samples]
             return
 
+        if self.sampling_plan is not None:
+            local_segment = int(epoch) - self.config.sampling_start_segment
+            self.active_positions = self.sampling_plan.take_segment(local_segment)
+            self.coverage_start = local_segment * self.n_samples
+            return
+
         segments_per_pass = math.ceil(self.total_samples / self.n_samples)
         segment_in_pass = int(epoch) % segments_per_pass
         start = segment_in_pass * self.n_samples
@@ -694,6 +727,17 @@ class QlibDataset(Dataset):
         self.active_positions = self.coverage_order[start:end]
 
     def coverage_state(self, segment_index: int = 0) -> dict:
+        if self.sampling_plan is not None:
+            completed = int(segment_index) + 1 - self.config.sampling_start_segment
+            return {
+                'total_samples': self.total_samples,
+                'samples_per_segment': len(self.active_positions),
+                'segment_start': self.coverage_start,
+                'sample_draws': max(0, completed) * self.n_samples,
+                'unique_samples_covered': self.sampling_plan.unique_through(completed),
+                'sampling_plan_sha256': self.sampling_plan.sha256,
+                'replacement': True,
+            }
         consumed = min((int(segment_index) + 1) * self.n_samples, self.total_samples)
         return {
             'total_samples': self.total_samples,
