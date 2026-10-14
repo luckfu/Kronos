@@ -297,11 +297,14 @@ def build_validation_pool(val_pkl: Path, symbol_split_csv: Path, max_samples: in
 
 def find_relay_state(root: Path) -> Path | None:
     best, best_step = None, -1
-    for meta in root.glob("**/relay/relay.json"):
+    candidates = list(root.glob("**/relay/relay.json")) + list(root.glob("**/relay.json"))
+    for meta in candidates:
         try:
             info = json.loads(meta.read_text())
             if info.get("run_id") == SWANLAB_RUN_ID and info.get("global_step", -1) > best_step:
-                best, best_step = meta.parent / "state.pt", info["global_step"]
+                target_state = meta.parent / "state.pt"
+                if target_state.exists():
+                    best, best_step = target_state, info["global_step"]
         except Exception:
             continue
     return best
@@ -380,11 +383,11 @@ def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5, a
     dir_alignment = (soft_sign_pred * soft_sign_true).mean()
     dir_loss = 1.0 - dir_alignment
 
-    # 振幅防暴走校准: 预测收益率标准差如果超过真实波动的 1.3 倍，施加软惩罚，稳定 skill_nrmse
-    # 防御性 epsilon 平滑，消除方差极小时的浮点奇异点
+    # 振幅宽带校准正则: 允许在 0.7x ~ 1.3x 真实波动带内自由贝叶斯收缩
+    # 下限防过度萎缩 (解决 std~0.02 导致的 NRMSE 倒挂)，上限防暴走，且不除以 true_std 避免放大极小波动冲击方向分
     pred_std = torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-7).mean()
     true_std = torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-7).mean()
-    amp_loss = F.relu(pred_std - 1.3 * true_std)
+    amp_loss = F.relu(pred_std - 1.3 * true_std) + F.relu(0.7 * true_std - pred_std)
 
     total_loss = ret_loss + dir_loss_weight * dir_loss + amp_loss_weight * amp_loss
     return total_loss, {
@@ -640,6 +643,7 @@ def train(args) -> None:
     rng = np.random.default_rng(args.seed + chunk_index)
     tic, chunk_start_step = time.monotonic(), global_step
     skipped = 0
+    hook_diagnosed = False  # 首次遇到非有限梯度时懒挂 Hook 深度诊断，记完即卸载，平时零开销
 
     while global_step < args.max_steps:
         if time.monotonic() - STARTED >= deadline:
@@ -664,22 +668,100 @@ def train(args) -> None:
         if not torch.isfinite(grad):
             pred_ret = (pred - 1.0).detach()
             true_ret = (t - 1.0).detach()
-            nan_layers = [
+            nan_params = [
                 name for name, p in model.named_parameters()
                 if p.grad is not None and not torch.isfinite(p.grad).all()
-            ][:3]
+            ]
             sec_nan = sector_embedding.weight.grad is not None and not torch.isfinite(sector_embedding.weight.grad).all()
-            log(
-                "warning_skip_non_finite_grad",
-                step=global_step + 1,
-                amp_loss=parts.get("amp_loss", 0.0),
-                pred_std=float(torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-7).mean()),
-                true_std=float(torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-7).mean()),
-                max_abs_pred_ret=float(pred_ret.abs().max()),
-                max_abs_true_ret=float(true_ret.abs().max()),
-                nan_layers=nan_layers,
-                sec_nan=bool(sec_nan),
-            )
+
+            diag_event = {
+                "step": global_step + 1,
+                "amp_loss": parts.get("amp_loss", 0.0),
+                "pred_std": float(torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-7).mean()),
+                "true_std": float(torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-7).mean()),
+                "max_abs_pred_ret": float(pred_ret.abs().max()),
+                "max_abs_true_ret": float(true_ret.abs().max()),
+                "nan_count": len(nan_params),
+                "total_trainable": len(trainable_params),
+                "nan_layers_sample": nan_params[:10],
+                "sec_nan": bool(sec_nan),
+            }
+
+            # 首次出现非有限梯度: 懒挂钩子单次深入定位 (Two-shot Lazy Hook Diagnosis)
+            if not hook_diagnosed:
+                hook_diagnosed = True
+                first_forward_anomaly = None
+                f_handles = []
+
+                def make_f_hook(mod_name):
+                    def f_hook(module, inputs, output):
+                        nonlocal first_forward_anomaly
+                        if first_forward_anomaly is not None:
+                            return
+                        out_tensor = output[0] if isinstance(output, (tuple, list)) else output
+                        if isinstance(out_tensor, torch.Tensor) and not torch.isfinite(out_tensor).all():
+                            first_forward_anomaly = {
+                                "module": mod_name,
+                                "stage": "forward",
+                                "out_shape": list(out_tensor.shape),
+                            }
+                    return f_hook
+
+                for name, mod in model.named_modules():
+                    if len(list(mod.children())) == 0:
+                        f_handles.append(mod.register_forward_hook(make_f_hook(name)))
+
+                optimizer.zero_grad(set_to_none=True)
+                with torch.no_grad():
+                    _ = forecast(model, c, s, args.horizon, sector_embedding)
+
+                for h in f_handles:
+                    h.remove()
+
+                if first_forward_anomaly:
+                    diag_event["forward_clean"] = False
+                    diag_event["first_anomaly"] = first_forward_anomaly
+                else:
+                    diag_event["forward_clean"] = True
+                    # 第二枪: 反传 Hook 抓取 (若前向 clean，则深入反传链路)
+                    first_backward_anomaly = None
+                    b_handles = []
+
+                    def make_b_hook(mod_name):
+                        def b_hook(module, grad_input, grad_output):
+                            nonlocal first_backward_anomaly
+                            if first_backward_anomaly is not None:
+                                return
+                            for idx, g in enumerate(grad_output):
+                                if g is not None and not torch.isfinite(g).all():
+                                    first_backward_anomaly = {
+                                        "module": mod_name,
+                                        "stage": "backward_grad_output",
+                                        "idx": idx,
+                                        "shape": list(g.shape),
+                                    }
+                                    return
+                        return b_hook
+
+                    for name, mod in model.named_modules():
+                        if len(list(mod.children())) == 0:
+                            b_handles.append(mod.register_full_backward_hook(make_b_hook(name)))
+
+                    optimizer.zero_grad(set_to_none=True)
+                    p_retry = forecast(model, c, s, args.horizon, sector_embedding)
+                    l_retry, _ = alpha_loss(p_retry, t, args.dir_loss_weight, args.amp_loss_weight)
+                    l_retry.backward()
+
+                    for h in b_handles:
+                        h.remove()
+
+                    if first_backward_anomaly:
+                        diag_event["backward_clean"] = False
+                        diag_event["first_anomaly"] = first_backward_anomaly
+                    else:
+                        diag_event["backward_clean"] = True
+
+            log("warning_skip_non_finite_grad", **diag_event)
             skipped += 1
             optimizer.zero_grad(set_to_none=True)
             continue
@@ -759,8 +841,8 @@ def parse_args(argv=None):
     p.add_argument("--budget-seconds", type=int, default=43200)  # 默认 12 小时大 Chunk
     p.add_argument("--reserve-seconds", type=int, default=300)
     p.add_argument("--log-every", type=int, default=10)
-    p.add_argument("--eval-every", type=int, default=500)
-    p.add_argument("--save-every", type=int, default=500)
+    p.add_argument("--eval-every", type=int, default=2500)
+    p.add_argument("--save-every", type=int, default=2500)
     p.set_defaults(**CHUNK_CONFIG)
     return p.parse_args(argv)
 

@@ -40,6 +40,7 @@ def main() -> None:
     ap.add_argument("chunk", type=int)
     ap.add_argument("--owner", type=str, default=current_user, help=f"Kaggle 用户名 (当前环境: {current_user})")
     ap.add_argument("--upstream", type=str, default=None, help="显式指定上游接力 kernel (如 wynstonliu/kronos-timesfm3-v11-clean-c04)")
+    ap.add_argument("--upstream-dataset", type=str, default=None, help="显式指定上游接力 Dataset (如 user281434/kronos-timesfm3-v11-c05-relay)")
     ap.add_argument("--budget", type=int, default=3600, help="本段运行秒数 (默认 3600 秒 / 1小时)")
     ap.add_argument("--max-steps", type=int, default=500000)
     ap.add_argument("--batch-size", type=int, default=32, help="训练批大小 (默认升级为 32: 双卡每卡 16, 抑制梯度噪声)")
@@ -47,7 +48,7 @@ def main() -> None:
     ap.add_argument("--val-samples", type=int, default=0, help="验证集采样数 (0 为 100% 全量 123,839 条)")
     ap.add_argument("--power-law-ratio", type=float, default=0.6, help="幂律大波段采样比例 (默认 0.6)")
     ap.add_argument("--amp-loss-weight", type=float, default=0.1, help="振幅防暴走软约束权重 (默认 0.1)")
-    ap.add_argument("--eval-every", type=int, default=500, help="每多少步做一次全量大考验证 (默认 500 步)")
+    ap.add_argument("--eval-every", type=int, default=2500, help="每多少步做一次全量大考验证 (默认恢复为 2500 步)")
     ap.add_argument("--seed", type=int, default=20261009, help="随机种子 (训练中会自动按 seed + chunk 递增)")
     ap.add_argument("--learning-rate", type=float, default=None, help="覆盖初始学习率")
     ap.add_argument("--reserve", type=int, default=300, help="保留缓冲秒数 (默认 300 秒 / 5分钟)")
@@ -78,7 +79,11 @@ def main() -> None:
     code_file = f"{slug(args.chunk)}.py"
     (build / code_file).write_text(source)
 
-    if args.upstream:
+    dataset_sources = [DATASET_SOURCE]
+    if args.upstream_dataset:
+        dataset_sources.append(args.upstream_dataset)
+        kernel_sources = []
+    elif args.upstream:
         kernel_sources = [args.upstream]
     elif args.chunk > 1:
         # 兼容跨账号上游
@@ -97,13 +102,13 @@ def main() -> None:
         "enable_tpu": False,
         "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4",
-        "dataset_sources": [DATASET_SOURCE],
+        "dataset_sources": dataset_sources,
         "kernel_sources": kernel_sources,
         "competition_sources": [],
         "model_sources": [],
     }
     (build / "kernel-metadata.json").write_text(json.dumps(meta, indent=2))
-    print(json.dumps({"build": str(build), "config": config, "dataset_sources": [DATASET_SOURCE], "kernel_sources": kernel_sources}, indent=2))
+    print(json.dumps({"build": str(build), "config": config, "dataset_sources": dataset_sources, "kernel_sources": kernel_sources}, indent=2))
     if not args.dry_run:
         subprocess.check_call(["kaggle", "kernels", "push", "-p", str(build)])
 
