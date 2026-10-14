@@ -9,14 +9,26 @@ import json
 from pathlib import Path
 import subprocess
 
+def get_current_kaggle_user() -> str:
+    try:
+        out = subprocess.check_output(["kaggle", "config", "view"], text=True)
+        for line in out.splitlines():
+            if "username:" in line:
+                return line.split("username:")[1].strip()
+    except Exception:
+        pass
+    return "user281434"
+
+
 HERE = Path(__file__).parent
-OWNER = "wynstonliu"
 DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
-KERNEL_SOURCE = "wynstonliu/kronos-timesfm3-v11-clean-c03"
-KERNEL_SLUG = "kronos-timesfm3-v11-clean-c03-oos-audit"
+KERNEL_SLUG = "kronos-timesfm3-v11-clean-c06-oos-audit"
 
 
 def main():
+    current_user = get_current_kaggle_user()
+    KERNEL_SOURCE = f"{current_user}/kronos-timesfm3-v11-clean-c06"
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -29,8 +41,8 @@ def main():
     (build / code_file).write_text(source)
 
     meta = {
-        "id": f"{OWNER}/{KERNEL_SLUG}",
-        "title": "Kronos TimesFM3 V11 Clean C03 OOS Audit",
+        "id": f"{current_user}/{KERNEL_SLUG}",
+        "title": "Kronos TimesFM3 V11 Clean C06 OOS Audit",
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",
