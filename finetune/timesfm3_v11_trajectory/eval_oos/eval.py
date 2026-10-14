@@ -118,6 +118,9 @@ def extract_full_validation_set(val_pkl: Path, symbol_split_csv: Path):
                         amt_med = np.median(w[:120, 5]) + 1e-4
                         w[:, 4] /= vol_med
                         w[:, 5] /= amt_med
+                        w[:, 4] = np.clip(w[:, 4], 0.0, 50.0)
+                        w[:, 5] = np.clip(w[:, 5], 0.0, 50.0)
+                        w[:, list(PRICE_INDICES)] = np.clip(w[:, list(PRICE_INDICES)], 0.05, 10.0)
 
                         contexts.append(w[:120])
                         targets.append(w[120:130, 3])
@@ -170,6 +173,9 @@ def extract_full_oos_set(oos_panel_pkl: Path, oos_samples_jsonl: Path, sectors: 
             amt_med = np.median(w[:120, 5]) + 1e-4
             w[:, 4] /= vol_med
             w[:, 5] /= amt_med
+            w[:, 4] = np.clip(w[:, 4], 0.0, 50.0)
+            w[:, 5] = np.clip(w[:, 5], 0.0, 50.0)
+            w[:, list(PRICE_INDICES)] = np.clip(w[:, list(PRICE_INDICES)], 0.05, 10.0)
 
             contexts.append(w[:120])
             targets.append(w[120:130, 3])
