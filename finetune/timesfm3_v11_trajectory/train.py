@@ -362,6 +362,8 @@ def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5, a
 
     pred_ret = pred_rel_price - 1.0
     true_ret = target_rel_price - 1.0
+    # 温和 Winsorize: 过滤极端单点异常波动，防止极端数据冲击求导
+    true_ret = torch.clamp(true_ret, min=-0.85, max=3.0)
 
     ret_loss = F.smooth_l1_loss(pred_ret, true_ret, beta=0.02)
 
@@ -371,8 +373,9 @@ def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5, a
     dir_loss = 1.0 - dir_alignment
 
     # 振幅防暴走校准: 预测收益率标准差如果超过真实波动的 1.3 倍，施加软惩罚，稳定 skill_nrmse
-    pred_std = pred_ret.std(dim=-1).mean()
-    true_std = true_ret.std(dim=-1).mean()
+    # 防御性 epsilon 平滑，消除方差极小时的浮点奇异点
+    pred_std = torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-7).mean()
+    true_std = torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-7).mean()
     amp_loss = F.relu(pred_std - 1.3 * true_std)
 
     total_loss = ret_loss + dir_loss_weight * dir_loss + amp_loss_weight * amp_loss
@@ -651,7 +654,24 @@ def train(args) -> None:
         grad = torch.nn.utils.clip_grad_norm_(trainable_params, args.max_grad_norm)
 
         if not torch.isfinite(grad):
-            log("warning_skip_non_finite_grad", step=global_step + 1)
+            pred_ret = (pred - 1.0).detach()
+            true_ret = (t - 1.0).detach()
+            nan_layers = [
+                name for name, p in model.named_parameters()
+                if p.grad is not None and not torch.isfinite(p.grad).all()
+            ][:3]
+            sec_nan = sector_embedding.weight.grad is not None and not torch.isfinite(sector_embedding.weight.grad).all()
+            log(
+                "warning_skip_non_finite_grad",
+                step=global_step + 1,
+                amp_loss=parts.get("amp_loss", 0.0),
+                pred_std=float(torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-7).mean()),
+                true_std=float(torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-7).mean()),
+                max_abs_pred_ret=float(pred_ret.abs().max()),
+                max_abs_true_ret=float(true_ret.abs().max()),
+                nan_layers=nan_layers,
+                sec_nan=bool(sec_nan),
+            )
             skipped += 1
             optimizer.zero_grad(set_to_none=True)
             continue

@@ -19,13 +19,27 @@ OWNER = "wynstonliu"
 DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
 
 
+def get_current_kaggle_user() -> str:
+    try:
+        out = subprocess.check_output(["kaggle", "config", "view"], text=True)
+        for line in out.splitlines():
+            if "username:" in line:
+                return line.split("username:")[1].strip()
+    except Exception:
+        pass
+    return "user281434"
+
+
 def slug(n: int) -> str:
     return f"kronos-timesfm3-v11-clean-c{n:02d}"
 
 
 def main() -> None:
+    current_user = get_current_kaggle_user()
     ap = argparse.ArgumentParser()
     ap.add_argument("chunk", type=int)
+    ap.add_argument("--owner", type=str, default=current_user, help=f"Kaggle 用户名 (当前环境: {current_user})")
+    ap.add_argument("--upstream", type=str, default=None, help="显式指定上游接力 kernel (如 wynstonliu/kronos-timesfm3-v11-clean-c04)")
     ap.add_argument("--budget", type=int, default=3600, help="本段运行秒数 (默认 3600 秒 / 1小时)")
     ap.add_argument("--max-steps", type=int, default=500000)
     ap.add_argument("--batch-size", type=int, default=32, help="训练批大小 (默认升级为 32: 双卡每卡 16, 抑制梯度噪声)")
@@ -64,9 +78,16 @@ def main() -> None:
     code_file = f"{slug(args.chunk)}.py"
     (build / code_file).write_text(source)
 
-    kernel_sources = [f"{OWNER}/{slug(args.chunk - 1)}"] if args.chunk > 1 else []
+    if args.upstream:
+        kernel_sources = [args.upstream]
+    elif args.chunk > 1:
+        # 兼容跨账号上游
+        default_prev = f"{args.owner}/{slug(args.chunk - 1)}"
+        kernel_sources = [default_prev]
+    else:
+        kernel_sources = []
     meta = {
-        "id": f"{OWNER}/{slug(args.chunk)}",
+        "id": f"{args.owner}/{slug(args.chunk)}",
         "title": f"Kronos TimesFM3 V11 Clean C{args.chunk:02d}",
         "code_file": code_file,
         "language": "python",
