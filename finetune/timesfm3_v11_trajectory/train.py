@@ -190,6 +190,10 @@ class FastStockPool:
             window[:, 5] = np.clip(window[:, 5], 0.0, 50.0)
             window[:, list(PRICE_INDICES)] = np.clip(window[:, list(PRICE_INDICES)], 0.05, 10.0)
 
+            # 协变量微观防抖: 防止超大盘权重股因全市场横截面市值排名恒定导致时序方差为 0
+            # 注入幅度 1e-6 远小于千分位有效精度 (1e-3)，不改变特征语义，但数学上阻断 std == 0
+            window[:, 6] += np.random.normal(0.0, 1e-6, size=len(window)).astype(np.float32)
+
             contexts.append(window[:120])
             targets.append(window[120:130, 3])
             sectors.append(sec)
@@ -204,6 +208,7 @@ class FastStockPool:
 def build_validation_pool(val_pkl: Path, symbol_split_csv: Path, max_samples: int = 4096, seed: int = 20261009):
     import pandas as pd
 
+    val_rng = np.random.default_rng(seed)
     df_split = pd.read_csv(symbol_split_csv)
     sectors = sorted(df_split["sector"].dropna().unique().tolist())
     sector2id = {s: i for i, s in enumerate(sectors)}
@@ -242,6 +247,8 @@ def build_validation_pool(val_pkl: Path, symbol_split_csv: Path, max_samples: in
                         w[:, 4] = np.clip(w[:, 4], 0.0, 50.0)
                         w[:, 5] = np.clip(w[:, 5], 0.0, 50.0)
                         w[:, list(PRICE_INDICES)] = np.clip(w[:, list(PRICE_INDICES)], 0.05, 10.0)
+                        # 验证集采用确定性微观防抖，确保特征分布与训练严格一致
+                        w[:, 6] += val_rng.normal(0.0, 1e-6, size=len(w)).astype(np.float32)
 
                         contexts.append(w[:120])
                         targets.append(w[120:130, 3])
@@ -400,6 +407,51 @@ def alpha_loss(pred_rel_price, target_rel_price, dir_loss_weight: float = 0.5, a
     }
 
 
+def patch_timesfm_nan_safety() -> bool:
+    """对 TimesFM-3 RevIN 算子实施底层热修复 (Monkey Patch):
+    当输入通道在时间窗口内取常数 (如超大盘股市值排位不变) 时，方差底数恰好为 0。
+    PyTorch 对 sqrt(x) 反传求导为 1/(2*sqrt(x))，在 x=0 处会产生 NaN 并污染全网梯度。
+    本热补丁在开方前对方差底数注入 clamp_min(1e-8)，在数学上彻底消灭除零求导奇点。
+    """
+    import torch
+    try:
+        import timesfm3.torch.util as tfm_util
+        import timesfm3.torch.cpm_revin_refine as tfm_cpm
+    except ImportError:
+        return False
+
+    def safe_update_running_stats(n, mu, sigma, x, masks):
+        is_legit = ~masks
+        inc_n = is_legit.float().sum(dim=-1)
+        x_masked = torch.where(is_legit, x, torch.zeros_like(x))
+        inc_sum = x_masked.sum(dim=-1)
+        inc_mu = torch.where(inc_n == 0, torch.zeros_like(inc_sum), inc_sum / torch.clamp_min(inc_n, 1.0))
+
+        x_diff_sq = torch.where(is_legit, (x - inc_mu.unsqueeze(-1)) ** 2, torch.zeros_like(x))
+        inc_var = torch.where(inc_n == 0, torch.zeros_like(inc_sum), x_diff_sq.sum(dim=-1) / torch.clamp_min(inc_n, 1.0))
+        # 安全开方 1: 增量方差 clamp_min(1e-8) 阻断反传除零
+        inc_sigma = torch.sqrt(torch.clamp_min(inc_var, 1e-8))
+
+        new_n = n + inc_n
+        new_mu = torch.where(new_n == 0, torch.zeros_like(mu), (n * mu + inc_mu * inc_n) / torch.clamp_min(new_n, 1.0))
+
+        var_sum = (
+            n * sigma * sigma
+            + inc_n * inc_sigma * inc_sigma
+            + n * (mu - new_mu) * (mu - new_mu)
+            + inc_n * (inc_mu - new_mu) * (inc_mu - new_mu)
+        )
+        raw_var = torch.where(new_n == 0, torch.zeros_like(sigma), var_sum / torch.clamp_min(new_n, 1.0))
+        # 安全开方 2: 累计方差 clamp_min(1e-8) 阻断反传除零
+        new_sigma = torch.sqrt(torch.clamp_min(raw_var, 1e-8))
+        return new_n, new_mu, new_sigma
+
+    tfm_util.update_running_stats = safe_update_running_stats
+    if hasattr(tfm_cpm, "util"):
+        tfm_cpm.util.update_running_stats = safe_update_running_stats
+    return True
+
+
 def attach_lora(model, rank: int, alpha: int, dropout: float):
     """将 LoRA 注入到核心投影层 (V11 支持 rank=16 扩容)。"""
     import torch
@@ -537,6 +589,10 @@ def train(args) -> None:
     import torch
     from torch import nn
     from timesfm3 import TimesFM3Forecaster
+
+    patched = patch_timesfm_nan_safety()
+    if patched:
+        log("patch_applied", target="timesfm3_update_running_stats_safe_sqrt")
 
     train_pkl, val_pkl, split_csv = discover_dataset(INPUT_ROOT)
     resume_path = find_relay_state(INPUT_ROOT)

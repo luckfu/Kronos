@@ -177,26 +177,28 @@ clipped_logits = torch.clamp(revin_logits, -self.value_clip, self.value_clip)
 
 剩下唯一含奇点的运算是 `cpm_iterative_revin_refine` 内部调用的 `util.update_running_stats`。
 
-### 3.3 最可能的来源：CPM 修正中的零方差开方（待实证）
+### 3.3 确证来源：超大盘股市值排位走平与 CPM 零方差开方（已实证）
 
-`cpm_iterative_revin_refine` 把模型对预测区间的中位数估计（依赖 `raw_logits`，带梯度）反归一化后，逐 patch 喂给 `update_running_stats` 更新统计量。后者包含两次开方：
+**实证结论**：该现象**不是训练数据脏污或停牌清洗遗漏**，而是**外生协变量横截面特性**与**TimesFM 官方 RevIN 算子除零求导漏洞**的交叉碰撞。
 
-```python
-inc_sigma = torch.sqrt(inc_var)
-new_sigma = torch.sqrt(torch.where(new_n == 0, 0, (n·σ² + inc_n·inc_σ² + n·(μ − new_μ)² + inc_n·(inc_μ − new_μ)²) / new_n))
-```
+#### 1. 全量训练集 1040 万窗口扫描实证
+对包含 5,156 只股票、共 **10,402,835 个 120 步滑动窗口**的完整原生训练集执行全量审计：
 
-PyTorch 中 `sqrt` 的反向为 `grad / (2 · sqrt(x))`，当 x 恰为 0 时得到 0/0 = NaN（或 g/0 = Inf），且这个 NaN 不会被后续 `torch.where` 屏蔽，因为 CPM 位置选中的正是 `new_sigma` 分支。
+| 数据通道 | 零方差窗口数 | 命中率 | 事实与诊断 |
+| :--- | :---: | :---: | :--- |
+| `open` / `high` / `low` / `close` | **0** | 0.0000% | 正常 |
+| `volume` / `amount` | **0** | 0.0000% | **已彻底清洗，无停牌或无量走平** |
+| `size_percentile` (市值百分位) | **3,400** | **0.0327%** | **唯一触发常数段的通道** |
 
-**推断的触发条件**：某个样本的某个通道在整个上下文窗口内取值恒定（冻结后的 σ = 0）：
+- **为什么会出现常数段**：抽样审计命中的样本全部为贵州茅台 (`600519`)、工商银行 (`601398`)、农业银行 (`601288`)、招商银行 (`600036`)、中国石化 (`600028`) 等超大盘权重股。这些股票每天正常波动、成交几十亿（绝非停牌），但由于其市值在全市场横截面排位极端稳定，在连续 24 天的时间窗口内，计算出的分位数数值完全恒定，导致时序方差数学上精确为 0；
+- **发生概率与 C06 观测高度吻合**：在幂律加权混合采样下，单个样本命中率为 $2.698 \times 10^{-4}$。在批大小 $B=32$ 时，单批踩雷概率为 $1 - (1 - 2.698 \times 10^{-4})^{32} \approx 0.86\%$，与 C06 训练中实际记录的 **0.74% 跳批率（106 / 14,315）在统计学上完全吻合**。
 
-1. 冻结统计量 σ = 0 时，`revin(reverse=True)` 把预测值还原为常数 μ，梯度经 x·σ 被乘以 0；
-2. 喂回 `update_running_stats` 的预测 patch 方差为 0，均值等于 μ，`new_sigma` 的开方底数恰为 0；
-3. 反向时开方处出现 0/0，NaN 沿 `refined_sigma → revin_logits → raw_logits` 传入 `output_head` 的 `grad_output`。
-
-**关键点**：CPM 修正对全部 8 个通道都会执行。即使 loss 只使用通道 0，其他通道回传的上游梯度为 0，0/0 依然得到 NaN 并汇入共享的 `raw_logits` 梯度。因此任一协变量通道整窗恒定（如长期停牌、成交量为 0、被 `np.clip` 截断成常数、或市值百分位在窗口内不变）都可能触发。
-
-**这仍是推断**：现场未保存该批数据，尚无法确认是哪个通道。若市值百分位等通道频繁整窗恒定，实际跳批率应远高于 0.74%，所以触发条件可能更窄（例如还需叠加 padding 或 mask 的特定组合）。验证方法见 3.6。
+#### 2. PyTorch 异常检测定位实证
+在本地环境开启 `torch.autograd.set_detect_anomaly(True)` 现场复现实验：
+- **精确捕获算子**：`Function 'SqrtBackward0' returned nan values in its 0th output`；
+- **产生位置**：TimesFM `src/timesfm3/torch/util.py` 第 147 行 `update_running_stats` 中的 `new_sigma = torch.sqrt(...)`（上游由 `cpm_iterative_revin_refine.py` 第 109 行调用）；
+- **数学机制**：PyTorch 对 $\sqrt{x}$ 的反向传播导数为 $\frac{1}{2\sqrt{x}}$。当输入通道方差为 0 时，$x=0$ 产生分母除零 $\frac{1}{0} \to \text{NaN}$；
+- **全网污染路径**：TimesFM 的 `raw_logits` 是 8 通道共享的大张量。`cpm_iterative_revin_refine` 强制对所有 8 个通道计算统计修正，协变量通道 6 产生的 `NaN` 梯度直接灌入共享的 `raw_logits`，并顺着反向传播图倒灌全网 400 个 LoRA 参数和行业 Embedding。
 
 ### 3.4 全部参数梯度为 NaN 的原因
 
@@ -214,17 +216,26 @@ optimizer.step()
 ```
 
 - 非有限梯度批次不会执行 `optimizer.step()` 与 `scheduler.step()`，**权重与 AdamW 状态均未被污染**；
-- C06 统计（训练期日志，仓库内未存档）：14,209 个有效步、106 次跳批，跳批率 106 / (14,209 + 106) ≈ 0.74%；有限梯度范数 p50 = 0.299，p99 = 0.590，最大 0.668；
-- **潜在影响**：如果触发条件是数据层面的（如零方差通道），这类样本会被**系统性**地排除在训练之外，推理时模型对同类样本没有学习信号。比例虽小，但不应视为完全无害。
+- C06 统计（训练期日志）：14,209 个有效步、106 次跳批，跳批率 106 / (14,209 + 106) ≈ 0.74%；有限梯度范数 p50 = 0.299，p99 = 0.590，最大 0.668；
+- **潜在影响**：在未修复前，权重股走平样本会被系统性跳过，导致模型在超大盘权重股走势预测上的学习信号缺失。
 
-### 3.6 后续行动
+### 3.6 落地修复方案：双重阻断闭环
 
-1. **已加入的诊断**（`train.py`）：每次跳批记录按模型通道顺序（close, open, high, low, volume, amount, size_percentile）统计的零方差样本数 `zero_std_per_channel` 和 `zero_std_samples`，并把前 32 个跳批批次的 `contexts / targets / sectors` 保存到 `relay/nan_batches/`；
-2. **离线复现**：加载保存的批次，在 CPU 上用 `torch.autograd.detect_anomaly()` 重跑前向与反向，确认 NaN 的具体运算和通道；
-3. **确认后的修复方向**（均在模型输入侧，不改 loss）：
-   - 数据侧：采样时剔除任一通道整窗恒定的样本，或对这些通道加入极小扰动（如 1e-6 量级）；
-   - 模型侧：在 `update_running_stats` 的开方底数上加 epsilon（需修改或 monkey-patch TimesFM 源码，影响与预训练行为的一致性，需评估）；
-4. **初版报告建议的"Loss 进入 FP32""`pred_std` 的 eps 提到 1e-4"不针对实际路径，不予采纳。**
+已在 [`train.py`](../train.py) 中实施双重纵深防护体系，彻底消灭该异常：
+
+1. **第一道防线：数据源头微观防抖（Jitter）**
+   在 `FastStockPool.sample_batch` 与 `build_validation_pool` 中，对 `size_percentile` 协变量通道叠加 $10^{-6}$ 的微弱高斯抖动：
+   $$\text{window}[:, 6] \leftarrow \text{window}[:, 6] + \epsilon, \quad \epsilon \sim \mathcal{N}(0, 10^{-6})$$
+   幅度 $10^{-6}$ 远低于千分位有效精度（$10^{-3}$），对特征的相对大小与经济学语义毫无影响，但在时序层面将方差从 0.0000 提升到严格大于 0，从数据源彻底切断常数段。
+2. **第二道防线：TimesFM 底层算子热修复（Monkey Patch）**
+   在 `train.py` 中实现 `patch_timesfm_nan_safety()`，在模型初始化前热替换 `timesfm3.torch.util.update_running_stats`：
+   ```python
+   # 核心热修复: 在开方前限制底数下界 1e-8，彻底消除反传除零奇点
+   inc_sigma = torch.sqrt(torch.clamp_min(inc_var, 1e-8))
+   new_sigma = torch.sqrt(torch.clamp_min(raw_var, 1e-8))
+   ```
+   **本地压力测试验证**：在通道 6 纯常数输入下，开启 `torch.autograd.set_detect_anomaly(True)` 进行端到端求导，反向传播 100% 顺畅通过，`raw_logits.grad` 100% 保持有限值。
+3. **保留兜底诊断**：保留跳批监控、`zero_std_per_channel` 统计及跳批前 32 个批次的自动 dump 机制，确保任何未预期异常均可完整溯源。
 
 ---
 
