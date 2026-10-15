@@ -347,12 +347,15 @@ def calculate_metrics(pred_ret: np.ndarray, true_ret: np.ndarray, asof_dates=Non
                 traj_corrs.append(r)
     mean_traj_corr = float(np.mean(traj_corrs)) if traj_corrs else 0.0
 
-    # 4. NRMSE
+    # 4. NRMSE & 显式振幅比 (AmpRatio，彻底告别用 skill 反推振幅)
     err = pred_ret - true_ret
     naive_err = true_ret  # 朴素走平
     nrmse = float(np.sqrt(np.mean(err ** 2)))
     naive_nrmse = float(np.sqrt(np.mean(naive_err ** 2)))
     skill_nrmse = float(1.0 - nrmse / max(naive_nrmse, 1e-12))
+    pred_std_mean = float(np.mean(np.std(pred_ret, axis=-1)))
+    true_std_mean = float(np.mean(np.std(true_ret, axis=-1)))
+    amp_ratio = float(pred_std_mean / max(true_std_mean, 1e-12))
 
     # 5. 走势综合得分
     trajectory_score = float(direction_acc_10d + 0.5 * max(pooled_ic_10d, 0.0))
@@ -394,6 +397,7 @@ def calculate_metrics(pred_ret: np.ndarray, true_ret: np.ndarray, asof_dates=Non
         "daily_ic_mean": daily_ic_mean,
         "daily_icir": daily_icir,
         "positive_ic_ratio": positive_ic_ratio,
+        "amp_ratio": amp_ratio,
         "nrmse": nrmse,
         "naive_nrmse": naive_nrmse,
         "skill_nrmse": skill_nrmse,

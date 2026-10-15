@@ -517,6 +517,12 @@ def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_em
             pred_ret = p - 1.0
             true_ret = t - 1.0
 
+            # 显式振幅比跟踪: pred_std / true_std，彻底告别用 skill 反推振幅
+            pred_std_val = float(torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-8).mean())
+            true_std_val = float(torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-8).mean())
+            sums["pred_std_sum"] = sums.get("pred_std_sum", 0.0) + pred_std_val * n
+            sums["true_std_sum"] = sums.get("true_std_sum", 0.0) + true_std_val * n
+
             err = pred_ret - true_ret
             naive_err = true_ret
             n = len(t)
@@ -547,12 +553,13 @@ def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_em
         "naive_nrmse": (sums["naive_nrmse_sq"] / count) ** 0.5,
         "direction_acc": sums["direction_acc"] / count,
         "trajectory_corr": sums["trajectory_corr_sum"] / count,
+        "amp_ratio": (sums["pred_std_sum"] / count) / max(sums["true_std_sum"] / count, 1e-8),
     }
     metrics["skill_nrmse"] = 1.0 - metrics["nrmse"] / max(metrics["naive_nrmse"], 1e-12)
     # 单票未来10天走势轨迹综合得分: 兼顾方向胜率 (大趋势) 与 TrajCorr (曲线形态同频度)
     metrics["trajectory_score"] = float(metrics["direction_acc"] + 0.5 * max(metrics.get("trajectory_corr", 0.0), 0.0))
     print(f"[Eval Done] DirAcc={metrics['direction_acc']:.4f}, TrajCorr={metrics['trajectory_corr']:+.4f}, "
-          f"Score={metrics['trajectory_score']:.4f}, NRMSE={metrics['nrmse']:.4f} (naive={metrics['naive_nrmse']:.4f})", flush=True)
+          f"Score={metrics['trajectory_score']:.4f}, AmpRatio={metrics['amp_ratio']:.3f}, NRMSE={metrics['nrmse']:.4f} (naive={metrics['naive_nrmse']:.4f})", flush=True)
     return metrics
 
 
