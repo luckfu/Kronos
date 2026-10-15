@@ -46,6 +46,8 @@ DATA_FEATURES = (
 )
 PRICE_INDICES = (0, 1, 2, 3)  # open, high, low, close
 COVARIATE_INDICES = (0, 1, 2, 4, 5, 6)
+MODEL_CHANNEL_INDICES = (3, *COVARIATE_INDICES)  # 与 build_forward_inputs 的通道 0~6 顺序一致
+NAN_BATCH_DUMP_LIMIT = 32
 
 
 def log(event: str, **fields) -> None:
@@ -643,6 +645,7 @@ def train(args) -> None:
     rng = np.random.default_rng(args.seed + chunk_index)
     tic, chunk_start_step = time.monotonic(), global_step
     skipped = 0
+    nan_batches_dumped = 0
     hook_diagnosed = False  # 首次遇到非有限梯度时懒挂 Hook 深度诊断，记完即卸载，平时零开销
 
     while global_step < args.max_steps:
@@ -674,6 +677,10 @@ def train(args) -> None:
             ]
             sec_nan = sector_embedding.weight.grad is not None and not torch.isfinite(sector_embedding.weight.grad).all()
 
+            # CPM RevIN 修正在上下文 std == 0 的通道上会对 sqrt(0) 求导得到 NaN, 按模型通道顺序统计零方差样本数
+            ctx_std = c[..., list(MODEL_CHANNEL_INDICES)].std(dim=1, unbiased=False)
+            zero_std = ctx_std == 0
+
             diag_event = {
                 "step": global_step + 1,
                 "amp_loss": parts.get("amp_loss", 0.0),
@@ -685,7 +692,18 @@ def train(args) -> None:
                 "total_trainable": len(trainable_params),
                 "nan_layers_sample": nan_params[:10],
                 "sec_nan": bool(sec_nan),
+                "zero_std_samples": int(zero_std.any(dim=1).sum()),
+                "zero_std_per_channel": zero_std.sum(dim=0).tolist(),
             }
+
+            if nan_batches_dumped < NAN_BATCH_DUMP_LIMIT:
+                dump_dir = OUTPUT / "nan_batches"
+                dump_dir.mkdir(parents=True, exist_ok=True)
+                dump_path = dump_dir / f"step{global_step + 1}_skip{skipped + 1}.pt"
+                torch.save({"step": global_step + 1, "contexts": c.cpu(), "targets": t.cpu(), "sectors": s.cpu()},
+                           dump_path)
+                nan_batches_dumped += 1
+                diag_event["dump_path"] = str(dump_path)
 
             # 首次出现非有限梯度: 懒挂钩子单次深入定位 (Two-shot Lazy Hook Diagnosis)
             if not hook_diagnosed:
