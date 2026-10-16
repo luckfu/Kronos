@@ -1,0 +1,50 @@
+{
+  "model_evaluated": "best_weights.pt",
+  "evaluation_time": "2026-10-16T16:04:43.880358+00:00",
+  "validation_full": {
+    "sample_count": 123839,
+    "direction_acc_10d": 0.6435581809986023,
+    "alpha_win_rate_edge": 0.1610581809986023,
+    "pooled_ic_10d": 0.0,
+    "mean_trajectory_corr": 0.26893824962326557,
+    "trajectory_score": 0.778027305810235,
+    "amp_ratio": 0.0,
+    "skill_nrmse": -0.12549526362632912,
+    "nrmse": 0.08118080255922307,
+    "step": 157500
+  },
+  "oos_full": {
+    "sample_count": 175428,
+    "direction_acc_10d": 0.5842339877328591,
+    "market_natural_up_rate": 0.46803816950543814,
+    "alpha_win_rate_edge": 0.11619581822742092,
+    "pooled_ic_10d": 0.15567275881767273,
+    "mean_trajectory_corr": 0.1255600288170163,
+    "daily_ic_mean": 0.06850248149395467,
+    "daily_icir": 0.5135535663636427,
+    "positive_ic_ratio": 0.6764705882352942,
+    "amp_ratio": 0.84192693448183,
+    "nrmse": 0.09025511890649796,
+    "naive_nrmse": 0.06906705349683762,
+    "skill_nrmse": -0.30677529063304365,
+    "trajectory_score": 0.6620703671416954,
+    "daily_horizon_accs": [
+      0.5231319971726293,
+      0.534133661673165,
+      0.5378844882230887,
+      0.543681738376998,
+      0.5524089655015163,
+      0.5704619559021364,
+      0.5828887064778713,
+      0.5884864445812527,
+      0.58674783956951,
+      0.5842339877328591
+    ]
+  },
+  "historical_baselines": {
+    "kronos_small_c2_oos_direction_acc": 0.5442,
+    "kronos_small_c2_oos_pooled_ic": 0.2428,
+    "kronos_small_c2_oos_daily_ic_mean": 0.1796,
+    "market_random_direction_acc": 0.4825
+  }
+}
