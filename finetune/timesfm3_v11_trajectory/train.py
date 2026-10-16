@@ -517,15 +517,15 @@ def evaluate(model, val, device, horizon, batch_size, dir_loss_weight, sector_em
             pred_ret = p - 1.0
             true_ret = t - 1.0
 
+            err = pred_ret - true_ret
+            naive_err = true_ret
+            n = len(t)
+
             # 显式振幅比跟踪: pred_std / true_std，彻底告别用 skill 反推振幅
             pred_std_val = float(torch.sqrt(torch.var(pred_ret, dim=-1, unbiased=False) + 1e-8).mean())
             true_std_val = float(torch.sqrt(torch.var(true_ret, dim=-1, unbiased=False) + 1e-8).mean())
             sums["pred_std_sum"] = sums.get("pred_std_sum", 0.0) + pred_std_val * n
             sums["true_std_sum"] = sums.get("true_std_sum", 0.0) + true_std_val * n
-
-            err = pred_ret - true_ret
-            naive_err = true_ret
-            n = len(t)
 
             sums["loss"] += float(loss) * n
             sums["nrmse_sq"] += float(err.square().mean()) * n
