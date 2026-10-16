@@ -98,6 +98,10 @@ tmp/
 
 # Local evaluation/download scratch artifacts
 /scratch/
+finetune/timesfm3_v11_trajectory/scratch_*/
+finetune/timesfm3_v11_trajectory/eval_oos/results_*/
+finetune/timesfm3_v11_trajectory/eval_oos/build/
+swanlog/
 /webui/stock_name_cache.json
 /webui/stock_name_cache.json.lock
 finetune/kaggle_datasets/

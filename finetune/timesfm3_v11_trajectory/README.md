@@ -9,22 +9,26 @@
 
 ## 文档索引
 
+- 📄 **C08 训练收官与 True OOS 盲测技术复盘报告**：  
+  [`docs/c08_training_and_oos_technical_report_cn.md`](docs/c08_training_and_oos_technical_report_cn.md)  
+  *包含 C01~C08 全阶段指标演进、同分布验证集(64.99%)与 True OOS(56.84%)脱钩深度复盘、实测振幅比(0.85)与负 Skill 恶化机理解析、横截面排序瓶颈定性，以及 NaN 完全根除实证。*
 - 📄 **C06 训练复盘与非有限梯度专题报告**：  
   [`docs/c06_training_and_gradient_anomaly_technical_report_cn.md`](docs/c06_training_and_gradient_anomaly_technical_report_cn.md)  
-  *包含 C02~C06 指标对比、C06 True OOS 分日胜率、四项工程问题（评估耗时 / 振幅收缩 / Kaggle 路径平铺 / 时间预算存档），以及基于 Step 111,338 Hook 记录的非有限梯度来源分析。*
 - 📄 **架构与评测规范**：  
   [`docs/architecture_and_eval_spec.md`](docs/architecture_and_eval_spec.md)
+- 📊 **C08 True OOS 评测数据**：  
+  [`../reports/timesfm3_v11_clean_c08_true_oos_report.json`](../reports/timesfm3_v11_clean_c08_true_oos_report.json)
 - 📊 **C06 True OOS 评测数据**：  
   [`../reports/timesfm3_v11_clean_c06_true_oos_report.json`](../reports/timesfm3_v11_clean_c06_true_oos_report.json)
 
 ---
 
-## C06 结果摘要（最佳 checkpoint：Step 122,500）
+## C08 收官与 True OOS 结果摘要（全局收官步数：Step 192,865）
 
-- **验证集（123,839 条）**：10 天方向胜率 **63.01%**，轨迹相关度 **+0.2460**，综合分 **0.7532**。
-- **True OOS（175,428 条）**：
-  - 10 天方向胜率 57.03%；OOS 期间市场自然上涨率 46.80%，相对"恒猜下跌"基线（53.20%）高 **3.8 个百分点**；
-  - Day 2 胜率 57.33%，Day 5 达到峰值 57.58%，Day 2 ~ Day 10 维持在 57.0% ~ 57.6%；
-  - 日度 IC 均值 0.0685，正 IC 交易日占比 70.59%，Pooled IC 0.1383，均弱于 C02；
-    - 振幅比 `amp_ratio = 0.73`；`skill_nrmse = -0.307`（主动接受可交易振幅导致的方差惩罚，且叠加局部过冲残差）；
-- **进展**：非有限梯度（跳批）根因已彻底证实（超大盘股市值排位走平撞上 TimesFM RevIN 除零反传）并在 `train.py` 实施双重阻断修复；待补齐含交易成本的收益回测与平衡准确率。
+- **验证集（123,839 条）**：10 天方向胜率 **64.99%**，轨迹形态相关度 **+0.2862**，走势综合分 **0.7930**（历史高点）。
+- **True OOS（175,428 条绝对封箱样本）**：
+  - 10 天方向胜率 **56.84%**（超越 46.80% 自然上涨率 **+10.04%** 净胜率，较 C06 的 57.03% 持平微降 -0.19%）；
+  - 分日胜率：Day 1 为 53.76%，Day 7~10 稳定在 56.8% ~ 57.0%；
+  - 日度 IC 均值 **+0.0705**，年化 ICIR **7.38**，正 IC 交易日占比 67.65%，Pooled IC **+0.1503**；
+  - 实测振幅比 `amp_ratio = 0.8496`，`skill_nrmse = -0.3341`（因低相关下振幅放大导致方差惩罚加剧）；
+- **主线判定**：时序纯监督回归（SFT）长训步数红利榨干完毕（验证涨点 ≠ 未达上限），后续必须重组同日截面 panel 转向同日截面排序目标（Rank Loss）。
