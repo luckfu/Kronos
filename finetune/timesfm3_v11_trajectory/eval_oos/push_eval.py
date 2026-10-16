@@ -22,12 +22,12 @@ def get_current_kaggle_user() -> str:
 
 HERE = Path(__file__).parent
 DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
-KERNEL_SLUG = "kronos-timesfm3-v11-clean-c08-oos-audit"
+KERNEL_SLUG = "kronos-timesfm3-v11-clean-c07-oos-audit"
 
 
 def main():
     current_user = get_current_kaggle_user()
-    KERNEL_SOURCE = f"{current_user}/kronos-timesfm3-v11-clean-c08"
+    KERNEL_SOURCE = f"{current_user}/kronos-timesfm3-v11-clean-c07"
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -42,7 +42,7 @@ def main():
 
     meta = {
         "id": f"{current_user}/{KERNEL_SLUG}",
-        "title": "Kronos TimesFM3 V11 Clean C08 OOS Audit",
+        "title": "Kronos TimesFM3 V11 Clean C07 OOS Audit",
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",

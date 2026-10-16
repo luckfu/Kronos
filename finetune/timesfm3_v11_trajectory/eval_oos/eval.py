@@ -31,8 +31,8 @@ OUTPUT = Path(os.environ.get("EVAL_OUTPUT", "/kaggle/working/eval_results"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v11-clean-c08-oos-audit"
-EXPERIMENT_NAME = "timesfm3-v11-clean-c08-oos-audit"
+SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"
+EXPERIMENT_NAME = "timesfm3-v11-clean-c07-oos-audit"
 MAX_SAFE_SECONDS = 1980  # 33 分钟全局熔断安全哨兵 (确保 42 分钟配额内 100% 安全收尾)
 
 QUANTILE_INDEX = 4
@@ -486,20 +486,20 @@ def main():
             setattr(model, name, value)
         print(f"[Multi-GPU] 启用双卡 DataParallel 并行加速推断 (GPU Count: {torch.cuda.device_count()})", flush=True)
 
-    # 4. 严格只跑 C08 走势大模型的 True OOS 盲测，坚决不重复跑验证集，100% 算力留给 OOS
+    # 4. 严格只跑 C07 走势大模型的 True OOS 盲测，坚决不重复跑验证集，100% 算力留给 OOS
     if not val_metrics:
         val_metrics = {
-            "direction_acc_10d": 0.649904,
-            "alpha_win_rate_edge": 0.649904 - 0.4825,
+            "direction_acc_10d": 0.643558,
+            "alpha_win_rate_edge": 0.643558 - 0.4825,
             "pooled_ic_10d": 0.0,
-            "mean_trajectory_corr": 0.286236,
-            "trajectory_score": 0.793022,
-            "amp_ratio": 0.692459,
-            "skill_nrmse": -0.100904,
-            "nrmse": 0.079407,
-            "step": 192500,
+            "mean_trajectory_corr": 0.268938,
+            "trajectory_score": 0.778027,
+            "amp_ratio": 0.0,
+            "skill_nrmse": -0.125495,
+            "nrmse": 0.081181,
+            "step": 157500,
         }
-        print("\n[Validation Metrics] 直接继承 C08 官方最佳验证集成果 (Step 192,500, DirAcc: 64.99%)，免除重复推断！", flush=True)
+        print("\n[Validation Metrics] 直接继承 C07 官方最佳验证集成果 (Step 157,500, DirAcc: 64.36%)，免除重复推断！", flush=True)
 
     # 5. 执行全量 True OOS 盲测集推断 (批次 512, 全力开火)
     oos_metrics = None
