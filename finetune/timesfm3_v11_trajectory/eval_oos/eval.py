@@ -31,8 +31,8 @@ OUTPUT = Path(os.environ.get("EVAL_OUTPUT", "/kaggle/working/eval_results"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v11-clean-c06-oos-audit"
-EXPERIMENT_NAME = "timesfm3-v11-clean-c06-oos-audit"
+SWANLAB_RUN_ID = "tfm3v11-clean-c08-oos-audit"
+EXPERIMENT_NAME = "timesfm3-v11-clean-c08-oos-audit"
 MAX_SAFE_SECONDS = 1980  # 33 分钟全局熔断安全哨兵 (确保 42 分钟配额内 100% 安全收尾)
 
 QUANTILE_INDEX = 4
@@ -428,10 +428,12 @@ def main():
             "pooled_ic_10d": 0.0,
             "mean_trajectory_corr": best_meta.get("trajectory_corr", 0.0),
             "trajectory_score": best_meta.get("trajectory_score", 0.0),
+            "amp_ratio": best_meta.get("amp_ratio", 0.0),
+            "skill_nrmse": best_meta.get("skill_nrmse", 0.0),
             "nrmse": best_meta.get("nrmse", 0.0),
             "step": best_meta.get("step", 0),
         }
-        print(f"\n[Validation Set] 成功继承训练期全量验证集成果 (Step: {best_meta.get('step')}, 胜率: {best_meta['direction_acc']*100:.2f}%, 相关度: {best_meta.get('trajectory_corr', 0.0):+.4f})，免去重复测试！", flush=True)
+        print(f"\n[Validation Set] 成功继承训练期全量验证集成果 (Step: {best_meta.get('step')}, 胜率: {best_meta['direction_acc']*100:.2f}%, 相关度: {best_meta.get('trajectory_corr', 0.0):+.4f}, amp_ratio: {best_meta.get('amp_ratio', 0.0):.4f})，免去重复测试！", flush=True)
     elif val_pkl:
         c_val, t_val, s_val, sectors = extract_full_validation_set(val_pkl, split_csv)
 
@@ -484,18 +486,20 @@ def main():
             setattr(model, name, value)
         print(f"[Multi-GPU] 启用双卡 DataParallel 并行加速推断 (GPU Count: {torch.cuda.device_count()})", flush=True)
 
-    # 4. 严格只跑 C06 走势大模型的 True OOS 盲测，坚决不重复跑验证集，100% 算力留给 OOS
+    # 4. 严格只跑 C08 走势大模型的 True OOS 盲测，坚决不重复跑验证集，100% 算力留给 OOS
     if not val_metrics:
         val_metrics = {
-            "direction_acc_10d": 0.630148,
-            "alpha_win_rate_edge": 0.630148 - 0.4825,
+            "direction_acc_10d": 0.649904,
+            "alpha_win_rate_edge": 0.649904 - 0.4825,
             "pooled_ic_10d": 0.0,
-            "mean_trajectory_corr": 0.246042,
-            "trajectory_score": 0.753169,
-            "nrmse": 0.080307,
-            "step": 122500,
+            "mean_trajectory_corr": 0.286236,
+            "trajectory_score": 0.793022,
+            "amp_ratio": 0.692459,
+            "skill_nrmse": -0.100904,
+            "nrmse": 0.079407,
+            "step": 192500,
         }
-        print("\n[Validation Metrics] 直接继承 C06 官方最佳验证集成果 (Step 122,500, DirAcc: 63.01%)，免除重复推断！", flush=True)
+        print("\n[Validation Metrics] 直接继承 C08 官方最佳验证集成果 (Step 192,500, DirAcc: 64.99%)，免除重复推断！", flush=True)
 
     # 5. 执行全量 True OOS 盲测集推断 (批次 512, 全力开火)
     oos_metrics = None
@@ -556,6 +560,14 @@ def main():
     oos_sc = f"{oos_metrics['trajectory_score']:.4f}" if oos_metrics else "N/A"
     print(f"{'走势综合评分 (Score)':<22} | {val_sc:<20} | {oos_sc:<20} | {'0.6656':<20}")
 
+    val_amp = f"{val_metrics['amp_ratio']:.4f}" if 'amp_ratio' in val_metrics else "--"
+    oos_amp = f"{oos_metrics['amp_ratio']:.4f}" if oos_metrics and 'amp_ratio' in oos_metrics else "N/A"
+    print(f"{'实测振幅比 (amp_ratio)':<20} | {val_amp:<20} | {oos_amp:<20} | {'--':<20}")
+
+    val_skill = f"{val_metrics['skill_nrmse']:.4f}" if 'skill_nrmse' in val_metrics else "--"
+    oos_skill = f"{oos_metrics['skill_nrmse']:.4f}" if oos_metrics and 'skill_nrmse' in oos_metrics else "N/A"
+    print(f"{'skill_nrmse':<22} | {val_skill:<20} | {oos_skill:<20} | {'--':<20}")
+
     if oos_metrics and oos_metrics.get("daily_ic_mean", 0) > 0:
         print(f"{'OOS 日度 IC 均值':<22} | {'--':<20} | {oos_metrics['daily_ic_mean']:+.4f} | {'+0.1796':<20}")
         print(f"{'OOS 日度 ICIR (年化)':<20} | {'--':<20} | {oos_metrics['daily_icir']*15.87:.2f} | {'26.48':<20}")
@@ -573,6 +585,8 @@ def main():
             "val_full/pooled_ic": val_metrics["pooled_ic_10d"],
             "val_full/trajectory_score": val_metrics["trajectory_score"],
             "val_full/alpha_edge": val_metrics["alpha_win_rate_edge"],
+            "val_full/amp_ratio": val_metrics.get("amp_ratio", 0.0),
+            "val_full/skill_nrmse": val_metrics.get("skill_nrmse", 0.0),
         }
         if oos_metrics:
             swan_log.update({
@@ -582,6 +596,8 @@ def main():
                 "oos_full/alpha_edge": oos_metrics["alpha_win_rate_edge"],
                 "oos_full/daily_ic_mean": oos_metrics["daily_ic_mean"],
                 "oos_full/daily_icir": oos_metrics["daily_icir"],
+                "oos_full/amp_ratio": oos_metrics["amp_ratio"],
+                "oos_full/skill_nrmse": oos_metrics["skill_nrmse"],
             })
         run.log(swan_log, step=1)
         swanlab.finish()
