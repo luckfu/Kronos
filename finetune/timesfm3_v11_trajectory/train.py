@@ -31,7 +31,7 @@ OUTPUT = Path(os.environ.get("RELAY_OUTPUT", "/kaggle/working/relay"))
 SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
-SWANLAB_RUN_ID = "tfm3v11rank16powerlaw"  # V11 幂律重要性采样 + 振幅方差正则
+SWANLAB_RUN_ID = "tfm3v11c07sweetconstl"  # 对齐 SweetSpot 老看板，直接接力续画
 EXPERIMENT_NAME = "timesfm3-v11-rank16-powerlaw"
 
 QUANTILE_INDEX = 4
