@@ -2,7 +2,7 @@
 
 验证目标:
 1. 完全不注入任何 LoRA 补丁模块，以 100% 官方原生 TimesFM 3.0 稠密大模型架构直接推断;
-2. 加载云端导出的 timesfm3_v11_c07_native_merged.pt;
+2. 加载云端导出的 timesfm3_v11_<MODEL_TAG>_native_merged.pt;
 3. 对全量 175,428 条真实封箱交易日进行盲测推断与预测压缩落盘;
 4. 严格比对该原生合并模型的指标是否精准复现甚至超越预期 (Pooled IC ~0.161, 胜率 ~58.3%)。
 """
@@ -27,6 +27,10 @@ STARTED = time.monotonic()
 INPUT_ROOT = Path(os.environ.get("EVAL_INPUT_ROOT", "/kaggle/input"))
 OUTPUT = Path(os.environ.get("EVAL_OUTPUT", "/kaggle/working/eval_results"))
 MAX_SAFE_SECONDS = 2400
+
+# 由 push_eval_native_merged.py 注入
+MODEL_TAG = "c07"
+MODEL_LABEL = "C07"
 
 QUANTILE_INDEX = 4
 DATA_FEATURES = (
@@ -57,7 +61,7 @@ def discover_inputs(root: Path):
     oos_samples = sorted(root.glob("**/evaluation_samples.jsonl"))
 
     # 寻找导出的原生合并模型文件
-    merged_models = sorted(root.glob("**/timesfm3_v11_c07_native_merged.pt"))
+    merged_models = sorted(root.glob(f"**/timesfm3_v11_{MODEL_TAG}_native_merged.pt"))
     if not merged_models:
         merged_models = sorted(root.glob("**/*native_merged*.pt"))
     if not merged_models:
@@ -66,7 +70,7 @@ def discover_inputs(root: Path):
     if not splits:
         raise FileNotFoundError(f"未找到 symbol_split.csv 于 {root}")
     if not merged_models:
-        raise FileNotFoundError(f"未在 {root} 找到导出的原生合并模型 timesfm3_v11_c07_native_merged.pt")
+        raise FileNotFoundError(f"未在 {root} 找到导出的原生合并模型 timesfm3_v11_{MODEL_TAG}_native_merged.pt")
 
     return splits[0], merged_models[-1], oos_panels[0] if oos_panels else None, oos_samples[0] if oos_samples else None
 
@@ -360,7 +364,7 @@ def main():
     valid_symbols = oos_symbols[:len(oos_pred)] if oos_symbols is not None else None
 
     # 5. 落盘预测文件与报告
-    pred_npz_path = OUTPUT / "eval_predictions_native_merged.npz"
+    pred_npz_path = OUTPUT / f"eval_predictions_{MODEL_TAG}_native.npz"
     np.savez_compressed(
         pred_npz_path,
         pred_ret=oos_pred.astype(np.float32),
@@ -374,31 +378,36 @@ def main():
 
     report = {
         "model_architecture": "TimesFM-3.0 Native Dense Merged (Zero LoRA)",
+        "model_tag": MODEL_TAG,
+        "model_label": MODEL_LABEL,
         "source_checkpoint": str(merged_model_path.name),
         "evaluation_time": datetime.now(timezone.utc).isoformat(),
         "sample_count": len(oos_pred),
         "oos_metrics": m,
     }
-    (OUTPUT / "audit_report_native_merged.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    (OUTPUT / f"audit_report_{MODEL_TAG}_native.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
 
-    # 6. 打印与单模及离线融合的对比大报告
-    print("\n" + "=" * 90)
-    print("            原生烘焙合并模型 (timesfm3_v11_c07_native_merged.pt) OOS 盲测验收大报告")
-    print("=" * 90)
-    print(f"{'评估指标':<24} | {'原生烘焙合并模型 (实测)':<24} | {'此前离线预测融合':<20} | {'C07 best 单模':<18}")
-    print("-" * 90)
-    print(f"{'未来10天走势胜率':<22} | {m['direction_acc_10d']*100:.2f}%{'':<18} | {'58.26%':<20} | {'58.42%':<18}")
-    print(f"{'平衡准确率 (BalancedAcc)':<20} | {m['balanced_acc']*100:.2f}%{'':<18} | {'58.59%':<20} | {'58.45%':<18}")
-    print(f"{'预测上涨率 (真实46.8%)':<21} | {m['pred_pos_ratio']*100:.2f}%{'':<18} | {'48.63%':<20} | {'43.12%':<18}")
-    print(f"{'10天全样本 Pooled IC':<19} | {m['pooled_ic_10d']:+.4f}{'':<18} | {'+0.1616':<20} | {'+0.1557':<18}")
-    print(f"{'10天形态相关度 (Corr)':<20} | {m['mean_trajectory_corr']:+.4f}{'':<18} | {'+0.1068':<20} | {'+0.1196':<18}")
-    print(f"{'日度 IC 均值':<24} | {m['daily_ic_mean']:+.4f}{'':<18} | {'+0.0725':<20} | {'+0.0685':<18}")
-    print(f"{'日度 ICIR (年化)':<22} | {m['annualized_icir']:.2f}{'':<20} | {'8.65':<20} | {'8.15':<18}")
-    print(f"{'正 IC 交易日胜率':<22} | {m['positive_ic_ratio']*100:.1f}%{'':<19} | {'67.6%':<20} | {'67.6%':<18}")
-    print(f"{'实测振幅比 (AmpRatio)':<20} | {m['amp_ratio']:.4f}{'':<18} | {'0.7822':<20} | {'0.8419':<18}")
-    print(f"{'skill_nrmse':<25} | {m['skill_nrmse']:.4f}{'':<18} | {'-0.2662':<20} | {'-0.3068':<18}")
-    print(f"{'走势综合评分 (Score)':<22} | {m['trajectory_score']:.4f}{'':<18} | {'0.6634':<20} | {'0.6621':<18}")
-    print("=" * 90 + "\n")
+    # 6. 打印验收摘要
+    print("\n" + "=" * 70)
+    print(f"            {MODEL_LABEL} 原生烘焙合并模型 OOS 盲测验收")
+    print("=" * 70)
+    print(f"{'评估指标':<26} | {'原生模型实测':<16}")
+    print("-" * 70)
+    for label, value in [
+        ("未来10天走势胜率", f"{m['direction_acc_10d']*100:.2f}%"),
+        ("平衡准确率", f"{m['balanced_acc']*100:.2f}%"),
+        ("预测上涨率", f"{m['pred_pos_ratio']*100:.2f}%"),
+        ("10天 Pooled IC", f"{m['pooled_ic_10d']:+.4f}"),
+        ("10天形态相关度", f"{m['mean_trajectory_corr']:+.4f}"),
+        ("日均 IC", f"{m['daily_ic_mean']:+.4f}"),
+        ("年化 ICIR (未做重叠修正)", f"{m['annualized_icir']:.2f}"),
+        ("正 IC 交易日占比", f"{m['positive_ic_ratio']*100:.1f}%"),
+        ("振幅比", f"{m['amp_ratio']:.4f}"),
+        ("skill_nrmse", f"{m['skill_nrmse']:.4f}"),
+        ("走势综合分", f"{m['trajectory_score']:.4f}"),
+    ]:
+        print(f"{label:<26} | {value:<16}")
+    print("=" * 70 + "\n")
 
     log("native_eval_complete", report=report)
 

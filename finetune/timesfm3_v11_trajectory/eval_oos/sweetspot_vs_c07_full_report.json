@@ -1,6 +1,6 @@
 {
   "c07_best": {
-    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_c07_v2/eval_results/eval_predictions_best.npz",
+    "source_path": "results_c07_v2/eval_results/eval_predictions_best.npz",
     "metrics": {
       "direction_acc": 0.5842339877328591,
       "market_natural_up": 0.46803816950543814,
@@ -68,7 +68,7 @@
     }
   },
   "c07_last": {
-    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_c07_v2/eval_results/eval_predictions_last.npz",
+    "source_path": "results_c07_v2/eval_results/eval_predictions_last.npz",
     "metrics": {
       "direction_acc": 0.580773878742276,
       "market_natural_up": 0.46803816950543814,
@@ -136,7 +136,7 @@
     }
   },
   "c07_swa_native": {
-    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_native_merged/eval_results/eval_predictions_native_merged.npz",
+    "source_path": "results_native_merged/eval_results/eval_predictions_native_merged.npz",
     "metrics": {
       "direction_acc": 0.5824554803110108,
       "market_natural_up": 0.46803816950543814,
@@ -204,7 +204,7 @@
     }
   },
   "sweetspot_best": {
-    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_sweetspot/eval_results/eval_predictions_best.npz",
+    "source_path": "results_sweetspot/eval_results/eval_predictions_best.npz",
     "metrics": {
       "direction_acc": 0.585214446952596,
       "market_natural_up": 0.46803816950543814,
@@ -272,7 +272,7 @@
     }
   },
   "sweetspot_last": {
-    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_sweetspot/eval_results/eval_predictions_last.npz",
+    "source_path": "results_sweetspot/eval_results/eval_predictions_last.npz",
     "metrics": {
       "direction_acc": 0.5847926214743371,
       "market_natural_up": 0.46803816950543814,
@@ -336,6 +336,74 @@
         "max_drawdown": -0.12277929484844208,
         "daily_win_rate": 0.8823529411764706,
         "avg_daily_ls_spread": 0.04049934074282646
+      }
+    }
+  },
+  "sweetspot_native": {
+    "source_path": "results_sweetspot_native/eval_results/eval_predictions_sweetspot_native.npz",
+    "metrics": {
+      "direction_acc": 0.5858642862028867,
+      "market_natural_up": 0.46803816950543814,
+      "pred_pos_ratio": 0.49094215290603554,
+      "balanced_acc": 0.5893842459566898,
+      "tpr_bull_win": 0.5860401670990293,
+      "tnr_bear_win": 0.5927283248143504,
+      "pooled_ic": 0.17483682930469513,
+      "mean_trajectory_corr": 0.10867252276678992,
+      "daily_ic_mean": 0.09558229134305918,
+      "daily_icir": 0.6828788599599873,
+      "annualized_icir": 10.840365834224578,
+      "positive_ic_ratio": 0.7058823529411765,
+      "amp_ratio": 0.8296368927966395,
+      "skill_nrmse": -0.2747733204113949,
+      "trajectory_score": 0.6732827008552342
+    },
+    "bootstrap_ci_95": {
+      "direction_acc": {
+        "mean": 0.5865052255302581,
+        "std": 0.015230255648352328,
+        "ci_lower": 0.5522787644559725,
+        "ci_upper": 0.6138436867521018
+      },
+      "pooled_ic": {
+        "mean": 0.1728947013616562,
+        "std": 0.0344076007604599,
+        "ci_lower": 0.10262051969766617,
+        "ci_upper": 0.2352968156337738
+      },
+      "daily_ic_mean": {
+        "mean": 0.094393882404735,
+        "std": 0.02367731203060059,
+        "ci_lower": 0.050369233236557454,
+        "ci_upper": 0.1421122969137106
+      },
+      "daily_icir": {
+        "mean": 0.6974255081903193,
+        "std": 0.17403491382076744,
+        "ci_lower": 0.3908807696636994,
+        "ci_upper": 1.0967193304421405
+      }
+    },
+    "backtests": {
+      "top_50": {
+        "top_k": 50,
+        "trade_days": 34,
+        "total_return": 2.329798460006714,
+        "annualized_return": 7446.986993353621,
+        "sharpe_ratio": 9.068486112879501,
+        "max_drawdown": -0.07533907890319824,
+        "daily_win_rate": 0.7352941176470589,
+        "avg_daily_ls_spread": 0.03795124962925911
+      },
+      "top_100": {
+        "top_k": 100,
+        "trade_days": 34,
+        "total_return": 2.2151191234588623,
+        "annualized_return": 5743.1441769329485,
+        "sharpe_ratio": 8.637682855290512,
+        "max_drawdown": -0.1372293084859848,
+        "daily_win_rate": 0.7352941176470589,
+        "avg_daily_ls_spread": 0.0369575209915638
       }
     }
   }

@@ -2,11 +2,14 @@
 
 执行逻辑:
 1. 从 HuggingFace 下载/加载官方原生 TimesFM 3.0 PyTorch 基础模型;
-2. 从 C07 产物中加载 best_weights.pt 与 last_weights.pt 并执行 SWA 参数空间平滑融合;
+2. 从上游 kernel 产物中加载 best_weights.pt 与 last_weights.pt 并执行 SWA 参数空间平滑融合;
 3. 按照矩阵分配律: W_final = W_base + (lora_b @ lora_a) * (alpha / rank)，将微调增量永久加回原版对应层;
 4. 消除所有 LoRA 旁路结构，恢复成最纯净原生的稠密 Transformer 权重;
 5. 执行快速前向自检，验证数值健康度与输出形状;
-6. 保存导出的全量原生模型: timesfm3_v11_c07_merged.pt。
+6. 保存导出的全量原生模型: timesfm3_v11_<MODEL_TAG>_native_merged.pt。
+
+MODEL_TAG / MODEL_LABEL / FINETUNE_VERSION 由 push_export.py 在打包时注入，
+不在此处写死，避免为新模型复制脚本（KISS）。
 """
 
 from __future__ import annotations
@@ -28,6 +31,11 @@ RANK = 16
 ALPHA = 32
 SCALE = float(ALPHA / RANK)  # 2.0
 
+# 以下三行由 push_export.py 注入，默认值仅用于本地直接运行
+MODEL_TAG = "c07"
+MODEL_LABEL = "C07"
+FINETUNE_VERSION = "V11-Clean-C07-SWA (Step 157.5k + 159.5k)"
+
 
 def log(event: str, **fields) -> None:
     line = json.dumps({"time": datetime.now(timezone.utc).isoformat(), "event": event, **fields},
@@ -35,7 +43,7 @@ def log(event: str, **fields) -> None:
     print(line, flush=True)
 
 
-def discover_c07_weights(root: Path):
+def discover_weights(root: Path):
     best_weights = sorted(root.glob("**/best_weights.pt"))
     last_weights = sorted(root.glob("**/last_weights.pt"))
     splits = sorted(root.glob("**/symbol_split.csv"))
@@ -53,10 +61,10 @@ def discover_c07_weights(root: Path):
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
-    log("export_start")
+    log("export_start", model=MODEL_TAG)
 
-    # 1. 发现 C07 权重
-    p_best, p_last, split_csv = discover_c07_weights(INPUT_ROOT)
+    # 1. 发现上游权重
+    p_best, p_last, split_csv = discover_weights(INPUT_ROOT)
     print(f"[Input Check] 找到最佳权重: {p_best}")
     print(f"[Input Check] 找到收官权重: {p_last}")
 
@@ -66,7 +74,7 @@ def main():
     print(f"[Sector Check] 发现行业数量: {len(sectors)} (总嵌入空间: {num_sectors})")
 
     # 2. 执行 SWA 权重融合
-    print("\n[SWA Merging] 正在对 C07 best 与 last 进行 1:1 权重空间线性融合...")
+    print(f"\n[SWA Merging] 正在对 {MODEL_LABEL} best 与 last 进行 1:1 权重空间线性融合...")
     w_best = torch.load(p_best, map_location="cpu", weights_only=False)
     w_last = torch.load(p_last, map_location="cpu", weights_only=False)
 
@@ -155,14 +163,15 @@ def main():
         print(f"[Self Check OK] 原生前向推断通过! 预测输出形状: {pred_sample.shape}, 数值均值: {pred_sample.mean().item():.4f}")
 
     # 6. 保存烘焙合并后的纯原生大模型
-    output_model_file = OUTPUT / "timesfm3_v11_c07_native_merged.pt"
+    output_model_file = OUTPUT / f"timesfm3_v11_{MODEL_TAG}_native_merged.pt"
     print(f"\n[Saving] 正在保存原生合并完整大模型至: {output_model_file}...")
     torch.save({
         "model_state_dict": base_model.state_dict(),
         "sector_embedding_state_dict": sector_embedding.state_dict(),
         "metadata": {
             "source_architecture": "TimesFM 3.0 200M Native Dense",
-            "finetune_version": "V11-Clean-C07-SWA (Step 157.5k + 167.8k)",
+            "model_tag": MODEL_TAG,
+            "finetune_version": FINETUNE_VERSION,
             "merged_at": datetime.now(timezone.utc).isoformat(),
             "num_sectors": num_sectors,
             "patch_len": patch_len,
@@ -174,7 +183,7 @@ def main():
 
     size_mb = output_model_file.stat().st_size / (1024 * 1024)
     print(f"[Complete] 原生完整模型落盘完成! 文件大小: {size_mb:.2f} MB, 总耗时: {time.time() - t0:.2f} 秒")
-    log("export_success", file=str(output_model_file), size_mb=size_mb)
+    log("export_success", model=MODEL_TAG, file=str(output_model_file), size_mb=size_mb)
 
 
 if __name__ == "__main__":

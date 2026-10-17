@@ -11,7 +11,7 @@
 
 - 📄 **C07-SweetSpot 项目交接与技术归档报告**（★ 核心必读）：  
   [`docs/c07_sweetspot_handover_and_technical_report_cn.md`](docs/c07_sweetspot_handover_and_technical_report_cn.md)  
-  *包含 7.92e-5 甜点恒定微调全套实测指标（17.5万条 OOS 样本：胜率 58.52%, Pooled IC 0.1772, ICIR 11.34, 回撤 -5.79%）、重大避坑指南（数据池 OOM 规避/Token 隔离/布尔值序列化）、代码与资产清单及交接 SOP。*
+  *包含 7.92e-5 甜点恒定微调全套实测指标（17.5万条 OOS 样本，窗口 2026-08-03~09-17：胜率 58.52%, Pooled IC 0.1772, ICIR 11.34, 表观回撤 -5.79%）。**注意：ICIR 与 TopK 夏普/回撤未做 10 日重叠标签修正，不可直接当年化/回撤结论；文首已附独立复核备注。** 原生 50/50 SWA 已导出并实测：**DirAcc 58.59%、Pooled IC +0.1748、日均 IC +0.0956**（零 LoRA，与 LoRA 融合相关度 0.9966）。另含重大避坑指南（数据池 OOM 规避/Token 隔离/布尔值序列化）、代码与资产清单及交接 SOP。*
 - 📄 **C07 SWA 原生烘焙合并模型实测报告**：  
   [`docs/native_merged_model_oos_verification_cn.md`](docs/native_merged_model_oos_verification_cn.md)  
   *包含 C07 best+last LoRA 永久吸收入底座的零 LoRA 1.26GB 稠密大模型验证（胜率 58.25%, Pooled IC 0.1608）。*
@@ -31,7 +31,7 @@
 ## C08 收官与 True OOS 结果摘要（全局收官步数：Step 192,865）
 
 - **验证集（123,839 条）**：10 天方向胜率 **64.99%**，轨迹形态相关度 **+0.2862**，走势综合分 **0.7930**（历史高点）。
-- **True OOS（175,428 条绝对封箱样本）**：
+- **True OOS（175,428 条未参与训练样本）**：
   - 10 天方向胜率 **56.84%**（超越 46.80% 自然上涨率 **+10.04%** 净胜率，较 C06 的 57.03% 持平微降 -0.19%）；
   - 分日胜率：Day 1 为 53.76%，Day 7~10 稳定在 56.8% ~ 57.0%；
   - 日度 IC 均值 **+0.0705**，年化 ICIR **7.38**，正 IC 交易日占比 67.65%，Pooled IC **+0.1503**；
