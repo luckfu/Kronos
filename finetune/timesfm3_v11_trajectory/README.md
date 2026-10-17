@@ -9,17 +9,22 @@
 
 ## 文档索引
 
+- 📄 **C07-SweetSpot 项目交接与技术归档报告**（★ 核心必读）：  
+  [`docs/c07_sweetspot_handover_and_technical_report_cn.md`](docs/c07_sweetspot_handover_and_technical_report_cn.md)  
+  *包含 7.92e-5 甜点恒定微调全套实测指标（17.5万条 OOS 样本：胜率 58.52%, Pooled IC 0.1772, ICIR 11.34, 回撤 -5.79%）、重大避坑指南（数据池 OOM 规避/Token 隔离/布尔值序列化）、代码与资产清单及交接 SOP。*
+- 📄 **C07 SWA 原生烘焙合并模型实测报告**：  
+  [`docs/native_merged_model_oos_verification_cn.md`](docs/native_merged_model_oos_verification_cn.md)  
+  *包含 C07 best+last LoRA 永久吸收入底座的零 LoRA 1.26GB 稠密大模型验证（胜率 58.25%, Pooled IC 0.1608）。*
+- 📄 **C07/C08 全量交叉分析报告**：  
+  [`docs/c07_c08_oos_full_cross_analysis_cn.md`](docs/c07_c08_oos_full_cross_analysis_cn.md)
 - 📄 **C08 训练收官与 True OOS 盲测技术复盘报告**：  
   [`docs/c08_training_and_oos_technical_report_cn.md`](docs/c08_training_and_oos_technical_report_cn.md)  
-  *包含 C01~C08 全阶段指标演进、同分布验证集(64.99%)与 True OOS(56.84%)脱钩深度复盘、实测振幅比(0.85)与负 Skill 恶化机理解析、横截面排序瓶颈定性，以及 NaN 完全根除实证。*
 - 📄 **C06 训练复盘与非有限梯度专题报告**：  
   [`docs/c06_training_and_gradient_anomaly_technical_report_cn.md`](docs/c06_training_and_gradient_anomaly_technical_report_cn.md)  
 - 📄 **架构与评测规范**：  
   [`docs/architecture_and_eval_spec.md`](docs/architecture_and_eval_spec.md)
-- 📊 **C08 True OOS 评测数据**：  
-  [`../reports/timesfm3_v11_clean_c08_true_oos_report.json`](../reports/timesfm3_v11_clean_c08_true_oos_report.json)
-- 📊 **C06 True OOS 评测数据**：  
-  [`../reports/timesfm3_v11_clean_c06_true_oos_report.json`](../reports/timesfm3_v11_clean_c06_true_oos_report.json)
+- 📊 **SweetSpot vs C07 全维评测数据**：  
+  [`eval_oos/sweetspot_vs_c07_full_report.json`](eval_oos/sweetspot_vs_c07_full_report.json)
 
 ---
 
