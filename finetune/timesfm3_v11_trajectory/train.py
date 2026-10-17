@@ -613,10 +613,49 @@ def train(args) -> None:
     log("start", chunk_index=chunk_index, resume_from=str(resume_path) if state else None,
         train_source=str(train_pkl), gpu_detected=torch.cuda.device_count() if torch.cuda.is_available() else 0)
 
-    swanlab.login(api_key=SWANLAB_API_KEY)
-    run = swanlab.init(project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
-                       experiment_name=EXPERIMENT_NAME, id=SWANLAB_RUN_ID, resume="allow",
-                       config={**vars(args), "chunk": chunk_index})
+    run = None
+    try:
+        swanlab.login(api_key=SWANLAB_API_KEY)
+        run = swanlab.init(project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
+                           experiment_name=EXPERIMENT_NAME, id=SWANLAB_RUN_ID, resume="allow",
+                           config={**vars(args), "chunk": chunk_index})
+    except Exception as e:
+        print(f"[SwanLab Warning] 初始 ID {SWANLAB_RUN_ID} 启动失败 ({e})，尝试换用备用 ID...", flush=True)
+        fallback_id = f"tfm3v11_s01_{chunk_index}"
+        try:
+            run = swanlab.init(project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
+                               experiment_name=EXPERIMENT_NAME, id=fallback_id, resume="allow",
+                               config={**vars(args), "chunk": chunk_index})
+            SWANLAB_RUN_ID = fallback_id
+            print(f"[SwanLab Info] 成功换用新 Run ID {fallback_id} 连接看板！", flush=True)
+        except Exception as e2:
+            print(f"[SwanLab Warning] fallback_id 依然失败 ({e2})，尝试完全由 SwanLab 自动分配 ID...", flush=True)
+            try:
+                run = swanlab.init(project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
+                                   experiment_name=EXPERIMENT_NAME,
+                                   config={**vars(args), "chunk": chunk_index})
+                print(f"[SwanLab Info] 成功由 SwanLab 自动分配 ID 连接到看板 {EXPERIMENT_NAME}！", flush=True)
+            except Exception as e3:
+                print(f"[SwanLab Warning] SwanLab 连接全部失败 ({e3})，安全降级为本地日志，GPU 训练正常进行！", flush=True)
+                run = None
+
+    class SafeRun:
+        def __init__(self, raw_run):
+            self.raw_run = raw_run
+        def log(self, data, step=None):
+            if self.raw_run is not None:
+                try:
+                    self.raw_run.log(data, step=step)
+                except Exception:
+                    pass
+        def finish(self):
+            if self.raw_run is not None:
+                try:
+                    self.raw_run.finish()
+                except Exception:
+                    pass
+
+    run = SafeRun(run)
     log("swanlab_ready", run_id=SWANLAB_RUN_ID, chunk_index=chunk_index)
 
     log("loading_data_pools")
@@ -917,7 +956,7 @@ def train(args) -> None:
     (OUTPUT / "summary.json").write_text(json.dumps(summary, indent=2))
     run.log({"relay/last_step_of_chunk": global_step, **gpu_metrics()}, step=global_step)
     log("chunk_done", **summary)
-    swanlab.finish()
+    run.finish()
 
 
 def parse_args(argv=None):
