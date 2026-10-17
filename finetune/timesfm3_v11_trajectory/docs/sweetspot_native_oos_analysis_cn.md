@@ -128,7 +128,7 @@
 
 C06 的整体方向/IC 低于 C07/SweetSpot（超额 +3.83pp vs +5.0~5.4pp；IC 0.1383 vs 0.1557~0.1772），但它不是全维度落后：**Day 1~5 的短线胜率 C06 更强**（54.28 / 57.33 / 57.40 / 57.42 / 57.58），native 为 52.98 / 54.51 / 55.04 / 55.89 / 56.67；Day 7~10 native 反超。C06 更像“短持有期”模型，C07/SweetSpot 更像“中长持有期”模型。
 
-> C06 行为存档报告聚合值（同一 175,428 条面板，`market_natural_up_rate=46.8038%` 完全一致）；逐样本 `npz` 正在 Kaggle 补跑，balanced accuracy / 分区间 / TopK 待补。
+> C06 行为存档报告聚合值（同一 175,428 条面板，`market_natural_up_rate=46.8038%` 完全一致）。逐样本 `npz` 补跑在 Kaggle 排队约 42 分钟后被取消（`CANCEL_ACKNOWLEDGED`），balanced accuracy / 分区间 / TopK 暂缺；需要时重推。
 
 ![图3 分持有期方向胜率](figures/sweetspot_native/fig3_horizon_acc.png)
 
