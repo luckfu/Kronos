@@ -1,0 +1,438 @@
+"""TimesFM 3.0 V11 OOS 离线预测深度分析与免训练集成试验套件。
+
+功能:
+1. Block-Bootstrap 95% 置信区间 (按交易日块抽样，杜绝截面自相关假象);
+2. 涨跌平衡准确率 (Balanced Accuracy) 与方向偏置分析;
+3. 真实截面 Top 50 / Top 100 多空对冲回测 (含交易成本与印花税);
+4. 离线无缝多模型免训练集成 (Ensemble: C06 + C07 + C08 等)。
+
+用法示例:
+    python finetune/timesfm3_v11_trajectory/eval_oos/analyze_predictions.py \
+        --inputs results_c07/eval_predictions_best.npz:c07_best \
+                 results_c07/eval_predictions_last.npz:c07_last \
+                 results_c08/eval_predictions_best.npz:c08_best \
+        --topk 50 100 \
+        --bootstrap 1000 \
+        --ensemble
+"""
+
+from __future__ import annotations
+
+import argparse
+from collections import defaultdict
+import json
+from pathlib import Path
+import sys
+import time
+
+import numpy as np
+import pandas as pd
+
+
+# -------------------------------------------------------------------------
+# 1. 基础指标计算与平衡准确率分析
+# -------------------------------------------------------------------------
+def compute_comprehensive_metrics(pred_ret: np.ndarray, true_ret: np.ndarray, dates: np.ndarray | None = None) -> dict:
+    """计算全维指标，包含 10d DirAcc, Pooled IC, 轨迹 Corr, 日度 IC/ICIR, 以及 Balanced Accuracy。"""
+    p_10d = pred_ret[:, -1]
+    t_10d = true_ret[:, -1]
+
+    # 方向判断
+    p_up = p_10d > 0
+    t_up = t_10d > 0
+    same_dir = (np.sign(p_10d) == np.sign(t_10d))
+    direction_acc = float(np.mean(same_dir))
+
+    # 偏置与平衡准确率 (Balanced Accuracy)
+    tp = float(np.sum(p_up & t_up))
+    fp = float(np.sum(p_up & ~t_up))
+    fn = float(np.sum(~p_up & t_up))
+    tn = float(np.sum(~p_up & ~t_up))
+
+    tpr = tp / max(tp + fn, 1e-12)  # 实际上涨时的召回率
+    tnr = tn / max(tn + fp, 1e-12)  # 实际下跌时的召回率
+    balanced_acc = float(0.5 * (tpr + tnr))
+    pred_pos_ratio = float(np.mean(p_up))
+    market_pos_ratio = float(np.mean(t_up))
+
+    # Pooled IC
+    vx = p_10d - np.mean(p_10d)
+    vy = t_10d - np.mean(t_10d)
+    denom = np.sqrt(np.sum(vx ** 2) * np.sum(vy ** 2)) + 1e-12
+    pooled_ic = float(np.sum(vx * vy) / denom)
+
+    # 轨迹波形相关度 (点对点 Pearson Corr 均值)
+    traj_corrs = []
+    # 向量化抽样或直接分块快速计算
+    step = max(1, len(pred_ret) // 10000)
+    for i in range(0, len(pred_ret), step):
+        px, tx = pred_ret[i], true_ret[i]
+        std_p, std_t = np.std(px), np.std(tx)
+        if std_p > 1e-6 and std_t > 1e-6:
+            r = np.corrcoef(px, tx)[0, 1]
+            if np.isfinite(r):
+                traj_corrs.append(r)
+    mean_traj_corr = float(np.mean(traj_corrs)) if traj_corrs else 0.0
+
+    # 振幅与 Skill NRMSE
+    err = pred_ret - true_ret
+    nrmse = float(np.sqrt(np.mean(err ** 2)))
+    naive_nrmse = float(np.sqrt(np.mean(true_ret ** 2)))
+    skill_nrmse = float(1.0 - nrmse / max(naive_nrmse, 1e-12))
+
+    pred_std = float(np.mean(np.std(pred_ret, axis=-1)))
+    true_std = float(np.mean(np.std(true_ret, axis=-1)))
+    amp_ratio = float(pred_std / max(true_std, 1e-12))
+
+    # 日度 IC, ICIR
+    daily_ic_mean, daily_icir, pos_ic_ratio = 0.0, 0.0, 0.0
+    day_ics = []
+    if dates is not None and len(dates) == len(p_10d):
+        date_groups = defaultdict(list)
+        for idx, dt in enumerate(dates):
+            date_groups[dt].append((p_10d[idx], t_10d[idx]))
+
+        for dt, pairs in date_groups.items():
+            if len(pairs) >= 50:
+                p_sub = np.array([x[0] for x in pairs])
+                t_sub = np.array([x[1] for x in pairs])
+                if np.std(p_sub) > 1e-6 and np.std(t_sub) > 1e-6:
+                    ic_val = np.corrcoef(p_sub, t_sub)[0, 1]
+                    if np.isfinite(ic_val):
+                        day_ics.append(ic_val)
+
+        if day_ics:
+            daily_ic_mean = float(np.mean(day_ics))
+            daily_ic_std = float(np.std(day_ics)) + 1e-12
+            daily_icir = float(daily_ic_mean / daily_ic_std)
+            pos_ic_ratio = float(np.mean([x > 0 for x in day_ics]))
+
+    return {
+        "direction_acc": direction_acc,
+        "market_natural_up": market_pos_ratio,
+        "pred_pos_ratio": pred_pos_ratio,
+        "balanced_acc": balanced_acc,
+        "tpr_bull_win": tpr,
+        "tnr_bear_win": tnr,
+        "pooled_ic": pooled_ic,
+        "mean_trajectory_corr": mean_traj_corr,
+        "daily_ic_mean": daily_ic_mean,
+        "daily_icir": daily_icir,
+        "annualized_icir": daily_icir * np.sqrt(252),
+        "positive_ic_ratio": pos_ic_ratio,
+        "amp_ratio": amp_ratio,
+        "skill_nrmse": skill_nrmse,
+        "trajectory_score": float(direction_acc + 0.5 * max(pooled_ic, 0.0)),
+        "day_ics": day_ics,
+    }
+
+
+# -------------------------------------------------------------------------
+# 2. Block-Bootstrap 95% 置信区间 (按交易日块抽样)
+# -------------------------------------------------------------------------
+def run_block_bootstrap(pred_ret: np.ndarray, true_ret: np.ndarray, dates: np.ndarray,
+                        n_bootstraps: int = 1000, ci: float = 0.95, seed: int = 42) -> dict:
+    """按日度块进行 Block-Bootstrap 抽样，评估估计误差与 95% 置信区间。"""
+    np.random.seed(seed)
+    p_10d = pred_ret[:, -1]
+    t_10d = true_ret[:, -1]
+
+    # 按日期分组索引
+    date_to_indices = defaultdict(list)
+    for idx, dt in enumerate(dates):
+        date_to_indices[dt].append(idx)
+
+    unique_dates = np.array(list(date_to_indices.keys()))
+    n_days = len(unique_dates)
+    if n_days < 5:
+        return {}
+
+    date_to_indices_arr = {dt: np.array(idxs, dtype=np.int64) for dt, idxs in date_to_indices.items()}
+
+    boot_dir_accs = []
+    boot_pooled_ics = []
+    boot_daily_ic_means = []
+    boot_daily_icirs = []
+
+    alpha_half = (1.0 - ci) / 2.0
+
+    print(f"[Bootstrap] 正在执行 {n_bootstraps} 次日度块抽样 (总交易日={n_days})...", flush=True)
+    t0 = time.time()
+
+    for _ in range(n_bootstraps):
+        # 有放回随机抽取 n_days 个日期
+        sampled_dates = np.random.choice(unique_dates, size=n_days, replace=True)
+        sampled_idxs = np.concatenate([date_to_indices_arr[d] for d in sampled_dates])
+
+        sp = p_10d[sampled_idxs]
+        st = t_10d[sampled_idxs]
+
+        # 胜率
+        acc = np.mean(np.sign(sp) == np.sign(st))
+        boot_dir_accs.append(acc)
+
+        # Pooled IC
+        vx = sp - np.mean(sp)
+        vy = st - np.mean(st)
+        denom = np.sqrt(np.sum(vx ** 2) * np.sum(vy ** 2)) + 1e-12
+        boot_pooled_ics.append(np.sum(vx * vy) / denom)
+
+        # 日度 IC
+        day_ics = []
+        for d in sampled_dates:
+            idxs = date_to_indices_arr[d]
+            dp, dt_val = p_10d[idxs], t_10d[idxs]
+            if len(dp) >= 50 and np.std(dp) > 1e-6 and np.std(dt_val) > 1e-6:
+                r = np.corrcoef(dp, dt_val)[0, 1]
+                if np.isfinite(r):
+                    day_ics.append(r)
+
+        if day_ics:
+            m_ic = np.mean(day_ics)
+            s_ic = np.std(day_ics) + 1e-12
+            boot_daily_ic_means.append(m_ic)
+            boot_daily_icirs.append(m_ic / s_ic)
+
+    elapsed = time.time() - t0
+    print(f"[Bootstrap] 抽样计算完成 (耗时: {elapsed:.2f}s)", flush=True)
+
+    def get_ci_stats(arr):
+        arr = np.array(arr)
+        return {
+            "mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+            "ci_lower": float(np.percentile(arr, alpha_half * 100)),
+            "ci_upper": float(np.percentile(arr, (1.0 - alpha_half) * 100)),
+        }
+
+    return {
+        "direction_acc": get_ci_stats(boot_dir_accs),
+        "pooled_ic": get_ci_stats(boot_pooled_ics),
+        "daily_ic_mean": get_ci_stats(boot_daily_ic_means),
+        "daily_icir": get_ci_stats(boot_daily_icirs),
+    }
+
+
+# -------------------------------------------------------------------------
+# 3. 截面 Top K 多空对冲回测 (含交易成本与印花税)
+# -------------------------------------------------------------------------
+def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray,
+                                      dates: np.ndarray, symbols: np.ndarray,
+                                      top_k: int = 50, round_trip_cost: float = 0.0015) -> dict:
+    """按日度截面选股构建 Top K 多头与 Bottom K 空头组合，计算含交易费用的多空净值曲线。"""
+    p_10d = pred_ret[:, -1]
+    t_10d = true_ret[:, -1]
+
+    df = pd.DataFrame({
+        "date": dates,
+        "symbol": symbols,
+        "pred": p_10d,
+        "true": t_10d,
+    })
+
+    unique_dates = sorted(df["date"].unique())
+    daily_long_rets, daily_short_rets, daily_ls_rets = [], [], []
+
+    for dt in unique_dates:
+        sub = df[df["date"] == dt]
+        if len(sub) < top_k * 2:
+            continue
+
+        sub_sorted = sub.sort_values(by="pred", ascending=False)
+        long_basket = sub_sorted.iloc[:top_k]
+        short_basket = sub_sorted.iloc[-top_k:]
+
+        long_ret = long_basket["true"].mean()
+        short_ret = short_basket["true"].mean()
+
+        # 净收益：扣除换手成本 (买入佣金+卖出印花税佣金，保守设单边或双边)
+        ls_ret = long_ret - short_ret - round_trip_cost
+
+        daily_long_rets.append(long_ret)
+        daily_short_rets.append(short_ret)
+        daily_ls_rets.append(ls_ret)
+
+    if not daily_ls_rets:
+        return {}
+
+    ls_arr = np.array(daily_ls_rets)
+    cum_nav = np.cumprod(1.0 + ls_arr)
+    total_ret = float(cum_nav[-1] - 1.0)
+    sharpe = float(np.mean(ls_arr) / (np.std(ls_arr) + 1e-12) * np.sqrt(252))
+
+    # 最大回撤
+    peaks = np.maximum.accumulate(cum_nav)
+    drawdowns = (cum_nav - peaks) / peaks
+    max_dd = float(np.min(drawdowns))
+    win_rate = float(np.mean(ls_arr > 0))
+
+    return {
+        "top_k": top_k,
+        "trade_days": len(ls_arr),
+        "total_return": total_ret,
+        "annualized_return": float((1.0 + total_ret) ** (252.0 / len(ls_arr)) - 1.0) if len(ls_arr) > 10 else total_ret,
+        "sharpe_ratio": sharpe,
+        "max_drawdown": max_dd,
+        "daily_win_rate": win_rate,
+        "avg_daily_ls_spread": float(np.mean(ls_arr)),
+    }
+
+
+# -------------------------------------------------------------------------
+# 主程序入口
+# -------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(description="TimesFM 3.0 V11 OOS 深度分析与集成套件")
+    parser.add_argument("--inputs", nargs="+", required=True,
+                        help="输入预测 npz 文件列表，格式: path/to/eval_predictions.npz:tag")
+    parser.add_argument("--topk", nargs="+", type=int, default=[50, 100], help="截面回测 Top K 数量")
+    parser.add_argument("--bootstrap", type=int, default=1000, help="Block-Bootstrap 重采样次数")
+    parser.add_argument("--ensemble", action="store_true", help="是否对输入的各模型预测进行免训练等权融合")
+    parser.add_argument("--cost", type=float, default=0.0015, help="多空换手摩擦费率 (默认 0.15% 双边)")
+    parser.add_argument("--output", type=str, default="analysis_report.json", help="输出指标报告 JSON 路径")
+    args = parser.parse_args()
+
+    models_data = {}
+    for item in args.inputs:
+        if ":" in item:
+            path_str, tag = item.split(":", 1)
+        else:
+            path_str, tag = item, Path(item).stem
+        p = Path(path_str)
+        if not p.exists():
+            print(f"[Warning] 文件不存在: {p}", file=sys.stderr)
+            continue
+        data = np.load(p)
+        models_data[tag] = {
+            "pred_ret": data["pred_ret"],
+            "true_ret": data["true_ret"],
+            "dates": data["dates"],
+            "symbols": data["symbols"],
+            "path": str(p),
+        }
+
+    if not models_data:
+        print("[Error] 没有成功加载任何可用的预测 npz 文件！", file=sys.stderr)
+        sys.exit(1)
+
+    # 1. 如果指定了 --ensemble 且存在至少两个模型，生成集成模型
+    if args.ensemble and len(models_data) >= 2:
+        print(f"\n[Ensemble] 正在对 {len(models_data)} 个模型进行预测等权平均集成...")
+        first = next(iter(models_data.values()))
+        N, H = first["pred_ret"].shape
+        ens_pred = np.zeros((N, H), dtype=np.float32)
+        for d in models_data.values():
+            ens_pred += d["pred_ret"]
+        ens_pred /= float(len(models_data))
+
+        ens_tag = "ensemble_" + "_".join(models_data.keys())
+        models_data[ens_tag] = {
+            "pred_ret": ens_pred,
+            "true_ret": first["true_ret"],
+            "dates": first["dates"],
+            "symbols": first["symbols"],
+            "path": "in_memory_ensemble",
+        }
+        print(f"[Ensemble] 成功构建融合模型: {ens_tag}")
+
+    # 2. 对每个模型执行全维度评估
+    full_report = {}
+    print("\n" + "=" * 90)
+    print("                     TimesFM 3.0 V11 OOS 离线全维深度评估汇总")
+    print("=" * 90)
+
+    for tag, d in models_data.items():
+        print(f"\n>>> 正在深度分析: [{tag}] (样本数: {len(d['pred_ret']):,}) <<<")
+        m = compute_comprehensive_metrics(d["pred_ret"], d["true_ret"], d["dates"])
+
+        # Bootstrap 置信区间
+        ci_res = {}
+        if args.bootstrap > 0 and len(d["dates"]) > 0:
+            ci_res = run_block_bootstrap(d["pred_ret"], d["true_ret"], d["dates"], n_bootstraps=args.bootstrap)
+
+        # Top K 回测
+        backtests = {}
+        for k in args.topk:
+            backtests[f"top_{k}"] = run_topk_cross_sectional_backtest(
+                d["pred_ret"], d["true_ret"], d["dates"], d["symbols"], top_k=k, round_trip_cost=args.cost
+            )
+
+        full_report[tag] = {
+            "source_path": d["path"],
+            "metrics": m,
+            "bootstrap_ci_95": ci_res,
+            "backtests": backtests,
+        }
+
+    # 打印格式化对比表格
+    print("\n" + "=" * 105)
+    print(f"{'指标维度':<26} | " + " | ".join([f"{tag:<22}" for tag in models_data.keys()]))
+    print("-" * 105)
+
+    def print_row(label, key, fmt="{:.2%}"):
+        vals = []
+        for tag in models_data.keys():
+            v = full_report[tag]["metrics"].get(key, None)
+            vals.append(fmt.format(v) if v is not None else "N/A")
+        print(f"{label:<26} | " + " | ".join([f"{v:<22}" for v in vals]))
+
+    print_row("10天走势胜率 (DirAcc)", "direction_acc", "{:.2%}")
+    print_row("平衡准确率 (BalancedAcc)", "balanced_acc", "{:.2%}")
+    print_row("预测上涨率 (PredPosRatio)", "pred_pos_ratio", "{:.2%}")
+    print_row("10天 Pooled IC", "pooled_ic", "{:+.4f}")
+    print_row("10天轨迹形态同频度", "mean_trajectory_corr", "{:+.4f}")
+    print_row("日度 IC 均值", "daily_ic_mean", "{:+.4f}")
+    print_row("日度 ICIR (年化)", "annualized_icir", "{:.2f}")
+    print_row("正 IC 交易日胜率", "positive_ic_ratio", "{:.1%}")
+    print_row("实测振幅比 (AmpRatio)", "amp_ratio", "{:.4f}")
+    print_row("skill_nrmse", "skill_nrmse", "{:.4f}")
+    print_row("走势综合评分 (Score)", "trajectory_score", "{:.4f}")
+
+    # 打印 Top K 多空回测
+    for k in args.topk:
+        k_key = f"top_{k}"
+        print("-" * 105)
+        vals_sharpe, vals_ret, vals_dd = [], [], []
+        for tag in models_data.keys():
+            bt = full_report[tag]["backtests"].get(k_key, {})
+            vals_sharpe.append(f"{bt.get('sharpe_ratio', 0.0):.2f}")
+            vals_ret.append(f"{bt.get('total_return', 0.0)*100:+.2f}%")
+            vals_dd.append(f"{bt.get('max_drawdown', 0.0)*100:.2f}%")
+        print(f"Top {k} 多空对冲夏普 (扣费) | " + " | ".join([f"{v:<22}" for v in vals_sharpe]))
+        print(f"Top {k} 多空累计收益 (扣费) | " + " | ".join([f"{v:<22}" for v in vals_ret]))
+        print(f"Top {k} 多空最大回撤        | " + " | ".join([f"{v:<22}" for v in vals_dd]))
+
+    # 打印 Bootstrap 95% 置信区间
+    if args.bootstrap > 0:
+        print("-" * 105)
+        print(">>> 95% 置信区间 (Block-Bootstrap 按日抽样):")
+        for metric_name, m_key in [("DirAcc 95% CI", "direction_acc"), ("Pooled IC 95% CI", "pooled_ic")]:
+            ci_strs = []
+            for tag in models_data.keys():
+                ci_dict = full_report[tag]["bootstrap_ci_95"].get(m_key, {})
+                if ci_dict:
+                    ci_strs.append(f"[{ci_dict['ci_lower']:.4f}, {ci_dict['ci_upper']:.4f}]")
+                else:
+                    ci_strs.append("N/A")
+            print(f"{metric_name:<26} | " + " | ".join([f"{v:<22}" for v in ci_strs]))
+
+    print("=" * 105 + "\n")
+
+    # 结果持久化
+    # 去除 numpy 内部数组对象以便 json 序列化
+    serializable = {}
+    for tag, d in full_report.items():
+        m_copy = dict(d["metrics"])
+        m_copy.pop("day_ics", None)
+        serializable[tag] = {
+            "source_path": d["source_path"],
+            "metrics": m_copy,
+            "bootstrap_ci_95": d["bootstrap_ci_95"],
+            "backtests": d["backtests"],
+        }
+    Path(args.output).write_text(json.dumps(serializable, indent=2, ensure_ascii=False))
+    print(f"[Done] 全维离线分析大报告已保存至: {args.output}")
+
+
+if __name__ == "__main__":
+    main()

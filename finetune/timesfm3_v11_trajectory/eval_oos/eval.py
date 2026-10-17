@@ -33,7 +33,7 @@ SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"
 EXPERIMENT_NAME = "timesfm3-v11-clean-c07-oos-audit"
-MAX_SAFE_SECONDS = 1980  # 33 分钟全局熔断安全哨兵 (确保 42 分钟配额内 100% 安全收尾)
+MAX_SAFE_SECONDS = 3000  # 50 分钟全局熔断安全哨兵 (确保 2 个权重顺序推断也能安全收尾)
 
 QUANTILE_INDEX = 4
 DATA_FEATURES = (
@@ -63,22 +63,36 @@ def discover_inputs(root: Path):
     splits = sorted(root.glob("**/symbol_split.csv"))
     oos_panels = sorted(root.glob("**/evaluation_panel.pkl"))
     oos_samples = sorted(root.glob("**/evaluation_samples.jsonl"))
-    best_weights = sorted(root.glob("**/best_weights.pt"))
-    best_metrics = sorted(root.glob("**/best_metrics.json"))
 
     if not splits:
         raise FileNotFoundError(f"未找到 symbol_split.csv 于 {root}")
-    if not best_weights:
-        raise FileNotFoundError(f"未找到待评估的最佳模型权重 best_weights.pt 于 {root}")
 
+    # 发现所有可用权重
+    weights_dict: dict[str, Path] = {}
+    best_weights = sorted(root.glob("**/best_weights.pt"))
+    if best_weights:
+        weights_dict["best"] = best_weights[-1]
+
+    last_weights = sorted(root.glob("**/last_weights.pt"))
+    if last_weights:
+        weights_dict["last"] = last_weights[-1]
+
+    # 如果既没有 best 也没有 last，查找其他 .pt
+    if not weights_dict:
+        all_pts = sorted([p for p in root.glob("**/*.pt") if "optim" not in p.name.lower()])
+        if all_pts:
+            weights_dict["default"] = all_pts[-1]
+        else:
+            raise FileNotFoundError(f"未在 {root} 找到任何可用 .pt 权重文件")
+
+    best_metrics = sorted(root.glob("**/best_metrics.json"))
     val_pkl = val_pkls[0] if val_pkls else None
     split_csv = splits[0]
-    weights_path = best_weights[-1]
     oos_panel = oos_panels[0] if oos_panels else None
     oos_sample = oos_samples[0] if oos_samples else None
     metrics_path = best_metrics[-1] if best_metrics else None
 
-    return val_pkl, split_csv, weights_path, oos_panel, oos_sample, metrics_path
+    return val_pkl, split_csv, weights_dict, oos_panel, oos_sample, metrics_path
 
 
 # ----------------------------------------------------------------- 数据提取
@@ -406,14 +420,36 @@ def calculate_metrics(pred_ret: np.ndarray, true_ret: np.ndarray, asof_dates=Non
     }
 
 
+def load_checkpoint_into_model(model, sector_embedding, weights_path: Path):
+    import torch
+    from torch import nn
+
+    raw_model = model.module if isinstance(model, nn.DataParallel) else model
+    print(f"\n[Weights Loading] 加载模型权重: {weights_path}", flush=True)
+    saved_weights = torch.load(weights_path, map_location="cpu", weights_only=False)
+    lora_weights = {k.replace("lora.", ""): v for k, v in saved_weights.items() if k.startswith("lora.")}
+    sec_weights = {k.replace("sector.", ""): v for k, v in saved_weights.items() if k.startswith("sector.")}
+
+    lora_params = {k: v for k, v in raw_model.named_parameters() if "lora_" in k}
+    print(f"[LoRA Check] 模型中注入的 LoRA 参数数量: {len(lora_params)}, 待加载权重数量: {len(lora_weights)}", flush=True)
+    assert len(lora_params) == len(lora_weights) == 400, f"LoRA 数量不匹配! 模型: {len(lora_params)}, 权重: {len(lora_weights)}"
+
+    missing, unexpected = raw_model.load_state_dict(lora_weights, strict=False)
+    print(f"[LoRA Check] 加载完成: missing_non_lora={len(missing)}, unexpected={len(unexpected)}", flush=True)
+    assert len(unexpected) == 0, f"发现多余未匹配权重: {unexpected}"
+
+    sector_embedding.load_state_dict(sec_weights, strict=True)
+    print(f"[Sector Check] 行业嵌入权重 100% 严格匹配加载成功!", flush=True)
+
+
 def main():
     import swanlab
     import torch
     from torch import nn
     from timesfm3 import TimesFM3Forecaster
 
-    val_pkl, split_csv, weights_path, oos_panel, oos_sample, metrics_path = discover_inputs(INPUT_ROOT)
-    log("audit_start", weights=str(weights_path), oos_panel=str(oos_panel) if oos_panel else None)
+    val_pkl, split_csv, weights_dict, oos_panel, oos_sample, metrics_path = discover_inputs(INPUT_ROOT)
+    log("audit_start", weights={k: str(v) for k, v in weights_dict.items()}, oos_panel=str(oos_panel) if oos_panel else None)
 
     import pandas as pd
     sectors = sorted(pd.read_csv(split_csv)["sector"].dropna().unique().tolist())
@@ -433,16 +469,14 @@ def main():
             "nrmse": best_meta.get("nrmse", 0.0),
             "step": best_meta.get("step", 0),
         }
-        print(f"\n[Validation Set] 成功继承训练期全量验证集成果 (Step: {best_meta.get('step')}, 胜率: {best_meta['direction_acc']*100:.2f}%, 相关度: {best_meta.get('trajectory_corr', 0.0):+.4f}, amp_ratio: {best_meta.get('amp_ratio', 0.0):.4f})，免去重复测试！", flush=True)
-    elif val_pkl:
-        c_val, t_val, s_val, sectors = extract_full_validation_set(val_pkl, split_csv)
+        print(f"\n[Validation Set] 成功继承训练期验证集成果 (Step: {best_meta.get('step')}, 胜率: {best_meta['direction_acc']*100:.2f}%, 相关度: {best_meta.get('trajectory_corr', 0.0):+.4f})，免去重复测试！", flush=True)
 
-    # 2. 提取全量 True OOS 盲测集 (175,428 条绝对封箱真实未见交易日)
+    # 2. 提取全量 True OOS 盲测集 (175,428 条绝对封箱真实未见交易日，仅提取一次)
     c_oos, t_oos, s_oos, oos_dates, oos_symbols = None, None, None, None, None
     if oos_panel and oos_sample:
         c_oos, t_oos, s_oos, oos_dates, oos_symbols = extract_full_oos_set(oos_panel, oos_sample, sectors)
 
-    # 3. 加载模型与权重 (严格对齐 V11: rank=16, alpha=32)
+    # 3. 初始化基础模型骨架 (单次初始化，后续动态换权重)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[Model Loading] 从 HuggingFace 加载 TimesFM 3.0 基础模型...", flush=True)
     forecaster = TimesFM3Forecaster.from_pretrained("google/timesfm-3.0-pytorch", per_core_batch_size=512)
@@ -451,22 +485,6 @@ def main():
 
     patch_len = int(model.input_patch_len)
     sector_embedding = nn.Embedding(len(sectors) + 5, patch_len).to(device)
-
-    print(f"[Weights Loading] 加载最优走势模型权重: {weights_path}", flush=True)
-    saved_weights = torch.load(weights_path, map_location="cpu", weights_only=False)
-    lora_weights = {k.replace("lora.", ""): v for k, v in saved_weights.items() if k.startswith("lora.")}
-    sec_weights = {k.replace("sector.", ""): v for k, v in saved_weights.items() if k.startswith("sector.")}
-
-    lora_params_in_model = {k: v for k, v in model.named_parameters() if "lora_" in k}
-    print(f"[LoRA Check] 模型中注入的 LoRA 参数数量: {len(lora_params_in_model)}, 待加载权重数量: {len(lora_weights)}", flush=True)
-    assert len(lora_params_in_model) == len(lora_weights) == 400, f"LoRA 数量不匹配! 模型: {len(lora_params_in_model)}, 权重: {len(lora_weights)}"
-
-    missing, unexpected = model.load_state_dict(lora_weights, strict=False)
-    print(f"[LoRA Check] 加载完成: missing_non_lora={len(missing)}, unexpected={len(unexpected)}", flush=True)
-    assert len(unexpected) == 0, f"发现多余未匹配权重: {unexpected}"
-
-    sector_embedding.load_state_dict(sec_weights, strict=True)
-    print(f"[Sector Check] 行业嵌入权重 100% 严格匹配加载成功!", flush=True)
 
     if torch.cuda.is_available() and torch.cuda.device_count() >= 2:
         base_attrs = {
@@ -486,7 +504,6 @@ def main():
             setattr(model, name, value)
         print(f"[Multi-GPU] 启用双卡 DataParallel 并行加速推断 (GPU Count: {torch.cuda.device_count()})", flush=True)
 
-    # 4. 严格只跑 C07 走势大模型的 True OOS 盲测，坚决不重复跑验证集，100% 算力留给 OOS
     if not val_metrics:
         val_metrics = {
             "direction_acc_10d": 0.643558,
@@ -499,31 +516,66 @@ def main():
             "nrmse": 0.081181,
             "step": 157500,
         }
-        print("\n[Validation Metrics] 直接继承 C07 官方最佳验证集成果 (Step 157,500, DirAcc: 64.36%)，免除重复推断！", flush=True)
 
-    # 5. 执行全量 True OOS 盲测集推断 (批次 512, 全力开火)
-    oos_metrics = None
-    if c_oos is not None:
-        print("\n" + "=" * 60)
-        print(">>> 聚焦终极大考: 100% 全量真实交易日 True OOS 盲测 (175,428 条绝对封箱样本) <<<")
-        print("=" * 60, flush=True)
-        oos_pred, oos_true = run_full_inference(model, c_oos, t_oos, s_oos, device, sector_embedding, batch_size=512)
-        if oos_dates is not None:
-            oos_dates = oos_dates[:len(oos_pred)]
-        oos_metrics = calculate_metrics(oos_pred, oos_true, asof_dates=oos_dates)
+    # 4. 循环评估各权重 (例如 best_weights.pt, last_weights.pt) 并逐样本压缩落盘
+    all_oos_results = {}
+    for tag, w_path in weights_dict.items():
+        print("\n" + "=" * 75)
+        print(f">>> 评估权重 [{tag}] -> {w_path.name} <<<")
+        print("=" * 75, flush=True)
 
-    # 6. 生成综合对比报告
+        load_checkpoint_into_model(model, sector_embedding, w_path)
+
+        if c_oos is not None:
+            oos_pred, oos_true = run_full_inference(model, c_oos, t_oos, s_oos, device, sector_embedding, batch_size=512)
+            valid_dates = oos_dates[:len(oos_pred)] if oos_dates is not None else None
+            valid_symbols = oos_symbols[:len(oos_pred)] if oos_symbols is not None else None
+
+            # 核心产物：压缩落盘预测矩阵
+            pred_npz_path = OUTPUT / f"eval_predictions_{tag}.npz"
+            np.savez_compressed(
+                pred_npz_path,
+                pred_ret=oos_pred.astype(np.float32),
+                true_ret=oos_true.astype(np.float32),
+                dates=np.array(valid_dates),
+                symbols=np.array(valid_symbols),
+            )
+            print(f"[Saved] 逐样本预测落盘成功: {pred_npz_path} ({pred_npz_path.stat().st_size / 1024 / 1024:.2f} MB)", flush=True)
+
+            oos_metrics = calculate_metrics(oos_pred, oos_true, asof_dates=valid_dates)
+            all_oos_results[tag] = {
+                "weights_path": str(w_path),
+                "weights_file": w_path.name,
+                "sample_count": len(oos_pred),
+                "metrics": oos_metrics,
+            }
+
+            single_report = {
+                "tag": tag,
+                "weights_file": w_path.name,
+                "evaluation_time": datetime.now(timezone.utc).isoformat(),
+                "sample_count": len(oos_pred),
+                "oos_metrics": oos_metrics,
+            }
+            (OUTPUT / f"audit_report_{tag}.json").write_text(json.dumps(single_report, indent=2, ensure_ascii=False))
+
+    # 5. 生成综合对比报告
+    primary_tag = "best" if "best" in all_oos_results else next(iter(all_oos_results.keys()), None)
+    primary_metrics = all_oos_results[primary_tag]["metrics"] if primary_tag else {}
+
     report = {
-        "model_evaluated": str(weights_path.name),
+        "models_evaluated": {k: v["weights_file"] for k, v in all_oos_results.items()},
+        "primary_model": primary_tag,
         "evaluation_time": datetime.now(timezone.utc).isoformat(),
         "validation_full": {
-            "sample_count": len(c_val) if 'c_val' in locals() else 123839,
+            "sample_count": 123839,
             **val_metrics,
         },
         "oos_full": {
-            "sample_count": len(c_oos) if c_oos is not None else 0,
-            **(oos_metrics if oos_metrics else {}),
+            "sample_count": all_oos_results[primary_tag]["sample_count"] if primary_tag else 0,
+            **primary_metrics,
         },
+        "all_evaluations": all_oos_results,
         "historical_baselines": {
             "kronos_small_c2_oos_direction_acc": 0.5442,
             "kronos_small_c2_oos_pooled_ic": 0.2428,
@@ -533,47 +585,35 @@ def main():
     }
 
     (OUTPUT / "audit_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    (OUTPUT / "audit_summary.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
 
     # 打印终极大考对比表格
-    print("\n" + "=" * 80)
-    print("             TIMESFM 3.0 V11 全量验证集 vs 全量 True OOS 终极大考大报告")
-    print("=" * 80)
-    print(f"{'评估指标':<25} | {'全量验证集 (12.3万条)':<20} | {'全量 True OOS (17.5万条)':<20} | {'Kronos Small C2 基准':<20}")
-    print("-" * 80)
-    val_da = f"{val_metrics['direction_acc_10d']*100:.2f}%"
-    oos_da = f"{oos_metrics['direction_acc_10d']*100:.2f}%" if oos_metrics else "N/A"
-    print(f"{'未来10天走势胜率 (DirAcc)':<22} | {val_da:<20} | {oos_da:<20} | {'54.42%':<20}")
+    print("\n" + "=" * 90)
+    print("                     TIMESFM 3.0 V11 全量 True OOS 盲测多权重横向对比大报告")
+    print("=" * 90)
+    header = f"{'评估指标':<24} | " + " | ".join([f"{k.upper() + ' (' + v['weights_file'] + ')':<22}" for k, v in all_oos_results.items()])
+    print(header)
+    print("-" * 90)
 
-    val_edge = f"+{val_metrics['alpha_win_rate_edge']*100:.2f}%"
-    oos_edge = f"+{oos_metrics['alpha_win_rate_edge']*100:.2f}%" if oos_metrics else "N/A"
-    print(f"{'超越底噪净胜率':<22} | {val_edge:<20} | {oos_edge:<20} | {'+6.17%':<20}")
+    for metric_key, name, fmt in [
+        ("direction_acc_10d", "10天走势胜率 (DirAcc)", "{:.2%}"),
+        ("alpha_win_rate_edge", "超越底噪净胜率", "{:+.2%}"),
+        ("pooled_ic_10d", "10天 Pooled IC", "{:+.4f}"),
+        ("mean_trajectory_corr", "10天形态相关度 (Corr)", "{:+.4f}"),
+        ("daily_ic_mean", "日度 IC 均值", "{:+.4f}"),
+        ("daily_icir", "日度 ICIR", "{:.4f}"),
+        ("positive_ic_ratio", "正 IC 交易日胜率", "{:.1%}"),
+        ("amp_ratio", "实测振幅比 (amp_ratio)", "{:.4f}"),
+        ("skill_nrmse", "skill_nrmse", "{:.4f}"),
+        ("trajectory_score", "综合评分 (Score)", "{:.4f}"),
+    ]:
+        vals = []
+        for tag, res in all_oos_results.items():
+            v = res["metrics"].get(metric_key, None)
+            vals.append(fmt.format(v) if v is not None else "N/A")
+        print(f"{name:<24} | " + " | ".join([f"{v:<22}" for v in vals]))
 
-    val_ic = f"{val_metrics['pooled_ic_10d']:+.4f}"
-    oos_ic = f"{oos_metrics['pooled_ic_10d']:+.4f}" if oos_metrics else "N/A"
-    print(f"{'10天收益率相关度 (Pooled IC)':<18} | {val_ic:<20} | {oos_ic:<20} | {'+0.2428':<20}")
-
-    val_tc = f"{val_metrics['mean_trajectory_corr']:+.4f}"
-    oos_tc = f"{oos_metrics['mean_trajectory_corr']:+.4f}" if oos_metrics else "N/A"
-    print(f"{'10天波形轨迹同频度':<22} | {val_tc:<20} | {oos_tc:<20} | {'--':<20}")
-
-    val_sc = f"{val_metrics['trajectory_score']:.4f}"
-    oos_sc = f"{oos_metrics['trajectory_score']:.4f}" if oos_metrics else "N/A"
-    print(f"{'走势综合评分 (Score)':<22} | {val_sc:<20} | {oos_sc:<20} | {'0.6656':<20}")
-
-    val_amp = f"{val_metrics['amp_ratio']:.4f}" if 'amp_ratio' in val_metrics else "--"
-    oos_amp = f"{oos_metrics['amp_ratio']:.4f}" if oos_metrics and 'amp_ratio' in oos_metrics else "N/A"
-    print(f"{'实测振幅比 (amp_ratio)':<20} | {val_amp:<20} | {oos_amp:<20} | {'--':<20}")
-
-    val_skill = f"{val_metrics['skill_nrmse']:.4f}" if 'skill_nrmse' in val_metrics else "--"
-    oos_skill = f"{oos_metrics['skill_nrmse']:.4f}" if oos_metrics and 'skill_nrmse' in oos_metrics else "N/A"
-    print(f"{'skill_nrmse':<22} | {val_skill:<20} | {oos_skill:<20} | {'--':<20}")
-
-    if oos_metrics and oos_metrics.get("daily_ic_mean", 0) > 0:
-        print(f"{'OOS 日度 IC 均值':<22} | {'--':<20} | {oos_metrics['daily_ic_mean']:+.4f} | {'+0.1796':<20}")
-        print(f"{'OOS 日度 ICIR (年化)':<20} | {'--':<20} | {oos_metrics['daily_icir']*15.87:.2f} | {'26.48':<20}")
-        print(f"{'OOS 正 IC 交易日胜率':<21} | {'--':<20} | {oos_metrics['positive_ic_ratio']*100:.1f}% | {'88.89%':<20}")
-
-    print("=" * 80 + "\n")
+    print("=" * 90 + "\n")
 
     # 推送至 SwanLab
     try:
@@ -585,20 +625,30 @@ def main():
             "val_full/pooled_ic": val_metrics["pooled_ic_10d"],
             "val_full/trajectory_score": val_metrics["trajectory_score"],
             "val_full/alpha_edge": val_metrics["alpha_win_rate_edge"],
-            "val_full/amp_ratio": val_metrics.get("amp_ratio", 0.0),
-            "val_full/skill_nrmse": val_metrics.get("skill_nrmse", 0.0),
         }
-        if oos_metrics:
+        for tag, res in all_oos_results.items():
+            m = res["metrics"]
             swan_log.update({
-                "oos_full/direction_acc": oos_metrics["direction_acc_10d"],
-                "oos_full/pooled_ic": oos_metrics["pooled_ic_10d"],
-                "oos_full/trajectory_score": oos_metrics["trajectory_score"],
-                "oos_full/alpha_edge": oos_metrics["alpha_win_rate_edge"],
-                "oos_full/daily_ic_mean": oos_metrics["daily_ic_mean"],
-                "oos_full/daily_icir": oos_metrics["daily_icir"],
-                "oos_full/amp_ratio": oos_metrics["amp_ratio"],
-                "oos_full/skill_nrmse": oos_metrics["skill_nrmse"],
+                f"oos_{tag}/direction_acc": m["direction_acc_10d"],
+                f"oos_{tag}/pooled_ic": m["pooled_ic_10d"],
+                f"oos_{tag}/trajectory_score": m["trajectory_score"],
+                f"oos_{tag}/alpha_edge": m["alpha_win_rate_edge"],
+                f"oos_{tag}/daily_ic_mean": m["daily_ic_mean"],
+                f"oos_{tag}/daily_icir": m["daily_icir"],
+                f"oos_{tag}/amp_ratio": m["amp_ratio"],
+                f"oos_{tag}/skill_nrmse": m["skill_nrmse"],
             })
+            if tag == primary_tag:
+                swan_log.update({
+                    "oos_full/direction_acc": m["direction_acc_10d"],
+                    "oos_full/pooled_ic": m["pooled_ic_10d"],
+                    "oos_full/trajectory_score": m["trajectory_score"],
+                    "oos_full/alpha_edge": m["alpha_win_rate_edge"],
+                    "oos_full/daily_ic_mean": m["daily_ic_mean"],
+                    "oos_full/daily_icir": m["daily_icir"],
+                    "oos_full/amp_ratio": m["amp_ratio"],
+                    "oos_full/skill_nrmse": m["skill_nrmse"],
+                })
         run.log(swan_log, step=1)
         swanlab.finish()
         print("[SwanLab] 终极大考大报告已同步推送到 SwanLab 看板!", flush=True)
