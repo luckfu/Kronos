@@ -1,6 +1,6 @@
 {
   "c07_best": {
-    "source_path": "results_c07_v2/eval_results/eval_predictions_best.npz",
+    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_c07_v2/eval_results/eval_predictions_best.npz",
     "metrics": {
       "direction_acc": 0.5842339877328591,
       "market_natural_up": 0.46803816950543814,
@@ -48,27 +48,41 @@
       "top_50": {
         "top_k": 50,
         "trade_days": 34,
-        "total_return": 0.32074999809265137,
-        "annualized_return": 6.861293260578617,
-        "sharpe_ratio": 2.670130088690934,
-        "max_drawdown": -0.4036089777946472,
-        "daily_win_rate": 0.5588235294117647,
-        "avg_daily_ls_spread": 0.0099170608446002
+        "daily_holding_total_return": 0.04604339599609375,
+        "daily_holding_sharpe": 1.4174161279604824,
+        "daily_holding_max_drawdown": -0.06851401180028915,
+        "daily_holding_win_rate": 0.5882352941176471,
+        "long_only_cum_return": 0.2399073839187622,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.15813946723937988,
+        "long_only_excess_ir": 4.739212891948225,
+        "long_only_excess_max_drawdown": -0.027043256908655167,
+        "overlapping_10d_total_return": 0.32074999809265137,
+        "overlapping_10d_sharpe_raw": 2.670130088690934,
+        "overlapping_10d_sharpe_indep": 0.8443692729210754,
+        "overlapping_10d_max_drawdown": -0.4036089777946472
       },
       "top_100": {
         "top_k": 100,
         "trade_days": 34,
-        "total_return": 0.6761984825134277,
-        "annualized_return": 44.98830491038318,
-        "sharpe_ratio": 4.639160876551056,
-        "max_drawdown": -0.3463054895401001,
-        "daily_win_rate": 0.7352941176470589,
-        "avg_daily_ls_spread": 0.01689360849559307
+        "daily_holding_total_return": 0.06557261943817139,
+        "daily_holding_sharpe": 2.0561052739317196,
+        "daily_holding_max_drawdown": -0.049497924745082855,
+        "daily_holding_win_rate": 0.5588235294117647,
+        "long_only_cum_return": 0.2266247272491455,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.14598357677459717,
+        "long_only_excess_ir": 4.350787789252142,
+        "long_only_excess_max_drawdown": -0.02698441408574581,
+        "overlapping_10d_total_return": 0.6761984825134277,
+        "overlapping_10d_sharpe_raw": 4.639160876551056,
+        "overlapping_10d_sharpe_indep": 1.4670314801844562,
+        "overlapping_10d_max_drawdown": -0.3463054895401001
       }
     }
   },
   "c07_last": {
-    "source_path": "results_c07_v2/eval_results/eval_predictions_last.npz",
+    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_c07_v2/eval_results/eval_predictions_last.npz",
     "metrics": {
       "direction_acc": 0.580773878742276,
       "market_natural_up": 0.46803816950543814,
@@ -116,27 +130,41 @@
       "top_50": {
         "top_k": 50,
         "trade_days": 34,
-        "total_return": 1.374344825744629,
-        "annualized_return": 606.354454401042,
-        "sharpe_ratio": 9.094706105963304,
-        "max_drawdown": -0.11011932790279388,
-        "daily_win_rate": 0.7647058823529411,
-        "avg_daily_ls_spread": 0.02677641063928604
+        "daily_holding_total_return": 0.153253436088562,
+        "daily_holding_sharpe": 4.8214949033718675,
+        "daily_holding_max_drawdown": -0.04791751503944397,
+        "daily_holding_win_rate": 0.6470588235294118,
+        "long_only_cum_return": 0.2387458086013794,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.15734684467315674,
+        "long_only_excess_ir": 4.047332836276809,
+        "long_only_excess_max_drawdown": -0.04633340239524841,
+        "overlapping_10d_total_return": 1.374344825744629,
+        "overlapping_10d_sharpe_raw": 9.094706105963304,
+        "overlapping_10d_sharpe_indep": 2.875998594468471,
+        "overlapping_10d_max_drawdown": -0.11011932790279388
       },
       "top_100": {
         "top_k": 100,
         "trade_days": 34,
-        "total_return": 1.6166956424713135,
-        "annualized_return": 1247.2124396028694,
-        "sharpe_ratio": 8.761905879793172,
-        "max_drawdown": -0.12624956667423248,
-        "daily_win_rate": 0.7647058823529411,
-        "avg_daily_ls_spread": 0.030034195631742477
+        "daily_holding_total_return": 0.18542468547821045,
+        "daily_holding_sharpe": 6.243073931879834,
+        "daily_holding_max_drawdown": -0.029889918863773346,
+        "daily_holding_win_rate": 0.5588235294117647,
+        "long_only_cum_return": 0.25686585903167725,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.1746598482131958,
+        "long_only_excess_ir": 4.725461375601523,
+        "long_only_excess_max_drawdown": -0.03848870098590851,
+        "overlapping_10d_total_return": 1.6166956424713135,
+        "overlapping_10d_sharpe_raw": 8.761905879793172,
+        "overlapping_10d_sharpe_indep": 2.7707579224167915,
+        "overlapping_10d_max_drawdown": -0.12624956667423248
       }
     }
   },
   "c07_swa_native": {
-    "source_path": "results_native_merged/eval_results/eval_predictions_native_merged.npz",
+    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_native_merged/eval_results/eval_predictions_native_merged.npz",
     "metrics": {
       "direction_acc": 0.5824554803110108,
       "market_natural_up": 0.46803816950543814,
@@ -184,27 +212,41 @@
       "top_50": {
         "top_k": 50,
         "trade_days": 34,
-        "total_return": 0.8067096471786499,
-        "annualized_return": 79.16708758049538,
-        "sharpe_ratio": 5.90954750150589,
-        "max_drawdown": -0.20325544476509094,
-        "daily_win_rate": 0.6176470588235294,
-        "avg_daily_ls_spread": 0.018749050796031952
+        "daily_holding_total_return": 0.10518372058868408,
+        "daily_holding_sharpe": 3.309517880954014,
+        "daily_holding_max_drawdown": -0.060143303126096725,
+        "daily_holding_win_rate": 0.5588235294117647,
+        "long_only_cum_return": 0.23116886615753174,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.1501537561416626,
+        "long_only_excess_ir": 4.095467637913676,
+        "long_only_excess_max_drawdown": -0.03604283928871155,
+        "overlapping_10d_total_return": 0.8067096471786499,
+        "overlapping_10d_sharpe_raw": 5.90954750150589,
+        "overlapping_10d_sharpe_indep": 1.868763004571594,
+        "overlapping_10d_max_drawdown": -0.20325544476509094
       },
       "top_100": {
         "top_k": 100,
         "trade_days": 34,
-        "total_return": 1.0867908000946045,
-        "annualized_return": 232.2934441190563,
-        "sharpe_ratio": 6.481244782772724,
-        "max_drawdown": -0.23865997791290283,
-        "daily_win_rate": 0.7352941176470589,
-        "avg_daily_ls_spread": 0.023378953337669373
+        "daily_holding_total_return": 0.14520049095153809,
+        "daily_holding_sharpe": 4.38838718931593,
+        "daily_holding_max_drawdown": -0.03130430355668068,
+        "daily_holding_win_rate": 0.5588235294117647,
+        "long_only_cum_return": 0.2376786470413208,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.15682756900787354,
+        "long_only_excess_ir": 4.303848504242658,
+        "long_only_excess_max_drawdown": -0.0350433774292469,
+        "overlapping_10d_total_return": 1.0867908000946045,
+        "overlapping_10d_sharpe_raw": 6.481244782772724,
+        "overlapping_10d_sharpe_indep": 2.0495495586645043,
+        "overlapping_10d_max_drawdown": -0.23865997791290283
       }
     }
   },
   "sweetspot_best": {
-    "source_path": "results_sweetspot/eval_results/eval_predictions_best.npz",
+    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_sweetspot/eval_results/eval_predictions_best.npz",
     "metrics": {
       "direction_acc": 0.585214446952596,
       "market_natural_up": 0.46803816950543814,
@@ -252,27 +294,41 @@
       "top_50": {
         "top_k": 50,
         "trade_days": 34,
-        "total_return": 2.73909068107605,
-        "annualized_return": 17586.60923123478,
-        "sharpe_ratio": 11.396883190596222,
-        "max_drawdown": -0.057921018451452255,
-        "daily_win_rate": 0.8235294117647058,
-        "avg_daily_ls_spread": 0.04100646823644638
+        "daily_holding_total_return": 0.2534139156341553,
+        "daily_holding_sharpe": 6.626684797456707,
+        "daily_holding_max_drawdown": -0.04222662374377251,
+        "daily_holding_win_rate": 0.6176470588235294,
+        "long_only_cum_return": 0.3167881965637207,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.23049283027648926,
+        "long_only_excess_ir": 5.1815114653314875,
+        "long_only_excess_max_drawdown": -0.04932336509227753,
+        "overlapping_10d_total_return": 2.73909068107605,
+        "overlapping_10d_sharpe_raw": 11.396883190596222,
+        "overlapping_10d_sharpe_indep": 3.6040109109170952,
+        "overlapping_10d_max_drawdown": -0.057921018451452255
       },
       "top_100": {
         "top_k": 100,
         "trade_days": 34,
-        "total_return": 2.4604005813598633,
-        "annualized_return": 9904.532972113519,
-        "sharpe_ratio": 10.423890670372403,
-        "max_drawdown": -0.09087564051151276,
-        "daily_win_rate": 0.7941176470588235,
-        "avg_daily_ls_spread": 0.038729872554540634
+        "daily_holding_total_return": 0.2858468294143677,
+        "daily_holding_sharpe": 8.11849179379945,
+        "daily_holding_max_drawdown": -0.025017380714416504,
+        "daily_holding_win_rate": 0.6470588235294118,
+        "long_only_cum_return": 0.31556081771850586,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.22957289218902588,
+        "long_only_excess_ir": 5.739077806296273,
+        "long_only_excess_max_drawdown": -0.0360698476433754,
+        "overlapping_10d_total_return": 2.4604005813598633,
+        "overlapping_10d_sharpe_raw": 10.423890670372403,
+        "overlapping_10d_sharpe_indep": 3.296323659895624,
+        "overlapping_10d_max_drawdown": -0.09087564051151276
       }
     }
   },
   "sweetspot_last": {
-    "source_path": "results_sweetspot/eval_results/eval_predictions_last.npz",
+    "source_path": "finetune/timesfm3_v11_trajectory/eval_oos/results_sweetspot/eval_results/eval_predictions_last.npz",
     "metrics": {
       "direction_acc": 0.5847926214743371,
       "market_natural_up": 0.46803816950543814,
@@ -320,90 +376,36 @@
       "top_50": {
         "top_k": 50,
         "trade_days": 34,
-        "total_return": 2.9159324169158936,
-        "annualized_return": 24770.64926320066,
-        "sharpe_ratio": 9.402292143699343,
-        "max_drawdown": -0.08357356488704681,
-        "daily_win_rate": 0.8529411764705882,
-        "avg_daily_ls_spread": 0.04324455186724663
+        "daily_holding_total_return": 0.3075977563858032,
+        "daily_holding_sharpe": 7.648325429780673,
+        "daily_holding_max_drawdown": -0.024822210893034935,
+        "daily_holding_win_rate": 0.7058823529411765,
+        "long_only_cum_return": 0.34582674503326416,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.25815117359161377,
+        "long_only_excess_ir": 5.672440173121253,
+        "long_only_excess_max_drawdown": -0.046291399747133255,
+        "overlapping_10d_total_return": 2.9159324169158936,
+        "overlapping_10d_sharpe_raw": 9.402292143699343,
+        "overlapping_10d_sharpe_indep": 2.973265840039709,
+        "overlapping_10d_max_drawdown": -0.08357356488704681
       },
       "top_100": {
         "top_k": 100,
         "trade_days": 34,
-        "total_return": 2.573246717453003,
-        "annualized_return": 12564.299621757345,
-        "sharpe_ratio": 8.700388104529322,
-        "max_drawdown": -0.12277929484844208,
-        "daily_win_rate": 0.8823529411764706,
-        "avg_daily_ls_spread": 0.04049934074282646
-      }
-    }
-  },
-  "sweetspot_native": {
-    "source_path": "results_sweetspot_native/eval_results/eval_predictions_sweetspot_native.npz",
-    "metrics": {
-      "direction_acc": 0.5858642862028867,
-      "market_natural_up": 0.46803816950543814,
-      "pred_pos_ratio": 0.49094215290603554,
-      "balanced_acc": 0.5893842459566898,
-      "tpr_bull_win": 0.5860401670990293,
-      "tnr_bear_win": 0.5927283248143504,
-      "pooled_ic": 0.17483682930469513,
-      "mean_trajectory_corr": 0.10867252276678992,
-      "daily_ic_mean": 0.09558229134305918,
-      "daily_icir": 0.6828788599599873,
-      "annualized_icir": 10.840365834224578,
-      "positive_ic_ratio": 0.7058823529411765,
-      "amp_ratio": 0.8296368927966395,
-      "skill_nrmse": -0.2747733204113949,
-      "trajectory_score": 0.6732827008552342
-    },
-    "bootstrap_ci_95": {
-      "direction_acc": {
-        "mean": 0.5865052255302581,
-        "std": 0.015230255648352328,
-        "ci_lower": 0.5522787644559725,
-        "ci_upper": 0.6138436867521018
-      },
-      "pooled_ic": {
-        "mean": 0.1728947013616562,
-        "std": 0.0344076007604599,
-        "ci_lower": 0.10262051969766617,
-        "ci_upper": 0.2352968156337738
-      },
-      "daily_ic_mean": {
-        "mean": 0.094393882404735,
-        "std": 0.02367731203060059,
-        "ci_lower": 0.050369233236557454,
-        "ci_upper": 0.1421122969137106
-      },
-      "daily_icir": {
-        "mean": 0.6974255081903193,
-        "std": 0.17403491382076744,
-        "ci_lower": 0.3908807696636994,
-        "ci_upper": 1.0967193304421405
-      }
-    },
-    "backtests": {
-      "top_50": {
-        "top_k": 50,
-        "trade_days": 34,
-        "total_return": 2.329798460006714,
-        "annualized_return": 7446.986993353621,
-        "sharpe_ratio": 9.068486112879501,
-        "max_drawdown": -0.07533907890319824,
-        "daily_win_rate": 0.7352941176470589,
-        "avg_daily_ls_spread": 0.03795124962925911
-      },
-      "top_100": {
-        "top_k": 100,
-        "trade_days": 34,
-        "total_return": 2.2151191234588623,
-        "annualized_return": 5743.1441769329485,
-        "sharpe_ratio": 8.637682855290512,
-        "max_drawdown": -0.1372293084859848,
-        "daily_win_rate": 0.7352941176470589,
-        "avg_daily_ls_spread": 0.0369575209915638
+        "daily_holding_total_return": 0.26349449157714844,
+        "daily_holding_sharpe": 7.110174524855117,
+        "daily_holding_max_drawdown": -0.028904851526021957,
+        "daily_holding_win_rate": 0.6470588235294118,
+        "long_only_cum_return": 0.3048694133758545,
+        "market_benchmark_return": 0.07407069206237793,
+        "long_only_excess_return": 0.21958470344543457,
+        "long_only_excess_ir": 5.425666995819306,
+        "long_only_excess_max_drawdown": -0.03636346012353897,
+        "overlapping_10d_total_return": 2.573246717453003,
+        "overlapping_10d_sharpe_raw": 8.700388104529322,
+        "overlapping_10d_sharpe_indep": 2.751304293774779,
+        "overlapping_10d_max_drawdown": -0.12277929484844208
       }
     }
   }

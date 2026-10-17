@@ -219,19 +219,22 @@ def run_block_bootstrap(pred_ret: np.ndarray, true_ret: np.ndarray, dates: np.nd
 def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray,
                                       dates: np.ndarray, symbols: np.ndarray,
                                       top_k: int = 50, round_trip_cost: float = 0.0015) -> dict:
-    """按日度截面选股构建 Top K 多头与 Bottom K 空头组合，计算含交易费用的多空净值曲线。"""
+    """按日度截面选股构建 Top K 多头与 Bottom K 空头组合，并计算真实单日与纯多头超额。"""
     p_10d = pred_ret[:, -1]
     t_10d = true_ret[:, -1]
+    t_1d = true_ret[:, 0]
 
     df = pd.DataFrame({
         "date": dates,
         "symbol": symbols,
         "pred": p_10d,
-        "true": t_10d,
+        "true_10d": t_10d,
+        "true_1d": t_1d,
     })
 
     unique_dates = sorted(df["date"].unique())
-    daily_long_rets, daily_short_rets, daily_ls_rets = [], [], []
+    daily_ls_10d, daily_ls_1d = [], []
+    daily_long_1d, daily_market_1d = [], []
 
     for dt in unique_dates:
         sub = df[df["date"] == dt]
@@ -242,39 +245,63 @@ def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray
         long_basket = sub_sorted.iloc[:top_k]
         short_basket = sub_sorted.iloc[-top_k:]
 
-        long_ret = long_basket["true"].mean()
-        short_ret = short_basket["true"].mean()
+        # 口径 1: 10d 重叠累计收益
+        ls_10d = long_basket["true_10d"].mean() - short_basket["true_10d"].mean() - round_trip_cost
+        daily_ls_10d.append(ls_10d)
 
-        # 净收益：扣除换手成本 (买入佣金+卖出印花税佣金，保守设单边或双边)
-        ls_ret = long_ret - short_ret - round_trip_cost
+        # 口径 2: 真实单日调仓多空 (次日实际单日收益结算)
+        ls_1d = long_basket["true_1d"].mean() - short_basket["true_1d"].mean() - round_trip_cost
+        daily_ls_1d.append(ls_1d)
 
-        daily_long_rets.append(long_ret)
-        daily_short_rets.append(short_ret)
-        daily_ls_rets.append(ls_ret)
+        # 口径 3: 纯多头单日扣费收益与全市场等权基准
+        long_1d_cost = long_basket["true_1d"].mean() - (round_trip_cost * 0.67)  # 单边千一
+        market_1d = sub["true_1d"].mean()
+        daily_long_1d.append(long_1d_cost)
+        daily_market_1d.append(market_1d)
 
-    if not daily_ls_rets:
+    if not daily_ls_1d:
         return {}
 
-    ls_arr = np.array(daily_ls_rets)
-    cum_nav = np.cumprod(1.0 + ls_arr)
-    total_ret = float(cum_nav[-1] - 1.0)
-    sharpe = float(np.mean(ls_arr) / (np.std(ls_arr) + 1e-12) * np.sqrt(252))
+    # 口径 1: 10d 重叠统计
+    ls_arr_10d = np.array(daily_ls_10d)
+    cum_10d = np.cumprod(1.0 + ls_arr_10d)
+    sharpe_10d_raw = float(np.mean(ls_arr_10d) / (np.std(ls_arr_10d) + 1e-12) * np.sqrt(252))
+    sharpe_10d_indep = float(np.mean(ls_arr_10d) / (np.std(ls_arr_10d) + 1e-12) * np.sqrt(25.2))
+    max_dd_10d = float(np.min((cum_10d - np.maximum.accumulate(cum_10d)) / np.maximum.accumulate(cum_10d)))
 
-    # 最大回撤
-    peaks = np.maximum.accumulate(cum_nav)
-    drawdowns = (cum_nav - peaks) / peaks
-    max_dd = float(np.min(drawdowns))
-    win_rate = float(np.mean(ls_arr > 0))
+    # 口径 2: 真实单日持有多空结算 (无重叠放大)
+    ls_arr_1d = np.array(daily_ls_1d)
+    cum_1d = np.cumprod(1.0 + ls_arr_1d)
+    sharpe_1d = float(np.mean(ls_arr_1d) / (np.std(ls_arr_1d) + 1e-12) * np.sqrt(252))
+    max_dd_1d = float(np.min((cum_1d - np.maximum.accumulate(cum_1d)) / np.maximum.accumulate(cum_1d)))
+
+    # 口径 3: 纯多头超额 (Long-Only Alpha)
+    long_arr = np.array(daily_long_1d)
+    market_arr = np.array(daily_market_1d)
+    excess_arr = long_arr - market_arr
+    cum_excess = np.cumprod(1.0 + excess_arr)
+    ir_excess = float(np.mean(excess_arr) / (np.std(excess_arr) + 1e-12) * np.sqrt(252))
+    max_dd_excess = float(np.min((cum_excess - np.maximum.accumulate(cum_excess)) / np.maximum.accumulate(cum_excess)))
 
     return {
         "top_k": top_k,
-        "trade_days": len(ls_arr),
-        "total_return": total_ret,
-        "annualized_return": float((1.0 + total_ret) ** (252.0 / len(ls_arr)) - 1.0) if len(ls_arr) > 10 else total_ret,
-        "sharpe_ratio": sharpe,
-        "max_drawdown": max_dd,
-        "daily_win_rate": win_rate,
-        "avg_daily_ls_spread": float(np.mean(ls_arr)),
+        "trade_days": len(ls_arr_1d),
+        # 真实单日持仓多空
+        "daily_holding_total_return": float(cum_1d[-1] - 1.0),
+        "daily_holding_sharpe": sharpe_1d,
+        "daily_holding_max_drawdown": max_dd_1d,
+        "daily_holding_win_rate": float(np.mean(ls_arr_1d > 0)),
+        # 纯多头超额 (Long-Only Alpha vs 全市场等权)
+        "long_only_cum_return": float(np.cumprod(1.0 + long_arr)[-1] - 1.0),
+        "market_benchmark_return": float(np.cumprod(1.0 + market_arr)[-1] - 1.0),
+        "long_only_excess_return": float(cum_excess[-1] - 1.0),
+        "long_only_excess_ir": ir_excess,
+        "long_only_excess_max_drawdown": max_dd_excess,
+        # 历史 10d 重叠参考口径
+        "overlapping_10d_total_return": float(cum_10d[-1] - 1.0),
+        "overlapping_10d_sharpe_raw": sharpe_10d_raw,
+        "overlapping_10d_sharpe_indep": sharpe_10d_indep,
+        "overlapping_10d_max_drawdown": max_dd_10d,
     }
 
 
@@ -388,19 +415,33 @@ def main():
     print_row("skill_nrmse", "skill_nrmse", "{:.4f}")
     print_row("走势综合评分 (Score)", "trajectory_score", "{:.4f}")
 
-    # 打印 Top K 多空回测
+    # 打印 Top K 多空回测 (区分真实单日结算 vs 纯多头超额 vs 10d重叠口径)
     for k in args.topk:
         k_key = f"top_{k}"
         print("-" * 105)
-        vals_sharpe, vals_ret, vals_dd = [], [], []
+        vals_1d_sharpe, vals_1d_ret, vals_1d_dd = [], [], []
+        vals_ex_ret, vals_ex_ir = [], []
+        vals_raw_sharpe, vals_raw_ret = [], []
+
         for tag in models_data.keys():
             bt = full_report[tag]["backtests"].get(k_key, {})
-            vals_sharpe.append(f"{bt.get('sharpe_ratio', 0.0):.2f}")
-            vals_ret.append(f"{bt.get('total_return', 0.0)*100:+.2f}%")
-            vals_dd.append(f"{bt.get('max_drawdown', 0.0)*100:.2f}%")
-        print(f"Top {k} 多空对冲夏普 (扣费) | " + " | ".join([f"{v:<22}" for v in vals_sharpe]))
-        print(f"Top {k} 多空累计收益 (扣费) | " + " | ".join([f"{v:<22}" for v in vals_ret]))
-        print(f"Top {k} 多空最大回撤        | " + " | ".join([f"{v:<22}" for v in vals_dd]))
+            # 真实单日持仓
+            vals_1d_sharpe.append(f"{bt.get('daily_holding_sharpe', 0.0):.2f}")
+            vals_1d_ret.append(f"{bt.get('daily_holding_total_return', 0.0)*100:+.2f}%")
+            vals_1d_dd.append(f"{bt.get('daily_holding_max_drawdown', 0.0)*100:.2f}%")
+            # 纯多头超额
+            vals_ex_ret.append(f"{bt.get('long_only_excess_return', 0.0)*100:+.2f}%")
+            vals_ex_ir.append(f"{bt.get('long_only_excess_ir', 0.0):.2f}")
+            # 10d重叠口径
+            vals_raw_ret.append(f"{bt.get('overlapping_10d_total_return', 0.0)*100:+.2f}%")
+            vals_raw_sharpe.append(f"{bt.get('overlapping_10d_sharpe_raw', 0.0):.2f}")
+
+        print(f"[真实] Top {k} 单日多空年化夏普| " + " | ".join([f"{v:<22}" for v in vals_1d_sharpe]))
+        print(f"[真实] Top {k} 单日多空累计收益| " + " | ".join([f"{v:<22}" for v in vals_1d_ret]))
+        print(f"[真实] Top {k} 单日多空最大回撤| " + " | ".join([f"{v:<22}" for v in vals_1d_dd]))
+        print(f"[真实] Top {k} 纯多头超额收益(扣费)| " + " | ".join([f"{v:<22}" for v in vals_ex_ret]))
+        print(f"[真实] Top {k} 纯多头超额信息比(IR)| " + " | ".join([f"{v:<22}" for v in vals_ex_ir]))
+        print(f"[重叠] Top {k} 10d重叠累乘虚高夏普| " + " | ".join([f"{v:<22}" for v in vals_raw_sharpe]))
 
     # 打印 Bootstrap 95% 置信区间
     if args.bootstrap > 0:
