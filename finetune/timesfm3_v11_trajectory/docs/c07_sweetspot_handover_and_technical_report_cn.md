@@ -29,6 +29,8 @@
 
 > **注**：评测集涵盖真实 A 股 **2026-08-03 ~ 2026-09-17** 的 34 个交易日（标签截至 2026-10-09）。Top 50/100 策略按信号日截面重平衡，扣除 0.15% 双边换手成本；表中夏普/回撤为 10 日重叠收益逐日复利口径，**不可直接当年化/回撤使用**（见上方复核备注第 4、5 条）。
 
+详细的分区间 IC 衰减、市场择时 vs 截面选股分解、TopK 换手/回测脆弱性见 [`docs/sweetspot_native_oos_analysis_cn.md`](sweetspot_native_oos_analysis_cn.md)。
+
 **原生烘焙交付模型（零 LoRA）实测**：将 `sweetspot_best` 与 `sweetspot_last` 做 1:1 权重空间 SWA 后烘焙进底座，在完全相同的 175,428 条 OOS 上取得 **DirAcc 58.59% / BalancedAcc 58.94% / Pooled IC +0.1748 / 日均 IC +0.0956 / 年化 ICIR 10.84（未修正）/ 正 IC 占比 70.6% / 综合分 0.6733**；日均 IC 相对 C07 SWA 起点 **+0.0236（NW t=3.62）**，方向胜率 +0.34pp（配对 CI [-0.05pp, +0.70pp]，仍属噪声）。与 LoRA 预测空间 50/50 融合的相关度 **0.9966**，证明烘焙数学保真。Top50 表观 Sharpe 9.07、MDD -7.53%（10 日重叠逐日复利口径，不可直接当年化/回撤）。产物留在 Kaggle `ibcaoo/kronos-timesfm3-v11-sweetspot-merged-model-export`，评估在 `...-merged-oos-audit`；本地只拉取约 11MB 的 npz，不下载 1.26GB 模型。
 
 | 核心评估维度 | C07 best (15.7w步) | C07 last (15.9w步) | C07 SWA 原生融合 (本次起点) | **SweetSpot best (1.0w步)** | **SweetSpot last (1.4w步收官)** | 相对起点改善幅度 |

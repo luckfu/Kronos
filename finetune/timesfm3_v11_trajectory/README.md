@@ -12,6 +12,9 @@
 - 📄 **C07-SweetSpot 项目交接与技术归档报告**（★ 核心必读）：  
   [`docs/c07_sweetspot_handover_and_technical_report_cn.md`](docs/c07_sweetspot_handover_and_technical_report_cn.md)  
   *包含 7.92e-5 甜点恒定微调全套实测指标（17.5万条 OOS 样本，窗口 2026-08-03~09-17：胜率 58.52%, Pooled IC 0.1772, ICIR 11.34, 表观回撤 -5.79%）。**注意：ICIR 与 TopK 夏普/回撤未做 10 日重叠标签修正，不可直接当年化/回撤结论；文首已附独立复核备注。** 原生 50/50 SWA 已导出并实测：**DirAcc 58.59%、Pooled IC +0.1748、日均 IC +0.0956**（零 LoRA，与 LoRA 融合相关度 0.9966）。另含重大避坑指南（数据池 OOM 规避/Token 隔离/布尔值序列化）、代码与资产清单及交接 SOP。*
+- 📄 **SweetSpot 原生 SWA OOS 实测与归因分析**（★ 结果分析）：  
+  [`docs/sweetspot_native_oos_analysis_cn.md`](docs/sweetspot_native_oos_analysis_cn.md)  
+  *含分区间 IC 衰减（8/3-8/20 vs 8/21-9/17）、市场择时 vs 截面选股分解、TopK 换手与回测脆弱性、统计显著性与选择偏差。核心结论：原生 SWA 工程交付合格，但截面 alpha 集中在 8 月反弹市，9 月接近零。*
 - 📄 **C07 SWA 原生烘焙合并模型实测报告**：  
   [`docs/native_merged_model_oos_verification_cn.md`](docs/native_merged_model_oos_verification_cn.md)  
   *包含 C07 best+last LoRA 永久吸收入底座的零 LoRA 1.26GB 稠密大模型验证（胜率 58.25%, Pooled IC 0.1608）。*
