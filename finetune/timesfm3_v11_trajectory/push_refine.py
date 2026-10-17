@@ -9,6 +9,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -16,7 +17,7 @@ import subprocess
 HERE = Path(__file__).parent
 DATASET_SOURCE = "smmt315/a-share-120d-temporal-symbol-holdout"
 DEFAULT_UPSTREAM_KERNEL = "ibcaoo/kronos-timesfm3-v11-clean-c07"
-SLUG = "kronos-timesfm3-v11-clean-c07-refine"
+SLUG = "kronos-timesfm3-v11-clean-c07-refine-sweetspot"
 
 
 def get_current_kaggle_user() -> str:
@@ -28,6 +29,19 @@ def get_current_kaggle_user() -> str:
     except Exception:
         pass
     return "ibcaoo"
+
+
+def load_swanlab_key() -> str:
+    key = os.environ.get("SWANLAB_API_KEY", "")
+    if key:
+        return key
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("SWANLAB_API_KEY="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
 
 
 def main() -> None:
@@ -72,6 +86,15 @@ def main() -> None:
     if n != 1:
         raise RuntimeError("train_refine.py 中未找到 REFINE_CONFIG 占位行")
 
+    swanlab_key = load_swanlab_key()
+    if swanlab_key:
+        source = re.sub(
+            r'^SWANLAB_API_KEY = os\.environ\.get\("SWANLAB_API_KEY", ""\)',
+            f'SWANLAB_API_KEY = "{swanlab_key}"',
+            source,
+            flags=re.M,
+        )
+
     code_file = f"{SLUG}.py"
     (build / code_file).write_text(source)
 
@@ -80,7 +103,7 @@ def main() -> None:
 
     meta = {
         "id": f"{args.owner}/{SLUG}",
-        "title": "Kronos TimesFM3 V11 Clean C07 Refine SweetSpot",
+        "title": "Kronos Timesfm3 V11 Clean C07 Refine Sweetspot",
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",

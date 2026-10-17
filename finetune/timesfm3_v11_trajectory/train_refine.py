@@ -33,7 +33,9 @@ REFINE_CONFIG: dict = {}
 SWANLAB_API_KEY = os.environ.get("SWANLAB_API_KEY", "")
 try:
     from kaggle_secrets import UserSecretsClient
-    SWANLAB_API_KEY = UserSecretsClient().get_secret("SWANLAB_API_KEY")
+    _secret_key = UserSecretsClient().get_secret("SWANLAB_API_KEY")
+    if _secret_key:
+        SWANLAB_API_KEY = _secret_key
 except Exception:
     pass
 
