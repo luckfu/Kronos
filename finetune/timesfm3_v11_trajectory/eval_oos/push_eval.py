@@ -31,16 +31,27 @@ def main():
     current_user = get_current_kaggle_user()
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--chunk", choices=["c06", "c07", "c08"], default="c07", help="指定评估的实验 Chunk (c06, c07, c08)")
+    ap.add_argument("--chunk", choices=["c06", "c07", "c08", "sweetspot"], default="c07", help="指定评估的实验 Chunk")
+    ap.add_argument("--upstream", type=str, default=None, help="显式指定权重来源 kernel (如 ibcaoo/kronos-timesfm3-v11-c07-sweetspot)")
+    ap.add_argument("--slug", type=str, default=None, help="显式指定评估 kernel slug")
     ap.add_argument("--dry-run", action="store_true", help="仅生成打包文件而不推送")
     args = ap.parse_args()
 
     chunk = args.chunk.lower()
-    kernel_slug = f"kronos-timesfm3-v11-clean-{chunk}-oos-audit"
-    title = f"Kronos TimesFM3 V11 Clean {chunk.upper()} OOS Audit"
+    if args.slug:
+        kernel_slug = args.slug
+    elif chunk == "sweetspot":
+        kernel_slug = "kronos-timesfm3-v11-c07-sweetspot-oos"
+    else:
+        kernel_slug = f"kronos-timesfm3-v11-clean-{chunk}-oos-audit"
 
-    # 根据 chunk 指定权重来源 kernel
-    if chunk == "c06":
+    title = kernel_slug.replace("-", " ").title()
+
+    if args.upstream:
+        kernel_source = args.upstream
+    elif chunk == "sweetspot":
+        kernel_source = f"{current_user}/kronos-timesfm3-v11-c07-sweetspot"
+    elif chunk == "c06":
         kernel_source = "user281434/kronos-timesfm3-v11-clean-c06"
     else:
         kernel_source = f"{current_user}/kronos-timesfm3-v11-clean-{chunk}"
@@ -51,8 +62,8 @@ def main():
     source = (HERE / "eval.py").read_text()
 
     # 动态适配 SwanLab 标识与 Chunk 名
-    source = source.replace('SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"', f'SWANLAB_RUN_ID = "tfm3v11-clean-{chunk}-oos-audit"')
-    source = source.replace('EXPERIMENT_NAME = "timesfm3-v11-clean-c07-oos-audit"', f'EXPERIMENT_NAME = "timesfm3-v11-clean-{chunk}-oos-audit"')
+    source = source.replace('SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"', f'SWANLAB_RUN_ID = "{kernel_slug}"')
+    source = source.replace('EXPERIMENT_NAME = "timesfm3-v11-clean-c07-oos-audit"', f'EXPERIMENT_NAME = "{kernel_slug}"')
 
     code_file = f"{kernel_slug}.py"
     (build / code_file).write_text(source)
