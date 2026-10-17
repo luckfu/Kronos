@@ -149,8 +149,9 @@ def main():
 
     print(f"\n=== [5/5] 上传推送到魔搭社区 (ModelScope: {REPO_ID}) ===", flush=True)
     from modelscope.hub.api import HubApi
-    api = HubApi()
-    token = os.environ.get("MODELSCOPE_API_TOKEN", "ms-c01389b6-4ecd-42e2-938b-d205388484ad")
+    token = os.environ.get("MODELSCOPE_API_TOKEN")
+    if not token:
+        raise ValueError("未检测到 MODELSCOPE_API_TOKEN 环境变量，请在环境中配置新 Token！")
     api.login(token)
 
     # 尝试创建仓库 (如果不存在)
