@@ -30,15 +30,7 @@ OUTPUT = Path(os.environ.get("RELAY_OUTPUT", "/kaggle/working/relay"))
 
 REFINE_CONFIG: dict = {}
 
-SWANLAB_API_KEY = os.environ.get("SWANLAB_API_KEY", "")
-try:
-    from kaggle_secrets import UserSecretsClient
-    _secret_key = UserSecretsClient().get_secret("SWANLAB_API_KEY")
-    if _secret_key:
-        SWANLAB_API_KEY = _secret_key
-except Exception:
-    pass
-
+SWANLAB_API_KEY = os.environ.get("SWANLAB_API_KEY", "fmEPDGk4IItxgqSZKGLi8")
 SWANLAB_PROJECT = os.environ.get("SWANLAB_PROJECT", "finance")
 SWANLAB_WORKSPACE = os.environ.get("SWANLAB_WORKSPACE", "roc_fu")
 SWANLAB_RUN_ID = "tfm3v11-clean-c07-refine-sweetspot"

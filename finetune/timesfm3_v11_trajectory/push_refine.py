@@ -31,19 +31,6 @@ def get_current_kaggle_user() -> str:
     return "ibcaoo"
 
 
-def load_swanlab_key() -> str:
-    key = os.environ.get("SWANLAB_API_KEY", "")
-    if key:
-        return key
-    env_file = Path(__file__).resolve().parents[2] / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("SWANLAB_API_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return ""
-
-
 def main() -> None:
     current_user = get_current_kaggle_user()
     ap = argparse.ArgumentParser(description="推送 C07-Refine 甜点学习率 5 小时精修实验到 Kaggle")
@@ -85,15 +72,6 @@ def main() -> None:
     )
     if n != 1:
         raise RuntimeError("train_refine.py 中未找到 REFINE_CONFIG 占位行")
-
-    swanlab_key = load_swanlab_key()
-    if swanlab_key:
-        source = re.sub(
-            r'^SWANLAB_API_KEY = os\.environ\.get\("SWANLAB_API_KEY", ""\)',
-            f'SWANLAB_API_KEY = "{swanlab_key}"',
-            source,
-            flags=re.M,
-        )
 
     code_file = f"{SLUG}.py"
     (build / code_file).write_text(source)
