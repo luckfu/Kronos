@@ -52,10 +52,13 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=20261009, help="随机种子 (训练中会自动按 seed + chunk 递增)")
     ap.add_argument("--learning-rate", type=float, default=None, help="覆盖初始学习率")
     ap.add_argument("--reserve", type=int, default=300, help="保留缓冲秒数 (默认 300 秒 / 5分钟)")
+    ap.add_argument("--slug", type=str, default=None, help="自定义 kernel slug (默认 kronos-timesfm3-v11-clean-cNN)")
+    ap.add_argument("--extra", type=str, default="{}", help='额外 CHUNK_CONFIG JSON, 如 \'{"init_swa": true}\'')
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+    name = args.slug or slug(args.chunk)
 
-    build = HERE / "build" / slug(args.chunk)
+    build = HERE / "build" / name
     build.mkdir(parents=True, exist_ok=True)
     config = {
         "budget_seconds": args.budget,
@@ -71,12 +74,13 @@ def main() -> None:
     }
     if args.learning_rate is not None:
         config["learning_rate"] = args.learning_rate
+    config.update(json.loads(args.extra))
     source = (HERE / "train.py").read_text()
     source, n = re.subn(r"^CHUNK_CONFIG: dict = \{\}.*$",
-                        f"CHUNK_CONFIG: dict = {json.dumps(config)}", source, flags=re.M)
+                        f"CHUNK_CONFIG: dict = {config!r}", source, flags=re.M)
     if n != 1:
         raise RuntimeError("train.py 中找不到 CHUNK_CONFIG 占位行")
-    code_file = f"{slug(args.chunk)}.py"
+    code_file = f"{name}.py"
     (build / code_file).write_text(source)
 
     dataset_sources = [DATASET_SOURCE]
@@ -92,8 +96,8 @@ def main() -> None:
     else:
         kernel_sources = []
     meta = {
-        "id": f"{args.owner}/{slug(args.chunk)}",
-        "title": f"Kronos TimesFM3 V11 Clean C{args.chunk:02d}",
+        "id": f"{args.owner}/{name}",
+        "title": name.replace("-", " ").title(),
         "code_file": code_file,
         "language": "python",
         "kernel_type": "script",

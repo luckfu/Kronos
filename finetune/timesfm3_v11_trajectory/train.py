@@ -597,12 +597,16 @@ def train(args) -> None:
     from torch import nn
     from timesfm3 import TimesFM3Forecaster
 
+    global SWANLAB_RUN_ID
+    if args.run_id:
+        SWANLAB_RUN_ID = args.run_id
+
     patched = patch_timesfm_nan_safety()
     if patched:
         log("patch_applied", target="timesfm3_update_running_stats_safe_sqrt")
 
     train_pkl, val_pkl, split_csv = discover_dataset(INPUT_ROOT)
-    resume_path = find_relay_state(INPUT_ROOT)
+    resume_path = None if args.init_swa else find_relay_state(INPUT_ROOT)
     state = torch.load(resume_path, map_location="cpu", weights_only=False) if resume_path else None
     chunk_index = state["chunk_index"] + 1 if state else 1
 
@@ -639,6 +643,8 @@ def train(args) -> None:
     # 余弦退火学习率调度器 (按 3 小时有效长训步数约 12,000 步精确退火)
     anneal_steps = 12000
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=anneal_steps, eta_min=args.min_lr)
+    if args.constant_lr:
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
 
     global_step, best_score, history = 0, -1.0, []
     if state:
@@ -672,6 +678,21 @@ def train(args) -> None:
         else:
             best_score = -1.0
         log("resumed_successfully", global_step=global_step, best_score=best_score, lora_defense_passed=True)
+    elif args.init_swa:
+        # 从上游 best_weights.pt + last_weights.pt 做 1:1 权重平均起跑, 优化器/调度器全新
+        p_best = sorted(INPUT_ROOT.glob("**/best_weights.pt"))[-1]
+        p_last = sorted(INPUT_ROOT.glob("**/last_weights.pt"))[-1]
+        w_best = torch.load(p_best, map_location="cpu", weights_only=False)
+        w_last = torch.load(p_last, map_location="cpu", weights_only=False)
+        assert w_best.keys() == w_last.keys()
+        w = {k: 0.5 * w_best[k].float() + 0.5 * w_last[k].float() for k in w_best}
+        lora_weights = {k[5:]: v for k, v in w.items() if k.startswith("lora.")}
+        sec_weights = {k[7:]: v for k, v in w.items() if k.startswith("sector.")}
+        assert len(lora_weights) == 400, f"LoRA 数量不匹配: {len(lora_weights)}"
+        _, unexpected = model.load_state_dict(lora_weights, strict=False)
+        assert len(unexpected) == 0, f"发现多余未匹配权重: {unexpected}"
+        sector_embedding.load_state_dict(sec_weights, strict=True)
+        log("init_swa_loaded", best=str(p_best), last=str(p_last))
 
     if args.multi_gpu and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
         base_attrs = {
@@ -924,6 +945,9 @@ def parse_args(argv=None):
     p.add_argument("--log-every", type=int, default=10)
     p.add_argument("--eval-every", type=int, default=2500)
     p.add_argument("--save-every", type=int, default=2500)
+    p.add_argument("--init-swa", action="store_true", default=False)      # 从上游 best+last 1:1 平均起跑
+    p.add_argument("--constant-lr", action="store_true", default=False)   # 恒定学习率
+    p.add_argument("--run-id", type=str, default=None)                   # 覆盖 SwanLab run id
     p.set_defaults(**CHUNK_CONFIG)
     return p.parse_args(argv)
 
