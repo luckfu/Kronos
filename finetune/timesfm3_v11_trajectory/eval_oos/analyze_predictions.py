@@ -218,8 +218,19 @@ def run_block_bootstrap(pred_ret: np.ndarray, true_ret: np.ndarray, dates: np.nd
 # -------------------------------------------------------------------------
 def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray,
                                       dates: np.ndarray, symbols: np.ndarray,
-                                      top_k: int = 50, round_trip_cost: float = 0.0015) -> dict:
-    """按日度截面选股构建 Top K 多头与 Bottom K 空头组合，并计算真实单日与纯多头超额。"""
+                                      top_k: int = 50, round_trip_cost: float = 0.003,
+                                      capital_split: float = 0.5,
+                                      trim_days=(0, 1, 3),
+                                      split_date: str | None = None) -> dict:
+    """按日度截面选股构建 Top K 多头与 Bottom K 空头组合，并计算真实单日与纯多头超额。
+
+    统一口径 (2026-10-18 定稿)：
+      - round_trip_cost 默认 0.30%（双边，含冲击成本，比旧版 0.15% 更保守）；
+      - capital_split=0.5 表示多头/空头各占 50% 资金，收益按半仓计（旧版按 100/100 满仓）；
+      - 同时输出多头腿/空头腿对全市场等权基准的超额，用于区分"挑赢家"与"挑输家"；
+      - 对称去极值敏感性（剔除最好 0/1/3 天后重算），防止重尾日主导结论；
+      - 分区间（默认按交易日中位切分）单独统计，避免单一行情段掩盖失效。
+    """
     p_10d = pred_ret[:, -1]
     t_10d = true_ret[:, -1]
     t_1d = true_ret[:, 0]
@@ -235,6 +246,7 @@ def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray
     unique_dates = sorted(df["date"].unique())
     daily_ls_10d, daily_ls_1d = [], []
     daily_long_1d, daily_market_1d = [], []
+    daily_long_ex, daily_short_ex, used_dates = [], [], []
 
     for dt in unique_dates:
         sub = df[df["date"] == dt]
@@ -252,6 +264,12 @@ def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray
         # 口径 2: 真实单日调仓多空 (次日实际单日收益结算)
         ls_1d = long_basket["true_1d"].mean() - short_basket["true_1d"].mean() - round_trip_cost
         daily_ls_1d.append(ls_1d)
+
+        # 双腿拆分：相对当日全市场等权基准的超额
+        day_mean = sub["true_1d"].mean()
+        daily_long_ex.append(long_basket["true_1d"].mean() - day_mean)
+        daily_short_ex.append(day_mean - short_basket["true_1d"].mean())
+        used_dates.append(dt)
 
         # 口径 3: 纯多头单日扣费收益与全市场等权基准
         long_1d_cost = long_basket["true_1d"].mean() - (round_trip_cost * 0.67)  # 单边千一
@@ -275,6 +293,65 @@ def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray
     sharpe_1d = float(np.mean(ls_arr_1d) / (np.std(ls_arr_1d) + 1e-12) * np.sqrt(252))
     max_dd_1d = float(np.min((cum_1d - np.maximum.accumulate(cum_1d)) / np.maximum.accumulate(cum_1d)))
 
+    # ---- 统一口径附加统计 (50/50 资金 / 双腿拆分 / 对称去极值 / 分区间) ----
+    def _sharpe(x):
+        x = np.asarray(x, dtype=float)
+        return float(np.mean(x) / (np.std(x) + 1e-12) * np.sqrt(252)) if len(x) > 2 else 0.0
+
+    def _cum(x):
+        return float(np.cumprod(1.0 + np.asarray(x, dtype=float))[-1] - 1.0)
+
+    def _mdd(x):
+        c = np.cumprod(1.0 + np.asarray(x, dtype=float))
+        return float(np.min((c - np.maximum.accumulate(c)) / np.maximum.accumulate(c)))
+
+    ls_scaled = ls_arr_1d * capital_split
+    long_ex = np.array(daily_long_ex)
+    short_ex = np.array(daily_short_ex)
+
+    trimmed = {}
+    for n in trim_days:
+        kept = np.sort(ls_arr_1d)[:-n] if n > 0 else np.sort(ls_arr_1d)
+        kept_s = kept * capital_split
+        trimmed[f"trim_{n}"] = {
+            "dropped_best_days": int(n),
+            "total_return": _cum(kept_s),
+            "sharpe": _sharpe(kept_s),
+            "max_drawdown": _mdd(kept_s),
+        }
+
+    # 分区间：默认按交易日中位数切分，也可显式指定 split_date
+    order = np.argsort(np.array([str(x) for x in used_dates]))
+    dates_sorted = [str(used_dates[i]) for i in order]
+    ls_sorted = ls_arr_1d[order]
+    long_sorted = long_ex[order]
+    short_sorted = short_ex[order]
+    if split_date is None:
+        split_date = dates_sorted[len(dates_sorted) // 2]
+
+    def _regime(mask, label):
+        if mask.sum() < 3:
+            return {}
+        return {
+            "label": label,
+            "trade_days": int(mask.sum()),
+            "ls_mean_daily": float(ls_sorted[mask].mean()),
+            "ls_sharpe": _sharpe(ls_sorted[mask]),
+            "ls_total_return": _cum(ls_sorted[mask] * capital_split),
+            "long_leg_excess_daily": float(long_sorted[mask].mean()),
+            "long_leg_sharpe": _sharpe(long_sorted[mask]),
+            "short_leg_excess_daily": float(short_sorted[mask].mean()),
+            "short_leg_sharpe": _sharpe(short_sorted[mask]),
+        }
+
+    dates_arr = np.array(dates_sorted)
+    split_idx = int(np.searchsorted(dates_arr, str(split_date)))
+    regime = {
+        "split_date": str(split_date),
+        "first": _regime(np.arange(len(dates_sorted)) < split_idx, "before_split"),
+        "second": _regime(np.arange(len(dates_sorted)) >= split_idx, "after_split"),
+    }
+
     # 口径 3: 纯多头超额 (Long-Only Alpha)
     long_arr = np.array(daily_long_1d)
     market_arr = np.array(daily_market_1d)
@@ -286,15 +363,26 @@ def run_topk_cross_sectional_backtest(pred_ret: np.ndarray, true_ret: np.ndarray
     return {
         "top_k": top_k,
         "trade_days": len(ls_arr_1d),
-        # 真实单日持仓多空
-        "daily_holding_total_return": float(cum_1d[-1] - 1.0),
-        "daily_holding_sharpe": sharpe_1d,
-        "daily_holding_max_drawdown": max_dd_1d,
+        "round_trip_cost": float(round_trip_cost),
+        "capital_split": float(capital_split),
+        # 真实单日持仓多空 (50/50 资金)
+        "daily_holding_total_return": _cum(ls_scaled),
+        "daily_holding_sharpe": _sharpe(ls_scaled),
+        "daily_holding_max_drawdown": _mdd(ls_scaled),
         "daily_holding_win_rate": float(np.mean(ls_arr_1d > 0)),
-        # 纯多头超额 (Long-Only Alpha vs 全市场等权)
+        # 双腿拆分：谁在赚钱 (相对全市场等权基准)
+        "long_leg_excess_daily": float(long_ex.mean()),
+        "long_leg_sharpe": _sharpe(long_ex),
+        "short_leg_excess_daily": float(short_ex.mean()),
+        "short_leg_sharpe": _sharpe(short_ex),
+        # 对称去极值敏感性
+        "trimmed": trimmed,
+        # 分区间稳定性
+        "regime": regime,
+        # 纯多头超额 (Long-Only Alpha)
         "long_only_cum_return": float(np.cumprod(1.0 + long_arr)[-1] - 1.0),
         "market_benchmark_return": float(np.cumprod(1.0 + market_arr)[-1] - 1.0),
-        "long_only_excess_return": float(cum_excess[-1] - 1.0),
+        "long_only_excess_return": float((1.0 + np.cumprod(1.0 + long_arr)[-1]) / (1.0 + np.cumprod(1.0 + market_arr)[-1]) - 1.0),
         "long_only_excess_ir": ir_excess,
         "long_only_excess_max_drawdown": max_dd_excess,
         # 历史 10d 重叠参考口径
@@ -315,7 +403,10 @@ def main():
     parser.add_argument("--topk", nargs="+", type=int, default=[50, 100], help="截面回测 Top K 数量")
     parser.add_argument("--bootstrap", type=int, default=1000, help="Block-Bootstrap 重采样次数")
     parser.add_argument("--ensemble", action="store_true", help="是否对输入的各模型预测进行免训练等权融合")
-    parser.add_argument("--cost", type=float, default=0.0015, help="多空换手摩擦费率 (默认 0.15% 双边)")
+    parser.add_argument("--cost", type=float, default=0.003, help="多空换手摩擦费率 (默认 0.30% 双边，含冲击成本)")
+    parser.add_argument("--capital", type=float, default=0.5, help="单腿资金占比 (默认 0.5 = 50/50 多空各半)")
+    parser.add_argument("--trim", nargs="+", type=int, default=[0, 1, 3], help="对称去极值敏感性: 剔除最好的 N 天")
+    parser.add_argument("--split-date", type=str, default=None, help="分区间切分日 (默认按交易日中位切分)")
     parser.add_argument("--output", type=str, default="analysis_report.json", help="输出指标报告 JSON 路径")
     args = parser.parse_args()
 
@@ -381,7 +472,9 @@ def main():
         backtests = {}
         for k in args.topk:
             backtests[f"top_{k}"] = run_topk_cross_sectional_backtest(
-                d["pred_ret"], d["true_ret"], d["dates"], d["symbols"], top_k=k, round_trip_cost=args.cost
+                d["pred_ret"], d["true_ret"], d["dates"], d["symbols"], top_k=k,
+                round_trip_cost=args.cost, capital_split=args.capital,
+                trim_days=tuple(args.trim), split_date=args.split_date,
             )
 
         full_report[tag] = {
@@ -441,6 +534,31 @@ def main():
         print(f"[真实] Top {k} 单日多空最大回撤| " + " | ".join([f"{v:<22}" for v in vals_1d_dd]))
         print(f"[真实] Top {k} 纯多头超额收益(扣费)| " + " | ".join([f"{v:<22}" for v in vals_ex_ret]))
         print(f"[真实] Top {k} 纯多头超额信息比(IR)| " + " | ".join([f"{v:<22}" for v in vals_ex_ir]))
+
+        # 双腿拆分 / 去极值 / 分区间 (统一口径核心表)
+        def _row(fmt, getter):
+            cells = []
+            for tag in models_data.keys():
+                bt = full_report[tag]["backtests"].get(k_key, {})
+                try:
+                    cells.append(fmt.format(getter(bt)))
+                except Exception:
+                    cells.append("N/A")
+            return cells
+
+        print(f"[腿] Top {k} 多头腿超额 SR    | " + " | ".join(f"{v:<22}" for v in _row("{:.2f}", lambda b: b["long_leg_sharpe"])))
+        print(f"[腿] Top {k} 空头腿超额 SR    | " + " | ".join(f"{v:<22}" for v in _row("{:.2f}", lambda b: b["short_leg_sharpe"])))
+        for n in sorted({int(x) for x in args.trim}):
+            if n == 0:
+                continue
+            print(f"[压测] Top {k} 剔最好{n}天 SR | " + " | ".join(
+                f"{v:<22}" for v in _row("{:.2f}", lambda b, n=n: b["trimmed"][f"trim_{n}"]["sharpe"])))
+        print(f"[分段] Top {k} 前半段多空 SR  | " + " | ".join(
+            f"{v:<22}" for v in _row("{:.2f}", lambda b: (b["regime"]["first"] or {}).get("ls_sharpe", float("nan")))))
+        print(f"[分段] Top {k} 后半段多空 SR  | " + " | ".join(
+            f"{v:<22}" for v in _row("{:.2f}", lambda b: (b["regime"]["second"] or {}).get("ls_sharpe", float("nan")))))
+        print(f"[分段] Top {k} 后半段多头腿SR | " + " | ".join(
+            f"{v:<22}" for v in _row("{:.2f}", lambda b: (b["regime"]["second"] or {}).get("long_leg_sharpe", float("nan")))))
         print(f"[重叠] Top {k} 10d重叠累乘虚高夏普| " + " | ".join([f"{v:<22}" for v in vals_raw_sharpe]))
 
     # 打印 Bootstrap 95% 置信区间
