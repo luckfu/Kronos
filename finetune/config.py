@@ -197,6 +197,7 @@ class Config:
         )
         self.train_sampling = os.getenv('KRONOS_TRAIN_SAMPLING', 'coverage')
         self.sampling_start_segment = int(os.getenv('KRONOS_SAMPLING_START_SEGMENT', '0'))
+        self.sampling_parent_global_step = int(os.getenv('KRONOS_SAMPLING_PARENT_GLOBAL_STEP', '0'))
         self.sampling_seed = int(os.getenv('KRONOS_SAMPLING_SEED', '20261013'))
         self.sampling_segments = int(os.getenv('KRONOS_SAMPLING_SEGMENTS', '200'))
         self.sampling_weighted_ratio = float(os.getenv('KRONOS_SAMPLING_WEIGHTED_RATIO', '0.6'))

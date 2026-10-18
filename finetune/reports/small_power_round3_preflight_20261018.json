@@ -1,0 +1,28 @@
+{
+  "sampler_version": "capped_power_mixture_v1",
+  "plan_sha256": "b1b846ed8471a3482474d5793c8d18e5b65ed017e5c09a361bf1ed1064bf4995",
+  "seed": 20261018,
+  "weighted_ratio": 0.6,
+  "reference": 0.05,
+  "exponent": 1.0,
+  "weight_cap": 4.0,
+  "replacement": true,
+  "eligible_windows": 10397679,
+  "sample_draws": 4000000,
+  "unique_windows": 3269922,
+  "natural_amplitude_mean": 0.09590455793987704,
+  "sampled_amplitude_mean": 0.11862482594674578,
+  "natural_amplitude_ge_5pct": 0.7068902588741199,
+  "sampled_amplitude_ge_5pct": 0.78727175,
+  "validation_samples": 123836,
+  "build_seconds": 47.86397304094862,
+  "global_segments": [
+    721,
+    920
+  ],
+  "parent_global_step": 225324,
+  "planned_final_global_step": 287924,
+  "c04_mean_segment_seconds": 191.02414263850756,
+  "c04_last20_segment_seconds": 193.98547558534992,
+  "estimated_total_seconds_including_setup": 39397.095117069985
+}

@@ -42,20 +42,33 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('chunk', type=int)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--stage-plan', type=Path)
     args = parser.parse_args()
     if args.chunk < 4:
         parser.error('Second round starts at C04')
     payload = source_bundle()
     digest = hashlib.sha256(payload).hexdigest()
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    if args.chunk > 4:
+    stage = json.loads(args.stage_plan.read_text()) if args.stage_plan else None
+    if stage is None and args.chunk > 4:
+        previous_path = HERE / 'build' / slug(args.chunk - 1) / 'build_manifest.json'
+        if previous_path.is_file():
+            stage = json.loads(previous_path.read_text()).get('stage')
+    first_chunk = int(stage['first_chunk']) if stage else 4
+    if args.chunk < first_chunk:
+        raise RuntimeError('Chunk precedes the frozen stage plan')
+    if args.chunk > first_chunk:
         previous = json.loads((HERE / 'build' / slug(args.chunk - 1) / 'build_manifest.json').read_text())
+        if previous.get('stage') != stage:
+            raise RuntimeError('Sampling stage plan changed within a round')
         if digest != previous['source_sha256']:
             raise RuntimeError('Source changed within the second round')
         commit = previous['source_commit']
-    parent = PARENT if args.chunk == 4 else f'{OWNER}/{slug(args.chunk - 1)}'
+    parent = (stage['parent_kernel'] if stage else PARENT) if args.chunk == first_chunk else f'{OWNER}/{slug(args.chunk - 1)}'
     config = {'chunk': args.chunk, 'parent_kernel': parent,
               'source_sha256': digest, 'source_commit': commit, 'working_tree_bundle': True}
+    if stage:
+        config['stage'] = stage
     legacy = runpy.run_path(str(ROOT / 'finetune/small_clean_relay/push_chunk.py'))
     code = f'''import base64, hashlib, io, json, os, runpy, sys, time, zipfile
 from pathlib import Path

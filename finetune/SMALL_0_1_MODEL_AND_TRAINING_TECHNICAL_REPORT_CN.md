@@ -856,6 +856,12 @@ Kaggle提交账号改为 `user281434`，首个目标为 `user281434/kronos-small
 
 第1版已提交并进入真实训练：双T4、原看板、C03完整State恢复及采样哈希均已云端验证，日志执行到全局第521段step276/313，global step基线162724连续保留。源码包SHA-256为 `23bcf7c5d5897401c899bf0fc19f17853a0d2ddec9b8e8062a53c4af78d8410f`。完整实验定义、预检与提交方式见 `finetune/small_power_relay/ROUND2_CN.md`；启动证据在 `finetune/reports/small_power_round2_startup_20261013.json`，当前未验收第二轮终态，不据此声明预测改善。
 
+#### 6.8.10 C04完成与C05第三轮接力（2026-10-18）
+
+重新查询确认C04为COMPLETE，累计720段、global step225324，521–720段200条全量验证记录均为123,836样本。第二轮Best为715段，weighted forecast loss为2.281827528184304；暂无本轮OOS改善结论。
+
+按用户要求从C04完整Last State准备C05，原看板smcl1011不变，从全局721段、step225325继续。第三轮新seed20261018，仍400万次抽样、200段，计划至920段。生产Dataset预检含3,269,922个唯一窗口，采样哈希冻结。依据C04末20段速度，含准备预算约10小时57分；提交12小时硬上限、11小时15分代码预算，段末安全退出。模型、loss、LR和验证均保持原设置。具体计划及终态验收见 `finetune/small_power_relay/ROUND3_CN.md`。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。

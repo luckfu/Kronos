@@ -26,16 +26,35 @@ phase = LEGACY['phase']
 command = LEGACY['command']
 sha256 = LEGACY['sha256']
 find_one = LEGACY['find_one']
+ROUND_NUMBER = 2
+SAMPLING_SEED = 20261013
+FIRST_CHUNK = 4
+STAGE_PARENT = 'luckfu/kronos-small-clean-wc-dual-t4-c03'
+
+
+def configure_stage(stage):
+    global START_SEGMENT, PARENT_GLOBAL_STEP, ROUND_SEGMENTS, PLAN_SHA256
+    global TOTAL_SEGMENTS, ROUND_NUMBER, SAMPLING_SEED, FIRST_CHUNK, STAGE_PARENT, OUTPUT_NAME
+    START_SEGMENT = int(stage['start_segment'])
+    PARENT_GLOBAL_STEP = int(stage['parent_global_step'])
+    ROUND_SEGMENTS = int(stage['round_segments'])
+    PLAN_SHA256 = stage['sampling_plan_sha256']
+    TOTAL_SEGMENTS = START_SEGMENT + ROUND_SEGMENTS
+    ROUND_NUMBER = int(stage['round'])
+    SAMPLING_SEED = int(stage['seed'])
+    FIRST_CHUNK = int(stage['first_chunk'])
+    STAGE_PARENT = stage['parent_kernel']
+    OUTPUT_NAME = EXPERIMENT + f'_power_round{ROUND_NUMBER}'
 
 
 def recipe():
     return {
-        'experiment': EXPERIMENT, 'round': 2, 'run_id': RUN_ID,
-        'parent_kernel': 'luckfu/kronos-small-clean-wc-dual-t4-c03',
+        'experiment': EXPERIMENT, 'round': ROUND_NUMBER, 'run_id': RUN_ID,
+        'parent_kernel': STAGE_PARENT,
         'data_manifest_sha256': LEGACY['DATA_SHA'],
         'source_sha256': CHUNK_CONFIG['source_sha256'],
         'source_commit': CHUNK_CONFIG['source_commit'],
-        'sampler': 'capped_power_mixture_v1', 'seed': 20261013,
+        'sampler': 'capped_power_mixture_v1', 'seed': SAMPLING_SEED,
         'weighted_ratio': 0.6, 'reference': 0.05, 'exponent': 1.0, 'weight_cap': 4.0,
         'amplitude': 'max_h1_h10_abs_close_return_from_last_input_close',
         'replacement': True, 'start_segment': START_SEGMENT,
@@ -70,7 +89,12 @@ def validate_output(root, torch, expected_recipe, parent=False):
             or summary['status'] not in {'stopped', 'completed'}):
         raise RuntimeError('Parent global segment/step/optimizer contract mismatch')
     if parent:
-        if (boundary != START_SEGMENT or state['effective_epochs'] != START_SEGMENT
+        if 'stage' in CHUNK_CONFIG:
+            if (boundary != START_SEGMENT or state['effective_epochs'] != START_SEGMENT
+                    or manifest['recipe'] != CHUNK_CONFIG['stage']['parent_recipe']
+                    or sha256(root / 'checkpoints/last_state.pt') != CHUNK_CONFIG['stage']['parent_state_sha256']):
+                raise RuntimeError('Not the verified completed parent round')
+        elif (boundary != START_SEGMENT or state['effective_epochs'] != START_SEGMENT
                 or manifest['recipe']['source_sha256'] != 'd505207d6d12ac0d5a7443f7e06ac63c46ce8fe312acf00ad41d7fad82d01b57'
                 or manifest['recipe']['data_manifest_sha256'] != LEGACY['DATA_SHA']):
             raise RuntimeError('Not the verified C03 first-round checkpoint')
@@ -91,7 +115,7 @@ def training_environment(runtime, data_root, parent, tokenizer, continuation, bo
         'KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION': '0' if continuation else '1',
         'KRONOS_EPOCHS': str(TOTAL_SEGMENTS), 'KRONOS_REQUIRE_FULL_COVERAGE': '0',
         'KRONOS_COVERAGE_PASSES': '1', 'KRONOS_COVERAGE_SEED': '20261011',
-        'KRONOS_SAMPLING_SEED': '20261013',
+        'KRONOS_SAMPLING_SEED': str(SAMPLING_SEED),
         'KRONOS_SAMPLING_PLAN_SHA256': PLAN_SHA256,
         'KRONOS_TRAIN_SAMPLING': 'capped_power_mixture_v1',
         'KRONOS_SAMPLING_START_SEGMENT': str(START_SEGMENT),
@@ -118,6 +142,8 @@ def training_environment(runtime, data_root, parent, tokenizer, continuation, bo
 
 
 def main():
+    if 'stage' in CHUNK_CONFIG:
+        configure_stage(CHUNK_CONFIG['stage'])
     started = time.monotonic()
     phase('started', owner='user281434', chunk=CHUNK_CONFIG['chunk'], recipe=recipe())
     command([sys.executable, '-u', '-m', 'pip', 'install',
@@ -151,7 +177,7 @@ def main():
     if sha256(tokenizer / 'model.safetensors') != LEGACY['TOKENIZER_SHA']:
         raise RuntimeError('Tokenizer mismatch')
     parent = find_one(input_root, '**/last_state.pt').parent.parent
-    continuation = CHUNK_CONFIG['chunk'] > 4
+    continuation = CHUNK_CONFIG['chunk'] > FIRST_CHUNK
     boundary = validate_output(parent, torch, recipe(), parent=not continuation)
     if boundary >= TOTAL_SEGMENTS:
         raise RuntimeError('Second round has already completed')
@@ -160,10 +186,11 @@ def main():
         output.mkdir(parents=True)
         for name in ('run.log', 'metrics.jsonl'):
             shutil.copy2(parent / name, output / name)
-        (output / 'round1_parent.json').write_text(json.dumps({
+        (output / f'round{ROUND_NUMBER - 1}_parent.json').write_text(json.dumps({
             'kernel': recipe()['parent_kernel'], 'state_sha256': sha256(parent / 'checkpoints/last_state.pt'),
             'best': json.loads((parent / 'checkpoints/best_model/best_metric.json').read_text()),
             'next_epoch': boundary, 'global_step': PARENT_GLOBAL_STEP,
+            'parent_recipe': json.loads((parent / 'experiment_manifest.json').read_text())['recipe'],
         }, indent=2))
     env = training_environment(runtime, data_root, parent, tokenizer, continuation, boundary)
     env['KRONOS_MAX_RUNTIME_SECONDS'] = str(max(60, BUDGET_SECONDS - int(time.monotonic() - started)))

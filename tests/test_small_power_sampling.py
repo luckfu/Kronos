@@ -86,7 +86,7 @@ def test_real_dataset_uses_sampled_plan_and_leaves_validation_natural(tmp_path, 
 def trainer_helpers():
     names = {'restore_sampling_transition', 'validate_scheduler_transition_state',
              'validate_resume_guard', 'optimizer_to', 'segment_sample_count',
-             'completed_coverage_windows'}
+             'completed_coverage_windows', 'sampling_scheduler_steps'}
     tree = ast.parse((ROOT / 'finetune/train_predictor.py').read_text())
     module = ast.Module(body=[node for node in tree.body
                              if isinstance(node, ast.FunctionDef) and node.name in names], type_ignores=[])
@@ -97,17 +97,18 @@ def trainer_helpers():
     return namespace
 
 
-def test_sampling_transition_preserves_optimizer_scheduler_and_global_axes():
+@pytest.mark.parametrize('parent_segment,parent_step', [(520, 162724), (720, 225324)])
+def test_sampling_transition_preserves_optimizer_scheduler_and_global_axes(parent_segment, parent_step):
     model = torch.nn.Linear(2, 2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: 1.0)
     model(torch.ones(1, 2)).sum().backward()
     optimizer.step()
     scheduler.step()
-    scheduler.last_epoch = 162724
-    config = {'sampling_start_segment': 520, 'predictor_loss_mode': 'forecast',
+    scheduler.last_epoch = parent_step
+    config = {'sampling_start_segment': parent_segment, 'sampling_parent_global_step': parent_step, 'predictor_loss_mode': 'forecast',
               'history_loss_weight': 0.02, 'use_amp': False}
-    source = {'next_epoch': 520, 'resume_step': 0, 'batch_idx_global': 162724,
+    source = {'next_epoch': parent_segment, 'resume_step': 0, 'batch_idx_global': parent_step,
               'model': copy.deepcopy(model.state_dict()), 'optimizer': copy.deepcopy(optimizer.state_dict()),
               'scheduler': scheduler.state_dict(), 'scheduler_type': 'warmup_constant',
               'scheduler_warmup_steps': 1627, 'resume_guard': {'batch_size': 32, 'effective_epochs': 520},
@@ -122,8 +123,8 @@ def test_sampling_transition_preserves_optimizer_scheduler_and_global_axes():
         source, config, guard, 1627, restored, restored_optimizer, restored_scheduler,
         None, torch.device('cpu'), 'disabled',
     )
-    assert (boundary, global_step) == (520, 162724)
-    assert restored_scheduler.last_epoch == 162724
+    assert (boundary, global_step) == (parent_segment, parent_step)
+    assert restored_scheduler.last_epoch == parent_step
     for parameter, saved in zip(restored.parameters(), model.parameters()):
         assert torch.equal(parameter, saved)
     for state in restored_optimizer.state.values():
@@ -136,6 +137,10 @@ def test_sampling_transition_preserves_optimizer_scheduler_and_global_axes():
     assert swanlab_chart_step(522, 1, 313, env) == 163038
     with pytest.raises(ValueError):
         swanlab_chart_step(520, 277, 277, env)
+    third_env = {**env, 'KRONOS_SAMPLING_START_SEGMENT': '720',
+                 'KRONOS_SAMPLING_PARENT_GLOBAL_STEP': '225324'}
+    assert swanlab_chart_step(721, 1, 313, third_env) == 225325
+    assert swanlab_chart_step(920, 313, 313, third_env) == 287924
     with pytest.raises(ValueError, match='batch_size'):
         helpers['restore_sampling_transition'](
             source, config, {**guard, 'batch_size': 64}, 1627, restored,
@@ -173,3 +178,22 @@ def test_gpu_quota_counts_days_in_duration():
     quota = SimpleNamespace(total_time_allowed=timedelta(days=1, hours=6),
                             time_used=timedelta(minutes=6), time_reserved=timedelta(0))
     assert ns['available_gpu_seconds'](quota) == 107640
+
+
+def test_new_round_keeps_parent_step_after_multiple_sampling_rounds():
+    ns = runpy.run_path(str(ROOT / 'finetune/small_power_relay/launch.py'))
+    ns['configure_stage']({'start_segment': 720, 'parent_global_step': 225324,
+                          'round_segments': 200, 'sampling_plan_sha256': 'new-plan',
+                          'round': 3, 'seed': 20261018, 'first_chunk': 5,
+                          'parent_kernel': 'user281434/kronos-small-clean-wc-dual-t4-c04'})
+    env = ns['training_environment'](Path('/runtime'), Path('/data'), Path('/parent'),
+                                     Path('/tokenizer'), False, 720)
+    assert env['KRONOS_EPOCHS'] == '920'
+    assert env['KRONOS_SAMPLING_START_SEGMENT'] == '720'
+    assert env['KRONOS_SAMPLING_PARENT_GLOBAL_STEP'] == '225324'
+    assert env['KRONOS_SAMPLING_SEED'] == '20261018'
+    assert env['SWANLAB_RUN_ID'] == 'smcl1011'
+    dataset = SimpleNamespace(total_samples=10397679, n_samples=20000,
+                              sampling_plan=object(), config=SimpleNamespace(sampling_start_segment=720))
+    config = {'sampling_parent_global_step': 225324, 'sampling_start_segment': 720, 'batch_size': 32}
+    assert trainer_helpers()['sampling_scheduler_steps'](dataset, config, 920, 2) == 287924

@@ -435,6 +435,7 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
             guard[key] = float(config[key])
     if config.get('train_sampling', 'coverage') != 'coverage':
         for key in ('train_sampling', 'sampling_start_segment', 'sampling_segments', 'sampling_seed',
+                    'sampling_parent_global_step',
                     'sampling_weighted_ratio', 'sampling_reference', 'sampling_exponent',
                     'sampling_weight_cap', 'sampling_warmup_steps', 'sampling_plan_sha256'):
             guard[key] = config[key]
@@ -524,12 +525,14 @@ def restore_sampling_transition(source_state, config, resume_guard, warmup_steps
     validate_scheduler_transition_state(source_state, config, amp_dtype_name)
     ignored = {
         'effective_epochs', 'train_sampling', 'sampling_start_segment', 'sampling_seed',
+        'sampling_parent_global_step',
         'sampling_segments', 'sampling_weighted_ratio', 'sampling_reference',
         'sampling_exponent', 'sampling_weight_cap', 'sampling_warmup_steps',
         'sampling_plan_sha256',
     }
     validate_resume_guard(source_state.get('resume_guard'), resume_guard, ignored)
     if (int(source_state['next_epoch']) != int(config['sampling_start_segment'])
+            or int(source_state['batch_idx_global']) != int(config.get('sampling_parent_global_step', source_state['batch_idx_global']))
             or source_state['scheduler_type'] != 'warmup_constant'
             or int(source_state['scheduler_warmup_steps']) != warmup_steps
             or int(source_state['scheduler']['last_epoch']) != int(source_state['batch_idx_global'])):
@@ -775,6 +778,14 @@ def segment_sample_count(dataset, segment_index):
     segment_in_pass = int(segment_index) % segments_per_pass
     start = segment_in_pass * dataset.n_samples
     return min(dataset.n_samples, dataset.total_samples - start)
+
+
+def sampling_scheduler_steps(dataset, config, effective_epochs, world_size):
+    return int(config['sampling_parent_global_step']) + sum(
+        math.ceil(math.ceil(segment_sample_count(dataset, segment) / world_size)
+                  / config['batch_size'])
+        for segment in range(int(config['sampling_start_segment']), effective_epochs)
+    )
 
 
 def optimizer_steps_for_completed_segments(
@@ -2644,6 +2655,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         )
         for segment in range(effective_epochs)
     )
+    if config.get('train_sampling', 'coverage') != 'coverage':
+        scheduler_steps = sampling_scheduler_steps(train_dataset, config, effective_epochs, world_size)
     scheduler_type = config.get('scheduler_type', 'warmup_cosine')
     if scheduler_type not in {
         'warmup_cosine', 'warmup_constant', 'two_speed', 'uniform_cosine', 'fixed',
