@@ -38,3 +38,5 @@ kaggle kernels logs --follow user281434/kronos-small-clean-wc-dual-t4-c05
 云端必须再次验证父State哈希、完整状态、原看板及新采样哈希，观察第721段真实训练后才确认启动。尚未验收第三轮终态与OOS表现。
 
 2026-10-18 16:42北京时间，C05第1版已为RUNNING。云端已确认两张Tesla T4、两个NCCL DDP进程、每卡batch32/总batch64，原看板smcl1011连接成功；父State哈希及720段/global step225324边界通过核验。目前正在构建Dataset，尚待完整状态恢复及第721段真实训练步数证据。提交源码为d7418dab7d477a4dc82972937f2e0c35bde1e296，轻量启动记录见 `finetune/reports/small_power_round3_startup_20261018.json`。
+
+16:45北京时间进一步核验：日志明确恢复optimizer/scheduler/AMP/RNG，两个rank的采样哈希均与冻结计划一致。已观察第721/920段Step276/313，学习率两组均为1e-5，总batch64（32×2），随后开始123,836样本固定全量验证。C05真实接力启动成立，第三轮完成及OOS改善仍待终态验收。

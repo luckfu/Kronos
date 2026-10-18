@@ -862,6 +862,8 @@ Kaggle提交账号改为 `user281434`，首个目标为 `user281434/kronos-small
 
 按用户要求从C04完整Last State准备C05，原看板smcl1011不变，从全局721段、step225325继续。第三轮新seed20261018，仍400万次抽样、200段，计划至920段。生产Dataset预检含3,269,922个唯一窗口，采样哈希冻结。依据C04末20段速度，含准备预算约10小时57分；提交12小时硬上限、11小时15分代码预算，段末安全退出。模型、loss、LR和验证均保持原设置。具体计划及终态验收见 `finetune/small_power_relay/ROUND3_CN.md`。
 
+2026-10-18 16:45北京时间，C05第1版已通过云端真实启动验收：双Tesla T4以NCCL DDP运行，父State哈希匹配，optimizer/scheduler/AMP/RNG恢复于global step225324；两个rank的采样哈希均匹配冻结计划。已观察721/920段Step276/313、学习率1e-5、总batch64，随后开始123,836样本固定验证。原看板smcl1011保持不变。启动证据归档于 `finetune/reports/small_power_round3_startup_20261018.json`；该证据不代表第三轮完成或OOS改善。
+
 ## 7. 训练执行与 Kaggle 接力
 
 每个 segment 包含固定数量的唯一窗口，segment 完成后进行验证并保存推理权重 `last_model` 和完整训练状态 `last_state.pt`；若该阶段预先声明的指标刷新则保存 `best_model`（Stage 2 为 forecast，Stage 3 单段测试为第 6.7.4 节的比较量）。Kaggle 单次任务受时限约束，因此同阶段接力按 segment 边界从完整 State 恢复模型、优化器、scheduler、全局 step、coverage cursor 和 best 指标。Stage 3 首次启动则是从 C2 best 权重建立新实验，不适用“继承 C2 optimizer”的同阶段恢复规则。

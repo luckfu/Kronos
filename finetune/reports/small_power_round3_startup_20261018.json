@@ -2,8 +2,14 @@
   "kernel": "user281434/kronos-small-clean-wc-dual-t4-c05",
   "version": 1,
   "status": "RUNNING",
-  "verification_phase": "ddp_started_dataset_initializing",
-  "actual_trainer_step_observed": false,
+  "verification_phase": "full_state_resumed_actual_training_and_validation_started",
+  "actual_trainer_step_observed": true,
+  "observed_segment": 721,
+  "observed_step": 276,
+  "steps_per_segment": 313,
+  "observed_learning_rate": 0.00001,
+  "full_state_restored": ["model", "optimizer", "scheduler", "AMP", "RNG"],
+  "full_validation_started_samples": 123836,
   "source_commit": "d7418dab7d477a4dc82972937f2e0c35bde1e296",
   "source_sha256": "f821526478463da4876c436dba34ac4a2fda752b1c6687705ae8f81d99ace23e",
   "device_ready_at": "2026-10-18T08:41:49.762645+00:00",
@@ -24,5 +30,5 @@
   "sample_draws": 4000000,
   "hard_timeout_seconds": 43200,
   "code_budget_seconds": 40500,
-  "note": "Live logs confirm both DDP ranks and parent State hash. Dataset initialization is in progress; full optimizer-state resume and an actual trainer step remain to be observed."
+  "note": "Live logs confirm both DDP ranks, parent State hash, full optimizer/scheduler/AMP/RNG restoration at global step225324, matching frozen sampling plan on both ranks, Segment721 Step276/313, and full validation start. This is startup proof, not round completion or OOS improvement."
 }
