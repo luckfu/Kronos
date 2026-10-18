@@ -75,6 +75,16 @@
 ### 坑 4：严守 KISS 原则，禁止随意新建单开实验脚本
 - 任何微调实验均必须在成熟的 `train.py` 与 `push_chunk.py` 上以参数化开关扩展，严禁随意“自立门户”重写训练脚本。
 
+### 坑 5：只按 trajectory_score 选点，会把“最准的权重”覆盖掉
+- **现象**：`train.py` 原先只按 `trajectory_score = direction_acc + 0.5*pooled_IC` 保存 `best_weights.pt`。S01 那次 12h 训练里，step 30,000 是整段 RMSE 最低的一版（`nrmse 0.0772 / skill -0.0703`），但 score 只有 0.7862，被 step 42,500（`nrmse 0.0793 / skill -0.0989`）顶掉，权重直接丢失。
+- **后果**：如果目标是“预测得准”（点位/幅度），而不是“排序/方向”，训完能拿到的反而是误差更大的那一版；复盘时甚至无法评估“最准的点”到底在 OOS 上表现如何。
+- **规范**：
+  1. 需要准确性优先时，推 chunk 加 `--extra '{"select_metric": "nrmse"}'`（或 `"skill"`）；不传则维持 `score`，老行为不变。
+  2. 无论选点口径是什么，训练都会**额外**保存 `best_acc_weights.pt` + `best_acc_metrics.json`（本 chunk 内 `nrmse` 最低的一版），除非显式加 `--no-acc-checkpoint`。
+  3. `eval.py` 的 `discover_inputs` 会自动识别 `best_acc_weights.pt`，评估时多跑一个 `best_acc` tag，与 `best` / `last` 并列输出。
+  4. 断点接力若切换了 `select_metric`，旧 `best_score` 与新指标不可比，训练会重置并记 `select_metric_changed`，不会把旧指标的权重误判成最优。
+
+
 ---
 
 ## 4. 资产位置与代码清单 (Asset Inventory)
@@ -148,6 +158,28 @@ python3 finetune/timesfm3_v11_trajectory/push_chunk.py 8 \
     --learning-rate 7.92e-5 \
     --extra '{"init_swa": true, "constant_lr": true, "run_id": "tfm3v11-sweetspot-stage2"}'
 ```
+
+### SOP 4：按“准确性”而非“方向/IC”选 checkpoint
+当实验目标是点位/幅度误差（nrmse、MAE、skill），而不是方向胜率或截面排序时，必须显式切换选点口径，否则最准的一版会被 `trajectory_score` 顶掉（见坑 5）。
+
+```bash
+# ① 推出下一段训练：按 val nrmse 选点（越小越好）
+python3 finetune/timesfm3_v11_trajectory/push_chunk.py 3 \
+    --slug kronos-timesfm3-v11-s02-acc \
+    --upstream ibcaoo/kronos-timesfm3-v11-s01-sweetspot-12h \
+    --budget 43200 \
+    --extra '{"select_metric": "nrmse"}'
+
+# ② 评估：best / last / best_acc 三个权重会一起跑
+python3 finetune/timesfm3_v11_trajectory/eval_oos/push_eval.py \
+    --chunk sweetspot \
+    --upstream ibcaoo/kronos-timesfm3-v11-s02-acc \
+    --slug kronos-timesfm3-v11-s02-acc-oos
+```
+
+> `select_metric` 三个取值：`score`（默认，方向+0.5×IC，越大越好）、`nrmse`（越小越好）、`skill`（`1 - nrmse/naive`，越大越好）。
+> `best_acc_weights.pt` 的落盘门槛是 history 里的历史最低 `nrmse`；若某一段训练始终没能刷新，本段就不会产生该文件，属正常现象。
+
 
 ---
 
