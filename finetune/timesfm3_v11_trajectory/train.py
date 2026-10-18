@@ -567,12 +567,26 @@ def compute_trajectory_score(m: dict) -> float:
     return float(m.get("direction_acc", 0.0) + 0.5 * max(m.get("trajectory_corr", 0.0), 0.0))
 
 
+def select_value(m: dict, metric: str) -> float:
+    """按选点口径取出可比较的标量。nrmse 越小越好，其余越大越好。"""
+    if metric == "nrmse":
+        return float(m["nrmse"])
+    if metric == "skill":
+        return float(m["skill_nrmse"])
+    return float(m["trajectory_score"])
+
+
+def select_better(metric: str, value: float, best: float) -> bool:
+    return value < best if metric == "nrmse" else value > best
+
+
 def save_state(model, sector_embedding, optimizer, scheduler, global_step, best, history, args, chunk_index):
     import torch
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
     state = {
         "run_id": SWANLAB_RUN_ID, "global_step": global_step, "best": best, "best_score": best, "history": history,
+        "select_metric": getattr(args, "select_metric", "score"),
         "weights": get_trainable_state(model, sector_embedding),
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict() if scheduler else None,
@@ -686,6 +700,7 @@ def train(args) -> None:
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
 
     global_step, best_score, history = 0, -1.0, []
+    _metric_reset = False
     if state:
         base_model = model.module if isinstance(model, nn.DataParallel) else model
         saved_weights = state["weights"]
@@ -710,13 +725,21 @@ def train(args) -> None:
         if state["cuda_rng"] and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(state["cuda_rng"])
         global_step, history = state["global_step"], state.get("history", [])
-        if "best_score" in state:
+        prev_metric = state.get("select_metric", "score")
+        if prev_metric != args.select_metric:
+            # 选点口径发生切换，旧的 best_score 不可比，重置以免把错误的权重当成最优
+            best_score = -1.0
+            _metric_reset = True
+            log("select_metric_changed", previous=prev_metric, current=args.select_metric,
+                note="best_score reset; best_weights.pt will be overwritten by new metric")
+        elif "best_score" in state:
             best_score = float(state["best_score"])
         elif history:
             best_score = float(max(compute_trajectory_score(h) for h in history))
         else:
             best_score = -1.0
-        log("resumed_successfully", global_step=global_step, best_score=best_score, lora_defense_passed=True)
+        log("resumed_successfully", global_step=global_step, best_score=best_score,
+            select_metric=args.select_metric, lora_defense_passed=True)
     elif args.init_swa:
         # 从上游 best_weights.pt + last_weights.pt 做 1:1 权重平均起跑, 优化器/调度器全新
         p_best = sorted(INPUT_ROOT.glob("**/best_weights.pt"))[-1]
@@ -751,10 +774,23 @@ def train(args) -> None:
             setattr(model, name, value)
         log("multi_gpu_enabled", count=torch.cuda.device_count())
 
+    # ---- 选点口径归一化 ----
+    # select_metric=score  : 沿用 trajectory_score (方向 + 0.5*IC)，越大越好
+    # select_metric=nrmse  : 纯准确性，越小越好
+    # select_metric=skill  : skill_nrmse = 1 - nrmse/naive，越大越好
+    if _metric_reset:
+        # 口径切换后旧 best_score 与新指标不可比，用哨兵值保证第一次 eval 一定落盘
+        best_score = {"nrmse": float("inf"), "skill": float("-inf")}.get(args.select_metric, -1.0)
+
+    # 准确性 checkpoint：本 chunk 内 RMSE 最低的权重单独留档，
+    # 避免"方向/IC 最优"把真正低误差的那一版覆盖掉 (S01 的 step 30k 就是这样丢的)。
+    best_acc_nrmse = float(min((h.get("nrmse", float("inf")) for h in history), default=float("inf")))
+    best_acc_step = 0
+
     # Step 0 基线体检
     if not state:
         metrics = evaluate(model, val, device, args.horizon, args.eval_batch_size, args.dir_loss_weight, sector_embedding, args.amp_loss_weight)
-        best_score = metrics["trajectory_score"]
+        best_score = select_value(metrics, args.select_metric)
         history.append({"step": 0, **metrics})
         base_log = {f"val/{k}": v for k, v in metrics.items()}
         base_log.update(gpu_metrics())
@@ -930,12 +966,33 @@ def train(args) -> None:
             run.log(eval_row, step=global_step)
             log("val", step=global_step, **metrics, **gpu_metrics())
             score = metrics["trajectory_score"]
-            if score > best_score:
-                best_score = score
+            # 按 --select-metric 决定 best_weights.pt 用哪个指标选点
+            if args.select_metric == "nrmse":
+                sel_value, improved = metrics["nrmse"], metrics["nrmse"] < best_score
+            elif args.select_metric == "skill":
+                sel_value, improved = metrics["skill_nrmse"], metrics["skill_nrmse"] > best_score
+            else:
+                sel_value, improved = score, score > best_score
+
+            if improved:
+                best_score = sel_value
                 torch.save(get_trainable_state(model, sector_embedding), OUTPUT / "best_weights.pt")
-                (OUTPUT / "best_metrics.json").write_text(json.dumps(history[-1], indent=2))
-                log("new_best_trajectory_model", step=global_step, trajectory_score=best_score,
-                    direction_acc=metrics["direction_acc"], trajectory_corr=metrics.get("trajectory_corr", 0.0), nrmse=metrics["nrmse"])
+                (OUTPUT / "best_metrics.json").write_text(json.dumps(
+                    {**history[-1], "select_metric": args.select_metric, "select_value": sel_value},
+                    indent=2))
+                log("new_best_metric_model", metric=args.select_metric, select_value=sel_value,
+                    step=global_step, trajectory_score=score, direction_acc=metrics["direction_acc"],
+                    trajectory_corr=metrics.get("trajectory_corr", 0.0), nrmse=metrics["nrmse"])
+
+            # 同时保留准确性最优的一版（默认开启，--no-acc-checkpoint 可关）
+            if not args.no_acc_checkpoint and metrics["nrmse"] < best_acc_nrmse:
+                best_acc_nrmse = metrics["nrmse"]
+                best_acc_step = global_step
+                torch.save(get_trainable_state(model, sector_embedding), OUTPUT / "best_acc_weights.pt")
+                (OUTPUT / "best_acc_metrics.json").write_text(json.dumps(history[-1], indent=2))
+                log("new_best_acc_model", step=global_step, nrmse=metrics["nrmse"],
+                    skill_nrmse=metrics["skill_nrmse"], direction_acc=metrics["direction_acc"],
+                    trajectory_corr=metrics.get("trajectory_corr", 0.0))
 
         if global_step % args.save_every == 0:
             save_state(model, sector_embedding, optimizer, scheduler, global_step, best_score, history, args, chunk_index)
@@ -947,10 +1004,14 @@ def train(args) -> None:
     best_tc = max((h.get("trajectory_corr", -1.0) for h in history), default=0.0)
     summary = {
         "chunk_index": chunk_index, "global_step": global_step, "stop": stop,
-        "best_trajectory_score": best_score,
+        "select_metric": args.select_metric,
+        "best_select_value": best_score,
+        "best_trajectory_score": max((h.get("trajectory_score", 0.0) for h in history), default=0.0),
         "best_direction_acc": best_dir,
         "best_trajectory_corr": best_tc,
         "best_val_nrmse": min((h.get("nrmse", 999.0) for h in history), default=0.0),
+        "best_acc_step": best_acc_step,
+        "acc_checkpoint": None if args.no_acc_checkpoint else "best_acc_weights.pt",
         "next": "push 下一个 chunk 并以本 kernel 为 kernel_source" if stop == "time_budget" else "done"
     }
     (OUTPUT / "summary.json").write_text(json.dumps(summary, indent=2))
@@ -987,6 +1048,10 @@ def parse_args(argv=None):
     p.add_argument("--init-swa", action="store_true", default=False)      # 从上游 best+last 1:1 平均起跑
     p.add_argument("--constant-lr", action="store_true", default=False)   # 恒定学习率
     p.add_argument("--run-id", type=str, default=None)                   # 覆盖 SwanLab run id
+    p.add_argument("--select-metric", choices=["score", "nrmse", "skill"], default="score",
+                   help="best_weights.pt 的选点指标: score=方向+IC(默认), nrmse/skill=准确性优先")
+    p.add_argument("--no-acc-checkpoint", action="store_true", default=False,
+                   help="关闭额外保存 best_acc_weights.pt（默认开启，用于留住 RMSE 最低的一版）")
     p.set_defaults(**CHUNK_CONFIG)
     return p.parse_args(argv)
 

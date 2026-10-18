@@ -77,6 +77,11 @@ def discover_inputs(root: Path):
     if last_weights:
         weights_dict["last"] = last_weights[-1]
 
+    # 准确性最优权重（train.py --select-metric 之外额外留档的一版）
+    acc_weights = sorted(root.glob("**/best_acc_weights.pt"))
+    if acc_weights:
+        weights_dict["best_acc"] = acc_weights[-1]
+
     # 如果既没有 best 也没有 last，查找其他 .pt
     if not weights_dict:
         all_pts = sorted([p for p in root.glob("**/*.pt") if "optim" not in p.name.lower()])
