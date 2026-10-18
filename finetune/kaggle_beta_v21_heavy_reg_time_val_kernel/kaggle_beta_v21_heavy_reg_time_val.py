@@ -142,7 +142,7 @@ SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = OUTPUT_NAME
 SWANLAB_URL = f"https://swanlab.cn/@{SWANLAB_WORKSPACE}/{SWANLAB_PROJECT}/runs/{SWANLAB_RUN_ID}"
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
 KERNEL_START = time.time()
 
 # Filled by build_kaggle_beta_v21_heavy_reg_time_val_kernel.py.

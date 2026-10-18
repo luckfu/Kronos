@@ -85,7 +85,16 @@ SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 # New board. Do not resume rank_frozen / rank_acc / rank_warm / wc.
 SWANLAB_RUN_ID = "beta_v2_1_c1_dual_t4_rank_unfreeze"
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
+
+def load_kaggle_swanlab_api_key():
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 MODEL_REPO = "luckfu/Kronos-A-Share-Beta-V2-1"
 EXPECTED_BEST_SHA256 = (
     "e1bd55842996b7690a21c34c4d74e1128702bca9c16164788b741e3b5d052f97"
@@ -741,7 +750,7 @@ def stream_training(repo: Path, env: dict[str, str], output_root: Path, run) -> 
 def start_swanlab(env: dict[str, str]):
     import swanlab
 
-    api_key = env.get("SWANLAB_API_KEY", "").strip() or SWANLAB_API_KEY_FALLBACK
+    api_key = env.get("SWANLAB_API_KEY", "").strip() or load_kaggle_swanlab_api_key() or SWANLAB_API_KEY_FALLBACK
     swanlab.login(api_key=api_key)
     run = swanlab.init(
         id=SWANLAB_RUN_ID,

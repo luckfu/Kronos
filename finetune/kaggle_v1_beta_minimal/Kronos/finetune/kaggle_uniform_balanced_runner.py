@@ -367,7 +367,7 @@ def initialize_swanlab(output_name, config, lineage, continuation):
 
             api_key = UserSecretsClient().get_secret("SWANLAB_API_KEY")
         except Exception:
-            api_key = "fmEPDGk4IItxgqSZKGLi8"
+            api_key = None
     swanlab.login(api_key=api_key)
     kwargs = {
         "project": os.getenv("SWANLAB_PROJECT", "finance"),

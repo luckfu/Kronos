@@ -5,8 +5,20 @@ TRAINER_SRC = "import argparse, json, os, time, subprocess, sys\nfrom pathlib im
 
 ALIGNMENT_SRC = "from dataclasses import dataclass\nimport torch\nimport torch.nn.functional as F\n@dataclass\nclass PathAlignmentConfig:\n top_k:int=16; candidates:int=16; weight:float=.05; huber_delta:float=.02; ema_decay:float=.99\nclass DetachedLossEMA:\n def __init__(self,decay=.99): self.decay=decay; self.value=None\n def normalize(self,loss):\n  cur=loss.detach().float(); self.value=cur if self.value is None else self.decay*self.value+(1-self.decay)*cur\n  return loss/self.value.clamp_min(1e-6).to(loss.dtype)\n def state_dict(self): return {'decay':self.decay,'value':None if self.value is None else self.value.detach().cpu()}\ndef candidate_mixture_decode(tok,a,b,top_k=16,candidates=16):\n k1=min(top_k,a.shape[-1]); k2=min(top_k,b.shape[-1]); p1=a.float().softmax(-1); p2=b.float().softmax(-1); v1,i1=torch.topk(p1,k1,-1); v2,i2=torch.topk(p2,k2,-1); outs=[]; ws=[]\n for n in range(min(candidates,k1*k2)): outs.append(tok.decode((i1[...,n%k1],i2[...,(n//k1)%k2]),half=True).float()); ws.append(v1[...,n%k1]*v2[...,(n//k1)%k2])\n w=torch.stack(ws); w=w/w.sum(0,keepdim=True).clamp_min(1e-8); return (torch.stack(outs)*w[...,None]).sum(0),w.detach()\ndef compute_path_alignment_loss(tok,a,b,target,cfg,normalizer=None):\n pred,w=candidate_mixture_decode(tok,a,b,cfg.top_k,cfg.candidates); target=target.to(pred.dtype); err=pred-target; per=F.huber_loss(pred,target,delta=cfg.huber_delta,reduction='none').mean((0,2)); loss=per.mean(); norm=normalizer.normalize(loss) if normalizer else loss\n return cfg.weight*norm, {'path_align_loss':loss.detach(),'path_align_horizon_mae':err.detach().abs().mean((0,2)),'path_align_max_residual':err.detach().abs().max()}\n"
 
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
+
 ROOT = Path('/kaggle/working/Kronos')
-SWANLAB_KEY = os.environ.get('SWANLAB_API_KEY', 'fmEPDGk4IItxgqSZKGLi8')
+SWANLAB_KEY = load_swanlab_api_key()
 os.environ['SWANLAB_API_KEY'] = SWANLAB_KEY
 os.environ.setdefault('SWANLAB_MODE', 'cloud')
 os.environ['SWANLAB_EXPERIMENT_NAME'] = 'small_0.1_stage3_path_alignment_from_c2_best'
@@ -19,6 +31,7 @@ sys.path.insert(0, str(ROOT))
 os.environ['PYTHONPATH'] = str(ROOT) + os.pathsep + os.environ.get('PYTHONPATH', '')
 
 import torch
+
 gpu_names = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
 if len(gpu_names) != 2 or any('T4' not in name for name in gpu_names):
     raise RuntimeError(f'Expected exactly two Tesla T4 GPUs, found {gpu_names}')

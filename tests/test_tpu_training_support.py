@@ -140,12 +140,27 @@ def test_kaggle_runner_uses_extracted_repo_for_child_pythonpath():
     assert 'str(repo_root / "finetune")' in TPU_RUNNER.read_text()
 
 
-def test_c1_runner_uses_hardcoded_swanlab_api_key():
+def _assigned_swanlab_secret(source: str) -> bool:
+    for line in source.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("SWANLAB_API_KEY"):
+            continue
+        if stripped.startswith("SWANLAB_API_KEY = None"):
+            continue
+        if 'SWANLAB_API_KEY = "' in stripped or "SWANLAB_API_KEY = '" in stripped:
+            return True
+    return False
+
+
+def test_c1_runner_loads_swanlab_api_key_from_env_or_kaggle_secrets():
     source = TPU_RUNNER.read_text()
 
-    assert 'SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"' in source
-    assert 'swanlab.login(api_key=SWANLAB_API_KEY)' in source
-    assert 'UserSecretsClient' not in source
+    assert 'SWANLAB_API_KEY = None' in source
+    assert 'def load_swanlab_api_key(' in source
+    assert 'os.environ.get("SWANLAB_API_KEY")' in source
+    assert 'UserSecretsClient().get_secret("SWANLAB_API_KEY")' in source
+    assert 'swanlab.login(api_key=load_swanlab_api_key())' in source
+    assert not _assigned_swanlab_secret(source)
 
 
 def test_c1_runner_reuses_stable_swanlab_run_id():

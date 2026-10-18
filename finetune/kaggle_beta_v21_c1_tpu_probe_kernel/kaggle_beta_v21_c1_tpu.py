@@ -21,7 +21,20 @@ from pathlib import Path
 
 
 EXPERIMENT_NAME = "beta_v2_1_c1_tpu_fp32_allreduce_probe"
-SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY = None
+
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        key = (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        key = ""
+    return key or SWANLAB_API_KEY
+
 # Leave empty for a fresh SwanLab run on Chunk 1.  Resume fallback remains:
 # if a non-empty id fails to resume, the runner starts a new run.
 SWANLAB_RUN_ID = ""
@@ -742,10 +755,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
             raise RuntimeError("disabled in eval-only mode")
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab"], check=True)
         import swanlab
-        # Keep the dashboard credential fixed for this experiment.  Falling
-        # back to a Kaggle Secret can silently create an unauthenticated run
-        # or send metrics to a different account.
-        swanlab.login(api_key=SWANLAB_API_KEY)
+        swanlab.login(api_key=load_swanlab_api_key())
         init_kwargs = dict(
             project=project,
             workspace=workspace,

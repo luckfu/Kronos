@@ -22,7 +22,16 @@ BATCH_SIZE = 16
 CHUNK_INDEX = 0
 CHUNK_COUNT = 8
 SHUFFLE_SEED = 20260925
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
+
+def load_kaggle_swanlab_api_key():
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 SWANLAB_RUN_ID = "modernbert-decision-full-gated-v1"
 SEGMENT_TOTAL = CHUNK_COUNT
 OUTPUT = Path("/kaggle/working/modernbert_decision_full")
@@ -114,7 +123,7 @@ def start_swanlab() -> tuple[Any, Any]:
     )
     import swanlab
 
-    api_key = os.environ.get("SWANLAB_API_KEY", "").strip() or SWANLAB_API_KEY_FALLBACK
+    api_key = os.environ.get("SWANLAB_API_KEY", "").strip() or load_kaggle_swanlab_api_key() or SWANLAB_API_KEY_FALLBACK
     if not api_key:
         raise RuntimeError("SWANLAB_API_KEY is empty")
     swanlab.login(api_key=api_key)
