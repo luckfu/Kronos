@@ -34,6 +34,7 @@ SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"
 EXPERIMENT_NAME = "timesfm3-v11-clean-c07-oos-audit"
 MAX_SAFE_SECONDS = 3000  # 50 分钟全局熔断安全哨兵 (确保 2 个权重顺序推断也能安全收尾)
+EVAL_TAGS = ""  # 逗号分隔的权重 tag 白名单（如 "best" / "best,last"）；空 = 评估全部发现的权重
 
 QUANTILE_INDEX = 4
 DATA_FEATURES = (
@@ -96,6 +97,16 @@ def discover_inputs(root: Path):
     oos_panel = oos_panels[0] if oos_panels else None
     oos_sample = oos_samples[0] if oos_samples else None
     metrics_path = best_metrics[-1] if best_metrics else None
+
+    # 权重 tag 白名单：GPU 配额紧张时只跑一个权重（1 个约 23 分钟，2 个约 48 分钟）
+    requested = [t.strip() for t in (EVAL_TAGS or os.environ.get("EVAL_TAGS", "")).split(",") if t.strip()]
+    if requested:
+        kept = {k: v for k, v in weights_dict.items() if k in requested}
+        if kept:
+            print(f"[Weights Filter] EVAL_TAGS={requested} -> 仅评估 {sorted(kept)}，跳过 {sorted(set(weights_dict) - set(kept))}", flush=True)
+            weights_dict = kept
+        else:
+            print(f"[Weights Filter] EVAL_TAGS={requested} 未命中任何权重（可用: {sorted(weights_dict)}），改为评估全部", flush=True)
 
     return val_pkl, split_csv, weights_dict, oos_panel, oos_sample, metrics_path
 

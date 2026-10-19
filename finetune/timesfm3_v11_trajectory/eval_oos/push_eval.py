@@ -35,6 +35,10 @@ def main():
     ap.add_argument("--upstream", type=str, default=None, help="显式指定权重来源 kernel (如 ibcaoo/kronos-timesfm3-v11-c07-sweetspot)")
     ap.add_argument("--slug", type=str, default=None, help="显式指定评估 kernel slug")
     ap.add_argument("--dry-run", action="store_true", help="仅生成打包文件而不推送")
+    ap.add_argument("--tags", type=str, default=None,
+                    help='只评估指定权重 tag，逗号分隔（如 "best" / "best,best_acc"）。默认评估全部发现的权重')
+    ap.add_argument("--max-seconds", type=int, default=None,
+                    help="全局熔断秒数。1 个权重约 1400s，2 个约 2900s；GPU 配额紧张时按剩余额度下调")
     args = ap.parse_args()
 
     chunk = args.chunk.lower()
@@ -64,6 +68,13 @@ def main():
     # 动态适配 SwanLab 标识与 Chunk 名
     source = source.replace('SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"', f'SWANLAB_RUN_ID = "{kernel_slug}"')
     source = source.replace('EXPERIMENT_NAME = "timesfm3-v11-clean-c07-oos-audit"', f'EXPERIMENT_NAME = "{kernel_slug}"')
+
+    # GPU 配额紧张时：只跑指定 tag + 下调熔断秒数（写死进 kernel，运行时无需环境变量）
+    if args.tags is not None:
+        source = source.replace('EVAL_TAGS = ""', f'EVAL_TAGS = "{args.tags}"', 1)
+    if args.max_seconds is not None:
+        source = source.replace('MAX_SAFE_SECONDS = 3000', f'MAX_SAFE_SECONDS = {args.max_seconds}', 1)
+        source = source.replace('MAX_SAFE_SECONDS = 1980', f'MAX_SAFE_SECONDS = {args.max_seconds}', 1)
 
     code_file = f"{kernel_slug}.py"
     (build / code_file).write_text(source)

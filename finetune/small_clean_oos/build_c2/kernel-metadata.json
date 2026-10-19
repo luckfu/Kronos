@@ -1,0 +1,17 @@
+{
+  "id": "user281434/kronos-small-clean-c2-best-full-oos",
+  "title": "Kronos Small Clean C2 Best Full OOS",
+  "code_file": "run.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "smmt315/a-share-120d-temporal-symbol-holdout"
+  ],
+  "kernel_sources": [
+    "luckfu/kronos-small-clean-wc-dual-t4-c03"
+  ]
+}

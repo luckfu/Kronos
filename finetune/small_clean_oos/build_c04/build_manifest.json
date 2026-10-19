@@ -1,0 +1,10 @@
+{
+  "source_sha256": "5e7c83d86c0ff3f29309f03d338c75ee94cba580a314caa7a0799b32498fc06d",
+  "commit": "1629d35a5802377862273d32f8c21e75148c96a3",
+  "kernel": "user281434/kronos-small-clean-c04-vs-c03-full-oos",
+  "models": [
+    "c03_best",
+    "c04_best",
+    "c04_last"
+  ]
+}

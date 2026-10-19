@@ -1,0 +1,8 @@
+{
+  "source_sha256": "72c9e392fdf4551fd3811b42275203d24cfd7e160e95a0494b9551e6fe09403c",
+  "commit": "1629d35a5802377862273d32f8c21e75148c96a3",
+  "kernel": "user281434/kronos-small-clean-c2-best-full-oos",
+  "c2_repo": "luckfu/Kronos-small-0.1-Cosine-C2-Best",
+  "c2_sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+  "prior": "user281434/kronos-small-clean-c04-vs-c03-full-oos"
+}
