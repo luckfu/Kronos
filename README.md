@@ -27,6 +27,8 @@
 
 跨机器交接入口：[`finetune/CROSS_MACHINE_HANDOFF_CN.md`](finetune/CROSS_MACHINE_HANDOFF_CN.md)。Beta 推理契约（连续市值百分位，不接受离散 `size_bucket`）：[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。
 
+2026-10-21 的 Small Clean Epoch2 / 三层评测接手文档：[`docs/HANDOVER_20261021_CN.md`](docs/HANDOVER_20261021_CN.md)。
+
 ## 线上推理部署（Beta V1.2）
 
 - 模型：A-share Full-Market Beta V1.2（约 102.4M 参数）
