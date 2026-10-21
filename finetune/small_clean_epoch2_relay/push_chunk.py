@@ -99,7 +99,7 @@ def main():
         commit = saved["source_commit"]
     parent = args.parent_kernel or (INITIAL_PARENT if args.chunk == 1 else f"{OWNER}/{slug(args.chunk - 1)}")
     config = {"chunk": args.chunk, "source_sha256": digest,
-              "source_commit": commit, "parent_kernel": parent}
+              "source_commit": commit, "parent_kernel": parent, "owner": OWNER}
     if args.budget_seconds:
         config["budget_seconds"] = args.budget_seconds
     if args.batch_size:

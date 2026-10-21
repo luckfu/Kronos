@@ -148,9 +148,10 @@ def main():
     batch_size = int(CHUNK_CONFIG.get("batch_size", 32))
     max_segments = int(CHUNK_CONFIG.get("max_segments", MAX_SEGMENTS))
     fresh_probe = bool(CHUNK_CONFIG.get("fresh_probe"))
+    owner = str(CHUNK_CONFIG.get("owner", "") or "")
     started = time.monotonic()
     phase("started", chunk=CHUNK_CONFIG["chunk"], experiment=EXPERIMENT,
-          owner="user281434", max_gpu_seconds=43200, training_budget_seconds=BUDGET_SECONDS)
+          owner=owner, max_gpu_seconds=43200, training_budget_seconds=BUDGET_SECONDS)
     input_root = Path("/kaggle/input")
     runtime = Path("/kaggle/working/clean_small_runtime")
     repo = Path(__file__).resolve().parents[2]
@@ -191,7 +192,7 @@ def main():
     os.environ["SWANLAB_API_KEY"] = token
     for key in ("SWANLAB_PROJECT", "SWANLAB_WORKSPACE", "SWANLAB_EXPERIMENT_NAME"):
         os.environ.pop(key, None)
-    phase("dashboard_deferred", project="finance", run_id=RUN_ID, experiment=EXPERIMENT,
+    phase("dashboard_deferred", project="finance", run_id=run_id, experiment=EXPERIMENT,
           note="single SwandLab run is created by the trainer")
     data_root = prepare_data(input_root, runtime / "data")
     tokenizer = find_one(input_root, "**/Kronos-Tokenizer-base/model.safetensors").parent
