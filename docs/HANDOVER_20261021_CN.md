@@ -265,59 +265,17 @@ PY
 
 ## 6. 下一步：epoch2 OOS（最高优先级）
 
-### 6.1 推荐做法：只推理 epoch2，复用已有 C2/C03 分片
+### 6.1 已提交的做法：C2 + epoch2 配对
 
-**理由**：C2 和 C03 的 34 日分片已经在 `artifacts/small_clean_oos_shards`；只缺 epoch2。重新解码 C2/C03 纯属浪费。单模型在单张 T4 上约 **2.3 小时**（前一轮双模型并行，单模型每个 signal date 约 245 秒）。
+**状态（2026-10-21 11:10 UTC）**：已提交 `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos`，当前 `RUNNING`，source SHA `1ef4094a…`。它复用同一 34 日冻结合同，一次产出 `c2_best_*` 和 `epoch2_best_*` 两组 shard。C2 会重新解码一次（多花一张 GPU），换来同 run 的配对一致性，避免跨 run 合并。
 
-**模板**：`finetune/small_clean_oos/evaluate_c04.py` 已有“多个 label + 2 GPU worker pool”的实现，可以复制后把模型注册表改成只剩 `epoch2_best`。复用 `evaluate.py` 的冻结常量与 `decode()`，不要改合同。
+实际代码：
 
-**必须改掉的硬编码**（`evaluate.py` 是为“两个模型、两个 rank”写的）：
+- [`finetune/small_clean_oos/evaluate_epoch2.py`](../finetune/small_clean_oos/evaluate_epoch2.py)：`patterns` 为 c2/epoch2，epoch2 `expected_segment=501`，SHA gate `68feb21b…`，校验 `summary.json` 为 completed/520；`worker` 按 rank 映射两个 label。
+- [`finetune/small_clean_oos/submit_epoch2.py`](../finetune/small_clean_oos/submit_epoch2.py)：kernel id、C2 + e05 `kernel_sources`、source bundle。
+- [`finetune/small_clean_oos/report_epoch2.py`](../finetune/small_clean_oos/report_epoch2.py)：下载 shard 后生成三层面板报告，并复用旧 C03 shard 做三方对比。
 
-- `worker()` 里的 `label = ("c2_best", "clean_best")[rank]`：单模型版改成只接受 `epoch2_best`，或只启动 rank 0。
-- `patterns`：只保留 `epoch2_best` 的 pattern。
-- `expected_segment`：`501`。
-- `paired_comparison(frames["c2_best"], frames["clean_best"])`：单模型版不要调用它；只校验 shard 完整性并输出 `scores`，三方比较留给本地 `panel.py`。
-- `summary.json` 的字段与 `swanlab.log` 的 key：改成 `epoch2_best`；同时把 `swanlab.init(id="smco1012", ...)` 换成新 id（如 `smce2oos`），避免覆盖旧的 `smco1012` 看板。
-
-模型注册表建议：
-
-```python
-patterns = {
-    "epoch2_best": "**/small_0.1_clean_epoch2_from_c03_20261020/checkpoints/best_model/model.safetensors",
-}
-expected_segment = {"epoch2_best": 501}
-EPOCH2_SHA = "68feb21bb0d2d6b385e69e95765536b25f2cad07a8efb011cd1bcdea878fda5d"
-
-# 载入前额外校验
-result = json.loads((weights.parents[2] / "summary.json").read_text())["final_result"]
-if result["status"] != "completed" or result["completed_segments"] != 520:
-    raise RuntimeError("Epoch2 training incomplete")
-if sha(weights) != EPOCH2_SHA:
-    raise RuntimeError("Epoch2 model hash mismatch")
-```
-
-Kaggle metadata：
-
-```python
-id = "luckfu/kronos-small-epoch2-full-oos"
-dataset_sources = ["smmt315/a-share-120d-temporal-symbol-holdout"]
-kernel_sources = ["luckfu/kronos-small-clean-epoch2-from-c03-e05"]
-machine_shape = "NvidiaTeslaT4"
-```
-
-输出 shard 命名为 `epoch2_best_<date>.csv.gz`；把它复制到同一个 `shards/` 目录（或在下载时直接合并），然后本地用 `panel.py` 做三方合并：
-
-```python
-import panel
-SHARDS = "artifacts/small_clean_oos_shards/small_clean_oos/shards"
-frames = {label: panel.load_shards(SHARDS, label)
-          for label in ("c2_best", "clean_best", "epoch2_best")}
-scores = {label: panel.panel(frame) for label, frame in frames.items()}
-# 三方比较要两两做，不要一次塞三个
-pairs = [("c2_best", "clean_best"), ("c2_best", "epoch2_best")]
-for base, cand in pairs:
-    panel.paired_deltas(frames[base], frames[cand], sorted(frames[base].asof_date.unique()))
-```
+**如果重跑/只补 epoch2**：只推理 epoch2 更省 GPU（单卡约 2.3h）；届时把 `evaluate_epoch2.py` 的 `worker` 限制为 rank 0、去掉 C2 label，复用已有 C2/C03 shard 做合并。但本次已经选了配对方案，不要再改。
 
 ### 6.2 验收标准
 
