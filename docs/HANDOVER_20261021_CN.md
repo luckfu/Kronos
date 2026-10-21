@@ -1,9 +1,11 @@
 # Small Clean Epoch2 接手文档（2026-10-21）
 
 **仓库**：<https://github.com/luckfu/Kronos>
-**撰写时 HEAD**：`d4df68e`（= `origin/master`；本文随后以 docs 提交追加）
+**交接时 HEAD**：`c71ce03`（= `origin/master`；本文档的最终状态更新随后以一个 docs 提交追加）
 **工作区**：干净
 **用途**：换机器 / 隔天继续时，10 分钟内恢复上下文，知道做了什么、结论是什么、下一步怎么跑。
+
+> **交接时运行状态（2026-10-21 11:19 UTC）**：`luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` 仍为 **RUNNING**。Kaggle 日志接口暂时为空（已知延迟），不代表失败；状态接口没有 `failureMessage`。代理已停止监控，后续由你回家处理。下载、判读与提交步骤见 §6.5。
 
 ---
 
@@ -25,17 +27,23 @@
 | 项目 | 值 |
 |---|---|
 | 分支 | `master` |
-| 基线 HEAD | `d4df68e` |
+| 交接时 HEAD | `c71ce03`（本文档最终更新随后追加） |
 | origin | `https://github.com/luckfu/Kronos.git` |
-| 本轮提交 | `976819f` feat(eval): direction/amplitude panel + probes + baseline report |
-|  | `d4df68e` fix(small-clean): relay chunk owner / run_id |
-| 未跟踪但应保留 | 无（`artifacts/`、`build/` 被 .gitignore 忽略，见 §7） |
+| 评测代码 | `976819f` panel + probes + baseline report |
+|  | `563272d` epoch2-vs-C2 OOS kernel |
+|  | `dff8b20` epoch2 panel report builder |
+| relay 修复 | `d4df68e` chunk owner / run_id |
+| 文档 | `8422d72` 初版接手文档；`5518c09` C05 命名消歧；`c71ce03` OOS 状态 |
+| 未跟踪但应保留 | 无（`artifacts/`、`build_epoch2/` 被 .gitignore 忽略，见 §7） |
 
 ```bash
-git log -3 --oneline
+git log -6 --oneline
+# c71ce03 docs: record submitted epoch2-vs-C2 OOS kernel
+# dff8b20 feat(eval): add epoch2-vs-C2 panel report builder
+# 563272d feat(eval): add epoch2-vs-C2 full OOS kernel
+# 5518c09 docs: disambiguate Clean C05 from TimesFM C05 in handover
+# 8422d72 docs: add Small Clean epoch2 handover for 2026-10-21
 # d4df68e fix(small-clean): record relay chunk owner and chunk run id
-# 976819f feat(eval): add direction/amplitude panel and epoch2 diagnostics
-# dcd396b docs: move small_clean OOS tail report to docs/reports
 ```
 
 ---
@@ -267,7 +275,7 @@ PY
 
 ### 6.1 已提交的做法：C2 + epoch2 配对
 
-**状态（2026-10-21 11:10 UTC）**：已提交 `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos`，当前 `RUNNING`，source SHA `1ef4094a…`。它复用同一 34 日冻结合同，一次产出 `c2_best_*` 和 `epoch2_best_*` 两组 shard。C2 会重新解码一次（多花一张 GPU），换来同 run 的配对一致性，避免跨 run 合并。
+**状态（2026-10-21 11:19 UTC）**：已提交 `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos`，当前 `RUNNING`，source SHA `1ef4094a…`。它复用同一 34 日冻结合同，一次产出 `c2_best_*` 和 `epoch2_best_*` 两组 shard。C2 会重新解码一次（占用另一张 GPU），换来同 run 的配对一致性，避免跨 run 合并。**代理已停止监控**，后续下载、判读和提交见 §6.5。
 
 实际代码：
 
@@ -300,6 +308,110 @@ PY
 3. 用真实日度组合回测：换手、滑点、涨跌停、停牌执行约束都要计入，而不是等权单笔平均。
 4. 在**新日期窗口**验证，不能再用这 34 天（已参与设计讨论）。
 
+### 6.5 回家后的执行清单
+
+**0）确认状态。** 代理交接时 kernel 仍为 `RUNNING`，日志接口为空是已知延迟：
+
+```bash
+kaggle kernels status luckfu/kronos-small-clean-epoch2-vs-c2-full-oos
+kaggle kernels logs   luckfu/kronos-small-clean-epoch2-vs-c2-full-oos
+```
+
+若报 `Permission 'kernels.get' was denied`，先重新登录或临时生成 token：
+
+```bash
+kaggle auth login
+# 或
+KAGGLE_API_TOKEN="$(kaggle auth print-access-token)" kaggle kernels status luckfu/kronos-small-clean-epoch2-vs-c2-full-oos
+```
+
+> 本会话的沙箱曾因 `~/.kaggle` 只读而用 `HOME=/tmp/khome` 复制凭据；家里正常登录即可，不需要这一步。
+
+**1）下载 output。** 完成后执行：
+
+```bash
+kaggle kernels output luckfu/kronos-small-clean-epoch2-vs-c2-full-oos -p artifacts -o
+```
+
+应得到：
+
+```text
+artifacts/small_clean_epoch2_oos/shards/c2_best_YYYY-MM-DD.csv.gz        # 34 个
+artifacts/small_clean_epoch2_oos/shards/epoch2_best_YYYY-MM-DD.csv.gz   # 34 个
+artifacts/small_clean_epoch2_oos/summary.json
+artifacts/small_clean_epoch2_oos/plan.json
+artifacts/small_clean_epoch2_oos/run.log
+```
+
+**2）核对完整性。** 68 个 shard；`summary.json` 应为 `status=complete`，且 `plan.json` 里 epoch2 的 SHA 是 `68feb21b…`：
+
+```bash
+ls artifacts/small_clean_epoch2_oos/shards | wc -l   # 期望 68
+python3 - <<'PY'
+import json
+base = "artifacts/small_clean_epoch2_oos"
+s = json.load(open(f"{base}/summary.json"))
+p = json.load(open(f"{base}/plan.json"))
+print("status:", s.get("status"))
+print("models:", {k: v["sha256"][:12] for k, v in p["models"].items()})
+for k in ("c2_best", "epoch2_best"):
+    print(k, s[k]["path_direction"], s[k]["path_return_mae"])
+print("paired:", s.get("paired_delta_epoch2_minus_c2"))
+PY
+```
+
+**3）生成三层报告。** 脚本默认读 `artifacts/small_clean_epoch2_oos/shards`，并自动复用旧 C03 shard：
+
+```bash
+python3 finetune/small_clean_oos/report_epoch2.py
+```
+
+输出 `finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json`。快速看关键量：
+
+```bash
+python3 - <<'PY'
+import json
+d = json.load(open("finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json"))
+for label in ("c2_best", "epoch2_best", "clean_best"):
+    s = d["scores"].get(label)
+    if not s:
+        continue
+    print(label,
+          "d10_dir=", round(s["official"]["horizons"]["10"]["direction"], 5),
+          "rank_ic=", round(s["L3_ranking"]["d10_rank_ic_daily_mean"], 5),
+          "amp_ic=", round(s["L2_amplitude"]["amplitude_rank_ic_daily_mean"], 5),
+          "net_pnl=", round(s["L1_money"]["net_pnl"], 5),
+          "top_decile_pnl=", round(s["L1_money"]["top_amplitude_decile"]["net_pnl"], 5))
+print("epoch2_minus_c2:", d["paired_deltas"]["epoch2_best_minus_c2_best"])
+PY
+```
+
+**4）按 §6.3 判定。** 重点看：
+
+- `D10 方向` 是否低于 C2 0.3pp 以上
+- `幅度 Rank IC` 是否低于 C2
+- `d10_rank_ic_daily_mean` 是否至少不退化
+- `net_pnl` / `top_amplitude_decile.net_pnl` 是否改善
+- `halt_gap` 子集是否仍为灾难
+
+若三项里有两项明显退化，直接关闭 epoch2 线；若改善，也先做新日期窗口的 forward test，不要直接上线。
+
+**5）归档并提交。**
+
+```bash
+git add docs/HANDOVER_20261021_CN.md README.md \
+        finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json
+git commit -m "docs: archive epoch2 vs C2 OOS results"
+git push origin master
+```
+
+建议同时更新：本文 §4.2/§4.3 增加 epoch2 行、§6.1 状态改为 COMPLETE、README 的“当前状态”表加一行。
+
+**如果 `summary.json` 是 `partial` 或 kernel 报错：**
+
+- `partial` 通常是 11h15m 预算在 34 天里没跑完。已完成的 `{label}_{date}.csv.gz` 可以复用：新开一个 resume kernel，把上一次 output 挂到 `/kaggle/input`，启动前复制到 `OUTPUT/shards/`，`worker` 会跳过已存在的日期。
+- `ERROR` 先看 `run.log` 和 `kaggle kernels logs`；常见原因是输入 SHA、checkpoint 段号、tokenizer 唯一性。不要在没有日志证据时重复提交。
+
 ---
 
 ## 7. 已知风险与口径陷阱
@@ -317,7 +429,7 @@ PY
 
 ## 8. 待决问题
 
-1. epoch2 是否值得继续？**建议先跑 OOS，再决定关闭或改配方。**
+1. epoch2 是否值得继续？**OOS 已提交并在运行（§6.1/§6.5）；回家后按 §6.3 判读，再决定关闭或改配方。**
 2. 下一阶段是“继续训模型”还是“做条件化交易”？**建议后者**：全样本方向 54.6% 已接近上限，而成本门槛/事前三层还有明确的工程空间。
 3. Clean C05（721→920）是否已完成？需要旧账号或网页确认；不要在未确认前重复提交。
 4. 是否要把 C2 换成 clean/epoch2？**当前证据不支持**；C2 在方向和幅度排序上仍占优。
@@ -331,10 +443,14 @@ PY
 
 | 内容 | 路径 |
 |---|---|
-| OOS 分片 | `artifacts/small_clean_oos_shards/small_clean_oos/shards/`（68 个，约 71MB） |
+| C2/C03 OOS 分片 | `artifacts/small_clean_oos_shards/small_clean_oos/shards/`（68 个，约 71MB） |
+| epoch2 OOS 输出（待下载） | `artifacts/small_clean_epoch2_oos/`（shards + summary/plan/run.log，见 §6.5） |
 | e05 权重 | `artifacts/kernels/e05/clean_small_runtime/outputs/models/small_0.1_clean_epoch2_from_c03_20261020/` |
-| 基线报告 | `finetune/reports/small_clean_direction_amplitude_baseline_20261021.json` |
+| C2/C03 基线报告 | `finetune/reports/small_clean_direction_amplitude_baseline_20261021.json` |
+| epoch2 报告（待生成） | `finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json` |
 | 三层评测 | `finetune/small_clean_oos/panel.py` |
+| epoch2 OOS 评测 | `finetune/small_clean_oos/evaluate_epoch2.py` |
+| epoch2 报告生成 | `finetune/small_clean_oos/report_epoch2.py` |
 | 接力入口 | `finetune/small_clean_epoch2_relay/launch.py` |
 | 打包/提交 | `finetune/small_clean_epoch2_relay/push_chunk.py` |
 
@@ -356,6 +472,7 @@ PY
 
 | Kernel | 作用 | 状态 |
 |---|---|---|
+| `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` | C2 + epoch2 配对 OOS，产出 shards/summary | **RUNNING（交接时）** |
 | `luckfu/kronos-small-clean-vs-c2-full-oos` | C2 vs C03 的 34 日 OOS，产出 shards | COMPLETE |
 | `luckfu/kronos-small-clean-epoch2-from-c03-e05` | epoch2 最后一个 chunk（499–520） | COMPLETE |
 | `luckfu/kronos-small-clean-epoch2-from-c03-e04` | epoch2 chunk 292–498 | COMPLETE |
@@ -364,4 +481,4 @@ PY
 
 ### 一句话交接
 
-> **不要再开 epoch3；先把 epoch2 的 34 日 OOS 补上。若方向/幅度没有超过 C2，就关闭 clean/epoch2 线，把精力转到“高预测幅度 + 事前过滤”的条件化交易验证。**
+> **epoch2 的 34 日 OOS 已经提交，交接时仍在 RUNNING；代码、评测器、报告生成器和这份接手文档都已提交到 `origin/master`。回家后只需按 §6.5 下载、跑 `report_epoch2.py`、按 §6.3 判读并归档。若方向/幅度没有超过 C2，就关闭 clean/epoch2 线，把精力转到“高预测幅度 + 事前过滤”的条件化交易验证。**
