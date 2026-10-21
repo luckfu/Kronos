@@ -105,3 +105,5 @@ swanlog/
 /webui/stock_name_cache.json
 /webui/stock_name_cache.json.lock
 finetune/kaggle_datasets/
+/.kaggle/
+finetune/small_clean_epoch2_relay/build/

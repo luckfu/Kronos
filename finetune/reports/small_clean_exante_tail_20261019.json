@@ -1,0 +1,173 @@
+{
+  "date": "2026-10-19",
+  "oos": {
+    "samples": 175428,
+    "dates": 34,
+    "symbols": 5173
+  },
+  "realized_top_decile": {
+    "definition": "per-date top 10% of max(|actual_return_d1..d10|)",
+    "n": 17559,
+    "models": {
+      "c2_best": {
+        "path_dir": 0.4182,
+        "d10_dir": 0.35458,
+        "mae": 0.20862,
+        "pnl_per_trade": -0.06635,
+        "d10_ic": 0.19964
+      },
+      "c03_best": {
+        "path_dir": 0.4164,
+        "d10_dir": 0.33994,
+        "mae": 0.21812,
+        "pnl_per_trade": -0.07329,
+        "d10_ic": 0.18309
+      },
+      "c04_best": {
+        "path_dir": 0.44928,
+        "d10_dir": 0.38214,
+        "mae": 0.21523,
+        "pnl_per_trade": -0.05567,
+        "d10_ic": 0.15718
+      }
+    }
+  },
+  "selectors": {
+    "vol20": {
+      "overlap_with_realized": 0.172,
+      "n": 17559,
+      "models": {
+        "c2_best": {
+          "path_dir": 0.56371,
+          "d10_dir": 0.58164,
+          "mae": 0.13054,
+          "pnl_per_trade": 0.00742,
+          "d10_ic": 0.10353
+        },
+        "c03_best": {
+          "path_dir": 0.55662,
+          "d10_dir": 0.57059,
+          "mae": 0.14865,
+          "pnl_per_trade": 0.00181,
+          "d10_ic": 0.09825
+        },
+        "c04_best": {
+          "path_dir": 0.56313,
+          "d10_dir": 0.57281,
+          "mae": 0.14942,
+          "pnl_per_trade": 0.00418,
+          "d10_ic": 0.07873
+        }
+      }
+    },
+    "atr20": {
+      "overlap_with_realized": 0.184,
+      "n": 17559,
+      "models": {
+        "c2_best": {
+          "path_dir": 0.55778,
+          "d10_dir": 0.57179,
+          "mae": 0.13705,
+          "pnl_per_trade": 0.00597,
+          "d10_ic": 0.07707
+        },
+        "c03_best": {
+          "path_dir": 0.54994,
+          "d10_dir": 0.56062,
+          "mae": 0.15528,
+          "pnl_per_trade": -0.00015,
+          "d10_ic": 0.08016
+        },
+        "c04_best": {
+          "path_dir": 0.55798,
+          "d10_dir": 0.56364,
+          "mae": 0.15597,
+          "pnl_per_trade": 0.00253,
+          "d10_ic": 0.06215
+        }
+      }
+    },
+    "range20": {
+      "overlap_with_realized": 0.174,
+      "n": 17559,
+      "models": {
+        "c2_best": {
+          "path_dir": 0.57219,
+          "d10_dir": 0.57811,
+          "mae": 0.12571,
+          "pnl_per_trade": 0.00868,
+          "d10_ic": 0.12273
+        },
+        "c03_best": {
+          "path_dir": 0.56329,
+          "d10_dir": 0.56319,
+          "mae": 0.1436,
+          "pnl_per_trade": 0.0021,
+          "d10_ic": 0.11992
+        },
+        "c04_best": {
+          "path_dir": 0.56875,
+          "d10_dir": 0.56575,
+          "mae": 0.1443,
+          "pnl_per_trade": 0.00444,
+          "d10_ic": 0.10263
+        }
+      }
+    },
+    "abs_mom20": {
+      "overlap_with_realized": 0.173,
+      "n": 17559,
+      "models": {
+        "c2_best": {
+          "path_dir": 0.58289,
+          "d10_dir": 0.5985,
+          "mae": 0.11771,
+          "pnl_per_trade": 0.01477,
+          "d10_ic": 0.15852
+        },
+        "c03_best": {
+          "path_dir": 0.57631,
+          "d10_dir": 0.585,
+          "mae": 0.12846,
+          "pnl_per_trade": 0.0085,
+          "d10_ic": 0.13529
+        },
+        "c04_best": {
+          "path_dir": 0.57552,
+          "d10_dir": 0.58022,
+          "mae": 0.12862,
+          "pnl_per_trade": 0.00952,
+          "d10_ic": 0.12063
+        }
+      }
+    },
+    "log_amt20": {
+      "overlap_with_realized": 0.095,
+      "n": 17559,
+      "models": {
+        "c2_best": {
+          "path_dir": 0.58174,
+          "d10_dir": 0.62743,
+          "mae": 0.10021,
+          "pnl_per_trade": 0.0163,
+          "d10_ic": 0.10738
+        },
+        "c03_best": {
+          "path_dir": 0.57689,
+          "d10_dir": 0.61712,
+          "mae": 0.11303,
+          "pnl_per_trade": 0.01248,
+          "d10_ic": 0.10239
+        },
+        "c04_best": {
+          "path_dir": 0.57632,
+          "d10_dir": 0.60875,
+          "mae": 0.11426,
+          "pnl_per_trade": 0.01245,
+          "d10_ic": 0.09282
+        }
+      }
+    }
+  },
+  "note": "selectors use only rows up to asof; pnl_per_trade = mean(sign(predicted_d10)*actual_d10) - 0.003, not annualized; per-date equal weighting; realized bucket is ex-post and not tradable"
+}

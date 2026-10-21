@@ -12,8 +12,10 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 
@@ -465,7 +467,7 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     swanlab = None
     run = None
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab"], check=True)
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab==0.10.1", "psutil", "pynvml"], check=True)
         import swanlab
         api_key = os.getenv("SWANLAB_API_KEY", "").strip()
         if api_key:
@@ -482,6 +484,51 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 "KRONOS_PREDICTOR_LEARNING_RATE", "KRONOS_CONDITION_LEARNING_RATE",
             )},
         )
+        latest_step = {"value": 0}
+        stop_gpu = threading.Event()
+        gpu_thread = None
+
+        def _gpu_monitor() -> None:
+            query = ["nvidia-smi", "--query-gpu=index,memory.used,memory.total,utilization.gpu",
+                     "--format=csv,noheader,nounits"]
+            while not stop_gpu.is_set():
+                try:
+                    output = subprocess.check_output(query, text=True, timeout=10)
+                    payload = {}
+                    for line in output.strip().splitlines():
+                        parts = [part.strip() for part in line.split(",")]
+                        if len(parts) < 4:
+                            continue
+                        index, used, total, util = parts[:4]
+                        used_gb = float(used) / 1024.0
+                        total_gb = float(total) / 1024.0
+                        payload[f"gpu/{index}_mem_used_gb"] = round(used_gb, 3)
+                        payload[f"gpu/{index}_mem_total_gb"] = round(total_gb, 3)
+                        payload[f"gpu/{index}_mem_used_pct"] = round(used_gb / max(total_gb, 1e-9) * 100.0, 2)
+                        payload[f"gpu/{index}_util_pct"] = float(util)
+                    if payload:
+                        if run is not None:
+                            run.log(payload, step=latest_step["value"])
+                        print(json.dumps({"phase": "gpu", **payload}), flush=True)
+                except Exception:
+                    pass
+                stop_gpu.wait(30)
+
+        if run is not None:
+            gpu_thread = threading.Thread(target=_gpu_monitor, daemon=True)
+            gpu_thread.start()
+        def _finish_on_term(signum, frame):
+            try:
+                if run is not None:
+                    swanlab.finish()
+            finally:
+                os._exit(143)
+
+        try:
+            signal.signal(signal.SIGTERM, _finish_on_term)
+        except Exception:
+            pass
+
         metrics_path = Path(env["KRONOS_SAVE_PATH"]) / env["KRONOS_PREDICTOR_SAVE_FOLDER"] / "metrics.jsonl"
         if metrics_path.is_file():
             for line in metrics_path.read_text().splitlines():
@@ -561,23 +608,35 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 segment, step, total_steps = int(segment), int(step), int(total_steps)
                 if run is not None:
                     chart_segment = swanlab_chart_segment(segment, env)
+                    step_value = swanlab_chart_step(segment, step, total_steps, env)
+                    latest_step["value"] = step_value
                     run.log({"train/loss": float(loss), "train/forecast_loss": float(forecast),
                              "train/history_loss": float(history), "train/learning_rate": float(lr),
                              "train/condition_learning_rate": float(condition_lr), "segment": chart_segment},
-                            step=swanlab_chart_step(segment, step, total_steps, env))
+                            step=step_value)
             match = VALIDATION_LOG_RE.search(line)
             if match and segment:
                 forecast, history, full = map(float, match.groups())
                 if run is not None:
                     chart_segment = swanlab_chart_segment(segment, env)
+                    step_value = swanlab_chart_step(segment, total_steps, total_steps, env)
+                    latest_step["value"] = step_value
                     run.log({"validation/forecast_loss": forecast, "validation/history_loss": history,
                              "validation/full_loss": full, "segment": chart_segment},
-                            step=swanlab_chart_step(segment, total_steps, total_steps, env))
+                            step=step_value)
     finally:
-        return_code = child.wait()
-        log_handle.close()
-    if swanlab is not None:
-        swanlab.finish()
+        stop_gpu.set()
+        if gpu_thread is not None:
+            gpu_thread.join(timeout=5)
+        try:
+            return_code = child.wait()
+        finally:
+            log_handle.close()
+            if swanlab is not None:
+                try:
+                    swanlab.finish()
+                except Exception:
+                    pass
     if return_code:
         raise subprocess.CalledProcessError(return_code, child.args)
 
