@@ -47,9 +47,11 @@ git log -3 --oneline
 | **C2 Best**（线上/基线） | `smmt315/kronos-small-0-1-stage2-cosine-refinement-c2`（Kaggle dataset）；ModelScope `luckfu/Kronos-small-0.1-Cosine-C2-Best` | 179 | 已发布 | SHA `4ee469d4…`；D10 方向 54.59%，Rank IC 0.1424 |
 | **Clean C03 Best** | `luckfu/kronos-small-clean-wc-dual-t4-c03` | 518 | COMPLETE | SHA `0837035e…`；selection loss 2.2806120 |
 | **C04 Best** | `user281434/kronos-small-clean-wc-dual-t4-c04` | 715（last 720） | COMPLETE | best SHA `81d73521…`；selection loss 2.2818275 |
-| **C05** | `user281434/kronos-small-clean-wc-dual-t4-c05` | 721→920 | **状态未知** | 当前 `luckfu` 凭据查询被拒，见 §7 |
+| **Clean C05**（第三轮幂律采样） | `user281434/kronos-small-clean-wc-dual-t4-c05` | 721→920 | **状态未知** | 当前 `luckfu` 凭据查询被拒，见 §7 |
 | **Epoch2 Best** | `luckfu/kronos-small-clean-epoch2-from-c03-e05` | 501（last 520） | COMPLETE | best SHA `68feb21b…`；selection loss **2.2743811** |
 | Epoch2 前序 chunk | `user281434/…e02`（291 段）、`luckfu/…e04`（498 段） |  | COMPLETE | e02 当前账号不可查；e04 可查 |
+
+> **命名冲突提醒**：本表里的 **Clean C05** 是 **Kronos-small clean 的第三轮幂律采样接力**（721→920 段），**不是** TimesFM 3.0 V11 的 C05。TimesFM 线也有自己的 C02–C08 编号；其中 C05 是 Step 111k 的旧 checkpoint，见 [`c06_training_and_gradient_anomaly_technical_report_cn.md`](../finetune/timesfm3_v11_trajectory/docs/c06_training_and_gradient_anomaly_technical_report_cn.md)。两条线的 C0x 编号互不相干。
 
 **Epoch2 训练合同**（来自 `experiment_manifest.json`）：
 
@@ -153,7 +155,7 @@ OOS 合同：**2026-08-03 至 2026-09-17，34 个 signal dates，175,428 个窗�
 ### 4.4 其他线
 
 - **C04 vs C03**：整体方向 -0.03pp（不显著），整体 MAE **变差 +0.13pp**（CI 不含 0）；但“已实现大幅波动 Top Decile”方向 **+3.65pp**（CI [+2.55, +4.76]）。幂律采样只改善尾部方向，没有改善整体校准。
-- **C05**：10-18 16:45 已确认真实启动（721/920 段），但当前 `luckfu` 凭据查询 `user281434` 的 kernel 返回 permission denied，**没有终态归档**。
+- **Clean C05**（Kronos-small 第三轮）：10-18 16:45 已确认真实启动（721/920 段），但当前 `luckfu` 凭据查询 `user281434` 的 kernel 返回 permission denied，**没有终态归档**。
 - **TimesFM 3.0 V11**：C07 best OOS 方向 **58.42%**、Pooled IC **0.1557**；C08 best **56.84%**、**0.1503**。同一 175,428 窗口上方向强于 Kronos C2，但日度 IC/ICIR、轨迹相关度和评测口径不同，不能直接横比。见 [C07/C08 复盘](../finetune/timesfm3_v11_trajectory/docs/c08_training_and_oos_technical_report_cn.md)。
 
 ---
@@ -347,7 +349,7 @@ for base, cand in pairs:
 1. **34 个 signal dates + 10 日重叠标签**：有效独立观测很少；block bootstrap CI 只能当参考，不是 sealed 盲测。不要把“CI 不含 0”当成生产级显著。
 2. **成本口径不统一**：panel 用 0.4%（round trip），ex-ante 尾部报告用 0.3%，TopK 回测另有一套。跨报告引用时必须注明。
 3. **指标口径不统一**：`path_direction`（10 horizon 平均）≠ `d10_direction`；`daily IC` ≠ `pooled IC`；19 日 ≠ 34 日；裁剪还原 ≠ 原始价格。不能跨报告直接比大小。
-4. **账号血缘断裂**：e02、C05 在 `user281434`；e04/e05 在 `luckfu`。本机 Kaggle CLI 在 10-21 15:37 切到 `luckfu` OAuth，所以 `user281434` 的 kernel 查询被拒。需要旧账号凭据或在 Kaggle 网页切换账号。
+4. **账号血缘断裂**：e02、Clean C05 在 `user281434`；e04/e05 在 `luckfu`。本机 Kaggle CLI 在 10-21 15:37 切到 `luckfu` OAuth，所以 `user281434` 的 kernel 查询被拒。需要旧账号凭据或在 Kaggle 网页切换账号。
 5. **凭据泄露风险（重要）**：`finetune/kaggle_small_0_1_stage2_wc_dual_t4_kernel/kaggle_small_0_1_stage2_wc_dual_t4.py` 中仍有字面量 `SWANLAB_API_KEY`，`push_chunk.py` 和 SwanLab 探针会读取它。该文件当前仍在 Git 跟踪中；如果仓库是公开的，应视为已泄露。建议尽快轮换 key，并改为 Kaggle Secrets / 环境变量；不要把该值写进文档或新提交。
 6. **`artifacts/` 与 `build/` 被 .gitignore 忽略**：新克隆没有 OOS 分片、e05 权重、chunk build manifest。e04 的 build manifest 是后来根据 published manifest 重建的；e05 的 `build/` 只在原机器上。需要时从 Kaggle output 重新下载，或从 `experiment_manifest.json` 重建。
 7. **e05 的 source bundle 不含 owner 修复**：`source_sha256=375ddf…` 与 e04 相同，`source_commit=620e8d6`。权重没问题；但下一次 chunk 若沿用旧 bundle，日志里的 owner 仍可能是旧值。要更新就重新打包并显式允许 source change。
@@ -359,7 +361,7 @@ for base, cand in pairs:
 
 1. epoch2 是否值得继续？**建议先跑 OOS，再决定关闭或改配方。**
 2. 下一阶段是“继续训模型”还是“做条件化交易”？**建议后者**：全样本方向 54.6% 已接近上限，而成本门槛/事前三层还有明确的工程空间。
-3. C05（721→920）是否已完成？需要旧账号或网页确认；不要在未确认前重复提交。
+3. Clean C05（721→920）是否已完成？需要旧账号或网页确认；不要在未确认前重复提交。
 4. 是否要把 C2 换成 clean/epoch2？**当前证据不支持**；C2 在方向和幅度排序上仍占优。
 5. 是否轮换 SwanLab key 并移除仓库中的字面量？**建议尽快做**，这是独立于模型进展的安全债。
 
@@ -400,7 +402,7 @@ for base, cand in pairs:
 | `luckfu/kronos-small-clean-epoch2-from-c03-e05` | epoch2 最后一个 chunk（499–520） | COMPLETE |
 | `luckfu/kronos-small-clean-epoch2-from-c03-e04` | epoch2 chunk 292–498 | COMPLETE |
 | `user281434/kronos-small-clean-epoch2-from-c03-e02` | epoch2 chunk 1–291 | COMPLETE，当前账号不可查 |
-| `user281434/kronos-small-clean-wc-dual-t4-c05` | C05 第三轮 721→920 | 启动已确认，终态未知 |
+| `user281434/kronos-small-clean-wc-dual-t4-c05` | Clean C05 第三轮 721→920 | 启动已确认，终态未知 |
 
 ### 一句话交接
 
