@@ -5,20 +5,23 @@
 **工作区**：干净
 **用途**：换机器 / 隔天继续时，10 分钟内恢复上下文，知道做了什么、结论是什么、下一步怎么跑。
 
-> **交接时运行状态（2026-10-21 11:19 UTC）**：`luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` 仍为 **RUNNING**。Kaggle 日志接口暂时为空（已知延迟），不代表失败；状态接口没有 `failureMessage`。代理已停止监控，后续由你回家处理。下载、判读与提交步骤见 §6.5。
+> **状态（2026-10-21 14:11 UTC 更新）**：`luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` 已 **COMPLETE**，output 已下载校验，三层报告已生成，**epoch2 线已按 §6.3 判定关闭**。结论见 §4.2b，执行流水见 §6.5.1。
 
 ---
 
-## 0. 先看这三件事
+## 0. 先看这四件事
 
 1. **epoch2 已训练完成 520/520 段，但验证 loss 已饱和。**
-   Best 在 **Segment 501**，weighted forecast selection loss **2.2743811**；C03 父 Best 为 2.2806120。改善只有 0.27%，而且第 242 段之后 259 段只再降 **5.7e-5**。不要直接开 epoch3，先做 OOS 判断。
+   Best 在 **Segment 501**，weighted forecast selection loss **2.2743811**；C03 父 Best 为 2.2806120。改善只有 0.27%，而且第 242 段之后 259 段只再降 **5.7e-5**。
 
-2. **冻结 34 日 OOS 上，C2 仍优于 clean C03。**
+2. **✅ epoch2 的 OOS 已跑完并判定：关闭这条线。**
+   同 run 配对、同 34 日合同：D10 方向 **53.82% vs C2 54.59%（-0.77pp，越 0.3pp 关闭门槛）**；幅度 Rank IC **0.2103 vs 0.2470（-0.0368，CI 不含 0）**；D10 日均 Rank IC **0.0843 vs 0.1424（-0.058，CI 不含 0）**。**验证集 -0.27% 的 loss 改善没有转化成 OOS 排序能力。** 详见 §4.2b。
+
+3. **冻结 34 日 OOS 上，C2 仍优于 clean C03。**
    D10 方向 **54.59% vs 53.86%**（Δ **-0.73pp**，block bootstrap CI 不含 0）；幅度 Rank IC **0.247 vs 0.235**（Δ **-0.0116**，CI 不含 0）。MAE、D10 Rank IC、净 PnL 的差异在 34 日口径下**不显著**。
 
-3. **真正能覆盖 0.4% 成本的是高预测幅度样本。**
-   C2 全样本扣费净 PnL **-0.35%/笔**；`|pred_d10| ≥ 3%` 才转正（**+0.12%**），≥5% 为 **+0.65%**，≥8% 为 **+1.38%**；预测幅度 Top Decile 为 **+1.47%**。下一步应做 **epoch2 OOS + 条件化交易验证**，而不是继续堆训练。
+4. **真正能覆盖 0.4% 成本的是高预测幅度样本。**
+   C2 全样本扣费净 PnL **-0.35%/笔**；`|pred_d10| ≥ 3%` 才转正（**+0.12%**），≥5% 为 **+0.65%**，≥8% 为 **+1.38%**；预测幅度 Top Decile 为 **+1.47%**。**既然三轮续训（C03/C04/epoch2）都没超过 C2，下一步应转向 §6.4 的条件化交易验证，而不是继续堆训练。**
 
 ---
 
@@ -27,7 +30,7 @@
 | 项目 | 值 |
 |---|---|
 | 分支 | `master` |
-| 交接时 HEAD | `c71ce03`（本文档最终更新随后追加） |
+| 交接时 HEAD | `c71ce03`；**OOS 收尾 HEAD `6cd6d44`**；本文档的 OOS 结果更新随后追加 |
 | origin | `https://github.com/luckfu/Kronos.git` |
 | 评测代码 | `976819f` panel + probes + baseline report |
 |  | `563272d` epoch2-vs-C2 OOS kernel |
@@ -37,7 +40,9 @@
 | 未跟踪但应保留 | 无（`artifacts/`、`build_epoch2/` 被 .gitignore 忽略，见 §7） |
 
 ```bash
-git log -6 --oneline
+git log -8 --oneline
+# (待追加) docs: archive epoch2 vs C2 OOS results
+# 6cd6d44 docs: finalize epoch2 OOS handover for home handoff
 # c71ce03 docs: record submitted epoch2-vs-C2 OOS kernel
 # dff8b20 feat(eval): add epoch2-vs-C2 panel report builder
 # 563272d feat(eval): add epoch2-vs-C2 full OOS kernel
@@ -131,6 +136,35 @@ OOS 合同：**2026-08-03 至 2026-09-17，34 个 signal dates，175,428 个窗�
 
 > **口径提醒**：旧报告里的 `path_direction` 是 10 个 horizon 的平均（-0.24pp，不显著）；新 panel 的 `direction` 是 D10 单点（-0.73pp，显著）。两者不矛盾，但不能混用。
 
+### 4.2b epoch2 Best（段 501）同窗配对 OOS：已完成，判定关闭
+
+同一次 kernel run 内配对解码，复用同一 34 日冻结合同、同一 175,428 窗口，`label_date_d*` 与 identity 逐项一致，因此是**同 run 配对**比较，不存在跨 run 合并误差。来源 kernel `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos`：`summary.json` 为 `complete`，68 个 shard 齐全（c2/epoch2 各 34 日），`plan.json` 中 epoch2 SHA 为 `68feb21b…`。
+
+| 指标 | C2 Best | epoch2 Best | Δ（epoch2−C2） | 34 日配对 bootstrap 95% CI |
+|---|---:|---:|---:|---|
+| D10 方向 | **54.59%** | 53.82% | **-0.77pp** | [-3.01, +2.97] |
+| 10-horizon 平均方向 | 54.02% | 53.80% | -0.22pp | [-2.34, +2.38] |
+| D10 MAE | **7.01%** | 7.70% | +0.70pp | [-0.02, +1.50] |
+| D10 RMSE | **10.78%** | 11.83% | +1.05pp | [-0.25, +2.35] |
+| D10 日均 Rank IC | **0.1424** | 0.0843 | **-0.0581** | **[-0.0939, -0.0025]（不含 0）** |
+| 幅度 Rank IC | **0.2470** | 0.2103 | **-0.0368** | **[-0.0467, -0.0227]（不含 0）** |
+| Top-Bottom 10% spread | **2.86%** | 1.00% | -1.86pp | [-3.20, +0.66] |
+| 全样本扣费净 PnL/笔 | -0.35% | -0.32% | +0.03pp | [-0.24, +0.54] |
+| 预测幅度 Top Decile 净 PnL | **+1.47%** | +0.58% | -0.89pp | 点估计 |
+| `halt_gap` 方向（235 样本） | 36.6% | **46.8%** | +10.2pp | 点估计 |
+
+**判定（按 §6.3 事先写死的规则）：关闭 epoch2 线。**
+
+- epoch2 的 D10 方向比 C2 低 **0.77pp**，已越过 **0.3pp** 关闭门槛；幅度 Rank IC 同时低于 C2，且 CI 不含 0。两条关闭条件**同时命中**，不需要再做 forward test。
+- 退化最重的是排序层：D10 日均 Rank IC 0.1424 → 0.0843（-0.058，CI 不含 0），Top-Bottom 10% spread 2.86% → 1.00%，正 IC 天数 29/34 → 26/34。§4.1 那 **-0.27%** 的验证集 loss 改善**没有转化到 OOS 排序能力**，反而伴随确定性退化。
+- 全样本净 PnL 名义 +0.03pp 改善，但 CI 跨 0，且两者都是负值（-0.35% / -0.32%），不构成收益改善证据。Top Decile 净 PnL 从 +1.47% 掉到 +0.58%，与幅度 IC 退化方向一致。
+- 唯一“改善”是 `halt_gap` 方向 36.6% → 46.8%，但该子集只有 235 样本（0.13%），方向仍远低于 50%，且两个模型的 `halt_gap` 扣费 PnL 依然是灾难（-7.95% / -6.74%）。不构成晋级理由。
+- **C2 继续作为唯一线上基线，当前无晋级候选。** epoch2 / epoch3 同合同续训线到此终止（见 §4.4 与 §8）。
+
+> **口径提醒**：① 本表 `direction` 是 D10 单点，`10-horizon 平均方向` 才是旧报告的 `path_direction`，不要混读。② 配对 bootstrap CI 明显宽于 §4.2 的独立 bootstrap，因为差值序列的逐日波动更大；方向差在本口径下**不显著**，但方向绝对值已越阈值、幅度与排序退化显著，判定成立。③ 成本 0.4% round trip，与 panel 一致。
+
+> 报告：[`finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json`](../finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json)
+
 ### 4.3 三层评测的交易含义
 
 **L1 成本门槛（C2）**：
@@ -163,6 +197,7 @@ OOS 合同：**2026-08-03 至 2026-09-17，34 个 signal dates，175,428 个窗�
 ### 4.4 其他线
 
 - **C04 vs C03**：整体方向 -0.03pp（不显著），整体 MAE **变差 +0.13pp**（CI 不含 0）；但“已实现大幅波动 Top Decile”方向 **+3.65pp**（CI [+2.55, +4.76]）。幂律采样只改善尾部方向，没有改善整体校准。
+- **epoch2 vs C2**：配对 OOS，D10 方向 **-0.77pp**、幅度 Rank IC **-0.0368**（CI 不含 0）、D10 Rank IC **-0.058**（CI 不含 0）。**线已关闭**，详见 §4.2b。
 - **Clean C05**（Kronos-small 第三轮）：10-18 16:45 已确认真实启动（721/920 段），但当前 `luckfu` 凭据查询 `user281434` 的 kernel 返回 permission denied，**没有终态归档**。
 - **TimesFM 3.0 V11**：C07 best OOS 方向 **58.42%**、Pooled IC **0.1557**；C08 best **56.84%**、**0.1503**。同一 175,428 窗口上方向强于 Kronos C2，但日度 IC/ICIR、轨迹相关度和评测口径不同，不能直接横比。见 [C07/C08 复盘](../finetune/timesfm3_v11_trajectory/docs/c08_training_and_oos_technical_report_cn.md)。
 
@@ -182,7 +217,18 @@ python3 -c "import sys, numpy, pandas; print(sys.version.split()[0], numpy.__ver
 # 本次验证：3.12.12 / 1.26.4 / 2.3.3
 ```
 
-`panel.py` / `baseline_panel.py` 只需要 **numpy + pandas**；训练/推理才需要 torch。SwanLab 探针需要 `swanlab`，可用 `python3 -m venv .venv-swanlab-api && .venv-swanlab-api/bin/pip install swanlab pandas numpy`。
+`panel.py` / `baseline_panel.py` / `report_epoch2.py` 需要 **numpy + pandas + scipy**；训练/推理才需要 torch。SwanLab 探针需要 `swanlab`，可用 `python3 -m venv .venv-swanlab-api && .venv-swanlab-api/bin/pip install swanlab pandas numpy scipy`。
+
+> **2026-10-21 实测坑**：`pandas.Series.corr(method="spearman")` 在 pandas 2.3.x 内部 `from scipy.stats import spearmanr`，**没有 scipy 会直接 `ModuleNotFoundError`**，而报错位置在 `panel.py:266` 的 `official_stats`，看起来像代码 bug。本次在 homebrew `python3`（无 scipy）上踩到，改用带 scipy 的解释器（如 `/opt/miniconda3/bin/python3`）即可。若要在 homebrew python 上跑：`python3 -m pip install scipy`。
+
+> **Kaggle CLI + 系统代理的坑**：macOS 开了 Clash/Verge 之类的 7890 端口代理时，`requests` 会读取系统代理并对 `api.kaggle.com` 做 TLS 拦截式转发，多次报 `SSLError: EOF occurred in violation of protocol` / `record layer failure`，而 `curl` 与直连都正常。绕过办法（本次使用）：
+>
+> ```bash
+> export NO_PROXY="api.kaggle.com,kaggle.com,www.kaggle.com,storage.googleapis.com"
+> export no_proxy="$NO_PROXY"
+> ```
+>
+> 不要为此关闭证书校验，也不要 `verify=False`。
 
 ### 5.2 拿 OOS 分片（仓库里没有，`artifacts/` 被忽略）
 
@@ -214,7 +260,7 @@ sanity: c2 path_direction=0.540222 mae=0.051143 rmse=0.081114
   amplitude_rank_ic  delta=-0.01164  95%CI [-0.01848,-0.00522]*
 ```
 
-`git status` 应该没有 diff（报告已跟踪，重算后内容相同）。
+`git status` 应该在**数值上**没有 diff。实践提醒：换 numpy/BLAS 构建后，报告里的浮点末位可能变化（本次在 homebrew numpy 2.3.5 上重算，只有 `x.xxxxxx…8044` vs `…8348` 这类 1e-16 级差异，93 行全为纯浮点末位，不影响任何结论）。**只看数值差异，不要把这类末位波动当成回归**；确认无实质差异后 `git checkout -- finetune/reports/small_clean_direction_amplitude_baseline_20261021.json` 还原即可，避免噪声提交。
 
 ### 5.4 跑探针
 
@@ -271,11 +317,15 @@ PY
 
 ---
 
-## 6. 下一步：epoch2 OOS（最高优先级）
+## 6. epoch2 OOS（已执行完毕，结论：关闭）
 
-### 6.1 已提交的做法：C2 + epoch2 配对
+### 6.1 C2 + epoch2 配对：**COMPLETE（2026-10-21 14:11 UTC 收尾）**
 
-**状态（2026-10-21 11:19 UTC）**：已提交 `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos`，当前 `RUNNING`，source SHA `1ef4094a…`。它复用同一 34 日冻结合同，一次产出 `c2_best_*` 和 `epoch2_best_*` 两组 shard。C2 会重新解码一次（占用另一张 GPU），换来同 run 的配对一致性，避免跨 run 合并。**代理已停止监控**，后续下载、判读和提交见 §6.5。
+**状态**：`luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` 已 **COMPLETE**，source SHA `1ef4094a…`。复用同一 34 日冻结合同，一次产出 `c2_best_*` 和 `epoch2_best_*` 两组 shard，C2 在同 run 内重新解码，换来配对一致性。output 已下载，68 个 shard 齐全，`summary.json` 为 `complete`。
+
+验收（§6.2）逐条通过：两模型各 175,428 窗口 × 34 dates；identity 与 date 集合完全一致；`inputs_verified` 含 epoch2 SHA `68feb21b…`；`plan.json` 的 epoch2 SHA 亦为 `68feb21b…`。三层报告已生成，含 L1/L2/L3 + `halt_gap` + 配对 bootstrap CI。
+
+**结论：按 §6.3 判定规则关闭 epoch2 线**（D10 方向 -0.77pp 越 0.3pp 门槛、幅度 Rank IC -0.0368 CI 不含 0）。完整数据表与判读见 **§4.2b**；执行流水见 §6.5。
 
 实际代码：
 
@@ -285,19 +335,30 @@ PY
 
 **如果重跑/只补 epoch2**：只推理 epoch2 更省 GPU（单卡约 2.3h）；届时把 `evaluate_epoch2.py` 的 `worker` 限制为 rank 0、去掉 C2 label，复用已有 C2/C03 shard 做合并。但本次已经选了配对方案，不要再改。
 
-### 6.2 验收标准
+### 6.2 验收标准（本次已全部通过 ✅）
 
-- 每个模型 **175,428** 个窗口 × **34** 个 dates
-- identity 集合与 C2/C03 完全一致；`label_date_d*` 逐项一致
-- `inputs_verified` 日志包含 epoch2 的 SHA
-- `summary.json` 为 `complete`，不是 `partial`
-- 三方 `panel()` 与 `paired_deltas()` 输出齐全，包含 L1/L2/L3 + halt_gap
+- [x] 每个模型 **175,428** 个窗口 × **34** 个 dates
+- [x] identity 集合与 C2/C03 完全一致；`label_date_d*` 逐项一致
+- [x] `inputs_verified` 日志包含 epoch2 的 SHA `68feb21b…`
+- [x] `summary.json` 为 `complete`，不是 `partial`
+- [x] 三方 `panel()` 与 `paired_deltas()` 输出齐全，包含 L1/L2/L3 + halt_gap
 
 ### 6.3 判定规则（建议先写死再跑）
 
 - 若 epoch2 的 **D10 方向 < C2 - 0.3pp**，或 **幅度 Rank IC < C2**：**关闭 epoch2 线**，不再追加训练。
 - 若方向/幅度至少一项显著优于 C2：仍不直接上线；先在**未参与本轮设计的日期窗口**做一次 forward test。
 - 无论结果如何，**C2 继续作为线上基线**；当前没有晋级候选。
+
+**实际判定结果（2026-10-21 执行）**：
+
+| 检查项 | 实测 | 是否触发关闭 |
+|---|---|---|
+| D10 方向 < C2 − 0.3pp | 53.82% vs 54.59%，**-0.77pp** | **是** |
+| 幅度 Rank IC < C2 | 0.2103 vs 0.2470，**-0.0368**（CI 不含 0） | **是** |
+
+→ **两条关闭条件同时命中，epoch2 线关闭。** 不进入 forward test，不上线，C2 保持唯一基线。详见 §4.2b。
+
+> 判定前置提醒（下次仍适用）：本规则必须在看到 OOS 结果**之前**写死，否则容易事后挑选口径。本次是在 kernel 提交前就写入 §6.3 的。
 
 ### 6.4 之后：条件化交易验证
 
@@ -310,7 +371,7 @@ PY
 
 ### 6.5 回家后的执行清单
 
-**0）确认状态。** 代理交接时 kernel 仍为 `RUNNING`，日志接口为空是已知延迟：
+**0）确认状态。**（原始交接时 kernel 仍为 `RUNNING`，日志接口为空是已知延迟。本次已执行完毕，结果见 §6.5.1；以下命令保留作参考/复跑用）
 
 ```bash
 kaggle kernels status luckfu/kronos-small-clean-epoch2-vs-c2-full-oos
@@ -412,6 +473,24 @@ git push origin master
 - `partial` 通常是 11h15m 预算在 34 天里没跑完。已完成的 `{label}_{date}.csv.gz` 可以复用：新开一个 resume kernel，把上一次 output 挂到 `/kaggle/input`，启动前复制到 `OUTPUT/shards/`，`worker` 会跳过已存在的日期。
 - `ERROR` 先看 `run.log` 和 `kaggle kernels logs`；常见原因是输入 SHA、checkpoint 段号、tokenizer 唯一性。不要在没有日志证据时重复提交。
 
+#### 6.5.1 本次执行流水（2026-10-21 22:00–22:20 +08）
+
+上述 5 步已全部跑完，实际结果：
+
+| 步骤 | 结果 |
+|---|---|
+| 0）状态 | `KernelWorkerStatus.COMPLETE`；日志 1,017 条，无 Traceback |
+| 1）下载 | 68 shard + `summary.json` + `plan.json` + `run.log`；另附 `swanlog/` 与 source bundle |
+| 2）完整性 | `status=complete`；c2/epoch2 各 34 日 × 175,428 行；epoch2 SHA `68feb21bb0d2…` ✅ |
+| 3）报告 | 生成 `finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json`（三方 + 配对 CI） |
+| 4）判定 | **关闭 epoch2 线**（见 §4.2b / §6.3） |
+| 5）归档 | 本文 + README + 报告 JSON 已提交 |
+
+本次踩到并已在上文 §5.1 记录的两个环境坑：**系统代理导致 Kaggle CLI SSL 失败**（用 `NO_PROXY` 绕过）、**缺 scipy 导致 spearman 报错**（换带 scipy 的解释器）。
+
+C03 归档分片不在仓库里，需按 §5.2 单独下载 `luckfu/kronos-small-clean-vs-c2-full-oos`，`report_epoch2.py` 会自动复用做三方对比。
+
+
 ---
 
 ## 7. 已知风险与口径陷阱
@@ -423,17 +502,20 @@ git push origin master
 5. **凭据泄露风险（重要）**：`finetune/kaggle_small_0_1_stage2_wc_dual_t4_kernel/kaggle_small_0_1_stage2_wc_dual_t4.py` 中仍有字面量 `SWANLAB_API_KEY`，`push_chunk.py` 和 SwanLab 探针会读取它。该文件当前仍在 Git 跟踪中；如果仓库是公开的，应视为已泄露。建议尽快轮换 key，并改为 Kaggle Secrets / 环境变量；不要把该值写进文档或新提交。
 6. **`artifacts/` 与 `build/` 被 .gitignore 忽略**：新克隆没有 OOS 分片、e05 权重、chunk build manifest。e04 的 build manifest 是后来根据 published manifest 重建的；e05 的 `build/` 只在原机器上。需要时从 Kaggle output 重新下载，或从 `experiment_manifest.json` 重建。
 7. **e05 的 source bundle 不含 owner 修复**：`source_sha256=375ddf…` 与 e04 相同，`source_commit=620e8d6`。权重没问题；但下一次 chunk 若沿用旧 bundle，日志里的 owner 仍可能是旧值。要更新就重新打包并显式允许 source change。
-8. **README/技术总报告未回填**：README 仍写“当前状态 2026-09”，技术总报告停在 C03/C04，没有 epoch2 和三层评测。本次只加了接手文档链接，没有重写正文。
+8. **技术总报告未回填**：~~README 仍写“当前状态 2026-09”~~ → **已更新为 2026-10，并加入“续训支线（已关闭）”一行与 epoch2 结论**；但 [`finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md`](../finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md) 仍停在 C03/C04，没有 epoch2 和三层评测正文。需要有人做一次系统性回填。
+9. **选型指标可能与 OOS 脱钩**：epoch2 用 weighted forecast loss 选 best（seg 501，-0.27% 改善），OOS 排序 IC 反而退 0.058。三轮续训（C03/C04/epoch2）都是这个模式。下次训练前应先确认“验证 loss 改善 → OOS 排序改善”这条链路是否还成立，否则选型信号本身是噪声。
 
 ---
 
 ## 8. 待决问题
 
-1. epoch2 是否值得继续？**OOS 已提交并在运行（§6.1/§6.5）；回家后按 §6.3 判读，再决定关闭或改配方。**
-2. 下一阶段是“继续训模型”还是“做条件化交易”？**建议后者**：全样本方向 54.6% 已接近上限，而成本门槛/事前三层还有明确的工程空间。
+1. epoch2 是否值得继续？**✅ 已决：不继续，线已关闭。** OOS 完成，D10 方向 -0.77pp 越阈值、幅度 Rank IC -0.0368（CI 不含 0），按 §6.3 事先规则关闭（§4.2b）。**不要再提交同合同的 epoch3。**
+2. 下一阶段是“继续训模型”还是“做条件化交易”？**建议后者（现在更明确）**：三轮 clean 续训（C03/C04/epoch2）在 OOS 上都没有超过 C2，方向稳定在 53.8%–54.0% 区间，已到该合同的噪声地板；继续同配方训练的期望收益接近零。真正有空间的是 §6.4 的成本门槛 + 事前过滤 + 组合级回测。
 3. Clean C05（721→920）是否已完成？需要旧账号或网页确认；不要在未确认前重复提交。
-4. 是否要把 C2 换成 clean/epoch2？**当前证据不支持**；C2 在方向和幅度排序上仍占优。
+4. 是否要把 C2 换成 clean/epoch2？**已决：不换。** 两个候选在方向和幅度排序上均劣于 C2（§4.2、§4.2b）。
 5. 是否轮换 SwanLab key 并移除仓库中的字面量？**建议尽快做**，这是独立于模型进展的安全债。
+6. **新问题**：既然三轮续训都退化，是否该回头质疑“验证集 loss 作为选型指标”的有效性？本次 epoch2 的 best 段（501）loss 改善 -0.27%，OOS 排序 IC 却退 0.058。建议下一轮若要训，**直接用 OOS 排序 IC 类指标做选型**，而不是 weighted forecast loss。
+
 
 ---
 
@@ -472,7 +554,7 @@ git push origin master
 
 | Kernel | 作用 | 状态 |
 |---|---|---|
-| `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` | C2 + epoch2 配对 OOS，产出 shards/summary | **RUNNING（交接时）** |
+| `luckfu/kronos-small-clean-epoch2-vs-c2-full-oos` | C2 + epoch2 配对 OOS，产出 shards/summary | **COMPLETE（2026-10-21 14:11 UTC），output 已下载校验** |
 | `luckfu/kronos-small-clean-vs-c2-full-oos` | C2 vs C03 的 34 日 OOS，产出 shards | COMPLETE |
 | `luckfu/kronos-small-clean-epoch2-from-c03-e05` | epoch2 最后一个 chunk（499–520） | COMPLETE |
 | `luckfu/kronos-small-clean-epoch2-from-c03-e04` | epoch2 chunk 292–498 | COMPLETE |
@@ -481,4 +563,4 @@ git push origin master
 
 ### 一句话交接
 
-> **epoch2 的 34 日 OOS 已经提交，交接时仍在 RUNNING；代码、评测器、报告生成器和这份接手文档都已提交到 `origin/master`。回家后只需按 §6.5 下载、跑 `report_epoch2.py`、按 §6.3 判读并归档。若方向/幅度没有超过 C2，就关闭 clean/epoch2 线，把精力转到“高预测幅度 + 事前过滤”的条件化交易验证。**
+> **epoch2 的 34 日配对 OOS 已跑完并归档：D10 方向 53.82% vs C2 54.59%（-0.77pp，越 0.3pp 关闭门槛），幅度 Rank IC 0.2103 vs 0.2470（-0.0368，CI 不含 0），D10 日均 Rank IC 0.0843 vs 0.1424（-0.058，CI 不含 0）。按事先写死的 §6.3 规则，epoch2 线已关闭，C2 仍是唯一线上基线，不再追加同合同训练。下一阶段的重点是“高预测幅度（≥3%/5%）+ 事前停牌与流动性过滤 + 组合级回测”的条件化交易验证（§6.4），而不是继续堆训练。**

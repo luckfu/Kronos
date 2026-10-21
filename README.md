@@ -12,12 +12,13 @@
 
 > 本项目用于研究和回测，不构成投资建议。模型预测、回测收益和排名都可能失效，不能直接替代交易系统或风险管理。
 
-## 当前状态（2026-09）
+## 当前状态（2026-10）
 
 | 层级 | 版本 | 说明 |
 |------|------|------|
 | 研究 alpha | **Cosine C2 Best @ Segment 179** | Kronos-small `small_0.1` 经 Bootstrap → Main → Extend → Warmup-Constant → Cosine 退火后的最佳点；主决策指标为 **D10 横截面 Rank IC** |
 | 研究旁路 | Stage 3 / P0a–P1 | Path Alignment、CE-only 对照、rank 辅助等；多数路径未超过 C2 Best，C2 仍是默认 alpha 检查点 |
+| 续训支线（已关闭） | clean C03 / C04 / **epoch2** | 三轮续训在冻结 34 日 OOS 上均未超过 C2：epoch2 配对 D10 方向 **-0.77pp**、幅度 Rank IC **-0.0368**（CI 不含 0）、D10 Rank IC **-0.058**（CI 不含 0）。**epoch2 线已按预设规则关闭，不再追加同合同训练**；详见 [接手文档 §4.2b](docs/HANDOVER_20261021_CN.md) |
 | 线上推理 | **Beta V1.2 `Best@871`** | Web UI + Modal Serverless；约 102.4M 参数，独立 App，不覆盖旧 V6 |
 | 历史发布 | Beta v2.1 Best@475 | [ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)；研究发布包，不含 Last / 优化器 |
 
@@ -27,7 +28,7 @@
 
 跨机器交接入口：[`finetune/CROSS_MACHINE_HANDOFF_CN.md`](finetune/CROSS_MACHINE_HANDOFF_CN.md)。Beta 推理契约（连续市值百分位，不接受离散 `size_bucket`）：[`finetune/MODEL_USAGE_V1_BETA_CN.md`](finetune/MODEL_USAGE_V1_BETA_CN.md)。
 
-2026-10-21 的 Small Clean Epoch2 / 三层评测接手文档：[`docs/HANDOVER_20261021_CN.md`](docs/HANDOVER_20261021_CN.md)。
+2026-10-21 的 Small Clean Epoch2 / 三层评测接手文档：[`docs/HANDOVER_20261021_CN.md`](docs/HANDOVER_20261021_CN.md)。**结论：epoch2 的冻结 34 日 OOS 已完成，方向与幅度/排序均退化，线已关闭；C2 仍是唯一基线。** 报告见 [`finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json`](finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json)。
 
 ## 线上推理部署（Beta V1.2）
 
