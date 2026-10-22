@@ -30,6 +30,8 @@
 
 2026-10-21 的 Small Clean Epoch2 / 三层评测接手文档：[`docs/HANDOVER_20261021_CN.md`](docs/HANDOVER_20261021_CN.md)。**结论：epoch2 的冻结 34 日 OOS 已完成，方向与幅度/排序均退化，线已关闭；C2 仍是唯一基线。** 报告见 [`finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json`](finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json)。
 
+2026-10-22 的下一步方案：[`docs/NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md`](docs/NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md)。**不再开新训练；构造 2026-09-18 → 09-30 的密封窗口，按事先写死的规则一次性判定 C2 / bigbatch e03b / SweetSpot native / C07 SWA。**
+
 ## 线上推理部署（Beta V1.2）
 
 - 模型：A-share Full-Market Beta V1.2（约 102.4M 参数）
