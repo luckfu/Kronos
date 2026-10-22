@@ -15,7 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-OWNER = "luckfu"
+OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "luckfu")
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
 INITIAL_PARENT = "luckfu/kronos-small-clean-epoch2-from-c03-e05"
 
@@ -157,8 +157,8 @@ namespace["main"]()
         return
     cli = ["kaggle"]
     configuration = subprocess.check_output(cli + ["config", "view"], text=True)
-    if "- username: luckfu" not in configuration:
-        raise RuntimeError("Authenticated Kaggle owner is not luckfu")
+    if f"- username: {OWNER}" not in configuration:
+        raise RuntimeError(f"Authenticated Kaggle owner is not {OWNER}")
     status = subprocess.run(cli + ["kernels", "status", metadata["id"]],
                             capture_output=True, text=True)
     status_text = status.stdout + status.stderr
