@@ -18,7 +18,7 @@ RUN_ID = "smce2_big"
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
 PARENT = "luckfu/kronos-small-clean-epoch2-from-c03-e05"
 DATA_SHA = "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
-BEST_SHA = "0837035e4cde286240b196cb2c7fda1dc671cacc2b501b00ab7f0ec38d887c9f"
+BEST_SHA = "68feb21bb0d2d6b385e69e95765536b25f2cad07a8efb011cd1bcdea878fda5d"
 TOKENIZER_SHA = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
 COVERAGE_SEED = "20261020"
 TOTAL_SEGMENTS = 520
@@ -207,6 +207,11 @@ def main():
     else:
         state = find_one(input_root, "**/last_state.pt")
         continuation = state.parent.parent
+        # Keep the original starting-parent SHA across chunks.  The module
+        # constant is only a fallback for chunk 1, where it is recomputed from
+        # the mounted parent weights.
+        parent_manifest = json.loads((continuation / "experiment_manifest.json").read_text())
+        recipe["parent_best_sha256"] = parent_manifest["recipe"]["parent_best_sha256"]
         boundary = validate_output(continuation, torch, recipe, parent=True)
         if boundary == TOTAL_SEGMENTS:
             raise RuntimeError("Parent has already completed the coverage plan")
