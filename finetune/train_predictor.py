@@ -76,6 +76,7 @@ from temporal_rank_ic_selection import (
     build_rank_ic_best_metric,
     checkpoint_should_update,
     coordinate_rank_ic_prepare,
+    coordinate_rank_ic_score,
     evaluate_temporal_d10_rank_ic,
     format_prepare_error,
     pack_rank_ic_broadcast,
@@ -83,6 +84,7 @@ from temporal_rank_ic_selection import (
     prepare_timeout_seconds,
     rank_ic_prepare_run_id,
     reconcile_resumed_rank_ic_threshold,
+    score_timeout_seconds,
     temporal_rank_ic_due,
     temporal_rank_ic_enabled,
     unpack_rank_ic_broadcast,
@@ -4092,6 +4094,8 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 )
             else:
                 due = False
+            # Short due-flag sync only. The long forward must not sit behind
+            # another broadcast: that is what killed e01c at Seg1 (~600s).
             if not broadcast_rank0_flag(due, device, rank):
                 if rank == 0:
                     print(
@@ -4101,32 +4105,40 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         flush=True,
                     )
                 return
-            measured = None
-            summary = None
-            if rank == 0:
-                try:
-                    print(
-                        "Running temporal D10 Rank IC at "
-                        f"Segment {next_segment}: "
-                        f"{len(rank_ic_runtime['rows'])} windows, "
-                        f"{rank_ic_interval}-segment cadence.",
-                        flush=True,
+
+            def _run_rank0_score():
+                if rank_ic_runtime is None or not rank_ic_runtime.get("rows"):
+                    raise RuntimeError(
+                        "Temporal Rank IC rows are not loaded on rank 0"
                     )
-                    summary = evaluate_temporal_d10_rank_ic(
-                        core_model, tokenizer, rank_ic_runtime, device,
-                    )
-                    measured = summary["daily_rank_ic_mean"]
-                except Exception:
-                    import traceback
-                    traceback.print_exc()
-                    measured = None
-                    summary = None
-            measured = broadcast_rank0_float(measured, device, rank)
-            if measured is None:
-                raise RuntimeError(
-                    "Temporal Rank IC failed. Refusing to keep a "
-                    "val-loss best_model for this segment."
+                print(
+                    "Running temporal D10 Rank IC at "
+                    f"Segment {next_segment}: "
+                    f"{len(rank_ic_runtime['rows'])} windows, "
+                    f"{rank_ic_interval}-segment cadence.",
+                    flush=True,
                 )
+                return evaluate_temporal_d10_rank_ic(
+                    core_model, tokenizer, rank_ic_runtime, device,
+                )
+
+            # Rank 0 scores; peers poll a status file outside NCCL. The
+            # measured float is published in that file — no broadcast during
+            # the multi-hour forward.
+            summary = coordinate_rank_ic_score(
+                rank=rank,
+                world_size=world_size,
+                directory=save_dir,
+                run_id=f"{rank_ic_prepare_run_id()}-seg{next_segment}",
+                segment=next_segment,
+                score_fn=_run_rank0_score if rank == 0 else (
+                    lambda: (_ for _ in ()).throw(
+                        AssertionError("non-zero rank must not score")
+                    )
+                ),
+                timeout=score_timeout_seconds(),
+            )
+            measured = float(summary["daily_rank_ic_mean"])
             rank_ic_evaluated = True
             updated = checkpoint_should_update(
                 protocol_enabled=True,

@@ -11,7 +11,9 @@ Panel bytes: ``finetune/build_temporal_rank_ic_panel.py`` (not stored in git).
 Optional precomputed windows live beside that panel as
 ``temporal_rank_ic_rows.pkl``. Dual-GPU startup hashes the manifest on every
 rank, then only rank 0 materializes rows. Other ranks wait on a status file
-and do not enter NCCL until that build has finished.
+and do not enter NCCL until that build has finished. Mid-train scoring is the
+same shape: only rank 0 runs the long temporal forward; peers poll a status
+file and must not enter ``broadcast`` until the score finishes.
 """
 
 from __future__ import annotations
@@ -55,6 +57,10 @@ ROWS_SHA_KEY = "rows_sha256"
 PANEL_DATASET_ENV = "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET"
 ROWS_PATH_ENV = "KRONOS_TEMPORAL_RANK_IC_ROWS"
 PREPARE_TIMEOUT_SECONDS = 45 * 60
+# Status-file wait while rank 0 scores ~300k 16-path windows on one T4.
+# Empirically ~13h at batch=4; keep headroom. Override with
+# KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS.
+SCORE_TIMEOUT_SECONDS = 16 * 60 * 60
 _PANEL_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 # Protocol §2.3. Inclusive signal-date ranges. These windows are acceptance
@@ -1127,6 +1133,32 @@ def prepare_timeout_seconds() -> float:
     return value
 
 
+def score_timeout_seconds() -> float:
+    """How long peers may poll while rank 0 scores ~300k windows.
+
+    Default is 16 hours so a full single-GPU pass over ~300k windows
+    cannot trip the peer wait. Override with
+    ``KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS``.
+    """
+    raw = os.environ.get(
+        "KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS", ""
+    ).strip()
+    if not raw:
+        return float(SCORE_TIMEOUT_SECONDS)
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise TemporalRankICSelectionError(
+            "KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS must be a number "
+            "of seconds"
+        ) from exc
+    if value < 60:
+        raise TemporalRankICSelectionError(
+            "KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS must be at least 60"
+        )
+    return value
+
+
 def _safe_run_id(run_id) -> str:
     text = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(run_id or "local"))
     return text[:96] or "local"
@@ -1156,8 +1188,10 @@ def wait_for_status_file(
     heartbeat_seconds=30.0,
     sleep=time.sleep,
     clock=time.monotonic,
+    phase="prepare",
 ):
     """Block in Python until ``path`` is ready. This is not a collective."""
+    label = str(phase or "prepare")
     deadline = clock() + float(timeout)
     started = clock()
     next_heartbeat = started
@@ -1172,14 +1206,14 @@ def wait_for_status_file(
         current = clock()
         if current >= deadline:
             raise TemporalRankICSelectionError(
-                "Timed out waiting for Temporal Rank IC prepare "
+                f"Timed out waiting for Temporal Rank IC {label} "
                 f"({role}) after {float(timeout):.0f}s at {path}. "
-                "This wait does not enter NCCL or all_reduce. "
+                "This wait does not enter NCCL, broadcast, or all_reduce. "
                 "Refusing to select best_model by val loss."
             )
         if current >= next_heartbeat:
             print(
-                "Temporal Rank IC prepare: "
+                f"Temporal Rank IC {label}: "
                 f"{role} elapsed={current - started:.0f}s "
                 f"timeout={float(timeout):.0f}s collective=none "
                 f"path={Path(path).name}",
@@ -1457,6 +1491,158 @@ def evaluate_temporal_d10_rank_ic(model, tokenizer, runtime, device):
         "selection_protocol": PROTOCOL_ID,
     })
     return summary
+
+
+
+def _raise_score_failure(detail, exc=None):
+    text = str(detail or "").strip() or "unknown score failure"
+    error = RuntimeError(
+        "Temporal Rank IC failed: "
+        f"{text}. Refusing to keep a val-loss best_model for this segment."
+    )
+    if exc is None:
+        raise error
+    raise error from exc
+
+
+def coordinate_rank_ic_score(
+    *,
+    rank,
+    world_size,
+    directory,
+    run_id,
+    segment,
+    score_fn,
+    timeout=SCORE_TIMEOUT_SECONDS,
+    poll_seconds=2.0,
+    heartbeat_seconds=30.0,
+):
+    """Rank 0 runs the long temporal forward; peers wait outside NCCL.
+
+    Dual-GPU e01c died because rank 1 entered ``broadcast`` for the score
+    float while rank 0 was still scanning ~300k windows under the default
+    600s watchdog. Peers must poll a status file until rank 0 publishes the
+    measured Rank IC (or an error). No collective runs during the forward.
+    The metric is unchanged: rank 0 still owns the 16-path median path seed.
+    """
+    rank = int(rank)
+    world_size = int(world_size)
+    segment = int(segment)
+    if world_size <= 1:
+        try:
+            summary = score_fn()
+        except Exception as exc:
+            text = format_prepare_error(exc)
+            print(
+                f"Temporal Rank IC score failed: {text}",
+                flush=True,
+            )
+            import traceback
+            traceback.print_exc()
+            _raise_score_failure(text, exc)
+        if not isinstance(summary, dict) or "daily_rank_ic_mean" not in summary:
+            _raise_score_failure("score_fn returned no daily_rank_ic_mean")
+        measured = unpack_rank_ic_broadcast(summary.get("daily_rank_ic_mean"))
+        if measured is None:
+            _raise_score_failure("score_fn returned a non-finite Rank IC")
+        return summary
+
+    done_path = prepare_status_path(
+        directory, run_id, 0, f"score_seg{segment}_done",
+    )
+    local_error = ""
+    summary = None
+    if rank == 0:
+        print(
+            "Temporal Rank IC score: rank0 evaluating; "
+            "other ranks wait outside NCCL "
+            f"(segment={segment}, timeout={float(timeout):.0f}s)",
+            flush=True,
+        )
+        try:
+            summary = score_fn()
+            if not isinstance(summary, dict) or "daily_rank_ic_mean" not in summary:
+                raise TemporalRankICSelectionError(
+                    "Temporal Rank IC score returned no daily_rank_ic_mean"
+                )
+            measured = unpack_rank_ic_broadcast(summary.get("daily_rank_ic_mean"))
+            if measured is None:
+                raise TemporalRankICSelectionError(
+                    "Temporal Rank IC score returned a non-finite Rank IC"
+                )
+        except Exception as exc:
+            local_error = format_prepare_error(exc)
+            print(
+                f"Temporal Rank IC score failed during forward: {local_error}",
+                flush=True,
+            )
+            import traceback
+            traceback.print_exc()
+            summary = None
+        payload = {
+            "state": "ready",
+            "ok": not local_error and summary is not None,
+            "error": local_error,
+            "segment": segment,
+            "run_id": str(run_id),
+        }
+        if summary is not None and not local_error:
+            payload.update({
+                "daily_rank_ic_mean": float(summary["daily_rank_ic_mean"]),
+                "n_dates": int(summary.get("n_dates") or 0),
+                "n_paths": int(summary.get("n_paths") or N_PATHS),
+                "path_agg": str(summary.get("path_agg") or PATH_AGG),
+                "manifest_sha256": str(summary.get("manifest_sha256") or ""),
+                "samples": int(summary.get("samples") or 0),
+                "selection_protocol": str(
+                    summary.get("selection_protocol") or PROTOCOL_ID
+                ),
+            })
+        _atomic_write_json(done_path, payload)
+    else:
+        try:
+            document = wait_for_status_file(
+                done_path,
+                timeout=timeout,
+                role=f"rank {rank} waiting for rank0 score segment={segment}",
+                poll_seconds=poll_seconds,
+                heartbeat_seconds=heartbeat_seconds,
+                phase="score",
+            )
+        except Exception as exc:
+            text = format_prepare_error(exc)
+            print(f"Temporal Rank IC score wait failed: {text}", flush=True)
+            _raise_score_failure(text, exc)
+        if not document.get("ok"):
+            detail = str(document.get("error") or "").strip() or (
+                "rank0 score failed without an error payload"
+            )
+            _raise_score_failure(detail)
+        measured = unpack_rank_ic_broadcast(document.get("daily_rank_ic_mean"))
+        if measured is None:
+            _raise_score_failure(
+                "rank0 score status had no finite daily_rank_ic_mean"
+            )
+        summary = {
+            "daily_rank_ic_mean": float(measured),
+            "n_dates": int(document.get("n_dates") or 0),
+            "n_paths": int(document.get("n_paths") or N_PATHS),
+            "path_agg": str(document.get("path_agg") or PATH_AGG),
+            "manifest_sha256": str(document.get("manifest_sha256") or ""),
+            "samples": int(document.get("samples") or 0),
+            "selection_protocol": str(
+                document.get("selection_protocol") or PROTOCOL_ID
+            ),
+        }
+
+    if rank == 0:
+        if local_error or summary is None:
+            _raise_score_failure(local_error or "rank0 finished without a score")
+        measured = unpack_rank_ic_broadcast(summary.get("daily_rank_ic_mean"))
+        if measured is None:
+            _raise_score_failure("rank0 score lost its finite Rank IC")
+    return summary
+
 
 
 def pack_rank_ic_broadcast(value, *, is_source):
