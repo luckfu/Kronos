@@ -34,6 +34,8 @@
 
 2026-10-23 的密封 OOS 判定（signal 2026-09-18 → 09-30，8 个交易日，38,100 窗口，`sealed_first_use=true`）：[`docs/SEALED_OOS_RESULT_20260918_20260930_CN.md`](docs/SEALED_OOS_RESULT_20260918_20260930_CN.md)。**C2 的 D10 日均 Rank IC = 0.0652，落在 0.05–0.10 档（弱但非零）→ 只写 `|pred_d10| ≥ 5%` 子集与事前流动性过滤的第 8b 步回测，不做全样本 TopK；bigbatch e03b IC 0.0525 < C2 0.0652，配对 Δ=-0.0128、CI [-0.0393, -0.0042]，不晋级关线。** C2 自身 alpha 从 8 月的 0.172 衰减到 9 月下旬的 0.065，且末 3 天几乎归零 —— 按**弱 alpha + 事前过滤后交易**对待。报告见 [`finetune/reports/small_sealed_oos_20260918_20260930.json`](finetune/reports/small_sealed_oos_20260918_20260930.json)。TimesFM 线（SweetSpot native / C07 SWA）的 §3.3 判定**尚未执行**。
 
+2026-10-23 的换电脑接手文档：[`docs/HANDOVER_20261023_NEXT_MACHINE_CN.md`](docs/HANDOVER_20261023_NEXT_MACHINE_CN.md)。**C2 仍是唯一基线，训练线已关闭；验证集 Rank IC（16 条路径）排序方向与 sealed OOS 一致（C2 > C03 > e03b > epoch2），但 20 天样本下 CI 仍跨 0；下一步是 60 天验证 IC 和 C2 的 8b 执行约束回测。**
+
 ## 线上推理部署（Beta V1.2）
 
 - 模型：A-share Full-Market Beta V1.2（约 102.4M 参数）
