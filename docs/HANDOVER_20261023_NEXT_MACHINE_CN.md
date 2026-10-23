@@ -23,7 +23,7 @@
 | 验证集 Rank IC（1 条路径） | 完成 | C2 0.2204 / C03 0.2184 / e03b 0.2174 / epoch2 0.1914；C2/C03/e03b 分不开 |
 | **验证集 Rank IC（16 条，生产口径）** | **完成** | C2 0.2535 / C03 0.2434 / e03b 0.2112 / epoch2 0.2028；**方向对，20 天仍不显著** |
 | 60 天验证 IC | **代码已就绪；kernel RUNNING** | `N_DATES=60`、`N_SYMBOLS=200`、16 条路径中位数未改。Kernel `wynstonliu/kronos-small-validation-rank-ic-20261023` 已由另一代理推送，结果未出 |
-| C2 8b 执行约束回测 | **未做** | 下一步 |
+| C2 8b 执行约束回测 | **代码已落地，§5.2 数字未出** | 只做 `\|pred\|≥5%`。行情要到 2026-11-06，见 [`C2_EXECUTION_CONSTRAINED_BACKTEST_8B_CN.md`](C2_EXECUTION_CONSTRAINED_BACKTEST_8B_CN.md) |
 | TimesFM sealed §3.3 | **未做** | SweetSpot / C07 SWA 尚未在 sealed 窗口评测 |
 
 ---
@@ -187,6 +187,8 @@ python3 finetune/small_validation_rank_ic/build_kernel.py
 - 成本 0.3% 双边；
 - 目标窗口：**2026-10-09 → 10-23**（D10 标签 2026-11-06 成熟）；
 - 不要用 sealed 8 天（已消费）。
+
+引擎和驱动已写好（[`execution_constrained.py`](../finetune/small_clean_oos/execution_constrained.py)、[`run_c2_execution_backtest.py`](../finetune/small_clean_oos/run_c2_execution_backtest.py)）。跑法、输入和「现在为什么没有净值」见 [`C2_EXECUTION_CONSTRAINED_BACKTEST_8B_CN.md`](C2_EXECUTION_CONSTRAINED_BACKTEST_8B_CN.md)。本仓库没有 10/09–10/23 的 C2 shard，也没有到 2026-11-06 的行情，所以还没有 §5.2 的 PnL / 夏普。34 日和已消费的 8 日都不能填这个数字。
 
 ### 5.3 TimesFM sealed §3.3
 
