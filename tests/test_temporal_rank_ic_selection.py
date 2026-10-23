@@ -1071,3 +1071,267 @@ def test_launch_prepare_keeps_rank1_out_of_all_reduce(tmp_path, monkeypatch):
         timeouts = [item[1] for item in events if isinstance(item, tuple) and item[0] == "timeout"]
     assert 2700 in timeouts
     assert 600 in timeouts
+
+
+def test_rank1_score_wait_does_not_enter_broadcast(tmp_path):
+    from temporal_rank_ic_selection import coordinate_rank_ic_score
+
+    calls = []
+
+    def score():
+        calls.append("score")
+        raise AssertionError("rank 1 must not score")
+
+    with pytest.raises(RuntimeError, match="broadcast") as caught:
+        coordinate_rank_ic_score(
+            rank=1,
+            world_size=2,
+            directory=tmp_path,
+            run_id="score-timeout",
+            segment=1,
+            score_fn=score,
+            timeout=0.2,
+            poll_seconds=0.01,
+            heartbeat_seconds=30,
+        )
+    assert calls == []
+    assert "val loss" in str(caught.value)
+    assert "NCCL" in str(caught.value) or "broadcast" in str(caught.value)
+
+
+def test_other_ranks_wait_outside_broadcast_during_score(tmp_path):
+    import threading
+
+    from temporal_rank_ic_selection import coordinate_rank_ic_score
+
+    order = []
+    lock = threading.Lock()
+    started = threading.Event()
+    release = threading.Event()
+    failures = []
+    results = {}
+
+    def score():
+        with lock:
+            order.append((0, "score-start"))
+        started.set()
+        assert release.wait(timeout=5)
+        with lock:
+            order.append((0, "score-end"))
+        return {
+            "daily_rank_ic_mean": 0.042,
+            "n_dates": 60,
+            "n_paths": 16,
+            "path_agg": "median",
+            "manifest_sha256": "abc",
+            "samples": 100,
+            "selection_protocol": PROTOCOL_ID,
+        }
+
+    def run(rank):
+        try:
+            summary = coordinate_rank_ic_score(
+                rank=rank,
+                world_size=2,
+                directory=tmp_path,
+                run_id="score-ddp",
+                segment=1,
+                score_fn=score if rank == 0 else (
+                    lambda: (_ for _ in ()).throw(
+                        AssertionError("rank 1 scored")
+                    )
+                ),
+                timeout=5,
+                poll_seconds=0.01,
+                heartbeat_seconds=30,
+            )
+            results[rank] = summary["daily_rank_ic_mean"]
+            with lock:
+                order.append((rank, "returned"))
+        except Exception as exc:
+            failures.append((rank, exc))
+
+    workers = [threading.Thread(target=run, args=(rank,)) for rank in (1, 0)]
+    for worker in workers:
+        worker.start()
+    assert started.wait(timeout=5)
+    with lock:
+        assert (0, "score-start") in order
+        assert not any(item[1] == "returned" for item in order)
+    release.set()
+    for worker in workers:
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+    assert failures == []
+    assert results == {0: 0.042, 1: 0.042}
+    with lock:
+        assert order.index((0, "score-end")) < order.index((1, "returned"))
+
+
+def test_rank0_score_error_reaches_every_rank(tmp_path):
+    import threading
+
+    from temporal_rank_ic_selection import (
+        TemporalRankICSelectionError,
+        coordinate_rank_ic_score,
+    )
+
+    failures = []
+    scores = []
+
+    def score():
+        scores.append("score")
+        raise TemporalRankICSelectionError("non-finite Rank IC on 2026-07-06")
+
+    def run(rank):
+        try:
+            coordinate_rank_ic_score(
+                rank=rank,
+                world_size=2,
+                directory=tmp_path,
+                run_id="score-err",
+                segment=1,
+                score_fn=score if rank == 0 else (
+                    lambda: (_ for _ in ()).throw(
+                        AssertionError("rank 1 scored")
+                    )
+                ),
+                timeout=5,
+                poll_seconds=0.01,
+                heartbeat_seconds=30,
+            )
+        except Exception as exc:
+            failures.append((rank, exc))
+
+    workers = [threading.Thread(target=run, args=(rank,)) for rank in (0, 1)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+    assert scores == ["score"]
+    assert sorted(rank for rank, _exc in failures) == [0, 1]
+    for _rank, exc in failures:
+        assert isinstance(exc, RuntimeError)
+        text = str(exc)
+        assert "non-finite Rank IC" in text
+        assert "val-loss" in text or "val loss" in text
+
+
+def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
+    """Mimic Seg1: due-flag broadcast is fine; score float broadcast is not."""
+    import threading
+    from types import SimpleNamespace
+
+    import train_predictor as trainer
+
+    events = []
+    lock = threading.Lock()
+    failures = []
+    measured = {}
+
+    def fake_evaluate(model, tokenizer, runtime, device):
+        del model, tokenizer, runtime, device
+        with lock:
+            events.append("evaluate")
+            assert "broadcast_float" not in events
+        time_mod = __import__("time")
+        time_mod.sleep(0.25)
+        with lock:
+            assert "broadcast_float" not in events
+        return {
+            "daily_rank_ic_mean": 0.11,
+            "n_dates": 60,
+            "n_paths": 16,
+            "path_agg": "median",
+            "manifest_sha256": "deadbeef",
+            "samples": 12,
+            "selection_protocol": PROTOCOL_ID,
+        }
+
+    def fake_broadcast_flag(flag, device, rank):
+        del device
+        with lock:
+            events.append(("broadcast_flag", rank, bool(flag)))
+        return True
+
+    def forbid_broadcast_float(value, device, rank):
+        del value, device, rank
+        with lock:
+            events.append("broadcast_float")
+        raise AssertionError("broadcast_rank0_float during Rank IC score")
+
+    monkeypatch.setattr(trainer, "evaluate_temporal_d10_rank_ic", fake_evaluate)
+    monkeypatch.setattr(trainer, "broadcast_rank0_flag", fake_broadcast_flag)
+    monkeypatch.setattr(trainer, "broadcast_rank0_float", forbid_broadcast_float)
+    monkeypatch.setattr(
+        trainer, "rank_ic_prepare_run_id", lambda: "unit-score-run"
+    )
+    monkeypatch.setattr(trainer, "score_timeout_seconds", lambda: 5.0)
+
+    # Build a minimal closure environment similar to train_model's helper.
+    def run(rank):
+        try:
+            use_temporal_rank_ic = True
+            rank_ic_evaluated = False
+            next_segment = 1
+            rank_ic_interval = 10
+            world_size = 2
+            save_dir = str(tmp_path)
+            device = SimpleNamespace(type="cpu")
+            rank_ic_runtime = {
+                "rows": [{"symbol": "AAA"}] if rank == 0 else None,
+                "manifest": {"signal_dates": ["2026-07-06"]},
+            }
+            core_model = object()
+            tokenizer = object()
+
+            def score_temporal_rank_ic_segment():
+                nonlocal rank_ic_evaluated
+                if not use_temporal_rank_ic or rank_ic_evaluated:
+                    return
+                due = rank == 0
+                if not trainer.broadcast_rank0_flag(due, device, rank):
+                    return
+
+                def _run_rank0_score():
+                    return trainer.evaluate_temporal_d10_rank_ic(
+                        core_model, tokenizer, rank_ic_runtime, device,
+                    )
+
+                summary = trainer.coordinate_rank_ic_score(
+                    rank=rank,
+                    world_size=world_size,
+                    directory=save_dir,
+                    run_id=f"{trainer.rank_ic_prepare_run_id()}-seg{next_segment}",
+                    segment=next_segment,
+                    score_fn=_run_rank0_score if rank == 0 else (
+                        lambda: (_ for _ in ()).throw(
+                            AssertionError("non-zero rank must not score")
+                        )
+                    ),
+                    timeout=trainer.score_timeout_seconds(),
+                    poll_seconds=0.01,
+                    heartbeat_seconds=30,
+                )
+                measured[rank] = float(summary["daily_rank_ic_mean"])
+                rank_ic_evaluated = True
+
+            score_temporal_rank_ic_segment()
+        except Exception as exc:
+            failures.append((rank, exc))
+
+    workers = [threading.Thread(target=run, args=(rank,)) for rank in (1, 0)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+    assert failures == []
+    assert measured == {0: 0.11, 1: 0.11}
+    with lock:
+        assert events.count("evaluate") == 1
+        assert "broadcast_float" not in events
+        assert any(
+            item[0] == "broadcast_flag" for item in events if isinstance(item, tuple)
+        )
