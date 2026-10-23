@@ -1,6 +1,6 @@
 # 时间切分 Rank IC 选型窗
 
-`selection_window.json` 里的**日期和日历 SHA 已经冻结**（60 个上交所交易日，`2026-04-01` → `2026-06-30`）。`panel_sha256` 仍是空字符串：行情面板不进 git，构建脚本第一次写出 pkl 之后才会填上。不要手填一个假 SHA，也不要退回 symbol holdout。
+`selection_window.json` 里的**日期和日历 SHA 已经冻结**（60 个上交所交易日，`2026-04-01` → `2026-06-30`）。`panel_sha256` 已钉为 `8539246be495db60ac89f23c4a79f19abae730af6d2a23a3847d477abf376784`（`temporal_rank_ic_panel.pkl` 不进 git）。不要改这个 SHA，也不要退回 symbol holdout。下一轮推送需要 `KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=wynstonliu/kronos-temporal-rank-ic-panel-v1`。
 
 启用 `temporal_rank_ic_v1` 时，缺这个文件、日历 SHA 对不上、`panel_sha256` 还不是 64 位十六进制、或面板指向 `val_data.pkl` / symbol-holdout，训练和 bigbatch 推送都会直接失败。val loss 继续打日志，**不**选 `best_model`。
 

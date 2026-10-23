@@ -295,7 +295,12 @@ def test_manifest_roundtrip_and_fail_closed(tmp_path):
         )
 
 
-def test_frozen_repo_calendar_passes_and_push_stays_closed_without_a_panel():
+PINNED_PANEL_SHA256 = (
+    "8539246be495db60ac89f23c4a79f19abae730af6d2a23a3847d477abf376784"
+)
+
+
+def test_frozen_repo_calendar_passes_with_pinned_panel_sha():
     from ashare_sse_calendar_2026 import (
         SELECTION_HOLIDAY_WEEKDAYS,
         is_sse_session,
@@ -315,7 +320,8 @@ def test_frozen_repo_calendar_passes_and_push_stays_closed_without_a_panel():
     assert calendar["sha256"] == manifest_sha256(expected)
     assert document["sha256"] == calendar["sha256"]
     assert document["panel_filename"] == "temporal_rank_ic_panel.pkl"
-    assert document["panel_sha256"] == ""
+    assert document["panel_sha256"] == PINNED_PANEL_SHA256
+    assert require_pinned_panel_sha(document) == PINNED_PANEL_SHA256
     assert expected[0] == "2026-04-01"
     assert expected[-1] == "2026-06-30"
     business = [
@@ -341,8 +347,6 @@ def test_frozen_repo_calendar_passes_and_push_stays_closed_without_a_panel():
     assert calendar["sha256"] in protocol
     for day in expected:
         assert day in protocol
-    with pytest.raises(TemporalRankICSelectionError, match="panel_sha256"):
-        require_pinned_panel_sha(document)
     launch = (ROOT / "finetune/small_clean_bigbatch_relay/launch.py").read_text(
         encoding="utf-8",
     )
@@ -365,6 +369,39 @@ def test_frozen_repo_calendar_passes_and_push_stays_closed_without_a_panel():
     assert resolve_panel_dataset_slug(
         "owner/kronos-temporal-rank-ic-panel-v1", training_dataset=training,
     ) == "owner/kronos-temporal-rank-ic-panel-v1"
+
+
+def test_empty_panel_sha_fails_push_dry_run(tmp_path, monkeypatch):
+    """Empty panel_sha256 still fail-closes push, including --dry-run."""
+    import runpy
+
+    import temporal_rank_ic_selection as selection
+
+    frozen = json.loads(
+        (ROOT / "finetune/manifests/temporal_rank_ic_v1/selection_window.json").read_text(
+            encoding="utf-8",
+        )
+    )
+    assert frozen["panel_sha256"] == PINNED_PANEL_SHA256
+    frozen["panel_sha256"] = ""
+    empty_path = tmp_path / "selection_window.json"
+    empty_path.write_text(json.dumps(frozen, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(selection, "default_manifest_path", lambda _repo_root: empty_path)
+
+    ns = runpy.run_path(str(ROOT / "finetune/small_clean_bigbatch_relay/push_chunk.py"))
+
+    def forbid_subprocess(*_args, **_kwargs):
+        raise AssertionError("empty panel SHA must fail before any subprocess")
+
+    monkeypatch.setattr(ns["subprocess"], "run", forbid_subprocess)
+    monkeypatch.setattr(ns["subprocess"], "check_output", forbid_subprocess)
+    monkeypatch.setenv(
+        "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET",
+        "wynstonliu/kronos-temporal-rank-ic-panel-v1",
+    )
+    monkeypatch.setattr(sys, "argv", ["push_chunk.py", "1", "--dry-run"])
+    with pytest.raises(TemporalRankICSelectionError, match="panel_sha256"):
+        ns["main"]()
 
 
 def test_resolve_inputs_does_not_pick_symbol_holdout_val(tmp_path):
