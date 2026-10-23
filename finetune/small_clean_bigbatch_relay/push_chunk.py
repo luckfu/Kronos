@@ -17,11 +17,12 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "luckfu")
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
-INITIAL_PARENT = "luckfu/kronos-small-clean-epoch2-from-c03-e05"
+INITIAL_PARENT = "wynstonliu/kronos-small-clean-bigbatch-e03b"
 
 
 def slug(chunk):
-    return f"kronos-small-clean-bigbatch-e{chunk:02d}b"
+    # Round 2 from e03b best; deliberately NOT e04b (closed line).
+    return f"kronos-small-clean-bigbatch2-e{chunk:02d}"
 
 
 def source_bundle():
@@ -139,7 +140,7 @@ namespace["main"]()
     (build / code_file).write_text(code)
     metadata = {
         "id": f"{OWNER}/{slug(args.chunk)}",
-        "title": f"Kronos Small Clean Bigbatch E{args.chunk:02d}b",
+        "title": f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} from e03b",
         "code_file": code_file, "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4", "dataset_sources": [DATASET],

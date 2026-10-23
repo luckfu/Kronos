@@ -1,4 +1,10 @@
-"""Clean Small training: one coverage plan, exact segment-level chunk relay."""
+"""Clean Small training: one coverage plan, exact segment-level chunk relay.
+
+Round 2 (2026-10-23 user override): fresh coverage epoch from e03b best
+weights with a new coverage seed. Not e04b — that name was retired with the
+closed bigbatch line. SwanLab continues run_id smce2_big with segment offset
+520 so the board appends after e03b's completed 520 segments.
+"""
 
 import hashlib
 import json
@@ -13,17 +19,23 @@ from pathlib import Path
 
 
 CHUNK_CONFIG = {}
-EXPERIMENT = "small_0.1_clean_bigbatch_20261022"
-RUN_ID = "smce2_big"
+EXPERIMENT = "small_0.1_clean_bigbatch2_from_e03b_20261023"
+RUN_ID = "smce2_big"  # continue SwanLab board from e01b–e03b
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
-PARENT = "luckfu/kronos-small-clean-epoch2-from-c03-e05"
+PARENT = "wynstonliu/kronos-small-clean-bigbatch-e03b"
+# Parent experiment directory name inside e03b Output (best @457).
+PARENT_EXPERIMENT = "small_0.1_clean_bigbatch_20261022"
 DATA_SHA = "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
-BEST_SHA = "68feb21bb0d2d6b385e69e95765536b25f2cad07a8efb011cd1bcdea878fda5d"
+# e03b best model.safetensors (selection_loss 2.261617 @ segment 457)
+BEST_SHA = "f2fb12a5fe36d3d7171331efc037a22494a74f6f52793338daa118cc778ab65b"
 TOKENIZER_SHA = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
-COVERAGE_SEED = "20261020"
+# Old seed (e01b–e03b): 20261020. New seed for this epoch:
+COVERAGE_SEED = "20261023"
 TOTAL_SEGMENTS = 520
 MAX_SEGMENTS = 0  # Let elapsed time determine each chunk's completed segments.
-BUDGET_SECONDS = 40500  # Original relay budget: 11h15m under the 12h cap.
+BUDGET_SECONDS = 40500  # ~11h15m under the 12h Kaggle GPU cap.
+# Chart continuity after e03b's completed coverage (local segments stay 1..520).
+SWANLAB_SEGMENT_OFFSET = 520
 REQUIRED = (
     "run.log", "metrics.jsonl", "progress.json", "summary.json",
     "small_v21_manifest.json", "experiment_manifest.json",
@@ -152,7 +164,10 @@ def main():
     owner = str(CHUNK_CONFIG.get("owner", "") or "")
     started = time.monotonic()
     phase("started", chunk=CHUNK_CONFIG["chunk"], experiment=EXPERIMENT,
-          owner=owner, max_gpu_seconds=43200, training_budget_seconds=BUDGET_SECONDS)
+          owner=owner, max_gpu_seconds=43200, training_budget_seconds=BUDGET_SECONDS,
+          coverage_seed=COVERAGE_SEED, previous_coverage_seed="20261020",
+          parent=PARENT, swanlab_run_id=run_id,
+          swanlab_segment_offset=SWANLAB_SEGMENT_OFFSET)
     input_root = Path("/kaggle/input")
     runtime = Path("/kaggle/working/clean_small_runtime")
     repo = Path(__file__).resolve().parents[2]
@@ -164,11 +179,14 @@ def main():
         "data_manifest_sha256": DATA_SHA, "parent_best_sha256": BEST_SHA,
         "source_sha256": CHUNK_CONFIG["source_sha256"],
         "source_commit": CHUNK_CONFIG["source_commit"], "coverage_seed": COVERAGE_SEED,
+        "previous_coverage_seed": "20261020",
         "total_segments": TOTAL_SEGMENTS, "samples_per_segment": 20000,
         "coverage_passes": 1, "batch_per_gpu": batch_size, "world_size": 2,
         "amp": "float16", "scheduler": "warmup_constant",
         "lr": lr, "warmup_start_lr": 1e-6, "warmup_ratio": 0.01,
         "loss": "forecast", "history_weight": 0.02, "oos": "evaluation_only",
+        "swanlab_segment_offset": SWANLAB_SEGMENT_OFFSET,
+        "parent_kernel": PARENT, "parent_experiment": PARENT_EXPERIMENT,
     }
     command([sys.executable, "-m", "pip", "install", "torch==2.6.0",
              "--only-binary=:all:",
@@ -194,15 +212,24 @@ def main():
     for key in ("SWANLAB_PROJECT", "SWANLAB_WORKSPACE", "SWANLAB_EXPERIMENT_NAME"):
         os.environ.pop(key, None)
     phase("dashboard_deferred", project="finance", run_id=run_id, experiment=EXPERIMENT,
-          note="single SwandLab run is created by the trainer")
+          note="single SwanLab run is created by the trainer; resume=allow on smce2_big")
     data_root = prepare_data(input_root, runtime / "data")
     tokenizer = find_one(input_root, "**/Kronos-Tokenizer-base/model.safetensors").parent
     if sha256(tokenizer / "model.safetensors") != TOKENIZER_SHA:
         raise RuntimeError("Tokenizer hash mismatch")
     if CHUNK_CONFIG["chunk"] == 1:
-        parent = find_one(input_root, "**/small_0.1_clean_epoch2_from_c03_20261020/checkpoints/best_model/model.safetensors").parent
+        parent = find_one(
+            input_root,
+            f"**/{PARENT_EXPERIMENT}/checkpoints/best_model/model.safetensors",
+        ).parent
         recipe["parent_best_sha256"] = sha256(parent / "model.safetensors")
-        phase("parent_model", path=str(parent), sha256=recipe["parent_best_sha256"])
+        if recipe["parent_best_sha256"] != BEST_SHA:
+            raise RuntimeError(
+                f"e03b best SHA mismatch: got {recipe['parent_best_sha256']}, "
+                f"expected {BEST_SHA}"
+            )
+        phase("parent_model", path=str(parent), sha256=recipe["parent_best_sha256"],
+              note="fresh optimizer from e03b best; new coverage seed")
         continuation = None
     else:
         state = find_one(input_root, "**/last_state.pt")
@@ -230,6 +257,9 @@ def main():
         "KRONOS_SMALL_V21_DISABLE_AUTO_CONTINUATION": "0" if continuation else "1",
         "KRONOS_EPOCHS": "1", "KRONOS_REQUIRE_FULL_COVERAGE": "1",
         "KRONOS_COVERAGE_PASSES": "1", "KRONOS_COVERAGE_SEED": COVERAGE_SEED,
+        # Fresh permutation under the new seed (local 0..519). Board offset only.
+        "KRONOS_COVERAGE_EPOCH_OFFSET": "0",
+        "KRONOS_SWANLAB_SEGMENT_OFFSET": str(SWANLAB_SEGMENT_OFFSET),
         "KRONOS_MAX_SEGMENTS_PER_RUN": str(max_segments),
         "KRONOS_MAX_RUNTIME_SECONDS": str(BUDGET_SECONDS),
         "KRONOS_TORCHRUN_NPROC_PER_NODE": "2", "KRONOS_BATCH_SIZE": str(batch_size),
