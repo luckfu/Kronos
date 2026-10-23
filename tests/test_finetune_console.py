@@ -52,6 +52,18 @@ def test_manager_default_estimate_requires_full_coverage(monkeypatch, tmp_path):
     assert estimate['total_segments'] == 81
 
 
+def test_window_contract_matches_training_defaults(monkeypatch):
+    monkeypatch.delenv('KRONOS_LOOKBACK_WINDOW', raising=False)
+    monkeypatch.delenv('KRONOS_PREDICT_WINDOW', raising=False)
+
+    assert FineTuneManager.window_contract() == (90, 10)
+
+    monkeypatch.setenv('KRONOS_LOOKBACK_WINDOW', '120')
+    monkeypatch.setenv('KRONOS_PREDICT_WINDOW', '10')
+
+    assert FineTuneManager.window_contract() == (120, 10)
+
+
 def test_manager_start_passes_batch_size_and_closes_log_on_failure(monkeypatch, tmp_path):
     manager = FineTuneManager(tmp_path)
     base_model = tmp_path / 'Kronos-base'
@@ -99,7 +111,7 @@ def test_finetune_routes_render_and_return_configuration(monkeypatch):
     stats = {
         'train': {'symbols': 1176, 'rows': 1_626_852, 'windows': 1_509_252},
         'val': {'symbols': 1176, 'rows': 0, 'windows': 100_000},
-        'window': 101,
+        'window': 101, 'lookback': 90, 'predict': 10,
     }
     defaults = {
         'mode': 'discrete', 'base_model': 'kronos-base-local',
@@ -130,8 +142,15 @@ def test_finetune_routes_render_and_return_configuration(monkeypatch):
     config = client.get('/api/finetune/config')
 
     assert page.status_code == 200
-    assert 'A股模型增训' in page.get_data(as_text=True)
+    html = page.get_data(as_text=True)
+    assert 'A股模型增训' in html
+    # The fine-tuning console trains on its own 90+10 panel; it must not present
+    # that window as if it were the production 120+10 inference contract.
+    assert '增训窗口 / 预测' in html
+    assert '90 / 10 日' not in html
     assert config.status_code == 200
+    assert config.get_json()['dataset']['lookback'] == 90
+    assert config.get_json()['dataset']['predict'] == 10
     assert config.get_json()['estimate']['segments_per_coverage'] == 76
     assert config.get_json()['base_models'][0]['name'] == 'NeoQuasar/Kronos-base'
     assert 'path' not in config.get_json()['base_models'][0]

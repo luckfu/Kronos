@@ -116,6 +116,23 @@ class FineTuneManager:
             raise ValueError('所选基础模型不存在或权重不完整')
         return registry[selected_id]
 
+    @staticmethod
+    def window_contract():
+        """Mirror the training-time window contract (lookback, predict).
+
+        The production inference path is fixed at 120 + 10 and lives in
+        ``webui/app.py`` / ``serverless/service.py``. This local fine-tuning
+        console trains on its own panel, whose window is decided by
+        ``finetune/config.py`` defaults (90 + 10 unless the KRONOS_* env vars
+        override it), so the UI must report that contract instead of assuming
+        the two are the same.
+        """
+        lookback = int(os.getenv('KRONOS_LOOKBACK_WINDOW', '90'))
+        predict = int(os.getenv('KRONOS_PREDICT_WINDOW', '10'))
+        if lookback < 1 or predict < 1:
+            raise ValueError('KRONOS_LOOKBACK_WINDOW and KRONOS_PREDICT_WINDOW must be positive')
+        return lookback, predict
+
     def dataset_stats(self):
         paths = {
             split: self.dataset_dir / f'{split}_data.pkl'
@@ -129,7 +146,8 @@ class FineTuneManager:
             return self._stats_cache
 
         result = {}
-        window = 101
+        lookback, predict = self.window_contract()
+        window = lookback + predict + 1
         for split, path in paths.items():
             with open(path, 'rb') as handle:
                 panel = pickle.load(handle)
@@ -141,6 +159,8 @@ class FineTuneManager:
                 'windows': windows,
             }
         result['window'] = window
+        result['lookback'] = lookback
+        result['predict'] = predict
         result['measured_seconds_per_train_window'] = 0.0625
         self._stats_cache = result
         self._stats_signature = signature

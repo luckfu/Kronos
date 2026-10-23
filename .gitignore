@@ -111,3 +111,4 @@ finetune/small_clean_bigbatch_relay/build/
 
 # Local kernel build bundles (embed source + credentials)
 finetune/small_clean_oos/build_epoch2/
+finetune/small_sealed_oos/build/

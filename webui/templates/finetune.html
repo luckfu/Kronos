@@ -354,7 +354,7 @@
             <div class="dataset-stat"><span>训练日线</span><strong id="train-rows">—</strong></div>
             <div class="dataset-stat"><span>唯一窗口</span><strong id="train-windows">—</strong></div>
             <div class="dataset-stat"><span>验证窗口</span><strong id="val-windows">—</strong></div>
-            <div class="dataset-stat"><span>输入 / 预测</span><strong>90 / 10 日</strong></div>
+            <div class="dataset-stat" title="这是本地增训数据集（data/a_share/processed_datasets）的窗口；线上推理固定为 120 个交易日回看 + 10 个交易日预测，两者不要混淆。"><span>增训窗口 / 预测</span><strong id="dataset-window">—</strong></div>
         </section>
 
         <div class="workspace">
@@ -598,6 +598,9 @@
             byId('train-rows').textContent = formatInt(data.dataset.train.rows);
             byId('train-windows').textContent = formatInt(data.dataset.train.windows);
             byId('val-windows').textContent = formatInt(data.dataset.val.windows);
+            byId('dataset-window').textContent = (data.dataset.lookback && data.dataset.predict)
+                ? `${formatInt(data.dataset.lookback)} / ${formatInt(data.dataset.predict)} 日`
+                : '—';
         }
 
         function renderStatus(data) {
