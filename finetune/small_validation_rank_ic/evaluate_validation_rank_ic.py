@@ -1,10 +1,11 @@
 """Offline validation Rank IC for C2 vs the clean-line checkpoints.
 
 This does not change training.  It builds one frozen subset of the 520-symbol
-validation panel (20 signal dates x 200 symbols), generates one path per
-window with each checkpoint, and computes the mean same-day Spearman IC of
-predicted D10 return vs actual D10 return.  The point is to check whether
-validation IC ranks the checkpoints in the same order as the sealed OOS.
+validation panel (60 signal dates x 200 symbols), generates 16 paths per
+window, ranks by the median predicted D10 return, and computes the mean
+same-day Spearman IC of that median vs actual D10 return.  The point is to
+check whether validation IC ranks the checkpoints in the same order as the
+sealed OOS.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ LOOKBACK, PREDICT, WINDOW = 120, 10, 130
 NUM_SECTORS = 86
 TOKENIZER_SHA = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
 SEED = 20261023
-N_DATES, N_SYMBOLS = 20, 200
+N_DATES, N_SYMBOLS = 60, 200
 SAMPLE_COUNT = 16
 FIRST_DATE, LAST_DATE = "2025-07-03", "2026-07-02"
 OUTPUT = Path("/kaggle/working/validation_rank_ic")
