@@ -89,8 +89,18 @@ def main():
     if args.chunk < 1:
         parser.error("chunk must be positive")
     sys.path.insert(0, str(ROOT / "finetune"))
-    from temporal_rank_ic_selection import assert_frozen_manifest_present
-    assert_frozen_manifest_present(ROOT)
+    from temporal_rank_ic_selection import (
+        assert_frozen_manifest_present,
+        require_pinned_panel_sha,
+        resolve_panel_dataset_slug,
+    )
+    manifest_path = assert_frozen_manifest_present(ROOT)
+    selection_document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    require_pinned_panel_sha(selection_document)
+    panel_dataset = resolve_panel_dataset_slug(
+        os.environ.get("KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET", ""),
+        training_dataset=DATASET,
+    )
     if args.retry_failed and args.chunk != 1:
         parser.error("--retry-failed only supports C01 setup failures")
     payload = source_bundle()
@@ -151,7 +161,10 @@ namespace["main"]()
         "title": f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} from e03b",
         "code_file": code_file, "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
-        "machine_shape": "NvidiaTeslaT4", "dataset_sources": [DATASET],
+        "machine_shape": "NvidiaTeslaT4",
+        # Training prices and the temporal panel are different mounts. The
+        # holdout dataset is not a fallback when the panel mount is missing.
+        "dataset_sources": [DATASET, panel_dataset],
         "kernel_sources": [parent],
     }
     (build / "kernel-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -159,6 +172,8 @@ namespace["main"]()
     compile(code, str(build / code_file), "exec")
     policy = runpy.run_path(str(HERE / "launch.py"))
     print(json.dumps({"build": str(build), **config, "id": metadata["id"],
+                      "dataset_sources": metadata["dataset_sources"],
+                      "temporal_rank_ic_panel_dataset": panel_dataset,
                       "hard_timeout": 43200,
                       "training_budget": args.budget_seconds or policy["BUDGET_SECONDS"],
                       "max_segments_per_run": policy["MAX_SEGMENTS"]}, indent=2))

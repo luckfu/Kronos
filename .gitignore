@@ -43,6 +43,9 @@ Desktop.ini
 # Linux
 *~
 
+# Temporal Rank IC selection panel. Built offline; only its SHA is committed.
+temporal_rank_ic_panel.pkl
+
 # Data files (large files)
 *.feather
 *.parquet

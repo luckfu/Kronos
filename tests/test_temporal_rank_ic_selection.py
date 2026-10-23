@@ -34,10 +34,13 @@ from temporal_rank_ic_selection import (
     median_path_d10_return,
     rank_ic_is_improvement,
     reconcile_resumed_rank_ic_threshold,
+    require_pinned_panel_sha,
+    resolve_panel_dataset_slug,
     resolve_training_selection_inputs,
     sha256_file,
     should_run_temporal_rank_ic,
     temporal_rank_ic_due,
+    validate_manifest_calendar,
 )
 from train_predictor import (
     selection_metric_higher_is_better,
@@ -292,16 +295,76 @@ def test_manifest_roundtrip_and_fail_closed(tmp_path):
         )
 
 
-def test_repo_placeholder_is_absent_and_push_would_fail():
-    with pytest.raises(TemporalRankICSelectionError, match="missing"):
-        assert_frozen_manifest_present(ROOT)
-    launch = (ROOT / "finetune/small_clean_bigbatch_relay/launch.py").read_text()
-    push = (ROOT / "finetune/small_clean_bigbatch_relay/push_chunk.py").read_text()
+def test_frozen_repo_calendar_passes_and_push_stays_closed_without_a_panel():
+    from ashare_sse_calendar_2026 import (
+        SELECTION_HOLIDAY_WEEKDAYS,
+        is_sse_session,
+        selection_window_sessions,
+        sessions_between,
+    )
+
+    path = assert_frozen_manifest_present(ROOT)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    calendar = validate_manifest_calendar(document)
+    expected = selection_window_sessions()
+    assert calendar["signal_dates"] == expected
+    assert document["signal_dates"] == expected
+    assert len(expected) == 60
+    assert document["n_dates"] == 60
+    assert calendar["train_time_upper_bound"] == "2024-12-31"
+    assert calendar["sha256"] == manifest_sha256(expected)
+    assert document["sha256"] == calendar["sha256"]
+    assert document["panel_filename"] == "temporal_rank_ic_panel.pkl"
+    assert document["panel_sha256"] == ""
+    assert expected[0] == "2026-04-01"
+    assert expected[-1] == "2026-06-30"
+    business = [
+        stamp.date().isoformat()
+        for stamp in pd.bdate_range("2026-04-01", "2026-06-30")
+    ]
+    assert set(business) - set(expected) == set(SELECTION_HOLIDAY_WEEKDAYS)
+    assert set(expected) - set(business) == set()
+    for day in (
+        "2026-04-01", "2026-04-30", "2026-05-11", "2026-06-22", "2026-06-26",
+    ):
+        assert day in expected
+    assert "2026-07-02" not in expected
+    assert is_sse_session("2026-07-02")
+    assert sessions_between("2026-07-01", "2026-07-31")[9] == "2026-07-14"
+    for day in ("2026-08-03", "2026-09-18", "2026-09-25", "2026-10-09", "2026-10-23"):
+        assert day not in expected
+    assert is_sse_session("2026-09-18")
+    assert not is_sse_session("2026-09-25")
+    protocol = (ROOT / "docs/VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md").read_text(
+        encoding="utf-8",
+    )
+    assert calendar["sha256"] in protocol
+    for day in expected:
+        assert day in protocol
+    with pytest.raises(TemporalRankICSelectionError, match="panel_sha256"):
+        require_pinned_panel_sha(document)
+    launch = (ROOT / "finetune/small_clean_bigbatch_relay/launch.py").read_text(
+        encoding="utf-8",
+    )
+    push = (ROOT / "finetune/small_clean_bigbatch_relay/push_chunk.py").read_text(
+        encoding="utf-8",
+    )
     assert "KRONOS_CHECKPOINT_SELECTION_PROTOCOL" in launch
     assert "temporal_rank_ic_v1" in launch
     assert "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS" in launch
-    assert "temporal_rank_ic_selection" in push
-    assert "assert_frozen_manifest_present" in push
+    assert "require_pinned_panel_sha" in push
+    assert "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET" in push
+    assert "[DATASET, panel_dataset]" in push
+    training = "smmt315/a-share-120d-temporal-symbol-holdout"
+    with pytest.raises(TemporalRankICSelectionError, match="KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET"):
+        resolve_panel_dataset_slug("", training_dataset=training)
+    with pytest.raises(TemporalRankICSelectionError, match="symbol-holdout"):
+        resolve_panel_dataset_slug(training, training_dataset=training)
+    with pytest.raises(TemporalRankICSelectionError, match="val_data.pkl"):
+        resolve_panel_dataset_slug("owner/val_data.pkl", training_dataset=training)
+    assert resolve_panel_dataset_slug(
+        "owner/kronos-temporal-rank-ic-panel-v1", training_dataset=training,
+    ) == "owner/kronos-temporal-rank-ic-panel-v1"
 
 
 def test_resolve_inputs_does_not_pick_symbol_holdout_val(tmp_path):
@@ -325,6 +388,29 @@ def test_resolve_inputs_does_not_pick_symbol_holdout_val(tmp_path):
     assert panel_path == panel
     assert loaded["split_kind"] == "temporal"
     assert "symbol-holdout" not in panel_path.as_posix()
+
+    holdout_copy = holdout / "temporal_rank_ic_panel.pkl"
+    holdout_copy.write_bytes(b"do-not-use")
+    again_manifest, again_panel, _loaded = resolve_training_selection_inputs(
+        repo, input_root, val_data_paths=[holdout / "val_data.pkl"],
+    )
+    assert again_manifest == manifest_path
+    assert again_panel == panel
+
+    only = tmp_path / "only_holdout"
+    only_repo = only / "repo"
+    only_manifest_dir = only_repo / "finetune/manifests/temporal_rank_ic_v1"
+    only_manifest_dir.mkdir(parents=True)
+    only_input = only / "input" / "a-share-120d-temporal-symbol-holdout"
+    only_input.mkdir(parents=True)
+    planted = only_input / "temporal_rank_ic_panel.pkl"
+    planted.write_bytes(b"holdout-panel")
+    planted_body = _manifest_body(DATES, sha256_file(planted))
+    (only_manifest_dir / "selection_window.json").write_text(
+        json.dumps(planted_body), encoding="utf-8",
+    )
+    with pytest.raises(TemporalRankICSelectionError, match="symbol-holdout"):
+        resolve_training_selection_inputs(only_repo, only / "input")
 
 
 def test_window_builder_uses_the_manifest_calendar_only():
