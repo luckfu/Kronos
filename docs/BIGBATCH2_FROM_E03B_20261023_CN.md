@@ -17,12 +17,12 @@
 
 ## 推送
 
-日历已经冻结，但**现在不要推**。`push_chunk.py` 在 `panel_sha256` 还是空、或没设置面板数据集时失败关闭。面板构建并上传之后：
+日历已经冻结，`panel_sha256` 已钉为 `8539246be495db60ac89f23c4a79f19abae730af6d2a23a3847d477abf376784`。`push_chunk.py` 在没设置面板数据集时仍失败关闭。下一轮推送：
 
 ```bash
 export KRONOS_KAGGLE_OWNER=wynstonliu
 export KAGGLE_API_TOKEN=... KAGGLE_USERNAME=wynstonliu
-export KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=<owner>/<panel-dataset>
+export KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=wynstonliu/kronos-temporal-rank-ic-panel-v1
 python -u finetune/small_clean_bigbatch_relay/push_chunk.py 1
 ```
 
@@ -47,7 +47,7 @@ e01 已取消，当时按 val loss 选 best，**不要**事后用 Rank IC 重选
 
 选型日历已冻结：`finetune/manifests/temporal_rank_ic_v1/selection_window.json`，**60** 个交易日（`2026-04-01` → `2026-06-30`），`sha256` `0721b3defca10d2dab4dcaf433f1efab12304340298e6304fca6d3c9a9f3ce0d`，`train_time_upper_bound` `2024-12-31`。日期列表见 [`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md) §7。
 
-`panel_sha256` 还是空的。先构建并上传面板，再推 chunk 1：
+`panel_sha256` 已钉住（见上）。下一轮推送需要 `KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=wynstonliu/kronos-temporal-rank-ic-panel-v1`。构建命令已离线跑过，日期和日历 SHA 不改：
 
 ```bash
 python finetune/build_temporal_rank_ic_panel.py \

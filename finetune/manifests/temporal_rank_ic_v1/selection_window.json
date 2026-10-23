@@ -74,7 +74,7 @@
     "2026-06-30"
   ],
   "sha256": "0721b3defca10d2dab4dcaf433f1efab12304340298e6304fca6d3c9a9f3ce0d",
-  "panel_sha256": "",
+  "panel_sha256": "8539246be495db60ac89f23c4a79f19abae730af6d2a23a3847d477abf376784",
   "panel_filename": "temporal_rank_ic_panel.pkl",
   "n_dates": 60,
   "calendar_source": "SSE 上证公告〔2025〕45号 (2025-12-22), https://www.sse.com.cn/disclosure/dealinstruc/closed/c/c_20251222_10802510.shtml ; weekends closed; no weekend session in 2026-04-01..2026-06-30",
