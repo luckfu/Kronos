@@ -177,6 +177,11 @@ python3 finetune/small_validation_rank_ic/build_kernel.py
   - 如果仍然跨 0：**放弃验证集 Rank IC 选模**，不要改训练。
 - 不要用 sealed 8 天来调这个阈值；它已经用掉。
 
+
+### 5.1b 选模协议冻结（2026-10-23）
+
+群聊已冻结：**训练中途**用**时间切分**日频 D10 Rank IC 选 checkpoint；晋级换 C2 仍只走 §5.2。全文：[`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md)。60 日 symbol-holdout Rank IC 只作 pilot 旁证，不是选型协议。本文交接时的「不开新训练」仍适用于未批准的 pilot 接线；正在跑的 bigbatch2 是用户覆盖指令，选模仍用旧 val loss。
+
 ### 5.2 C2 的 8b 执行约束回测
 
 按 [`NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md`](NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md) §3.1/§4.3：

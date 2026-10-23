@@ -34,3 +34,7 @@ Parent kernel：`wynstonliu/kronos-small-clean-bigbatch-e03b`。
 - Seed：`20261020` → `20261023`
 - SwanLab：`smce2_big` / project `finance` / workspace `roc_fu` / segment offset 520
 - Budget：40500s train / 43200s hard timeout / dual T4
+
+## 选模协议（本轮仍不接线）
+
+中途 checkpoint 正式尺子见冻结稿 [`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md)（时间切分日频 D10 Rank IC，N=10 segment，16 路径中位数）。**本轮 bigbatch2 仍按旧 val loss 选 best**，不中途改规则、不事后用 Rank IC 重选冒充。
