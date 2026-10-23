@@ -22,7 +22,9 @@ INITIAL_PARENT = "wynstonliu/kronos-small-clean-bigbatch-e03b"
 
 def slug(chunk):
     # Round 2 from e03b best; deliberately NOT e04b (closed line).
-    return f"kronos-small-clean-bigbatch2-e{chunk:02d}"
+    # Kaggle slugifies the title; keep title/slug in lockstep with the
+    # already-running E01: .../kronos-small-clean-bigbatch2-e01-from-e03b
+    return f"kronos-small-clean-bigbatch2-e{chunk:02d}-from-e03b"
 
 
 def source_bundle():
