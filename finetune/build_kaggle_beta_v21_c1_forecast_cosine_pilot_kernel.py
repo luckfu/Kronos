@@ -40,6 +40,7 @@ DOCKER_IMAGE = (
 )
 FILES = (
     "finetune/train_predictor.py",
+    "finetune/temporal_rank_ic_selection.py",
     "finetune/config.py",
     "finetune/dataset.py",
     "finetune/beta_v21.py",

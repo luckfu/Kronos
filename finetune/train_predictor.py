@@ -71,6 +71,18 @@ from beta_v21 import (
     mean_within_date_spearman,
     same_date_pairwise_accuracy,
 )
+from temporal_rank_ic_selection import (
+    SELECTION_METRIC as TEMPORAL_RANK_IC_SELECTION_METRIC,
+    build_rank_ic_best_metric,
+    checkpoint_should_update,
+    evaluate_temporal_d10_rank_ic,
+    pack_rank_ic_broadcast,
+    prepare_rank_ic_runtime,
+    reconcile_resumed_rank_ic_threshold,
+    temporal_rank_ic_due,
+    temporal_rank_ic_enabled,
+    unpack_rank_ic_broadcast,
+)
 # Import shared utilities
 from utils.training_utils import (
     setup_ddp,
@@ -148,6 +160,68 @@ def append_metric(save_dir, **payload):
     }
     with open(os.path.join(save_dir, 'metrics.jsonl'), 'a') as handle:
         handle.write(json.dumps(document) + '\n')
+
+
+def broadcast_all_true(flag, device):
+    """True only when every worker reports success. Single-process uses ``flag``."""
+    payload = 1 if flag else 0
+    if dist.is_available() and dist.is_initialized():
+        tensor = torch.tensor([payload], device=device, dtype=torch.int32)
+        dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
+        return bool(int(tensor.item()))
+    if device.type == 'xla' and xm is not None and get_xla_world_size() > 1:
+        tensor = torch.tensor([payload], device=device, dtype=torch.int32)
+        tensor = xm.all_reduce(xm.REDUCE_MIN, tensor)
+        return bool(int(tensor.item()))
+    return bool(flag)
+
+
+def broadcast_rank0_flag(flag, device, rank):
+    """Copy a rank-0 boolean to every worker. Single-process runs keep ``flag``."""
+    payload = 1 if rank == 0 and flag else 0
+    if dist.is_available() and dist.is_initialized():
+        tensor = torch.tensor([payload], device=device, dtype=torch.int32)
+        dist.broadcast(tensor, src=0)
+        return bool(int(tensor.item()))
+    if device.type == 'xla' and xm is not None and get_xla_world_size() > 1:
+        tensor = torch.tensor([payload], device=device, dtype=torch.int32)
+        tensor = xm.all_reduce(xm.REDUCE_MAX, tensor)
+        return bool(int(tensor.item()))
+    return bool(flag) if rank == 0 else False
+
+
+def broadcast_rank0_float(value, device, rank):
+    """Copy a rank-0 float to every worker. Missing scores stay None."""
+    payload = pack_rank_ic_broadcast(value, is_source=(rank == 0))
+    if dist.is_available() and dist.is_initialized():
+        tensor = torch.tensor([payload], device=device, dtype=torch.float64)
+        dist.broadcast(tensor, src=0)
+        payload = float(tensor.item())
+    elif device.type == 'xla' and xm is not None and get_xla_world_size() > 1:
+        tensor = torch.tensor([payload], device=device, dtype=torch.float64)
+        tensor = xm.all_reduce(xm.REDUCE_MAX, tensor)
+        payload = float(tensor.item())
+    elif rank != 0:
+        payload = pack_rank_ic_broadcast(None, is_source=False)
+    return unpack_rank_ic_broadcast(payload)
+
+
+def write_temporal_rank_ic_best(core_model, save_dir, config, document):
+    """Atomically replace best_model using a temporal Rank IC score."""
+    save_path = os.path.join(save_dir, 'checkpoints', 'best_model')
+    save_pretrained_with_retry(
+        core_model, save_path, model_export_config(core_model, config)
+    )
+    best_metric_path = os.path.join(save_path, 'best_metric.json')
+    temporary = f'{best_metric_path}.tmp'
+    with open(temporary, 'w') as handle:
+        json.dump(document, handle, indent=2)
+    os.replace(temporary, best_metric_path)
+    print(
+        f"Best model saved to {save_path} "
+        f"({TEMPORAL_RANK_IC_SELECTION_METRIC}: {document['daily_rank_ic_mean']:.8f})",
+        flush=True,
+    )
 
 
 def distributed_barrier(device, tag):
@@ -1168,7 +1242,10 @@ def best_selection_value(metric, quick_metrics, large_metrics=None):
 
 
 
-HIGHER_IS_BETTER_SELECTION_METRICS = frozenset({'pairwise_accuracy'})
+HIGHER_IS_BETTER_SELECTION_METRICS = frozenset({
+    'pairwise_accuracy',
+    TEMPORAL_RANK_IC_SELECTION_METRIC,
+})
 
 
 def selection_metric_higher_is_better(metric):
@@ -2454,10 +2531,53 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             f"Predictor loss mode: {config.get('predictor_loss_mode', 'full_sequence')}; "
             f"history weight: {float(config.get('history_loss_weight', 0.0)):.4f}"
         )
-        print(
-            "Best checkpoint selection metric: "
-            f"{config.get('best_selection_metric', 'objective')}"
-        )
+        if temporal_rank_ic_enabled(config):
+            print(
+                "Best checkpoint selection: temporal_rank_ic_v1 "
+                "(daily D10 Rank IC, 16-path median). "
+                "Validation loss is logged and does not select best_model."
+            )
+        else:
+            print(
+                "Best checkpoint selection metric: "
+                f"{config.get('best_selection_metric', 'objective')}"
+            )
+
+    rank_ic_runtime = None
+    if temporal_rank_ic_enabled(config):
+        try:
+            rank_ic_runtime = prepare_rank_ic_runtime(
+                config, load_panel=(rank == 0),
+            )
+            panel_ok = True
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            panel_ok = False
+            rank_ic_runtime = None
+        # Schema and SHA checks run on every rank. Panel materialization is
+        # rank 0 only; a failure there must still abort the other workers.
+        local_ok = bool(panel_ok and rank_ic_runtime is not None)
+        if rank == 0 and (
+            rank_ic_runtime is None or not rank_ic_runtime.get("rows")
+        ):
+            local_ok = False
+        if not broadcast_all_true(local_ok, device):
+            raise RuntimeError(
+                "Temporal Rank IC manifest or panel failed validation. "
+                "Refusing to select best_model by val loss or symbol holdout."
+            )
+        if rank == 0:
+            manifest = rank_ic_runtime["manifest"]
+            print(
+                "Temporal Rank IC window: "
+                f"dates={len(manifest['signal_dates'])} "
+                f"rows={len(rank_ic_runtime['rows'])} "
+                f"sha256={manifest['sha256']} "
+                f"train_time_upper_bound={manifest['train_time_upper_bound']}",
+                flush=True,
+            )
+    distributed_barrier(device, 'kronos_temporal_rank_ic_ready')
 
     (
         train_loader, val_loader, large_val_loader,
@@ -2788,7 +2908,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f"weight_decay={float(group['weight_decay']):.4f}"
             )
 
-    if selection_metric_higher_is_better(
+    if temporal_rank_ic_enabled(config) or selection_metric_higher_is_better(
         config.get('best_selection_metric', 'objective')
     ):
         best_val_loss = float('-inf')
@@ -2833,6 +2953,9 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             coverage_passes=coverage_passes,
             predictor_loss_mode=config.get('predictor_loss_mode', 'full_sequence'),
             history_loss_weight=float(config.get('history_loss_weight', 0.0)),
+            checkpoint_selection_protocol=str(
+                config.get('checkpoint_selection_protocol') or ''
+            ),
             resume_guard=resume_guard,
             scheduler_type=config.get('scheduler_type', 'warmup_cosine'),
             scheduler_min_learning_rate=float(
@@ -3073,49 +3196,79 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 )
             with open(best_metric_path) as handle:
                 best_metric = json.load(handle)
-            exported_best_loss = float(best_metric.get(
-                'selection_loss', best_metric['objective_loss']
-            ))
-            resume_metric = str(
-                best_metric.get('selection_metric')
-                or config.get('best_selection_metric', 'objective')
-            )
-            if selection_metric_higher_is_better(resume_metric):
-                if (
-                    selection_is_improvement(
-                        resume_metric, best_val_loss, exported_best_loss
-                    )
-                    and not math.isclose(
-                        exported_best_loss, best_val_loss, rel_tol=0.0, abs_tol=1e-12
-                    )
+            if temporal_rank_ic_enabled(config):
+                previous_threshold = best_val_loss
+                best_val_loss = reconcile_resumed_rank_ic_threshold(
+                    resume_state.get('checkpoint_selection_protocol'),
+                    resume_state.get('best_val_loss'),
+                    best_metric,
+                )
+                if rank == 0:
+                    if str(best_metric.get('selection_protocol') or '') != 'temporal_rank_ic_v1':
+                        print(
+                            'Historical best_metric.json was not selected by '
+                            'temporal_rank_ic_v1. Rank IC threshold starts unset. '
+                            'Validation loss will not select best_model.',
+                            flush=True,
+                        )
+                    elif (
+                        math.isfinite(best_val_loss)
+                        and math.isfinite(float(previous_threshold))
+                        and best_val_loss > float(previous_threshold)
+                        and not math.isclose(
+                            best_val_loss, float(previous_threshold),
+                            rel_tol=0.0, abs_tol=1e-12,
+                        )
+                    ):
+                        print(
+                            'Recovered temporal Rank IC best from best_metric.json: '
+                            f'{best_val_loss:.8f}',
+                            flush=True,
+                        )
+            else:
+                exported_best_loss = float(best_metric.get(
+                    'selection_loss', best_metric['objective_loss']
+                ))
+                resume_metric = str(
+                    best_metric.get('selection_metric')
+                    or config.get('best_selection_metric', 'objective')
+                )
+                if selection_metric_higher_is_better(resume_metric):
+                    if (
+                        selection_is_improvement(
+                            resume_metric, best_val_loss, exported_best_loss
+                        )
+                        and not math.isclose(
+                            exported_best_loss, best_val_loss, rel_tol=0.0, abs_tol=1e-12
+                        )
+                    ):
+                        raise ValueError(
+                            'last_state.pt claims a better validation metric than best_model: '
+                            f'{best_val_loss} > {exported_best_loss}'
+                        )
+                    if selection_is_improvement(
+                        resume_metric, exported_best_loss, best_val_loss
+                    ):
+                        print(
+                            'Recovered a Best export committed immediately before an '
+                            'interrupted State update: '
+                            f'{exported_best_loss:.6f} > {best_val_loss:.6f}'
+                        )
+                        best_val_loss = exported_best_loss
+                elif exported_best_loss > best_val_loss and not math.isclose(
+                    exported_best_loss, best_val_loss, rel_tol=0.0, abs_tol=1e-12
                 ):
                     raise ValueError(
-                        'last_state.pt claims a better validation metric than best_model: '
-                        f'{best_val_loss} > {exported_best_loss}'
+                        'last_state.pt claims a better validation loss than best_model: '
+                        f'{best_val_loss} < {exported_best_loss}'
                     )
-                if selection_is_improvement(
-                    resume_metric, exported_best_loss, best_val_loss
-                ):
+                elif exported_best_loss < best_val_loss:
                     print(
                         'Recovered a Best export committed immediately before an '
                         'interrupted State update: '
-                        f'{exported_best_loss:.6f} > {best_val_loss:.6f}'
+                        f'{exported_best_loss:.6f} < {best_val_loss:.6f}'
                     )
                     best_val_loss = exported_best_loss
-            elif exported_best_loss > best_val_loss and not math.isclose(
-                exported_best_loss, best_val_loss, rel_tol=0.0, abs_tol=1e-12
-            ):
-                raise ValueError(
-                    'last_state.pt claims a better validation loss than best_model: '
-                    f'{best_val_loss} < {exported_best_loss}'
-                )
-            elif exported_best_loss < best_val_loss:
-                print(
-                    'Recovered a Best export committed immediately before an '
-                    'interrupted State update: '
-                    f'{exported_best_loss:.6f} < {best_val_loss:.6f}'
-                )
-                best_val_loss = exported_best_loss
         if rank == 0:
             print(
                 f'Resumed training from the last completed segment; '
@@ -3190,53 +3343,68 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         with open(best_metric_path) as handle:
             existing_best_metric = json.load(handle)
         saved_metric_name = str(existing_best_metric.get('selection_metric') or '')
-        saved_loss = float(existing_best_metric.get(
-            'selection_loss', existing_best_metric.get('objective_loss', float('inf'))
-        ))
-        if not math.isfinite(saved_loss):
-            raise ValueError(
-                'Existing best_metric.json has no finite selection loss'
+        if temporal_rank_ic_enabled(config):
+            best_val_loss = reconcile_resumed_rank_ic_threshold(
+                '', None, existing_best_metric,
             )
-        current_metric = str(config.get('best_selection_metric', 'objective'))
-        calibration_value = None
-        if calibration_metrics is not None:
-            if current_metric == 'pairwise_accuracy':
-                calibration_value = calibration_metrics.get('pairwise_accuracy')
-            elif current_metric == 'ranking':
-                calibration_value = calibration_metrics.get('ranking_loss')
-        best_val_loss = resolve_kept_best_loss(
-            saved_metric_name, saved_loss, current_metric, calibration_value,
-        )
-        if rank == 0:
-            family_lrs = learning_rates_by_family(optimizer)
-            print(
-                'Fresh AdamW on existing best_model weights; '
-                'last_state optimizer moments were not loaded. '
-                f'best_segment={int(existing_best_metric.get("segment", -1))}, '
-                f'saved_selection_metric={saved_metric_name or "unset"}, '
-                f'saved_selection_loss={saved_loss:.8f}, '
-                f'active_metric={current_metric}, '
-                f'active_best_threshold={best_val_loss:.8f}, '
-                f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
-                f'condition_lr={family_lrs["condition"]:.10e}.'
+            if rank == 0:
+                print(
+                    'Fresh AdamW with temporal Rank IC selection. '
+                    'last_state optimizer moments were not loaded. '
+                    f"saved_protocol={existing_best_metric.get('selection_protocol') or 'unset'}, "
+                    f"saved_metric={saved_metric_name or 'unset'}, "
+                    f"active_best_threshold={best_val_loss}. "
+                    'Validation loss will not select best_model.',
+                    flush=True,
+                )
+        else:
+            saved_loss = float(existing_best_metric.get(
+                'selection_loss', existing_best_metric.get('objective_loss', float('inf'))
+            ))
+            if not math.isfinite(saved_loss):
+                raise ValueError(
+                    'Existing best_metric.json has no finite selection loss'
+                )
+            current_metric = str(config.get('best_selection_metric', 'objective'))
+            calibration_value = None
+            if calibration_metrics is not None:
+                if current_metric == 'pairwise_accuracy':
+                    calibration_value = calibration_metrics.get('pairwise_accuracy')
+                elif current_metric == 'ranking':
+                    calibration_value = calibration_metrics.get('ranking_loss')
+            best_val_loss = resolve_kept_best_loss(
+                saved_metric_name, saved_loss, current_metric, calibration_value,
             )
-            if current_metric == 'ranking' and saved_metric_name != 'ranking':
+            if rank == 0:
+                family_lrs = learning_rates_by_family(optimizer)
                 print(
-                    'Historical forecast best was not reused as the ranking '
-                    f'threshold ({saved_metric_name or "unset"} '
-                    f'{saved_loss:.8f} -> {current_metric}). '
-                    'beta_v21_score is not the selection metric.'
+                    'Fresh AdamW on existing best_model weights; '
+                    'last_state optimizer moments were not loaded. '
+                    f'best_segment={int(existing_best_metric.get("segment", -1))}, '
+                    f'saved_selection_metric={saved_metric_name or "unset"}, '
+                    f'saved_selection_loss={saved_loss:.8f}, '
+                    f'active_metric={current_metric}, '
+                    f'active_best_threshold={best_val_loss:.8f}, '
+                    f'adaptation_lr={family_lrs["adaptation"]:.10e}, '
+                    f'condition_lr={family_lrs["condition"]:.10e}.'
                 )
-            if (
-                current_metric == 'pairwise_accuracy'
-                and saved_metric_name != 'pairwise_accuracy'
-            ):
-                print(
-                    'Historical selection loss was not reused as the pairwise '
-                    f'accuracy threshold ({saved_metric_name or "unset"} '
-                    f'{saved_loss:.8f} -> {current_metric}). '
-                    'Higher accuracy is better. rank_ic is logged only.'
-                )
+                if current_metric == 'ranking' and saved_metric_name != 'ranking':
+                    print(
+                        'Historical forecast best was not reused as the ranking '
+                        f'threshold ({saved_metric_name or "unset"} '
+                        f'{saved_loss:.8f} -> {current_metric}). '
+                        'beta_v21_score is not the selection metric.'
+                    )
+                if (
+                    current_metric == 'pairwise_accuracy'
+                    and saved_metric_name != 'pairwise_accuracy'
+                ):
+                    print(
+                        'Historical selection loss was not reused as the pairwise '
+                        f'accuracy threshold ({saved_metric_name or "unset"} '
+                        f'{saved_loss:.8f} -> {current_metric}). '
+                        'Higher accuracy is better. rank_ic is logged only.'
+                    )
 
     if rank == 0:
         # Keep the output contract valid even if Kaggle interrupts before the
@@ -3718,21 +3886,165 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         selection_val_loss = best_selection_value(
             selection_metric, primary_metrics, large_metrics
         )
-
-        improved = selection_is_improvement(
-            selection_metric, selection_val_loss, best_val_loss
+        rank_ic_interval = int(
+            config.get('temporal_rank_ic_interval_segments')
+            or 10
         )
-        if improved:
-            best_val_loss = selection_val_loss
-            epochs_without_improvement = 0
-            if epoch_idx + 1 > minimum_coverage_segments:
-                post_coverage_without_improvement = 0
-        elif selection_val_loss is not None:
-            epochs_without_improvement += 1
-            if epoch_idx + 1 > minimum_coverage_segments:
-                post_coverage_without_improvement += 1
+        use_temporal_rank_ic = temporal_rank_ic_enabled(config)
+        rank_ic_evaluated = False
+        rank_ic_updated_best = False
+
+        if use_temporal_rank_ic:
+            # Val loss stays in the logs below. It must not move best_model.
+            improved = False
+        else:
+            improved = selection_is_improvement(
+                selection_metric, selection_val_loss, best_val_loss
+            )
+            if improved:
+                best_val_loss = selection_val_loss
+                epochs_without_improvement = 0
+                if epoch_idx + 1 > minimum_coverage_segments:
+                    post_coverage_without_improvement = 0
+            elif selection_val_loss is not None:
+                epochs_without_improvement += 1
+                if epoch_idx + 1 > minimum_coverage_segments:
+                    post_coverage_without_improvement += 1
 
         next_segment = epoch_idx + 1
+
+        def score_temporal_rank_ic_segment(force_final, *, persist_state=False):
+            nonlocal best_val_loss, epochs_without_improvement
+            nonlocal post_coverage_without_improvement, rank_ic_evaluated
+            nonlocal rank_ic_updated_best
+            if not use_temporal_rank_ic or rank_ic_evaluated:
+                return
+            if rank == 0:
+                due = temporal_rank_ic_due(
+                    next_segment,
+                    effective_epochs,
+                    rank_ic_interval,
+                    first_of_run=(epoch_idx == start_epoch),
+                    force_final=force_final,
+                )
+            else:
+                due = False
+            if not broadcast_rank0_flag(due, device, rank):
+                if rank == 0:
+                    print(
+                        "Temporal Rank IC selection: skipped "
+                        f"segment={next_segment} best_unchanged=1 "
+                        "val_loss_is_telemetry=1",
+                        flush=True,
+                    )
+                return
+            measured = None
+            summary = None
+            if rank == 0:
+                try:
+                    print(
+                        "Running temporal D10 Rank IC at "
+                        f"Segment {next_segment}: "
+                        f"{len(rank_ic_runtime['rows'])} windows, "
+                        f"{rank_ic_interval}-segment cadence.",
+                        flush=True,
+                    )
+                    summary = evaluate_temporal_d10_rank_ic(
+                        core_model, tokenizer, rank_ic_runtime, device,
+                    )
+                    measured = summary["daily_rank_ic_mean"]
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+                    measured = None
+                    summary = None
+            measured = broadcast_rank0_float(measured, device, rank)
+            if measured is None:
+                raise RuntimeError(
+                    "Temporal Rank IC failed. Refusing to keep a "
+                    "val-loss best_model for this segment."
+                )
+            rank_ic_evaluated = True
+            updated = checkpoint_should_update(
+                protocol_enabled=True,
+                rank_ic_due=True,
+                rank_ic_mean=measured,
+                incumbent_rank_ic=best_val_loss,
+                val_loss_improved=False,
+            )
+            if updated:
+                best_val_loss = float(measured)
+                rank_ic_updated_best = True
+                epochs_without_improvement = 0
+                if next_segment > minimum_coverage_segments:
+                    post_coverage_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if next_segment > minimum_coverage_segments:
+                    post_coverage_without_improvement += 1
+            if rank == 0:
+                print(
+                    "Temporal Rank IC selection: "
+                    f"daily_rank_ic_mean={float(measured):.8f} "
+                    f"segment={next_segment} "
+                    f"n_dates={int(summary['n_dates'])} "
+                    f"n_paths={int(summary['n_paths'])} "
+                    f"path_agg={summary['path_agg']} "
+                    f"updated_best={int(updated)}",
+                    flush=True,
+                )
+                append_metric(
+                    save_dir,
+                    type='validation_temporal_rank_ic',
+                    segment=int(next_segment),
+                    step=int(batch_idx_global),
+                    total_steps=len(train_loader),
+                    total_segments=effective_epochs,
+                    daily_rank_ic_mean=float(measured),
+                    n_dates=int(summary['n_dates']),
+                    n_paths=int(summary['n_paths']),
+                    path_agg=summary['path_agg'],
+                    manifest_sha256=summary['manifest_sha256'],
+                    selection_protocol='temporal_rank_ic_v1',
+                    updated_best=bool(updated),
+                    val_loss_selects_best=False,
+                    objective_loss=float(avg_val_loss),
+                    forecast_loss=float(avg_val_forecast_loss),
+                )
+                if updated:
+                    write_temporal_rank_ic_best(
+                        core_model,
+                        save_dir,
+                        config,
+                        build_rank_ic_best_metric(
+                            daily_rank_ic_mean=measured,
+                            segment=next_segment,
+                            step=batch_idx_global,
+                            n_dates=summary['n_dates'],
+                            manifest_sha256=summary['manifest_sha256'],
+                            objective_loss=avg_val_loss,
+                            forecast_loss=avg_val_forecast_loss,
+                            history_loss=avg_val_history_loss,
+                            full_sequence_loss=avg_val_full_loss,
+                        ),
+                    )
+                if persist_state:
+                    persist_resume_checkpoint(next_segment)
+
+        if use_temporal_rank_ic:
+            predicted_terminal = bool(
+                next_segment >= effective_epochs
+                or segment_run_limit_reached(
+                    start_epoch, next_segment, max_segments_per_run,
+                )
+                or (
+                    max_runtime_seconds > 0
+                    and (time.time() - start_time) >= max_runtime_seconds
+                )
+            )
+            score_temporal_rank_ic_segment(
+                predicted_terminal, persist_state=False,
+            )
 
         # --- End of Epoch Summary & Checkpointing (Master Process Only) ---
         if rank == 0:
@@ -3821,18 +4133,41 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     f"{metrics['full_sequence_loss']:.8f} "
                     f"({metrics['samples']:,} samples)"
                 )
-            print(
-                "Validation Train Average/Best: "
-                f"{epoch_loss_sum / max(epoch_batches, 1):.8f} / "
-                f"{best_val_loss:.8f}"
-            )
-            if selection_val_loss is None:
-                print(f"Best selection metric: {selection_metric}=not evaluated")
+            if use_temporal_rank_ic:
+                best_text = (
+                    f"{best_val_loss:.8f}"
+                    if math.isfinite(best_val_loss) else "unset"
+                )
+                print(
+                    "Validation Train Average / Best daily Rank IC: "
+                    f"{epoch_loss_sum / max(epoch_batches, 1):.8f} / "
+                    f"{best_text}"
+                )
+                if selection_val_loss is None:
+                    print(
+                        "Validation loss telemetry: "
+                        f"{selection_metric}=not evaluated "
+                        "(does not select best_model)"
+                    )
+                else:
+                    print(
+                        "Validation loss telemetry: "
+                        f"{selection_metric}={selection_val_loss:.8f} "
+                        "(does not select best_model)"
+                    )
             else:
                 print(
-                    f"Best selection metric: {selection_metric}="
-                    f"{selection_val_loss:.8f}"
+                    "Validation Train Average/Best: "
+                    f"{epoch_loss_sum / max(epoch_batches, 1):.8f} / "
+                    f"{best_val_loss:.8f}"
                 )
+                if selection_val_loss is None:
+                    print(f"Best selection metric: {selection_metric}=not evaluated")
+                else:
+                    print(
+                        f"Best selection metric: {selection_metric}="
+                        f"{selection_val_loss:.8f}"
+                    )
             if large_metrics is not None:
                 print(
                     "Large Validation Objective/Forecast/History/Full: "
@@ -3931,7 +4266,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                             else large_metrics.get('weighted_forecast_loss')
                         ),
                         'large_metrics': large_metrics,
-                        'is_new_best': bool(improved),
+                        'is_new_best': bool(improved or rank_ic_updated_best),
                         'learning_rates': [
                             float(group['lr']) for group in optimizer.param_groups
                         ],
@@ -4057,6 +4392,19 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
             decision = xm.all_reduce(xm.REDUCE_MAX, decision)
             runtime_limit_reached = bool(decision.item())
+        invocation_stopping = bool(
+            runtime_limit_reached
+            or next_segment >= effective_epochs
+            or segment_run_limit_reached(
+                start_epoch, next_segment, max_segments_per_run,
+            )
+        )
+        if use_temporal_rank_ic and invocation_stopping and not rank_ic_evaluated:
+            # The last completed segment of a wall-clock or chunk stop is scored
+            # even when it is not on the every-N grid. State is rewritten so
+            # resume sees the Rank IC threshold, not the val loss.
+            score_temporal_rank_ic_segment(True, persist_state=True)
+            distributed_barrier(device, f'kronos_segment_{next_segment}_rank_ic')
         if runtime_limit_reached:
             if rank == 0:
                 print(

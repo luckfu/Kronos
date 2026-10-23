@@ -180,7 +180,7 @@ python3 finetune/small_validation_rank_ic/build_kernel.py
 
 ### 5.1b 选模协议冻结（2026-10-23）
 
-群聊已冻结：**训练中途**用**时间切分**日频 D10 Rank IC 选 checkpoint；晋级换 C2 仍只走 §5.2。全文：[`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md)。60 日 symbol-holdout Rank IC 只作 pilot 旁证，不是选型协议。本文交接时的「不开新训练」仍适用于未批准的 pilot 接线；正在跑的 bigbatch2 是用户覆盖指令，选模仍用旧 val loss。
+群聊已冻结：**训练中途**用**时间切分**日频 D10 Rank IC 选 checkpoint；晋级换 C2 仍只走 §5.2。全文：[`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md)。60 日 symbol-holdout Rank IC 只作 pilot 旁证，不是选型协议。e01 已取消（那次仍是 val loss）。下一轮 bigbatch2 启动默认打开 `temporal_rank_ic_v1`；冻结选型窗缺失时失败关闭。实现状态见协议 §9。
 
 ### 5.2 C2 的 8b 执行约束回测
 

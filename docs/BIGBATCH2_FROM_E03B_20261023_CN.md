@@ -35,6 +35,8 @@ Parent kernel：`wynstonliu/kronos-small-clean-bigbatch-e03b`。
 - SwanLab：`smce2_big` / project `finance` / workspace `roc_fu` / segment offset 520
 - Budget：40500s train / 43200s hard timeout / dual T4
 
-## 选模协议（本轮仍不接线）
+## 选模协议（下一轮）
 
-中途 checkpoint 正式尺子见冻结稿 [`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md)（时间切分日频 D10 Rank IC，N=10 segment，16 路径中位数）。**本轮 bigbatch2 仍按旧 val loss 选 best**，不中途改规则、不事后用 Rank IC 重选冒充。
+e01 已取消，当时按 val loss 选 best，**不要**事后用 Rank IC 重选那次输出。下一轮启动默认 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL=temporal_rank_ic_v1`：每 10 个 segment（加首段和末段）用时间切分日频 D10 Rank IC（16 路径中位数）更新 `best_model`。val loss 仍记录。
+
+冻结选型窗 `finetune/manifests/temporal_rank_ic_v1/selection_window.json` 还没落盘。文件缺失时 `push_chunk.py` / `launch.py` 失败关闭，不会退回 val loss 或 symbol holdout。说明见该目录 README 与 [`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md) §9。

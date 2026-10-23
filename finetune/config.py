@@ -258,6 +258,48 @@ class Config:
                 "forecast, history, validation_large_objective, beta_v21_score, "
                 "ranking, or pairwise_accuracy"
             )
+        # Empty / val_loss keeps historical best-by-loss behavior. bigbatch2
+        # sets temporal_rank_ic_v1. The loss metric above stays telemetry.
+        self.checkpoint_selection_protocol = os.getenv(
+            "KRONOS_CHECKPOINT_SELECTION_PROTOCOL", ""
+        ).strip().lower()
+        if self.checkpoint_selection_protocol in {"", "val_loss", "legacy", "off"}:
+            self.checkpoint_selection_protocol = ""
+        elif self.checkpoint_selection_protocol != "temporal_rank_ic_v1":
+            raise ValueError(
+                "KRONOS_CHECKPOINT_SELECTION_PROTOCOL must be empty, val_loss, "
+                "or temporal_rank_ic_v1"
+            )
+        self.temporal_rank_ic_manifest_path = os.getenv(
+            "KRONOS_TEMPORAL_RANK_IC_MANIFEST", ""
+        ).strip()
+        self.temporal_rank_ic_panel_path = os.getenv(
+            "KRONOS_TEMPORAL_RANK_IC_PANEL", ""
+        ).strip()
+        # Independent of KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS. Bigbatch
+        # sets that interval very high because full validation already runs
+        # every segment; Rank IC stays on the protocol default of 10.
+        self.temporal_rank_ic_interval_segments = int(os.getenv(
+            "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS", "10"
+        ))
+        if self.checkpoint_selection_protocol == "temporal_rank_ic_v1":
+            if (
+                not self.temporal_rank_ic_manifest_path
+                or not self.temporal_rank_ic_panel_path
+            ):
+                raise ValueError(
+                    "temporal_rank_ic_v1 requires KRONOS_TEMPORAL_RANK_IC_MANIFEST "
+                    "and KRONOS_TEMPORAL_RANK_IC_PANEL. A missing manifest fails "
+                    "closed; symbol-holdout val loss cannot select best_model."
+                )
+            if self.temporal_rank_ic_interval_segments <= 0:
+                raise ValueError(
+                    "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS must be positive"
+                )
+            if self.lookback_window != 120 or self.predict_window != 10:
+                raise ValueError(
+                    "temporal_rank_ic_v1 requires lookback 120 and predict window 10"
+                )
         forecast_weights = os.getenv("KRONOS_FORECAST_HORIZON_WEIGHTS", "").strip()
         if forecast_weights:
             self.forecast_horizon_weights = tuple(
