@@ -1,6 +1,8 @@
 # 验证集 Rank IC 选模诊断（16 路径，2026-10-23）
 
-**结论先说**：改成生产口径的 **16 条路径 + P50 中位数**后，排序仍然是 **C2 > C03 > e03b > epoch2**，和 sealed OOS 的大方向一致；而且 C2 对 C03/e03b/epoch2 的差距比 1 条路径时更大。但 **20 个日期下，配对 CI 仍然全部跨 0**，所以它还不能单独作为训练选模指标。下一步是把日期加到 60 个，而不是马上改训练。
+**结论先说**：改成生产口径的 **16 条路径 + P50 中位数**后，排序仍然是 **C2 > C03 > e03b > epoch2**，和 sealed OOS 的大方向一致；而且 C2 对 C03/e03b/epoch2 的差距比 1 条路径时更大。但 **20 个日期下，配对 CI 仍然全部跨 0**，所以它还不能单独作为训练选模指标。下面第 2–6 节是这次已完成的 20 日结果，不是 60 日跑分。
+
+**§5.1 代码状态**：评估器已改为 `N_DATES = 60`（`N_SYMBOLS = 200`，16 条路径 + P50 中位数不变）。Kernel [`wynstonliu/kronos-small-validation-rank-ic-20261023`](https://www.kaggle.com/code/wynstonliu/kronos-small-validation-rank-ic-20261023) 已由另一代理推送，状态 **RUNNING**。60 日数字出来之前不要改写下面的表，也不要改训练，不要再 `kaggle kernels push`。
 
 ---
 
@@ -94,7 +96,7 @@
 
 ## 7. 下一步
 
-1. **日期从 20 加到 60**（每天 200 只，1.2 万窗口）；16 条路径下预计约 1.5 小时，成本可接受；
+1. **日期从 20 加到 60 的代码已就绪**（每天 200 只，1.2 万窗口；16 条路径中位数不变）。Kernel `wynstonliu/kronos-small-validation-rank-ic-20261023` 已另行推送，状态 **RUNNING**；预计约 1.5 小时。结果未出，不要重复 push。
 2. 如果 60 天后 C2 对 C03/e03b 的 CI 仍跨 0，就**放弃验证集 Rank IC 选模**；
 3. 同时考虑**时间切分验证**（例如 2026-04 → 2026-07 作为验证），比 symbol holdout 更接近 OOS；
 4. 在指标通过之前，不改训练循环，也不替换 C2。
@@ -108,10 +110,10 @@
 - 评估器：[`finetune/small_validation_rank_ic/evaluate_validation_rank_ic.py`](../finetune/small_validation_rank_ic/evaluate_validation_rank_ic.py)
 - Kernel：[`wynstonliu/kronos-small-validation-rank-ic-20261023`](https://www.kaggle.com/code/wynstonliu/kronos-small-validation-rank-ic-20261023)
 
-复现：
+本地重建（`build/` 不入库）。60 日 kernel 已在跑，**不要再 push**：
 
 ```bash
 python3 finetune/small_validation_rank_ic/build_kernel.py
-kaggle kernels push -p finetune/small_validation_rank_ic/build \
-  --timeout 43200 --accelerator NvidiaTeslaT4
+# kaggle kernels push 已由另一代理完成：
+# wynstonliu/kronos-small-validation-rank-ic-20261023 状态 RUNNING
 ```
