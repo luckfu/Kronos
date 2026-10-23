@@ -28,6 +28,9 @@ TRAIN_LOG_RE = re.compile(
 VALIDATION_LOG_RE = re.compile(
     r"Validation Forecast/History/Full: ([0-9.]+) / ([0-9.]+) / ([0-9.]+)"
 )
+RANK_IC_LOG_RE = re.compile(
+    r"Temporal Rank IC selection: daily_rank_ic_mean=([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?)"
+)
 
 
 def swanlab_chart_segment(local_segment, env=None):
@@ -433,7 +436,15 @@ def write_manifest(output_root: Path, stage: str, data_root: Path, predictor: Pa
             "physical_layer_expansion": False,
         },
         "validation": {
-            "selection": STAGES[stage]["best_metric"],
+            "selection": (
+                os.getenv("KRONOS_CHECKPOINT_SELECTION_PROTOCOL", "").strip()
+                or STAGES[stage]["best_metric"]
+            ),
+            "val_loss_logged": True,
+            "val_loss_selects_best": (
+                os.getenv("KRONOS_CHECKPOINT_SELECTION_PROTOCOL", "").strip().lower()
+                != "temporal_rank_ic_v1"
+            ),
             "full_symbol_holdout_required": stage != "bootstrap",
             "profile": "balanced_20k" if stage == "bootstrap" else "full_natural",
             "quick_validation_is_telemetry_only": True,
@@ -549,6 +560,15 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                                 "train/history_loss": float(record["history_loss"]),
                                 "segment": chart_segment,
                             }, step=swanlab_chart_step(segment, step, total_steps, env))
+                    elif record_type == "validation_temporal_rank_ic":
+                        segment = int(record.get("segment", 1))
+                        total_steps = int(record.get("total_steps", 625) or 625)
+                        if run is not None and record.get("daily_rank_ic_mean") is not None:
+                            chart_segment = swanlab_chart_segment(segment, env)
+                            run.log({
+                                "validation/daily_rank_ic_mean": float(record["daily_rank_ic_mean"]),
+                                "segment": chart_segment,
+                            }, step=swanlab_chart_step(segment, total_steps, total_steps, env))
                     elif record_type in {"validation", "validation_large"}:
                         segment = int(record.get("segment", 1))
                         total_steps = int(record.get("total_steps", 625))
@@ -614,6 +634,15 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                              "train/history_loss": float(history), "train/learning_rate": float(lr),
                              "train/condition_learning_rate": float(condition_lr), "segment": chart_segment},
                             step=step_value)
+            rank_ic_match = RANK_IC_LOG_RE.search(line)
+            if rank_ic_match and segment and run is not None:
+                chart_segment = swanlab_chart_segment(segment, env)
+                step_value = swanlab_chart_step(segment, total_steps, total_steps, env)
+                latest_step["value"] = step_value
+                run.log({
+                    "validation/daily_rank_ic_mean": float(rank_ic_match.group(1)),
+                    "segment": chart_segment,
+                }, step=step_value)
             match = VALIDATION_LOG_RE.search(line)
             if match and segment:
                 forecast, history, full = map(float, match.groups())

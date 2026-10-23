@@ -167,10 +167,36 @@ def main():
           owner=owner, max_gpu_seconds=43200, training_budget_seconds=BUDGET_SECONDS,
           coverage_seed=COVERAGE_SEED, previous_coverage_seed="20261020",
           parent=PARENT, swanlab_run_id=run_id,
-          swanlab_segment_offset=SWANLAB_SEGMENT_OFFSET)
+          swanlab_segment_offset=SWANLAB_SEGMENT_OFFSET,
+          checkpoint_selection="temporal_rank_ic_v1")
     input_root = Path("/kaggle/input")
     runtime = Path("/kaggle/working/clean_small_runtime")
     repo = Path(__file__).resolve().parents[2]
+    # Fail before the torch install when the frozen temporal window is absent.
+    # Symbol-holdout val loss is not a fallback for this launch.
+    finetune_dir = Path(__file__).resolve().parents[1]
+    if str(finetune_dir) not in sys.path:
+        sys.path.insert(0, str(finetune_dir))
+    from temporal_rank_ic_selection import resolve_training_selection_inputs
+    val_panels = [
+        path for path in input_root.glob("**/val_data.pkl") if path.is_file()
+    ] if input_root.exists() else []
+    manifest_path, panel_path, selection_manifest = resolve_training_selection_inputs(
+        repo,
+        input_root,
+        explicit_manifest=os.environ.get("KRONOS_TEMPORAL_RANK_IC_MANIFEST", ""),
+        explicit_panel=os.environ.get("KRONOS_TEMPORAL_RANK_IC_PANEL", ""),
+        val_data_paths=val_panels,
+    )
+    phase(
+        "temporal_rank_ic_window",
+        manifest=str(manifest_path),
+        manifest_sha256=selection_manifest["sha256"],
+        panel=str(panel_path),
+        panel_sha256=selection_manifest["panel_sha256"],
+        n_dates=len(selection_manifest["signal_dates"]),
+        train_time_upper_bound=selection_manifest["train_time_upper_bound"],
+    )
     output_name = EXPERIMENT + ("_probe" if fresh_probe else "")
     output = runtime / "outputs/models" / output_name
     entry_log = Path("/kaggle/working/entry.log")
@@ -185,6 +211,11 @@ def main():
         "amp": "float16", "scheduler": "warmup_constant",
         "lr": lr, "warmup_start_lr": 1e-6, "warmup_ratio": 0.01,
         "loss": "forecast", "history_weight": 0.02, "oos": "evaluation_only",
+        "checkpoint_selection_protocol": "temporal_rank_ic_v1",
+        "temporal_rank_ic_manifest_sha256": selection_manifest["sha256"],
+        "temporal_rank_ic_panel_sha256": selection_manifest["panel_sha256"],
+        "temporal_rank_ic_n_dates": len(selection_manifest["signal_dates"]),
+        "val_loss_selects_best": False,
         "swanlab_segment_offset": SWANLAB_SEGMENT_OFFSET,
         "parent_kernel": PARENT, "parent_experiment": PARENT_EXPERIMENT,
     }
@@ -266,6 +297,10 @@ def main():
         "KRONOS_NUM_WORKERS": "2", "KRONOS_SCHEDULER": "warmup_constant",
         "KRONOS_SCHEDULER_WARMUP_RATIO": "0.01",
         "KRONOS_PREDICTOR_LEARNING_RATE": str(lr), "KRONOS_CONDITION_LEARNING_RATE": str(lr),
+        "KRONOS_CHECKPOINT_SELECTION_PROTOCOL": "temporal_rank_ic_v1",
+        "KRONOS_TEMPORAL_RANK_IC_MANIFEST": str(manifest_path),
+        "KRONOS_TEMPORAL_RANK_IC_PANEL": str(panel_path),
+        "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS": "10",
         "KRONOS_USE_AMP": "1", "KRONOS_AMP_DTYPE": "float16",
         "KRONOS_REQUIRE_SWANLAB": "1", "SWANLAB_PROJECT": "finance",
         "SWANLAB_WORKSPACE": "roc_fu", "SWANLAB_EXPERIMENT_NAME": EXPERIMENT,

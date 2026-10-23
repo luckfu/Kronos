@@ -2,7 +2,7 @@
 
 状态：**冻结（2026-10-23）**。群聊约定；改任何一条须显式修订本文并另开 commit，禁止口头变口径。
 
-本文只冻结**中途选模**规则。不改训练代码、不推 Kaggle、不替换 C2。
+本文只冻结**中途选模**规则。不推 Kaggle、不替换 C2。尺子以本文为准；代码是否已接线见 §9。
 
 相关：
 
@@ -148,3 +148,24 @@ validation_large_interval_segments = 10
 | path_aggregation | median |
 | horizon | D10 |
 | promotion_gate | section_5_2_execution_constrained |
+
+---
+
+## 9. 实现状态（2026-10-23）
+
+选模规则已接到训练代码。默认**关**，旧 run 仍按 val loss 选 `best_model`。bigbatch2 启动脚本把协议设为 `temporal_rank_ic_v1`。
+
+| 项 | 位置 |
+|---|---|
+| 协议判断、manifest SHA、日均 Rank IC、16 路径中位数 | `finetune/temporal_rank_ic_selection.py` |
+| 稀疏触发（第 1 段、每 10 段、计划末段，外加本 run 首段与墙钟/chunk 末段）并写 `best_model` | `finetune/train_predictor.py` |
+| 开关 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL` | `finetune/config.py` |
+| bigbatch2 默认打开 | `finetune/small_clean_bigbatch_relay/launch.py` |
+| 选型窗占位说明 | `finetune/manifests/temporal_rank_ic_v1/README.md` |
+| 单测 | `tests/test_temporal_rank_ic_selection.py` |
+
+选型日历 **尚未**随代码提交。`selection_window.json` 缺失、日历 SHA 不符、日期落进禁止窗口、或面板落到 symbol-holdout `val_data.pkl` 时失败关闭，不会改用 val loss，也不会改用 symbol holdout。推送前会检查日历本身；面板 SHA 在启动时核对。val loss 仍每个 segment 记录。路径 seed 只作用于当次评分前向，评完恢复训练 RNG。
+
+`best_metric.json` 在该模式下写入 `daily_rank_ic_mean`、`segment`、`step`、`n_dates`、`n_paths`、`path_agg=median`、`selection_protocol=temporal_rank_ic_v1`、manifest SHA，并标记 `val_loss_selects_best=false`。IC 并列（绝对差 &lt; 1e-6）保留更早的 checkpoint。
+
+e01（val loss 选模）已取消。下一轮 bigbatch2 按本实现启动；§7.4「本轮仍按旧 val loss」只描述取消前的那次运行。晋级替换 C2 仍只走 §5.2，本实现不改那道门。

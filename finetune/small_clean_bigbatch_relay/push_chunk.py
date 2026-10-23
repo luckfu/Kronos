@@ -35,9 +35,12 @@ def source_bundle():
         "config", "dataset", "asset_metadata", "beta_v21", "drive_cleanup",
         "validation_precision", "train_predictor", "export_last_model",
         "kaggle_kronos_small_v21", "power_law_sampler",
+        "temporal_rank_ic_selection",
     ):
         files.append(ROOT / "finetune" / f"{name}.py")
     files.append(HERE / "launch.py")
+    manifest = ROOT / "finetune/manifests/temporal_rank_ic_v1/selection_window.json"
+    files.append(manifest)
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in files:
@@ -85,6 +88,9 @@ def main():
     args = parser.parse_args()
     if args.chunk < 1:
         parser.error("chunk must be positive")
+    sys.path.insert(0, str(ROOT / "finetune"))
+    from temporal_rank_ic_selection import assert_frozen_manifest_present
+    assert_frozen_manifest_present(ROOT)
     if args.retry_failed and args.chunk != 1:
         parser.error("--retry-failed only supports C01 setup failures")
     payload = source_bundle()
