@@ -6,7 +6,8 @@ stays telemetry. Symbol-holdout ``val_data.pkl`` is never a fallback: a missing
 manifest, a bad SHA, or a holdout path raises ``TemporalRankICSelectionError``.
 
 Frozen rules: ``docs/VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md``.
-Manifest placeholder: ``finetune/manifests/temporal_rank_ic_v1/README.md``.
+Calendar: ``finetune/manifests/temporal_rank_ic_v1/selection_window.json``.
+Panel bytes: ``finetune/build_temporal_rank_ic_panel.py`` (not stored in git).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from datetime import date
 from pathlib import Path
 
@@ -41,6 +43,9 @@ MANIFEST_RELATIVE = Path(
     "finetune/manifests/temporal_rank_ic_v1/selection_window.json"
 )
 README_RELATIVE = Path("finetune/manifests/temporal_rank_ic_v1/README.md")
+PANEL_FILENAME = "temporal_rank_ic_panel.pkl"
+PANEL_DATASET_ENV = "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET"
+_PANEL_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 # Protocol §2.3. Inclusive signal-date ranges. These windows are acceptance
 # only and must not enter checkpoint selection.
@@ -421,20 +426,27 @@ def resolve_panel_path(manifest, *, explicit_path="", search_roots=()):
             "or set panel_filename to a base name other than val_data.pkl. "
             "Symbol-holdout validation is not the selection window."
         )
-    matches = []
+    found = []
     for root in search_roots:
         root_path = Path(root)
         if not root_path.exists():
             continue
-        matches.extend(
+        found.extend(
             candidate for candidate in root_path.glob(f"**/{filename}")
             if candidate.is_file()
         )
+    matches = [
+        candidate for candidate in found
+        if candidate.name != "val_data.pkl" and not path_mentions_symbol_holdout(candidate)
+    ]
     if len(matches) != 1:
+        ignored = len(found) - len(matches)
         raise TemporalRankICSelectionError(
-            f"Expected one temporal panel named {filename}; found "
-            f"{[str(path) for path in matches[:8]]}. "
-            "Refusing to search val_data.pkl."
+            f"Expected one temporal panel named {filename} outside "
+            f"symbol-holdout inputs; found {[str(path) for path in matches[:8]]}. "
+            f"Ignored {ignored} holdout or val_data.pkl hit(s). "
+            "Mount the built panel dataset (KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET) "
+            "or set KRONOS_TEMPORAL_RANK_IC_PANEL. Refusing val_data.pkl."
         )
     return matches[0]
 
@@ -487,6 +499,12 @@ def validate_manifest_calendar(document):
         raise TemporalRankICSelectionError(f"temperature must be {TEMPERATURE}")
     if not math.isclose(float(document.get("top_p", -1)), TOP_P, rel_tol=0.0, abs_tol=1e-12):
         raise TemporalRankICSelectionError(f"top_p must be {TOP_P}")
+    filename = str(document.get("panel_filename") or "")
+    if filename != PANEL_FILENAME:
+        raise TemporalRankICSelectionError(
+            f"panel_filename must be {PANEL_FILENAME}. "
+            "val_data.pkl is not the temporal selection panel."
+        )
     raw_dates = document.get("signal_dates")
     if not isinstance(raw_dates, list) or not raw_dates:
         raise TemporalRankICSelectionError(
@@ -526,6 +544,57 @@ def validate_manifest_calendar(document):
         "sha256": actual_sha,
         "train_time_upper_bound": train_bound,
     }
+
+
+def require_pinned_panel_sha(document) -> str:
+    """Reject a push or launch until the builder has written a real panel SHA.
+
+    The calendar check deliberately allows an empty ``panel_sha256`` so the
+    date list can be frozen before the multi-GB panel exists. Push and launch
+    call this and stop. Do not fill the field with a placeholder digest.
+    """
+    if not isinstance(document, dict):
+        raise TemporalRankICSelectionError(
+            "Temporal Rank IC manifest must be a JSON object"
+        )
+    filename = str(document.get("panel_filename") or "")
+    if filename != PANEL_FILENAME:
+        raise TemporalRankICSelectionError(
+            f"panel_filename must be {PANEL_FILENAME}. "
+            "val_data.pkl is not the temporal selection panel."
+        )
+    panel_sha = str(document.get("panel_sha256") or "")
+    if not _PANEL_SHA.fullmatch(panel_sha):
+        raise TemporalRankICSelectionError(
+            "panel_sha256 is not a SHA256. Build temporal_rank_ic_panel.pkl with "
+            "finetune/build_temporal_rank_ic_panel.py so it can write the digest "
+            "into selection_window.json. Do not invent a digest, and do not point "
+            "this field at val_data.pkl."
+        )
+    return panel_sha
+
+
+def resolve_panel_dataset_slug(value, *, training_dataset) -> str:
+    """Kaggle ``owner/slug`` for the built panel. Never the training holdout set."""
+    slug = str(value or "").strip()
+    training = str(training_dataset or "").strip()
+    if not slug or slug.count("/") != 1 or slug.startswith("/") or slug.endswith("/"):
+        raise TemporalRankICSelectionError(
+            f"Set {PANEL_DATASET_ENV} to the owner/slug of the uploaded "
+            f"{PANEL_FILENAME} dataset before push_chunk. "
+            "The symbol-holdout training dataset cannot supply this panel."
+        )
+    owner, name = slug.split("/", 1)
+    if not owner or not name or name == "val_data.pkl":
+        raise TemporalRankICSelectionError(
+            f"{PANEL_DATASET_ENV}={slug!r} is not a panel dataset slug."
+        )
+    if slug == training or _contains_holdout_marker(slug):
+        raise TemporalRankICSelectionError(
+            f"{PANEL_DATASET_ENV}={slug!r} points at a symbol-holdout dataset. "
+            "Upload temporal_rank_ic_panel.pkl as its own dataset and mount that."
+        )
+    return slug
 
 
 def load_temporal_selection_manifest(
@@ -606,6 +675,7 @@ def resolve_training_selection_inputs(
     if not manifest_path.is_file():
         raise TemporalRankICSelectionError(missing_manifest_message(manifest_path))
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    require_pinned_panel_sha(document)
     panel_path = resolve_panel_path(
         document,
         explicit_path=explicit_panel or os.environ.get("KRONOS_TEMPORAL_RANK_IC_PANEL", ""),

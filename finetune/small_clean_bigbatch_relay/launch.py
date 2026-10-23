@@ -172,8 +172,10 @@ def main():
     input_root = Path("/kaggle/input")
     runtime = Path("/kaggle/working/clean_small_runtime")
     repo = Path(__file__).resolve().parents[2]
-    # Fail before the torch install when the frozen temporal window is absent.
-    # Symbol-holdout val loss is not a fallback for this launch.
+    # Fail before the torch install when the frozen calendar or the built
+    # panel is absent. Symbol-holdout val_data.pkl is not a fallback. The
+    # panel must be a second Kaggle dataset mount, not a file inside
+    # smmt315/a-share-120d-temporal-symbol-holdout.
     finetune_dir = Path(__file__).resolve().parents[1]
     if str(finetune_dir) not in sys.path:
         sys.path.insert(0, str(finetune_dir))

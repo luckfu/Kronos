@@ -36,7 +36,7 @@ A 的赢家只进**短名单**。未过 B，**不得**宣称替换 C2，也不�
 ### 2.2 必须是时间切分，禁止 symbol holdout 选型
 
 - **选型窗** = 按**交易日时间**切出的连续（或预先写死的）signal date 集合。
-- 训练样本的时间上界必须 **严格早于** 选型窗最早 signal date（含其 D10 标签所需行情都不进入训练覆盖）。
+- 训练样本的时间上界必须 **严格早于** 选型窗最早 signal date（含其 D10 标签所需行情都不进入训练覆盖）。本版冻结字段取 clean split 的 `train_cutoff`，见 §7。训练股票的全历史仍覆盖这个窗口，边界说明见 §9。
 - **禁止**用 `a-share-120d-temporal-symbol-holdout` 的 **symbol holdout 验证集**（520 只 holdout 股、2025-07-03→2026-07-02 那套）作为层 A 的正式选模协议。该面板上的 20/60 日 Rank IC 只作 **pilot 可行性旁证**，见 §6。
 - 选型窗日历必须在接入训练前落盘为只读 manifest（日期列表 + SHA）；开跑后不得增删日期「好看一点」。
 
@@ -127,13 +127,92 @@ validation_large_interval_segments = 10
 
 ---
 
-## 7. 接入顺序（文档门禁；本 commit 不动代码）
+## 7. 接入状态（日历已冻结，2026-10-23）
 
-1. 冻结并落盘时间切分选型窗 manifest。
-2. 离线对 C2 / 一两个续训 ckpt 在该窗上复算 16 路径 IC（sanity）。
-3. 再改 trainer：sparse 评测 + `best_model` 改挂 Rank IC。
-4. 小规模 pilot run（短墙钟）；**并行**的 bigbatch2 仍按旧 val loss 跑完，不中途改规则。
-5. Pilot 短名单 → 仅当 §5.2 标签齐且 `publishable_as_section_5_2=true` 时谈是否动 C2。
+选型日历已落盘：`finetune/manifests/temporal_rank_ic_v1/selection_window.json`。日期与 `sha256` 以该文件为准。下面是同一份列表。
+
+| 项 | 值 |
+|---|---|
+| n_dates | **60** |
+| 区间 | `2026-04-01` → `2026-06-30`（含首尾） |
+| 日历 | 上证公告〔2025〕45号（2025-12-22）。周末休市；这个窗口里没有周末开市。相对 pandas 工作日，只再去掉 `2026-04-06`、`2026-05-01`、`2026-05-04`、`2026-05-05`、`2026-06-19` |
+| train_time_upper_bound | `2024-12-31`（clean `split.train_cutoff`） |
+| sha256 | `0721b3defca10d2dab4dcaf433f1efab12304340298e6304fca6d3c9a9f3ce0d` |
+| panel_sha256 | **空**。只许 `finetune/build_temporal_rank_ic_panel.py` 在写出面板后填入，禁止手填 |
+
+```text
+2026-04-01
+2026-04-02
+2026-04-03
+2026-04-07
+2026-04-08
+2026-04-09
+2026-04-10
+2026-04-13
+2026-04-14
+2026-04-15
+2026-04-16
+2026-04-17
+2026-04-20
+2026-04-21
+2026-04-22
+2026-04-23
+2026-04-24
+2026-04-27
+2026-04-28
+2026-04-29
+2026-04-30
+2026-05-06
+2026-05-07
+2026-05-08
+2026-05-11
+2026-05-12
+2026-05-13
+2026-05-14
+2026-05-15
+2026-05-18
+2026-05-19
+2026-05-20
+2026-05-21
+2026-05-22
+2026-05-25
+2026-05-26
+2026-05-27
+2026-05-28
+2026-05-29
+2026-06-01
+2026-06-02
+2026-06-03
+2026-06-04
+2026-06-05
+2026-06-08
+2026-06-09
+2026-06-10
+2026-06-11
+2026-06-12
+2026-06-15
+2026-06-16
+2026-06-17
+2026-06-18
+2026-06-22
+2026-06-23
+2026-06-24
+2026-06-25
+2026-06-26
+2026-06-29
+2026-06-30
+```
+
+这些日期都不在 34 日包（`2026-08-03`→`2026-09-17`）、sealed 8 日（`2026-09-18`→`2026-09-30`）或 §5.2（`2026-10-09`→`2026-10-23`）里。信号日停在 6 月 30 日，不为了凑满 60 天伸进 7 月。`2026-06-30` 的 D10 标签是其后第 10 个上交所交易日 `2026-07-14`，仍早于 34 日包。
+
+面板还没进仓库，现在也不能推 Kaggle：
+
+1. `python finetune/build_temporal_rank_ic_panel.py --dataset-root <clean dataset> --output <dir>/temporal_rank_ic_panel.pkl`
+2. 把这个 pkl 上传成**单独**的 Kaggle dataset。不要并进 `smmt315/a-share-120d-temporal-symbol-holdout`，文件名不要用 `val_data.pkl`。
+3. 确认脚本已经把 manifest 里的 `panel_sha256` 写成该文件的 SHA，并提交这一行。
+4. `export KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=<owner>/<panel-dataset>` 之后才可以 `python -u finetune/small_clean_bigbatch_relay/push_chunk.py 1`。
+
+e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`push_chunk.py` 失败关闭，不要热重推。短名单要换 C2，仍然只走 §5.2。
 
 ---
 
@@ -161,11 +240,15 @@ validation_large_interval_segments = 10
 | 稀疏触发（第 1 段、每 10 段、计划末段，外加本 run 首段与墙钟/chunk 末段）并写 `best_model` | `finetune/train_predictor.py` |
 | 开关 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL` | `finetune/config.py` |
 | bigbatch2 默认打开 | `finetune/small_clean_bigbatch_relay/launch.py` |
-| 选型窗占位说明 | `finetune/manifests/temporal_rank_ic_v1/README.md` |
+| 选型窗日历与面板构建 | `finetune/manifests/temporal_rank_ic_v1/selection_window.json`、`finetune/build_temporal_rank_ic_panel.py`、同目录 README |
 | 单测 | `tests/test_temporal_rank_ic_selection.py` |
 
-选型日历 **尚未**随代码提交。`selection_window.json` 缺失、日历 SHA 不符、日期落进禁止窗口、或面板落到 symbol-holdout `val_data.pkl` 时失败关闭，不会改用 val loss，也不会改用 symbol holdout。推送前会检查日历本身；面板 SHA 在启动时核对。val loss 仍每个 segment 记录。路径 seed 只作用于当次评分前向，评完恢复训练 RNG。
+选型日历已经提交：60 个信号日，`sha256` 见 §7。`panel_sha256` 仍是空字符串。`selection_window.json` 缺失、日历 SHA 不符、日期落进禁止窗口、`panel_sha256` 还不是 64 位十六进制、或面板落到 symbol-holdout `val_data.pkl` 时失败关闭，不会改用 val loss，也不会改用 symbol holdout。`push_chunk.py` 在日历和面板 SHA 都钉住之前拒绝打包；面板字节到启动时再对一次。val loss 仍每个 segment 记录。路径 seed 只作用于当次评分前向，评完恢复训练 RNG。
+
+`train_time_upper_bound` 用的是 clean `data_manifest.split.train_cutoff` = `2024-12-31`。仓库里没有这份 manifest 原文。`launch.py` 把 `DATA_SHA` 钉在 `b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd`；`build_temporal_symbol_validation_dataset.py` 的默认 cutoff 是这一天，`remove_suspended_rows.py` 原样复制 `split`。预清洗 manifest 的训练股票最后一根 bar 在 beta v21 报告里是 `2026-07-17`，最后完整窗口 asof 是 `2026-07-02`（`build_time_disjoint_val_panel.py`）。所以这 60 天晚于 split cutoff，但仍落在训练股票 `train_data.pkl` 已经覆盖的日历里。本冻结不把信号日挪进 7 月或任何验收窗。构建脚本若发现挂载的 manifest `train_cutoff` 不是 `2024-12-31`，会直接停，不会沿用这份日期。
+
+`push_chunk.py` 还要求环境变量 `KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=owner/slug`。这个 slug 不能是训练数据集 `smmt315/a-share-120d-temporal-symbol-holdout`。生成的 `kernel-metadata.json` 把训练数据集和面板数据集一起放进 `dataset_sources`。`launch.py` 在 `/kaggle/input` 里只接受一份名为 `temporal_rank_ic_panel.pkl`、且路径不含 symbol-holdout 的文件。
 
 `best_metric.json` 在该模式下写入 `daily_rank_ic_mean`、`segment`、`step`、`n_dates`、`n_paths`、`path_agg=median`、`selection_protocol=temporal_rank_ic_v1`、manifest SHA，并标记 `val_loss_selects_best=false`。IC 并列（绝对差 &lt; 1e-6）保留更早的 checkpoint。
 
-e01（val loss 选模）已取消。下一轮 bigbatch2 按本实现启动；§7.4「本轮仍按旧 val loss」只描述取消前的那次运行。晋级替换 C2 仍只走 §5.2，本实现不改那道门。
+e01（val loss 选模）已取消。面板 SHA 钉上之前不要热重推 bigbatch2。晋级替换 C2 仍只走 §5.2，本实现不改那道门。
