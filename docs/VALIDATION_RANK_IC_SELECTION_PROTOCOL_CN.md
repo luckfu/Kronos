@@ -67,7 +67,7 @@ validation_large_interval_segments = 10
 
 （`should_run_large_validation`：第 1 段、每 `interval` 段、以及最后一段。）
 
-日频 16 路径 Rank IC 远重于 forecast val loss（60 日×16 路径单 ckpt 约十余分钟量级），**不得**每 segment 都跑。
+日频 Rank IC（现为单路径）仍远重于 forecast val loss（60 日×全截面单 ckpt 仍可能数十分钟量级），**不得**每 segment 都跑。
 
 ### 3.2 冻结默认
 
@@ -78,7 +78,7 @@ validation_large_interval_segments = 10
 | 强制点 | 本 run/本 epoch 的 **segment 1**、每个满足 `segment % 10 == 0` 的点、以及 **最后一个完成的 segment**（含墙钟提前停） |
 | 与现网对齐 | N=10 ≡ 现有 `validation_large_interval_segments` 默认 |
 
-可选加速（**仅 pilot 日志**，不改变「谁是 best」的定义）：同一套日期协议下可先用更少日期做冒烟；**写入 `best_model` 的正式分数**必须用冻结满规格窗 + 16 路径中位数。
+可选加速（**仅 pilot 日志**，不改变「谁是 best」的定义）：同一套日期协议下可先用更少日期做冒烟；**写入 `best_model` 的正式分数**必须用冻结满规格窗 + 当前 `n_paths`（现为 1）与 `path_agg=median`。
 
 若双 T4 墙钟证明 N=10 不可承受：只允许改成 **N=20**，且必须修订本文并留 commit；禁止改成「看 loss 曲线再手挑」。
 
@@ -223,7 +223,7 @@ e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`pus
 | protocol_id | `temporal_rank_ic_v1` |
 | frozen_date | 2026-10-23（Asia/Shanghai） |
 | sparse_N_segments | 10 |
-| n_paths | 16 |
+| n_paths | 1 |
 | path_aggregation | median |
 | horizon | D10 |
 | promotion_gate | section_5_2_execution_constrained |
@@ -236,7 +236,7 @@ e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`pus
 
 | 项 | 位置 |
 |---|---|
-| 协议判断、manifest SHA、日均 Rank IC、16 路径中位数 | `finetune/temporal_rank_ic_selection.py` |
+| 协议判断、manifest SHA、日均 Rank IC、单路径 | `finetune/temporal_rank_ic_selection.py` |
 | 稀疏触发（第 1 段、每 10 段、计划末段，外加本 run 首段与墙钟/chunk 末段）并写 `best_model` | `finetune/train_predictor.py` |
 | 开关 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL` | `finetune/config.py` |
 | bigbatch2 默认打开 | `finetune/small_clean_bigbatch_relay/launch.py` |
@@ -249,6 +249,6 @@ e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`pus
 
 `push_chunk.py` 还要求环境变量 `KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=owner/slug`。这个 slug 不能是训练数据集 `smmt315/a-share-120d-temporal-symbol-holdout`。生成的 `kernel-metadata.json` 把训练数据集和面板数据集一起放进 `dataset_sources`。`launch.py` 在 `/kaggle/input` 里只接受一份名为 `temporal_rank_ic_panel.pkl`、且路径不含 symbol-holdout 的文件。
 
-`best_metric.json` 在该模式下写入 `daily_rank_ic_mean`、`segment`、`step`、`n_dates`、`n_paths`、`path_agg=median`、`selection_protocol=temporal_rank_ic_v1`、manifest SHA，并标记 `val_loss_selects_best=false`。IC 并列（绝对差 &lt; 1e-6）保留更早的 checkpoint。
+`best_metric.json` 在该模式下写入 `daily_rank_ic_mean`、`segment`、`step`、`n_dates`、`n_paths`、`n_paths=1`、`path_agg=median`、`selection_protocol=temporal_rank_ic_v1`、manifest SHA，并标记 `val_loss_selects_best=false`。IC 并列（绝对差 &lt; 1e-6）保留更早的 checkpoint。
 
 e01（val loss 选模）已取消。面板 SHA 钉上之前不要热重推 bigbatch2。晋级替换 C2 仍只走 §5.2，本实现不改那道门。

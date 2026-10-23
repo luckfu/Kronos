@@ -1,7 +1,7 @@
 """Temporal daily D10 Rank IC checkpoint selection (protocol temporal_rank_ic_v1).
 
-Mid-training ``best_model`` uses the mean same-day Spearman IC of the 16-path
-median D10 return on a frozen temporal signal-date manifest. Validation loss
+Mid-training ``best_model`` uses the mean same-day Spearman IC of a single-path
+D10 return on a frozen temporal signal-date manifest (N_PATHS=1 for wall-clock). Validation loss
 stays telemetry. Symbol-holdout ``val_data.pkl`` is never a fallback: a missing
 manifest, a bad SHA, or a holdout path raises ``TemporalRankICSelectionError``.
 
@@ -12,7 +12,7 @@ Optional precomputed windows live beside that panel as
 ``temporal_rank_ic_rows.pkl``. Dual-GPU startup hashes the manifest on every
 rank, then only rank 0 materializes rows. Other ranks wait on a status file
 and do not enter NCCL until that build has finished. Mid-train scoring is the
-same shape: only rank 0 runs the long temporal forward; peers poll a status
+same shape: only rank 0 runs the temporal forward; peers poll a status
 file and must not enter ``broadcast`` until the score finishes.
 """
 
@@ -32,7 +32,7 @@ from pathlib import Path
 PROTOCOL_ID = "temporal_rank_ic_v1"
 SELECTION_METRIC = "temporal_daily_d10_rank_ic"
 DEFAULT_INTERVAL_SEGMENTS = 10
-N_PATHS = 16
+N_PATHS = 1
 PATH_AGG = "median"
 TEMPERATURE = 0.65
 TOP_P = 0.8
@@ -57,10 +57,10 @@ ROWS_SHA_KEY = "rows_sha256"
 PANEL_DATASET_ENV = "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET"
 ROWS_PATH_ENV = "KRONOS_TEMPORAL_RANK_IC_ROWS"
 PREPARE_TIMEOUT_SECONDS = 45 * 60
-# Status-file wait while rank 0 scores ~300k 16-path windows on one T4.
-# Empirically ~13h at batch=4; keep headroom. Override with
+# Status-file wait while rank 0 scores ~300k single-path windows on one T4.
+# With N_PATHS=1 expect ~1h-class Seg1; keep headroom. Override with
 # KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS.
-SCORE_TIMEOUT_SECONDS = 16 * 60 * 60
+SCORE_TIMEOUT_SECONDS = 4 * 60 * 60
 _PANEL_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 # Protocol §2.3. Inclusive signal-date ranges. These windows are acceptance
@@ -1459,7 +1459,7 @@ def _predict_temporal_d10_batch(model, tokenizer, rows, device, batch_size, mani
 
 
 def evaluate_temporal_d10_rank_ic(model, tokenizer, runtime, device):
-    """16-path median D10 Rank IC on the frozen temporal rows.
+    """Single-path D10 Rank IC on the frozen temporal rows.
 
     The path seed applies only inside this call. Training RNGs and train/eval
     mode are restored before the next segment.
@@ -1523,7 +1523,7 @@ def coordinate_rank_ic_score(
     float while rank 0 was still scanning ~300k windows under the default
     600s watchdog. Peers must poll a status file until rank 0 publishes the
     measured Rank IC (or an error). No collective runs during the forward.
-    The metric is unchanged: rank 0 still owns the 16-path median path seed.
+    The metric is unchanged: rank 0 still owns the single-path path seed.
     """
     rank = int(rank)
     world_size = int(world_size)

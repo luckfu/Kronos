@@ -2,8 +2,8 @@
 
 Round 2 (2026-10-23 user override): fresh coverage epoch from e03b best
 weights with a new coverage seed. Not e04b — that name was retired with the
-closed bigbatch line. SwanLab continues run_id smce2_big with segment offset
-520 so the board appends after e03b's completed 520 segments.
+closed bigbatch line. Mid-train Rank IC uses N_PATHS=1. SwanLab starts a
+fresh run_id (not smce2_big) with segment offset 0.
 """
 
 import hashlib
@@ -20,7 +20,7 @@ from pathlib import Path
 
 CHUNK_CONFIG = {}
 EXPERIMENT = "small_0.1_clean_bigbatch2_from_e03b_20261023"
-RUN_ID = "smce2_big"  # continue SwanLab board from e01b–e03b
+RUN_ID = "smce2_e01e_rankic1p"  # fresh board; not smce2_big
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
 PARENT = "wynstonliu/kronos-small-clean-bigbatch-e03b"
 # Parent experiment directory name inside e03b Output (best @457).
@@ -34,8 +34,8 @@ COVERAGE_SEED = "20261023"
 TOTAL_SEGMENTS = 520
 MAX_SEGMENTS = 0  # Let elapsed time determine each chunk's completed segments.
 BUDGET_SECONDS = 40500  # ~11h15m under the 12h Kaggle GPU cap.
-# Chart continuity after e03b's completed coverage (local segments stay 1..520).
-SWANLAB_SEGMENT_OFFSET = 520
+# Fresh SwanLab board: chart segment == local coverage segment.
+SWANLAB_SEGMENT_OFFSET = 0
 REQUIRED = (
     "run.log", "metrics.jsonl", "progress.json", "summary.json",
     "small_v21_manifest.json", "experiment_manifest.json",
@@ -245,7 +245,7 @@ def main():
     for key in ("SWANLAB_PROJECT", "SWANLAB_WORKSPACE", "SWANLAB_EXPERIMENT_NAME"):
         os.environ.pop(key, None)
     phase("dashboard_deferred", project="finance", run_id=run_id, experiment=EXPERIMENT,
-          note="single SwanLab run is created by the trainer; resume=allow on smce2_big")
+          note="single SwanLab run is created by the trainer; resume=allow on smce2_e01e_rankic1p")
     data_root = prepare_data(input_root, runtime / "data")
     tokenizer = find_one(input_root, "**/Kronos-Tokenizer-base/model.safetensors").parent
     if sha256(tokenizer / "model.safetensors") != TOKENIZER_SHA:

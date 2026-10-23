@@ -38,12 +38,12 @@ e01 已取消。下面是取消前那次 val-loss 运行的记录，不要热重
 - Commit：`1d408ab`（relay 配置）+ slug 对齐后续提交
 - Resume：`wynstonliu/kronos-small-clean-bigbatch-e03b` best（SHA `f2fb12a5…`）
 - Seed：`20261020` → `20261023`
-- SwanLab：`smce2_big` / project `finance` / workspace `roc_fu` / segment offset 520
+- SwanLab：`smce2_e01e_rankic1p` / project `finance` / workspace `roc_fu` / segment offset 0（新看板，不再续 smce2_big）
 - Budget：40500s train / 43200s hard timeout / dual T4
 
 ## 选模协议（下一轮）
 
-e01 已取消，当时按 val loss 选 best，**不要**事后用 Rank IC 重选那次输出，也不要在面板就绪前热重推。下一轮启动默认 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL=temporal_rank_ic_v1`：每 10 个 segment（加首段和末段）用时间切分日频 D10 Rank IC（16 路径中位数）更新 `best_model`。val loss 仍记录。晋级替换 C2 仍只走 §5.2。
+e01 已取消，当时按 val loss 选 best，**不要**事后用 Rank IC 重选那次输出，也不要在面板就绪前热重推。下一轮启动默认 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL=temporal_rank_ic_v1`：每 10 个 segment（加首段和末段）用时间切分日频 D10 Rank IC（单路径）更新 `best_model`。val loss 仍记录。晋级替换 C2 仍只走 §5.2。
 
 选型日历已冻结：`finetune/manifests/temporal_rank_ic_v1/selection_window.json`，**60** 个交易日（`2026-04-01` → `2026-06-30`），`sha256` `0721b3defca10d2dab4dcaf433f1efab12304340298e6304fca6d3c9a9f3ce0d`，`train_time_upper_bound` `2024-12-31`。日期列表见 [`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md) §7。
 
