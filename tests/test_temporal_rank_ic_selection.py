@@ -322,6 +322,7 @@ def test_frozen_repo_calendar_passes_with_pinned_panel_sha():
     assert document["panel_filename"] == "temporal_rank_ic_panel.pkl"
     assert document["panel_sha256"] == PINNED_PANEL_SHA256
     assert require_pinned_panel_sha(document) == PINNED_PANEL_SHA256
+    assert not str(document.get("rows_sha256") or "").strip()
     assert expected[0] == "2026-04-01"
     assert expected[-1] == "2026-06-30"
     business = [
@@ -560,3 +561,513 @@ def test_unpickle_guard_rejects_non_dicts(tmp_path):
     from temporal_rank_ic_selection import load_price_panel
     with pytest.raises(TemporalRankICSelectionError, match="dict"):
         load_price_panel(path)
+
+
+def _long_panel():
+    signal_dates = ["2026-07-06", "2026-07-07"]
+    index = pd.date_range("2025-06-01", "2026-08-01", freq="D")
+    panel = {}
+    for symbol, scale in (("AAA", 1.0), ("BBB", 2.0)):
+        close = np.linspace(10.0, 40.0, len(index)) * scale
+        panel[symbol] = pd.DataFrame({
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": np.full(len(index), 5.0),
+            "amount": np.full(len(index), 7.0),
+            "sector_id": np.full(len(index), 4),
+            "size_percentile": np.full(len(index), 0.25),
+        }, index=index)
+    late = pd.date_range("2026-07-20", "2026-08-01", freq="D")
+    late_close = np.linspace(1.0, 2.0, len(late))
+    panel["CCC"] = pd.DataFrame({
+        "open": late_close,
+        "high": late_close,
+        "low": late_close,
+        "close": late_close,
+        "volume": np.ones(len(late)),
+        "amount": np.ones(len(late)),
+    }, index=late)
+    return signal_dates, index, panel
+
+
+def test_evaluation_rows_use_a_per_symbol_date_index():
+    signal_dates, index, panel = _long_panel()
+    manifest = {"signal_dates": signal_dates, "lookback": 120, "predict": 10}
+    rows = build_evaluation_rows(manifest, panel, min_names=2, progress=False)
+    assert [row["symbol"] for row in rows] == ["AAA", "BBB", "AAA", "BBB"]
+    assert [row["asof_date"] for row in rows] == [
+        "2026-07-06", "2026-07-06", "2026-07-07", "2026-07-07",
+    ]
+    location = int(index.get_loc(pd.Timestamp("2026-07-06")))
+    assert location > 200
+    close = panel["AAA"]["close"].to_numpy()
+    expected = float(close[location + 10] / close[location] - 1.0)
+    assert rows[0]["actual"] == pytest.approx(expected)
+    assert rows[0]["x"].shape == (120, 6)
+    signal_stamp = rows[0]["stamp"][119]
+    assert signal_stamp.tolist() == pytest.approx([0, 0, 0, 6, 7])
+    bare = dict(panel)
+    bare["BBB"] = bare["BBB"].drop(columns=["sector_id"])
+    with pytest.raises(TemporalRankICSelectionError, match="sector_id"):
+        build_evaluation_rows(manifest, bare, min_names=2, progress=False)
+
+
+def test_row_build_progress_is_flushed(monkeypatch):
+    signal_dates, _index, panel = _long_panel()
+    manifest = {"signal_dates": signal_dates[:1], "lookback": 120, "predict": 10}
+    calls = []
+
+    def capture(*_args, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("builtins.print", capture)
+    build_evaluation_rows(manifest, panel, min_names=2, progress=True)
+    assert calls
+    assert all(call.get("flush") is True for call in calls)
+
+
+def _wrote_rows(tmp_path, rows, *, panel_sha, calendar_sha):
+    from temporal_rank_ic_selection import write_evaluation_rows
+
+    path = tmp_path / "temporal_rank_ic_rows.pkl"
+    digest = write_evaluation_rows(
+        rows, path, panel_sha256=panel_sha, calendar_sha256=calendar_sha,
+    )
+    return path, digest
+
+
+def test_precomputed_rows_load_and_fail_closed(tmp_path, monkeypatch):
+    from temporal_rank_ic_selection import (
+        load_precomputed_rows,
+        materialize_evaluation_rows,
+        prepare_rank_ic_runtime,
+        write_evaluation_rows,
+    )
+
+    signal_dates, _index, panel = _long_panel()
+    manifest_body = {
+        "signal_dates": signal_dates,
+        "lookback": 120,
+        "predict": 10,
+        "panel_path": str(tmp_path / "temporal_rank_ic_panel.pkl"),
+    }
+    rows = build_evaluation_rows(manifest_body, panel, min_names=2, progress=False)
+    panel_sha = "a" * 64
+    calendar_sha = manifest_sha256(signal_dates)
+    manifest_body["panel_sha256"] = panel_sha
+    manifest_body["sha256"] = calendar_sha
+    path, digest = _wrote_rows(
+        tmp_path, rows, panel_sha=panel_sha, calendar_sha=calendar_sha,
+    )
+    loaded = load_precomputed_rows(
+        path, manifest_body, expected_sha=digest, min_names=2,
+    )
+    assert len(loaded) == len(rows)
+    assert loaded[0]["symbol"] == "AAA"
+
+    def forbid_rebuild(*_args, **_kwargs):
+        raise AssertionError("row build must not run when an artifact is expected")
+
+    monkeypatch.setattr(
+        "temporal_rank_ic_selection.build_evaluation_rows", forbid_rebuild,
+    )
+    monkeypatch.setattr(
+        "temporal_rank_ic_selection.load_price_panel", forbid_rebuild,
+    )
+    manifest_body["rows_sha256"] = "b" * 64
+    with pytest.raises(TemporalRankICSelectionError, match="rows SHA"):
+        materialize_evaluation_rows(manifest_body, min_names=2, progress=False)
+    manifest_body["rows_sha256"] = digest
+    path.unlink()
+    with pytest.raises(TemporalRankICSelectionError, match="missing"):
+        materialize_evaluation_rows(manifest_body, min_names=2, progress=False)
+
+    path, digest = _wrote_rows(
+        tmp_path, rows, panel_sha="c" * 64, calendar_sha=calendar_sha,
+    )
+    manifest_body["rows_sha256"] = digest
+    with pytest.raises(TemporalRankICSelectionError, match="panel SHA"):
+        load_precomputed_rows(path, manifest_body, expected_sha=digest, min_names=2)
+
+    matching, matching_sha = _wrote_rows(
+        tmp_path, rows, panel_sha=panel_sha, calendar_sha=calendar_sha,
+    )
+    del manifest_body["rows_sha256"]
+    monkeypatch.delenv("KRONOS_TEMPORAL_RANK_IC_ROWS", raising=False)
+    loaded_rows, source = materialize_evaluation_rows(
+        manifest_body, min_names=2, progress=False,
+    )
+    assert source == "precomputed"
+    assert len(loaded_rows) == len(rows)
+    assert matching == tmp_path / "temporal_rank_ic_rows.pkl"
+    assert matching_sha
+
+    monkeypatch.setenv(
+        "KRONOS_TEMPORAL_RANK_IC_ROWS",
+        str(tmp_path / "missing-temporal_rank_ic_rows.pkl"),
+    )
+    with pytest.raises(TemporalRankICSelectionError, match="missing"):
+        materialize_evaluation_rows(manifest_body, min_names=2, progress=False)
+    monkeypatch.setenv(
+        "KRONOS_TEMPORAL_RANK_IC_ROWS",
+        str(tmp_path / "symbol-holdout" / "temporal_rank_ic_rows.pkl"),
+    )
+    with pytest.raises(TemporalRankICSelectionError, match="symbol-holdout"):
+        materialize_evaluation_rows(manifest_body, min_names=2, progress=False)
+
+    # Full prepare path: cheap SHA check plus load, with no panel unpickle.
+    monkeypatch.delenv("KRONOS_TEMPORAL_RANK_IC_ROWS", raising=False)
+    panel_file = tmp_path / "temporal_rank_ic_panel.pkl"
+    panel_file.write_bytes(b"panel-bytes-not-unpickled")
+    from temporal_rank_ic_selection import sha256_file as file_sha
+    body = _manifest_body(signal_dates, file_sha(panel_file))
+    expanded = []
+    for row in rows:
+        for index in range(15):
+            clone = dict(row)
+            clone["symbol"] = f"{row['symbol']}{index:02d}"
+            expanded.append(clone)
+    body["rows_sha256"] = write_evaluation_rows(
+        expanded,
+        tmp_path / "temporal_rank_ic_rows.pkl",
+        panel_sha256=body["panel_sha256"],
+        calendar_sha256=body["sha256"],
+    )
+    manifest_path = tmp_path / "selection_window.json"
+    manifest_path.write_text(json.dumps(body), encoding="utf-8")
+    config = {
+        "checkpoint_selection_protocol": PROTOCOL_ID,
+        "temporal_rank_ic_manifest_path": str(manifest_path),
+        "temporal_rank_ic_panel_path": str(panel_file),
+    }
+    runtime = prepare_rank_ic_runtime(config, load_panel=True)
+    assert runtime["rows_source"] == "precomputed"
+    assert runtime["panel"] is None
+    assert len(runtime["rows"]) == len(expanded)
+    checked = prepare_rank_ic_runtime(config, load_panel=False)
+    assert checked["rows"] is None
+    assert checked["manifest"]["panel_sha256"] == body["panel_sha256"]
+
+
+def test_materialize_builds_when_no_rows_artifact_is_expected(tmp_path, monkeypatch):
+    from temporal_rank_ic_selection import materialize_evaluation_rows
+
+    signal_dates, _index, panel = _long_panel()
+    panel.pop("CCC")
+    panel_path = tmp_path / "temporal_rank_ic_panel.pkl"
+    with panel_path.open("wb") as handle:
+        pickle.dump(panel, handle)
+    manifest = {
+        "signal_dates": signal_dates,
+        "lookback": 120,
+        "predict": 10,
+        "panel_path": str(panel_path),
+        "panel_sha256": sha256_file(panel_path),
+        "sha256": manifest_sha256(signal_dates),
+    }
+    monkeypatch.delenv("KRONOS_TEMPORAL_RANK_IC_ROWS", raising=False)
+    rows, source = materialize_evaluation_rows(
+        manifest, min_names=2, progress=False,
+    )
+    assert source == "built"
+    assert len(rows) == 4
+
+
+def test_prepare_failure_names_the_underlying_error_and_stays_closed(tmp_path):
+    from temporal_rank_ic_selection import coordinate_rank_ic_prepare
+
+    def cheap():
+        raise TemporalRankICSelectionError("panel SHA does not match the manifest")
+
+    def materialize(_checked):
+        raise AssertionError("rows must not be built after a failed manifest check")
+
+    with pytest.raises(RuntimeError, match="panel SHA does not match") as caught:
+        coordinate_rank_ic_prepare(
+            rank=0,
+            world_size=1,
+            directory=tmp_path,
+            run_id="solo",
+            cheap_check=cheap,
+            materialize=materialize,
+            exchange_errors=lambda _error: [],
+            timeout=5,
+        )
+    message = str(caught.value)
+    assert "TemporalRankICSelectionError" in message
+    assert "val loss" in message
+    assert "symbol holdout" in message
+
+
+def test_rank1_timeout_does_not_enter_the_collective(tmp_path):
+    from temporal_rank_ic_selection import coordinate_rank_ic_prepare
+
+    calls = []
+
+    def exchange(local_error):
+        calls.append(local_error)
+        return [local_error] if local_error else []
+
+    with pytest.raises(RuntimeError, match="all_reduce") as caught:
+        coordinate_rank_ic_prepare(
+            rank=1,
+            world_size=2,
+            directory=tmp_path,
+            run_id="timeout-run",
+            cheap_check=lambda: {"manifest": {"signal_dates": ["2026-07-06"]}},
+            materialize=lambda _checked: (_ for _ in ()).throw(
+                AssertionError("rank 1 built rows")
+            ),
+            exchange_errors=exchange,
+            timeout=0.2,
+            poll_seconds=0.01,
+            heartbeat_seconds=30,
+        )
+    assert calls == []
+    assert "val loss" in str(caught.value)
+    assert "NCCL" in str(caught.value)
+
+
+def test_other_ranks_wait_outside_the_collective_during_row_build(tmp_path):
+    import threading
+
+    from temporal_rank_ic_selection import coordinate_rank_ic_prepare
+
+    order = []
+    lock = threading.Lock()
+    started = threading.Event()
+    release = threading.Event()
+    failures = []
+    builds = []
+
+    def cheap(rank):
+        def _cheap():
+            with lock:
+                order.append((rank, "cheap"))
+            return {"manifest": {"signal_dates": ["2026-07-06"]}, "rows": None}
+        return _cheap
+
+    def materialize(_checked):
+        builds.append("build")
+        started.set()
+        with lock:
+            order.append((0, "materialize-start"))
+        assert release.wait(timeout=5)
+        with lock:
+            order.append((0, "materialize-end"))
+        return {
+            "manifest": {"signal_dates": ["2026-07-06"]},
+            "rows": [{"symbol": "AAA"}],
+            "rows_source": "built",
+        }
+
+    def exchange(rank):
+        def _exchange(local_error):
+            with lock:
+                order.append((rank, "exchange"))
+                assert (0, "materialize-end") in order
+            return [local_error] if local_error else []
+        return _exchange
+
+    def run(rank):
+        try:
+            coordinate_rank_ic_prepare(
+                rank=rank,
+                world_size=2,
+                directory=tmp_path,
+                run_id="ddp-run",
+                cheap_check=cheap(rank),
+                materialize=materialize if rank == 0 else (
+                    lambda _checked: (_ for _ in ()).throw(
+                        AssertionError("rank 1 built rows")
+                    )
+                ),
+                exchange_errors=exchange(rank),
+                timeout=5,
+                poll_seconds=0.01,
+                heartbeat_seconds=30,
+            )
+        except Exception as exc:
+            failures.append((rank, exc))
+
+    workers = [threading.Thread(target=run, args=(rank,)) for rank in (1, 0)]
+    for worker in workers:
+        worker.start()
+    assert started.wait(timeout=5)
+    with lock:
+        assert not any(item[1] == "exchange" for item in order)
+    release.set()
+    for worker in workers:
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+    assert failures == []
+    assert builds == ["build"]
+    with lock:
+        assert (0, "materialize-end") in order
+        assert (1, "exchange") in order
+        assert order.index((0, "materialize-end")) < order.index((1, "exchange"))
+
+
+def test_rank0_build_error_reaches_every_rank(tmp_path):
+    import threading
+
+    from temporal_rank_ic_selection import coordinate_rank_ic_prepare
+
+    barrier = threading.Barrier(2)
+    collected = {}
+    failures = []
+    builds = []
+
+    def materialize(_checked):
+        builds.append("build")
+        raise TemporalRankICSelectionError("missing columns ['sector_id']")
+
+    def exchange(rank):
+        def _exchange(local_error):
+            collected[rank] = local_error
+            barrier.wait(timeout=5)
+            return [
+                f"rank{index}: {text}"
+                for index, text in sorted(collected.items())
+                if text
+            ]
+        return _exchange
+
+    def run(rank):
+        try:
+            coordinate_rank_ic_prepare(
+                rank=rank,
+                world_size=2,
+                directory=tmp_path,
+                run_id="err-run",
+                cheap_check=lambda: {
+                    "manifest": {"signal_dates": ["2026-07-06"]},
+                    "rows": None,
+                },
+                materialize=materialize,
+                exchange_errors=exchange(rank),
+                timeout=5,
+                poll_seconds=0.01,
+                heartbeat_seconds=30,
+            )
+        except Exception as exc:
+            failures.append((rank, exc))
+
+    workers = [threading.Thread(target=run, args=(rank,)) for rank in (0, 1)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+    assert builds == ["build"]
+    assert sorted(rank for rank, _exc in failures) == [0, 1]
+    for _rank, exc in failures:
+        assert isinstance(exc, RuntimeError)
+        text = str(exc)
+        assert "sector_id" in text
+        assert "TemporalRankICSelectionError" in text
+        assert "val loss" in text
+        assert "symbol holdout" in text
+
+
+def test_launch_prepare_keeps_rank1_out_of_all_reduce(tmp_path, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+
+    import train_predictor as trainer
+
+    events = []
+    lock = threading.Lock()
+    failures = []
+
+    def fake_prepare(config, *, load_panel, manifest=None):
+        del config, manifest
+        with lock:
+            events.append(("prepare", bool(load_panel)))
+        if load_panel:
+            time_mod = __import__("time")
+            time_mod.sleep(0.2)
+            with lock:
+                assert "all_reduce" not in events
+            return {
+                "manifest": {
+                    "signal_dates": ["2026-07-06"],
+                    "sha256": "abc",
+                    "train_time_upper_bound": "2024-12-31",
+                },
+                "panel": None,
+                "rows": [{"symbol": "AAA"}],
+                "rows_source": "built",
+            }
+        return {
+            "manifest": {
+                "signal_dates": ["2026-07-06"],
+                "sha256": "abc",
+                "train_time_upper_bound": "2024-12-31",
+            },
+            "panel": None,
+            "rows": None,
+            "rows_source": "",
+        }
+
+    def forbid_all_reduce(*_args, **_kwargs):
+        with lock:
+            events.append("all_reduce")
+        raise AssertionError("all_reduce during Temporal Rank IC prepare")
+
+    def set_timeout(timeout, group=None):
+        del group
+        with lock:
+            events.append(("timeout", float(timeout.total_seconds())))
+
+    def exchange(local_error, device, rank, world_size):
+        del device, world_size
+        with lock:
+            events.append(("exchange", rank))
+            assert ("prepare", True) in events
+        return [local_error] if local_error else []
+
+    monkeypatch.setattr(trainer, "prepare_rank_ic_runtime", fake_prepare)
+    monkeypatch.setattr(trainer, "_exchange_prepare_errors", exchange)
+    monkeypatch.setattr(trainer.dist, "is_available", lambda: True)
+    monkeypatch.setattr(trainer.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(trainer.dist, "all_reduce", forbid_all_reduce)
+    monkeypatch.setattr(trainer.dist, "set_timeout", set_timeout, raising=False)
+    device = SimpleNamespace(type="cpu")
+
+    def run(rank):
+        try:
+            runtime = trainer.prepare_temporal_rank_ic_for_launch(
+                {"checkpoint_selection_protocol": PROTOCOL_ID},
+                device,
+                rank,
+                2,
+                str(tmp_path),
+            )
+            if rank == 0:
+                assert len(runtime["rows"]) == 1
+        except Exception as exc:
+            failures.append((rank, exc))
+
+    workers = [threading.Thread(target=run, args=(rank,)) for rank in (1, 0)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+    assert failures == []
+    with lock:
+        assert events.count(("prepare", True)) == 1
+        assert events.count(("prepare", False)) == 2
+        prepare_at = events.index(("prepare", True))
+        exchange_at = min(
+            index for index, item in enumerate(events)
+            if isinstance(item, tuple) and item and item[0] == "exchange"
+        )
+        assert prepare_at < exchange_at
+        assert "all_reduce" not in events
+        timeouts = [item[1] for item in events if isinstance(item, tuple) and item[0] == "timeout"]
+    assert 2700 in timeouts
+    assert 600 in timeouts

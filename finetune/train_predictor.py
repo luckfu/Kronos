@@ -75,9 +75,13 @@ from temporal_rank_ic_selection import (
     SELECTION_METRIC as TEMPORAL_RANK_IC_SELECTION_METRIC,
     build_rank_ic_best_metric,
     checkpoint_should_update,
+    coordinate_rank_ic_prepare,
     evaluate_temporal_d10_rank_ic,
+    format_prepare_error,
     pack_rank_ic_broadcast,
     prepare_rank_ic_runtime,
+    prepare_timeout_seconds,
+    rank_ic_prepare_run_id,
     reconcile_resumed_rank_ic_threshold,
     temporal_rank_ic_due,
     temporal_rank_ic_enabled,
@@ -2505,6 +2509,179 @@ def finish_first_step_sync_check(state, model, optimizer, device, rank, world_si
     return result
 
 
+def _set_process_group_timeout(timeout):
+    """Widen or restore the process-group timeout. Returns False if it cannot.
+
+    This is a safety net for the short collective that runs after row
+    materialization. Rank IC prepare does not depend on it: other ranks wait
+    on a status file and are not inside NCCL while rank 0 builds rows.
+    """
+    if not dist.is_available() or not dist.is_initialized():
+        return False
+    try:
+        setter = getattr(dist, "set_timeout", None)
+        if setter is not None:
+            setter(timeout)
+            return True
+        from torch.distributed import distributed_c10d as c10d
+        legacy = getattr(c10d, "_set_pg_timeout", None)
+        if legacy is None:
+            print(
+                "Process-group timeout API is unavailable. "
+                "Rank IC prepare still waits outside NCCL.",
+                flush=True,
+            )
+            return False
+        legacy(timeout, dist.group.WORLD)
+        return True
+    except Exception as exc:
+        print(
+            "Process-group timeout unchanged "
+            f"({type(exc).__name__}: {exc}). "
+            "Rank IC prepare still waits outside NCCL.",
+            flush=True,
+        )
+        return False
+
+
+def _widen_process_group_timeout(seconds):
+    from datetime import timedelta
+
+    timeout = timedelta(seconds=float(seconds))
+    if not _set_process_group_timeout(timeout):
+        return None
+    print(
+        f"Widened process-group timeout to {float(seconds):.0f}s "
+        "for Temporal Rank IC prepare",
+        flush=True,
+    )
+    return timedelta(minutes=10)
+
+
+def _restore_process_group_timeout(timeout):
+    if timeout is None:
+        return
+    if not _set_process_group_timeout(timeout):
+        print(
+            "Could not restore the process-group timeout after Rank IC prepare.",
+            flush=True,
+        )
+
+
+def _all_gather_prepare_errors(local_error, device, world_size):
+    """Collect each rank's prepare error. Call only after every rank is ready."""
+    max_bytes = 4096
+    payload = (local_error or "").encode("utf-8")[:max_bytes]
+    length = torch.tensor([len(payload)], device=device, dtype=torch.int32)
+    lengths = [
+        torch.zeros(1, dtype=torch.int32, device=device) for _ in range(world_size)
+    ]
+    dist.all_gather(lengths, length)
+    local = torch.zeros(max_bytes, dtype=torch.uint8, device=device)
+    if payload:
+        encoded = torch.tensor(list(payload), dtype=torch.uint8, device=device)
+        local[:len(payload)] = encoded
+    buffers = [
+        torch.zeros(max_bytes, dtype=torch.uint8, device=device)
+        for _ in range(world_size)
+    ]
+    dist.all_gather(buffers, local)
+    errors = []
+    for index, buffer in enumerate(buffers):
+        count = int(lengths[index].item())
+        if count <= 0:
+            continue
+        raw = bytes(
+            int(value) for value in buffer[:count].detach().cpu().tolist()
+        )
+        text = raw.decode("utf-8", errors="replace")
+        if text:
+            errors.append(f"rank{index}: {text}")
+    return errors
+
+
+def _exchange_prepare_errors(local_error, device, rank, world_size):
+    """Share prepare failures after every rank has left the row build."""
+    del rank
+    if int(world_size) <= 1:
+        return [local_error] if local_error else []
+    if dist.is_available() and dist.is_initialized():
+        return _all_gather_prepare_errors(local_error, device, int(world_size))
+    xla_world = (
+        device.type == "xla" and xm is not None and get_xla_world_size() > 1
+    )
+    if xla_world:
+        ok = 0 if local_error else 1
+        tensor = torch.tensor([ok], device=device, dtype=torch.int32)
+        tensor = xm.all_reduce(xm.REDUCE_MIN, tensor)
+        if int(tensor.item()) == 0 and not local_error:
+            return ["Temporal Rank IC prepare failed on another worker"]
+        return [local_error] if local_error else []
+    from temporal_rank_ic_selection import TemporalRankICSelectionError
+    raise TemporalRankICSelectionError(
+        "Temporal Rank IC prepare has no process group to share rank 0's "
+        f"status across world_size={world_size}"
+    )
+
+
+def prepare_temporal_rank_ic_for_launch(config, device, rank, world_size, save_dir):
+    """Manifest checks on every rank. Only rank 0 builds or loads rows.
+
+    Other ranks poll a status file. The NCCL all-gather runs after rank 0
+    publishes that the build finished, so a multi-minute row build cannot
+    trip the default 600s watchdog.
+    """
+    import tempfile
+
+    directory = save_dir or tempfile.gettempdir()
+    timeout = prepare_timeout_seconds()
+    widened = None
+    if int(world_size) > 1:
+        widened = _widen_process_group_timeout(timeout)
+    try:
+        def cheap_check():
+            return prepare_rank_ic_runtime(config, load_panel=False)
+
+        def materialize(checked):
+            if not isinstance(checked, dict) or not checked.get("manifest"):
+                from temporal_rank_ic_selection import TemporalRankICSelectionError
+                raise TemporalRankICSelectionError(
+                    "Temporal Rank IC manifest check produced no manifest"
+                )
+            return prepare_rank_ic_runtime(
+                config, load_panel=True, manifest=checked["manifest"],
+            )
+
+        def exchange(local_error):
+            return _exchange_prepare_errors(
+                local_error, device, rank, world_size,
+            )
+
+        try:
+            return coordinate_rank_ic_prepare(
+                rank=rank,
+                world_size=world_size,
+                directory=directory,
+                run_id=rank_ic_prepare_run_id(),
+                cheap_check=cheap_check,
+                materialize=materialize,
+                exchange_errors=exchange,
+                timeout=timeout,
+            )
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            text = format_prepare_error(exc)
+            print(f"Temporal Rank IC prepare failed: {text}", flush=True)
+            raise RuntimeError(
+                "Temporal Rank IC manifest or panel failed validation: "
+                f"{text}. Refusing to select best_model by val loss or "
+                "symbol holdout."
+            ) from exc
+    finally:
+        _restore_process_group_timeout(widened)
+
+
 def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_size):
     """
     The main training and validation loop for the predictor.
@@ -2545,34 +2722,20 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
 
     rank_ic_runtime = None
     if temporal_rank_ic_enabled(config):
-        try:
-            rank_ic_runtime = prepare_rank_ic_runtime(
-                config, load_panel=(rank == 0),
-            )
-            panel_ok = True
-        except Exception:
-            import traceback
-            traceback.print_exc()
-            panel_ok = False
-            rank_ic_runtime = None
-        # Schema and SHA checks run on every rank. Panel materialization is
-        # rank 0 only; a failure there must still abort the other workers.
-        local_ok = bool(panel_ok and rank_ic_runtime is not None)
-        if rank == 0 and (
-            rank_ic_runtime is None or not rank_ic_runtime.get("rows")
-        ):
-            local_ok = False
-        if not broadcast_all_true(local_ok, device):
-            raise RuntimeError(
-                "Temporal Rank IC manifest or panel failed validation. "
-                "Refusing to select best_model by val loss or symbol holdout."
-            )
+        # Every rank hashes the manifest first. Only rank 0 builds rows.
+        # Other ranks must not enter all_reduce until that build publishes
+        # a status file; the default NCCL watchdog is 600s and the build
+        # can take 8–15 minutes.
+        rank_ic_runtime = prepare_temporal_rank_ic_for_launch(
+            config, device, rank, world_size, save_dir,
+        )
         if rank == 0:
             manifest = rank_ic_runtime["manifest"]
             print(
                 "Temporal Rank IC window: "
                 f"dates={len(manifest['signal_dates'])} "
                 f"rows={len(rank_ic_runtime['rows'])} "
+                f"source={rank_ic_runtime.get('rows_source', 'built')} "
                 f"sha256={manifest['sha256']} "
                 f"train_time_upper_bound={manifest['train_time_upper_bound']}",
                 flush=True,
