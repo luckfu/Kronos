@@ -113,7 +113,7 @@ e03b 相对 C2 的缺口集中在 8 月（-0.0793），到首次使用窗口收�
 | # | 事项 |
 |---|---|
 | 1 | 第 8a 步固定规则回测（5 条预注册规则） |
-| 2 | 第 8b 步执行约束回测（涨跌停 / 停牌 / 滑点）—— §3.1 判定要求写，尚未写 |
+| 2 | 第 8b 步执行约束回测：代码已落地（`finetune/small_clean_oos/execution_constrained.py`）。§5.2 数字要等 2026-10-09→10-23 的 C2 shard 和到 2026-11-06 的行情，见 [`C2_EXECUTION_CONSTRAINED_BACKTEST_8B_CN.md`](C2_EXECUTION_CONSTRAINED_BACKTEST_8B_CN.md)。不要用本页的 8 日 PnL 代替 |
 | 3 | TimesFM SweetSpot native / C07 SWA 的 sealed OOS 评测与 §3.3 判定 |
 | 4 | `analyze_predictions.py` 的 `horizon=10` 不重叠 cohort 修正（TimesFM 第 7 步前置） |
 | 5 | `finetune/reports/c2_amplitude_calibration_fit_on_34d.json`（幅度标定映射，方案 §5 第 7 条：先落盘再碰新窗口） |
