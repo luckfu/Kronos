@@ -9,7 +9,7 @@
 
 ## 0. 一句话现状
 
-> **C2 仍是唯一基线；epoch2 / bigbatch e03b 两条续训线已关闭；sealed 8 天窗口已用掉；验证集 Rank IC（16 条路径）排序方向对，但 20 天样本下还不显著。下一步是 60 天验证 IC，然后写 C2 的 8b 执行约束回测。不要开新训练。**
+> **C2 仍是唯一基线；epoch2 / bigbatch e03b 两条续训线已关闭；sealed 8 天窗口已用掉；验证集 Rank IC（16 条路径）排序方向对，但 20 天样本下还不显著。§5.1 的 60 天验证 IC 代码已就绪（`N_DATES=60`，`N_SYMBOLS=200`，16 条路径中位数不变）；kernel `wynstonliu/kronos-small-validation-rank-ic-20261023` 已另行推送，状态 RUNNING，结果未出。然后写 C2 的 8b 执行约束回测。不要开新训练，不要再推这个 kernel。**
 
 ---
 
@@ -22,7 +22,7 @@
 | sealed 8 天 OOS（C2 vs e03b） | 完成 | C2 0.0652 > e03b 0.0525；e03b 不晋级；C2 弱 alpha |
 | 验证集 Rank IC（1 条路径） | 完成 | C2 0.2204 / C03 0.2184 / e03b 0.2174 / epoch2 0.1914；C2/C03/e03b 分不开 |
 | **验证集 Rank IC（16 条，生产口径）** | **完成** | C2 0.2535 / C03 0.2434 / e03b 0.2112 / epoch2 0.2028；**方向对，20 天仍不显著** |
-| 60 天验证 IC | **未做** | 下一步 |
+| 60 天验证 IC | **代码已就绪；kernel RUNNING** | `N_DATES=60`、`N_SYMBOLS=200`、16 条路径中位数未改。Kernel `wynstonliu/kronos-small-validation-rank-ic-20261023` 已由另一代理推送，结果未出 |
 | C2 8b 执行约束回测 | **未做** | 下一步 |
 | TimesFM sealed §3.3 | **未做** | SweetSpot / C07 SWA 尚未在 sealed 窗口评测 |
 
@@ -98,7 +98,7 @@
 
 | Kernel | 作用 | 状态 |
 |---|---|---|
-| `wynstonliu/kronos-small-validation-rank-ic-20261023` | 验证集 Rank IC（v4，16 条） | COMPLETE |
+| `wynstonliu/kronos-small-validation-rank-ic-20261023` | 验证集 Rank IC。已完成的是 20 日 × 16 条；60 日版本已另行推送 | **RUNNING**（60 日；不要重复 push） |
 | `wynstonliu/kronos-small-sealed-oos-20260803-20260930` | sealed 42 天 OOS（C2 + e03b） | COMPLETE |
 | `wynstonliu/kronos-small-clean-bigbatch-e03b` | e03b 训练（520/520） | COMPLETE |
 | `luckfu/kronos-small-clean-wc-dual-t4-c03` | C03 best 权重 | COMPLETE |
@@ -155,22 +155,24 @@ kaggle kernels output wynstonliu/kronos-small-sealed-oos-20260803-20260930 \
 
 目的：看 16 条路径下，C2 对 C03/e03b 的差距能不能统计上分开。
 
-改 [`finetune/small_validation_rank_ic/evaluate_validation_rank_ic.py`](../finetune/small_validation_rank_ic/evaluate_validation_rank_ic.py)：
+**代码已就绪。** [`finetune/small_validation_rank_ic/evaluate_validation_rank_ic.py`](../finetune/small_validation_rank_ic/evaluate_validation_rank_ic.py) 现在是：
 
 ```python
-N_DATES, N_SYMBOLS = 60, 200   # 现在 20, 200
+N_DATES, N_SYMBOLS = 60, 200
+SAMPLE_COUNT = 16  # 未改：生产口径，按 D10 路径中位数排序
 ```
 
-重建/提交 kernel：
+`build/` 被 gitignore。需要本地包时可以重建，但 **不要再 push**：
 
 ```bash
 python3 finetune/small_validation_rank_ic/build_kernel.py
-kaggle kernels push -p finetune/small_validation_rank_ic/build \
-  --timeout 43200 --accelerator NvidiaTeslaT4
+# 不要执行 kaggle kernels push。60 日 kernel 已由另一代理推送。
 ```
 
+- Kernel：`wynstonliu/kronos-small-validation-rank-ic-20261023`，状态 **RUNNING**。
 - 规模：60 × 200 = 12,000 窗口；16 条路径；预计 **1.5 小时**（30h GPU 额度足够）。
-- 验收：C2−C03、C2−e03b 的配对 CI 是否仍然跨 0。
+- 结果出来之前不要填写 IC / CI，也不要把上面 20 日已完成的表改成 60 日。
+- 验收（等 RUNNING 结束、下载 summary 之后再写）：C2−C03、C2−e03b 的配对 CI 是否仍然跨 0。
   - 如果 C2 显著高于 C03/e03b：可以考虑把 `validation_rank_ic` 接进训练，作为选模指标（先小规模 pilot）。
   - 如果仍然跨 0：**放弃验证集 Rank IC 选模**，不要改训练。
 - 不要用 sealed 8 天来调这个阈值；它已经用掉。
@@ -237,4 +239,4 @@ d6aaf68 docs: record sealed OOS judgment (C2 weak alpha, bigbatch closed)
 
 ## 8. 一句话交接
 
-> **训练线已经关了，别再开新训练。现在只剩三件事：把验证集 Rank IC 从 20 天加到 60 天（16 条路径），确认它能不能分开 C2/C03/e03b；如果能，再小规模接入选模；然后写 C2 的 8b 执行约束回测（|pred|≥5% + 停牌/流动性/涨跌停/滑点），用 10/09–10/23 新窗口验证。TimesFM 的 sealed 评测另开一条线，不要混。**
+> **训练线已经关了，别再开新训练。§5.1 的 60 天验证 Rank IC 代码已经落地（16 条路径中位数不变），kernel `wynstonliu/kronos-small-validation-rank-ic-20261023` 正在跑，结果未出，不要重复 push。等它结束再看能不能分开 C2/C03/e03b；如果能，再小规模接入选模。然后写 C2 的 8b 执行约束回测（|pred|≥5% + 停牌/流动性/涨跌停/滑点），用 10/09–10/23 新窗口验证。TimesFM 的 sealed 评测另开一条线，不要混。**
