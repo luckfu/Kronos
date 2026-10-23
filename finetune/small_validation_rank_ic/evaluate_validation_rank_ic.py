@@ -34,6 +34,7 @@ NUM_SECTORS = 86
 TOKENIZER_SHA = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
 SEED = 20261023
 N_DATES, N_SYMBOLS = 20, 200
+SAMPLE_COUNT = 16
 FIRST_DATE, LAST_DATE = "2025-07-03", "2026-07-02"
 OUTPUT = Path("/kaggle/working/validation_rank_ic")
 LABELS = ("c2_best", "c03_best", "epoch2_best", "e03b_best")
@@ -143,7 +144,7 @@ def evaluate_checkpoint(label, subset, panel, tokenizer, tokenizer_dir):
     from model.kronos import auto_regressive_inference
 
     predictions = []
-    batch_size = 24
+    batch_size = 12
     for offset in range(0, len(subset), batch_size):
         batch = subset[offset:offset + batch_size]
         xs, stamps, sectors, sizes, actuals, last_closes = [], [], [], [], [], []
@@ -172,7 +173,7 @@ def evaluate_checkpoint(label, subset, panel, tokenizer, tokenizer_dir):
             forecasts = auto_regressive_inference(
                 tokenizer, model, x, stamp[:, :LOOKBACK], stamp[:, LOOKBACK:WINDOW],
                 max_context=512, pred_len=PREDICT, clip=5, T=0.65, top_k=0,
-                top_p=0.8, sample_count=1, verbose=False,
+                top_p=0.8, sample_count=SAMPLE_COUNT, verbose=False,
                 sector_id=sector, size_percentile=size, return_samples=True,
             )
         for i, row in enumerate(batch.itertuples(index=False)):
@@ -182,8 +183,9 @@ def evaluate_checkpoint(label, subset, panel, tokenizer, tokenizer_dir):
             predicted_close = (
                 forecasts[i, :, -PREDICT:, 3].astype(np.float64)
                 * (float(std[3]) + 1e-5) + float(mean[3])
-            ).mean(0)
-            predicted = float(predicted_close[-1] / last_closes[i] - 1.0)
+            )
+            # Production ranks by the P50 of the sampled paths, not the mean.
+            predicted = float(np.median(predicted_close[:, -1] / last_closes[i] - 1.0))
             predictions.append((row.asof_date, predicted, actuals[i]))
         if offset % (batch_size * 20) == 0:
             phase("prediction", label=label, done=min(offset + batch_size, len(subset)),
@@ -197,6 +199,7 @@ def evaluate_checkpoint(label, subset, panel, tokenizer, tokenizer_dir):
     values = list(per_date.values())
     result = dict(
         label=label, weights=str(weights), sha256=sha(weights),
+        sample_count=SAMPLE_COUNT,
         samples=int(len(frame)), dates=len(values),
         mean_rank_ic=float(np.mean(values)),
         median_rank_ic=float(np.median(values)),
