@@ -2,9 +2,11 @@
 
 The price panel is not stored in git. This script reads the clean Kaggle
 dataset ``smmt315/a-share-120d-temporal-symbol-holdout`` (data_manifest SHA
-``b85ccc45…``), writes ``temporal_rank_ic_panel.pkl``, and fills
-``panel_sha256`` in ``selection_window.json``. It does not change
-``signal_dates`` or the calendar SHA, and it does not push a Kaggle kernel.
+``b85ccc45…``), writes ``temporal_rank_ic_panel.pkl`` and
+``temporal_rank_ic_rows.pkl`` beside it, and fills ``rows_sha256``.
+``panel_sha256`` is rewritten only when the panel file digest differs from
+the value already in the manifest. It does not change ``signal_dates`` or
+the calendar SHA, and it does not push a Kaggle kernel.
 
 Score time must not open ``val_data.pkl`` or join ``asset_metadata.csv``.
 Those files are inputs here only. Holdout symbols' post-cutoff bars live on
@@ -23,15 +25,12 @@ Example, from the repo root, after the clean dataset is on disk::
         --dataset-root /path/to/a-share-120d-temporal-symbol-holdout \\
         --output /path/to/temporal_rank_ic_panel.pkl
 
-Then upload that pickle as its own Kaggle dataset (the slug must not be the
-symbol-holdout training set) and::
-
-    export KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=<owner>/<panel-dataset>
-    python -u finetune/small_clean_bigbatch_relay/push_chunk.py 1
-
-Commit the updated ``panel_sha256`` before that push so the kernel bundle
-matches a reviewable tree. ``push_chunk`` refuses to run while the field is
-empty, and this script will not invent a digest.
+Then upload both pickles together as their own Kaggle dataset (the slug must
+not be the symbol-holdout training set). Commit ``rows_sha256``. Leave
+``panel_sha256`` unchanged when the panel file digest still matches the
+manifest (the pinned panel is ``8539246b…``). This script does not push a
+Kaggle kernel and will not invent a digest. ``push_chunk`` still refuses to
+run while ``panel_sha256`` is empty.
 """
 
 from __future__ import annotations
@@ -56,12 +55,14 @@ from temporal_rank_ic_selection import (
     MIN_NAMES_PER_DATE,
     PANEL_FILENAME,
     PREDICT,
+    ROWS_FILENAME,
     TemporalRankICSelectionError,
     build_evaluation_rows,
     manifest_sha256,
     path_mentions_symbol_holdout,
     sha256_file,
     validate_manifest_calendar,
+    write_evaluation_rows,
 )
 
 
@@ -333,8 +334,10 @@ def assemble_panel(
         "lookback": LOOKBACK,
         "predict": PREDICT,
     }
-    build_evaluation_rows(manifest, panel, min_names=int(min_names))
-    return dict(sorted(panel.items()))
+    rows = build_evaluation_rows(
+        manifest, panel, min_names=int(min_names), progress=True,
+    )
+    return dict(sorted(panel.items())), rows
 
 
 def write_panel(panel: dict, destination: Path) -> str:
@@ -349,31 +352,47 @@ def write_panel(panel: dict, destination: Path) -> str:
     return sha256_file(destination)
 
 
-def pin_panel_sha256(manifest_path, panel_path) -> str:
-    """Write ``panel_sha256`` without touching the frozen date list or its SHA."""
+def pin_selection_digests(manifest_path, *, panel_sha256, rows_sha256) -> dict:
+    """Pin panel and rows SHAs without touching the frozen date list.
+
+    ``panel_sha256`` keeps the manifest's current string when that string
+    already equals the panel file digest. A different digest means the panel
+    bytes changed, and the field is updated to the new digest.
+    """
     manifest_path = Path(manifest_path)
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
     calendar = validate_manifest_calendar(document)
-    digest = sha256_file(panel_path)
-    if len(digest) != 64:
-        raise TemporalRankICSelectionError(f"Unexpected panel digest length: {digest!r}")
+    panel_sha256 = str(panel_sha256)
+    rows_sha256 = str(rows_sha256)
+    if len(panel_sha256) != 64 or len(rows_sha256) != 64:
+        raise TemporalRankICSelectionError(
+            "panel and rows digests must be SHA256 hex strings"
+        )
+    existing_panel = str(document.get("panel_sha256") or "")
+    stored_panel = existing_panel if existing_panel == panel_sha256 else panel_sha256
     updated = dict(document)
-    updated["panel_sha256"] = digest
+    updated["panel_sha256"] = stored_panel
     updated["panel_filename"] = PANEL_FILENAME
+    updated["rows_sha256"] = rows_sha256
+    updated["rows_filename"] = ROWS_FILENAME
     again = validate_manifest_calendar(updated)
     if again["signal_dates"] != calendar["signal_dates"] or again["sha256"] != calendar["sha256"]:
         raise TemporalRankICSelectionError(
-            "Refusing to rewrite the frozen signal_dates while pinning panel_sha256"
+            "Refusing to rewrite the frozen signal_dates while pinning selection artifacts"
         )
     if manifest_sha256(again["signal_dates"]) != calendar["sha256"]:
         raise TemporalRankICSelectionError(
-            "Calendar SHA drifted while pinning panel_sha256"
+            "Calendar SHA drifted while pinning selection artifacts"
+        )
+    if updated["panel_sha256"] != stored_panel:
+        raise TemporalRankICSelectionError(
+            "panel_sha256 changed while pinning rows"
         )
     text = json.dumps(updated, ensure_ascii=False, indent=2) + "\n"
     temporary = manifest_path.with_name(manifest_path.name + ".tmp")
     temporary.write_text(text, encoding="utf-8")
     os.replace(temporary, manifest_path)
-    return digest
+    return {"panel_sha256": stored_panel, "rows_sha256": rows_sha256}
 
 
 def _load_pickle(path: Path):
@@ -421,7 +440,7 @@ def build_from_dataset(
     metadata = pd.read_csv(metadata_path)
     train_panel = _load_pickle(train_path)
     val_panel = _load_pickle(val_path)
-    panel = assemble_panel(
+    panel, rows = assemble_panel(
         train_panel,
         val_panel,
         calendar["signal_dates"],
@@ -429,15 +448,29 @@ def build_from_dataset(
         min_names=min_names,
     )
     digest = write_panel(panel, destination)
-    pinned = pin_panel_sha256(manifest_path, destination)
-    if pinned != digest:
+    rows_path = destination.with_name(ROWS_FILENAME)
+    rows_digest = write_evaluation_rows(
+        rows,
+        rows_path,
+        panel_sha256=digest,
+        calendar_sha256=calendar["sha256"],
+    )
+    pinned = pin_selection_digests(
+        manifest_path, panel_sha256=digest, rows_sha256=rows_digest,
+    )
+    if pinned["panel_sha256"] != digest or pinned["rows_sha256"] != rows_digest:
         raise TemporalRankICSelectionError(
-            f"Pinned panel_sha256 {pinned} does not match the written file {digest}"
+            "Pinned selection digests do not match the written files "
+            f"(panel {pinned['panel_sha256']} vs {digest}, "
+            f"rows {pinned['rows_sha256']} vs {rows_digest})"
         )
     return {
         "panel": str(destination),
         "panel_sha256": digest,
+        "rows": str(rows_path),
+        "rows_sha256": rows_digest,
         "n_symbols": len(panel),
+        "n_rows": len(rows),
         "n_dates": len(calendar["signal_dates"]),
         "calendar_sha256": calendar["sha256"],
         "train_time_upper_bound": calendar["train_time_upper_bound"],
@@ -460,9 +493,10 @@ def main(argv=None):
     )
     print(json.dumps(summary, indent=2))
     print(
-        "Next: upload the pickle as its own Kaggle dataset, commit this "
-        "panel_sha256, export KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET=owner/slug, "
-        "then run push_chunk. Do not push before the SHA is pinned.",
+        "Wrote temporal_rank_ic_panel.pkl and temporal_rank_ic_rows.pkl. "
+        "panel_sha256 was updated only if the panel bytes changed. "
+        "Commit rows_sha256 with the manifest and upload both pickles in the "
+        "panel dataset. This script does not push a Kaggle kernel.",
         flush=True,
     )
     return summary

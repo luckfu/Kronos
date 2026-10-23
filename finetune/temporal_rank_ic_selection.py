@@ -8,6 +8,10 @@ manifest, a bad SHA, or a holdout path raises ``TemporalRankICSelectionError``.
 Frozen rules: ``docs/VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md``.
 Calendar: ``finetune/manifests/temporal_rank_ic_v1/selection_window.json``.
 Panel bytes: ``finetune/build_temporal_rank_ic_panel.py`` (not stored in git).
+Optional precomputed windows live beside that panel as
+``temporal_rank_ic_rows.pkl``. Dual-GPU startup hashes the manifest on every
+rank, then only rank 0 materializes rows. Other ranks wait on a status file
+and do not enter NCCL until that build has finished.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import json
 import math
 import os
 import re
+import time
 from datetime import date
 from pathlib import Path
 
@@ -44,7 +49,12 @@ MANIFEST_RELATIVE = Path(
 )
 README_RELATIVE = Path("finetune/manifests/temporal_rank_ic_v1/README.md")
 PANEL_FILENAME = "temporal_rank_ic_panel.pkl"
+ROWS_FILENAME = "temporal_rank_ic_rows.pkl"
+ROWS_FORMAT = "temporal_rank_ic_rows_v1"
+ROWS_SHA_KEY = "rows_sha256"
 PANEL_DATASET_ENV = "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET"
+ROWS_PATH_ENV = "KRONOS_TEMPORAL_RANK_IC_ROWS"
+PREPARE_TIMEOUT_SECONDS = 45 * 60
 _PANEL_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 # Protocol §2.3. Inclusive signal-date ranges. These windows are acceptance
@@ -699,7 +709,26 @@ def _frame_dates(frame):
     return index
 
 
-def build_evaluation_rows(manifest, panel, *, min_names=MIN_NAMES_PER_DATE):
+def _positions_by_date(dates):
+    """Map ``YYYY-MM-DD`` to a row position once per symbol.
+
+    The old builder scanned ``stamp.date().isoformat()`` for every signal date.
+    On the full panel that is a Python walk over every bar, sixty times.
+    """
+    labels = dates.strftime("%Y-%m-%d").tolist()
+    positions = {}
+    for position, label in enumerate(labels):
+        if label in positions:
+            raise TemporalRankICSelectionError(
+                "Temporal panel index has duplicate dates"
+            )
+        positions[label] = position
+    return positions
+
+
+def build_evaluation_rows(
+    manifest, panel, *, min_names=MIN_NAMES_PER_DATE, progress=True,
+):
     """One normalized window per (signal date, symbol) on the frozen calendar."""
     import numpy as np
 
@@ -709,36 +738,58 @@ def build_evaluation_rows(manifest, panel, *, min_names=MIN_NAMES_PER_DATE):
         )
     lookback = int(manifest["lookback"])
     predict = int(manifest["predict"])
+    prepared = []
+    for symbol in sorted(panel):
+        frame = panel[symbol]
+        dates = _frame_dates(frame)
+        prepared.append({
+            "symbol": str(symbol),
+            "frame": frame,
+            "dates": dates,
+            "positions": _positions_by_date(dates),
+            "n_bars": len(frame),
+            "checked": False,
+        })
+    signal_dates = list(manifest["signal_dates"])
     rows = []
-    for signal_text in manifest["signal_dates"]:
+    n_dates = len(signal_dates)
+    if progress:
+        print(
+            "Temporal Rank IC building rows: "
+            f"dates={n_dates} symbols={len(prepared)}",
+            flush=True,
+        )
+    for date_number, signal_text in enumerate(signal_dates, start=1):
+        signal_key = str(signal_text)
         day_rows = []
-        for symbol in sorted(panel):
-            frame = panel[symbol]
-            dates = _frame_dates(frame)
-            matches = [
-                pos for pos, stamp in enumerate(dates)
-                if stamp.date().isoformat() == signal_text
-            ]
-            if not matches:
+        for item in prepared:
+            index = item["positions"].get(signal_key)
+            if index is None:
                 continue
-            index = matches[0]
-            if index < lookback - 1 or index + predict >= len(frame):
+            if index < lookback - 1 or index + predict >= item["n_bars"]:
                 continue
             start = index - (lookback - 1)
-            window = frame.iloc[start:index + predict + 1]
+            stop = index + predict + 1
+            frame = item["frame"]
+            window = frame.iloc[start:stop]
             if len(window) != lookback + predict:
                 continue
-            missing = [name for name in FEATURES if name not in window.columns]
-            if missing:
-                raise TemporalRankICSelectionError(
-                    f"{symbol} {signal_text} is missing columns {missing}"
-                )
-            if "sector_id" not in frame.columns or "size_percentile" not in frame.columns:
-                raise TemporalRankICSelectionError(
-                    f"{symbol} needs sector_id and size_percentile columns on the "
-                    "temporal panel. Asset-metadata from the symbol-holdout set "
-                    "is not joined in."
-                )
+            if not item["checked"]:
+                missing = [name for name in FEATURES if name not in frame.columns]
+                if missing:
+                    raise TemporalRankICSelectionError(
+                        f"{item['symbol']} {signal_text} is missing columns {missing}"
+                    )
+                if (
+                    "sector_id" not in frame.columns
+                    or "size_percentile" not in frame.columns
+                ):
+                    raise TemporalRankICSelectionError(
+                        f"{item['symbol']} needs sector_id and size_percentile "
+                        "columns on the temporal panel. Asset-metadata from the "
+                        "symbol-holdout set is not joined in."
+                    )
+                item["checked"] = True
             values = window.loc[:, list(FEATURES)].to_numpy(dtype=np.float64)
             if not np.isfinite(values).all():
                 continue
@@ -754,7 +805,7 @@ def build_evaluation_rows(manifest, panel, *, min_names=MIN_NAMES_PER_DATE):
             normalized = np.clip(
                 (history - mean) / (std + 1e-5), -5.0, 5.0,
             ).astype(np.float32)
-            stamp_index = _frame_dates(window)
+            stamp_index = item["dates"][start:stop]
             stamp = np.column_stack([
                 stamp_index.minute,
                 stamp_index.hour,
@@ -763,8 +814,8 @@ def build_evaluation_rows(manifest, panel, *, min_names=MIN_NAMES_PER_DATE):
                 stamp_index.month,
             ]).astype(np.float32)
             day_rows.append({
-                "symbol": str(symbol),
-                "asof_date": signal_text,
+                "symbol": item["symbol"],
+                "asof_date": signal_key,
                 "actual": actual,
                 "x": normalized,
                 "stamp": stamp,
@@ -774,6 +825,13 @@ def build_evaluation_rows(manifest, panel, *, min_names=MIN_NAMES_PER_DATE):
                 "sector_id": int(sector),
                 "size_percentile": float(max(0.0, min(1.0, size))),
             })
+        if progress:
+            print(
+                "Temporal Rank IC rows: "
+                f"{date_number}/{n_dates} {signal_key} "
+                f"names={len(day_rows)} total={len(rows) + len(day_rows)}",
+                flush=True,
+            )
         if len(day_rows) < int(min_names):
             raise TemporalRankICSelectionError(
                 f"{signal_text} produced {len(day_rows)} finite windows; "
@@ -781,6 +839,11 @@ def build_evaluation_rows(manifest, panel, *, min_names=MIN_NAMES_PER_DATE):
             )
         rows.extend(day_rows)
     rows.sort(key=lambda row: (row["asof_date"], row["symbol"]))
+    if progress:
+        print(
+            f"Temporal Rank IC rows ready: {len(rows)} dates={n_dates}",
+            flush=True,
+        )
     return rows
 
 
@@ -796,26 +859,486 @@ def load_price_panel(path):
     return panel
 
 
-def prepare_rank_ic_runtime(config, *, load_panel):
-    """Validate the frozen window. Rank 0 also materializes the cross-section."""
-    if not temporal_rank_ic_enabled(config):
-        return None
-    manifest = load_temporal_selection_manifest(
-        config["temporal_rank_ic_manifest_path"],
-        panel_path=config["temporal_rank_ic_panel_path"],
-        val_data_paths=config.get("val_data_paths") or (),
-        train_signal_end=str(config.get("train_signal_end") or ""),
-    )
-    rows = None
-    panel = None
-    if load_panel:
-        panel = load_price_panel(manifest["panel_path"])
-        rows = build_evaluation_rows(manifest, panel)
-    return {
-        "manifest": manifest,
-        "panel": panel,
+def pinned_rows_sha(document) -> str:
+    """Return a pinned rows digest, or ``""`` when rows are not pinned.
+
+    A present but malformed digest fails closed. An absent field means the
+    runtime may build rows from the panel.
+    """
+    if not isinstance(document, dict) or ROWS_SHA_KEY not in document:
+        return ""
+    value = str(document.get(ROWS_SHA_KEY) or "").strip()
+    if not value:
+        return ""
+    if not _PANEL_SHA.fullmatch(value):
+        raise TemporalRankICSelectionError(
+            "rows_sha256 is not a SHA256. Build temporal_rank_ic_rows.pkl with "
+            "finetune/build_temporal_rank_ic_panel.py so it can write the digest. "
+            "Do not invent one, and do not fall back to val loss."
+        )
+    return value
+
+
+def _reject_rows_path(path: Path) -> None:
+    if path.name == "val_data.pkl" or path_mentions_symbol_holdout(path):
+        raise TemporalRankICSelectionError(
+            f"Refusing temporal Rank IC rows at {path}. "
+            "val_data.pkl and symbol-holdout paths cannot supply this score."
+        )
+
+
+def resolve_rows_artifact(manifest):
+    """Return ``(path, expected_sha, required)``.
+
+    ``required`` means a missing or mismatched file must fail closed. The
+    runtime does not rebuild rows in that case. An unpinned sibling named
+    ``temporal_rank_ic_rows.pkl`` is also required once it is present: the
+    operator put it there to be loaded.
+    """
+    expected = pinned_rows_sha(manifest)
+    explicit = os.environ.get(ROWS_PATH_ENV, "").strip()
+    sibling = Path(manifest["panel_path"]).with_name(ROWS_FILENAME)
+    if explicit:
+        path = Path(explicit).expanduser()
+        _reject_rows_path(path)
+        return path, expected, True
+    if expected:
+        _reject_rows_path(sibling)
+        return sibling, expected, True
+    if sibling.is_file():
+        _reject_rows_path(sibling)
+        return sibling, "", True
+    return None, "", False
+
+
+def write_evaluation_rows(rows, destination, *, panel_sha256, calendar_sha256) -> str:
+    """Atomically write the rows artifact and return its file SHA256."""
+    import pickle
+
+    destination = Path(destination)
+    if destination.name != ROWS_FILENAME:
+        raise TemporalRankICSelectionError(
+            f"Refusing to write {destination}. The rows artifact must be named "
+            f"{ROWS_FILENAME}."
+        )
+    _reject_rows_path(destination)
+    if not _PANEL_SHA.fullmatch(str(panel_sha256)) or not _PANEL_SHA.fullmatch(
+        str(calendar_sha256)
+    ):
+        raise TemporalRankICSelectionError(
+            "Rows artifact requires a SHA256 panel digest and calendar digest"
+        )
+    payload = {
+        "format": ROWS_FORMAT,
+        "panel_sha256": str(panel_sha256),
+        "calendar_sha256": str(calendar_sha256),
+        "n_rows": len(rows),
         "rows": rows,
     }
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".tmp")
+    with temporary.open("wb") as handle:
+        pickle.dump(payload, handle, protocol=4)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, destination)
+    return sha256_file(destination)
+
+
+def load_precomputed_rows(path, manifest, *, expected_sha="", min_names=MIN_NAMES_PER_DATE):
+    """Load pinned rows. Missing or mismatched bytes raise; they are not rebuilt."""
+    import pickle
+
+    path = Path(path)
+    _reject_rows_path(path)
+    if not path.is_file():
+        pinned = f" rows_sha256 is pinned ({expected_sha})." if expected_sha else ""
+        raise TemporalRankICSelectionError(
+            f"Temporal Rank IC rows are missing at {path}.{pinned} "
+            "Refusing to rebuild evaluation rows or select best_model by val loss."
+        )
+    actual = sha256_file(path)
+    if expected_sha and actual != expected_sha:
+        raise TemporalRankICSelectionError(
+            "Temporal Rank IC rows SHA does not match the manifest. "
+            f"expected {expected_sha}, computed {actual}. "
+            "Refusing to rebuild evaluation rows from a mismatched artifact."
+        )
+    with path.open("rb") as handle:
+        payload = pickle.load(handle)
+    if not isinstance(payload, dict) or payload.get("format") != ROWS_FORMAT:
+        raise TemporalRankICSelectionError(
+            f"{path} is not a {ROWS_FORMAT} rows artifact. "
+            "Refusing to score it or rebuild from the panel."
+        )
+    if str(payload.get("panel_sha256") or "") != str(manifest.get("panel_sha256") or ""):
+        raise TemporalRankICSelectionError(
+            "Precomputed rows were built for a different panel SHA "
+            f"(rows {payload.get('panel_sha256')}, "
+            f"manifest {manifest.get('panel_sha256')}). "
+            "Refusing to score them."
+        )
+    if str(payload.get("calendar_sha256") or "") != str(manifest.get("sha256") or ""):
+        raise TemporalRankICSelectionError(
+            "Precomputed rows were built for a different calendar SHA "
+            f"(rows {payload.get('calendar_sha256')}, "
+            f"manifest {manifest.get('sha256')}). "
+            "Refusing to score them."
+        )
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise TemporalRankICSelectionError(
+            "Precomputed temporal rows are empty. "
+            "Refusing to select best_model by val loss."
+        )
+    if int(payload.get("n_rows", -1)) != len(rows):
+        raise TemporalRankICSelectionError(
+            "Precomputed rows n_rows does not match the payload. "
+            "Refusing to score a truncated artifact."
+        )
+    allowed = {str(day) for day in manifest["signal_dates"]}
+    counts = {}
+    for row in rows:
+        if not isinstance(row, dict) or "asof_date" not in row or "symbol" not in row:
+            raise TemporalRankICSelectionError(
+                "Precomputed temporal rows have an invalid record"
+            )
+        day = str(row["asof_date"])
+        if day not in allowed:
+            raise TemporalRankICSelectionError(
+                f"Precomputed rows contain {day}, which is outside the frozen "
+                "calendar. Refusing to score them."
+            )
+        counts[day] = counts.get(day, 0) + 1
+    for day in manifest["signal_dates"]:
+        found = counts.get(str(day), 0)
+        if found < int(min_names):
+            raise TemporalRankICSelectionError(
+                f"{day} has {found} precomputed rows; temporal Rank IC requires "
+                f"{int(min_names)} names on every date. "
+                "Refusing to drop the date or fall back to val loss."
+            )
+    return rows
+
+
+def materialize_evaluation_rows(
+    manifest, *, progress=True, min_names=MIN_NAMES_PER_DATE,
+):
+    """Load a pinned rows artifact, or build windows from the panel.
+
+    Returns ``(rows, source)`` where source is ``precomputed`` or ``built``.
+    """
+    path, expected, required = resolve_rows_artifact(manifest)
+    if required:
+        rows = load_precomputed_rows(
+            path, manifest, expected_sha=expected, min_names=min_names,
+        )
+        print(
+            f"Temporal Rank IC loaded precomputed rows: {len(rows)} from {path}",
+            flush=True,
+        )
+        return rows, "precomputed"
+    panel = load_price_panel(manifest["panel_path"])
+    try:
+        rows = build_evaluation_rows(
+            manifest, panel, min_names=min_names, progress=progress,
+        )
+    finally:
+        del panel
+    return rows, "built"
+
+
+def prepare_rank_ic_runtime(config, *, load_panel, manifest=None):
+    """Validate the frozen window. Rank 0 also materializes the cross-section.
+
+    ``load_panel=False`` is the cheap path: manifest, panel file SHA, and a
+    well-formed ``rows_sha256`` if that field is present. It does not unpickle
+    the panel or build rows. ``load_panel=True`` loads a pinned rows artifact
+    when one is expected, otherwise builds rows and drops the panel.
+    """
+    if not temporal_rank_ic_enabled(config):
+        return None
+    if manifest is None:
+        manifest = load_temporal_selection_manifest(
+            config["temporal_rank_ic_manifest_path"],
+            panel_path=config["temporal_rank_ic_panel_path"],
+            val_data_paths=config.get("val_data_paths") or (),
+            train_signal_end=str(config.get("train_signal_end") or ""),
+        )
+    pinned_rows_sha(manifest)
+    rows = None
+    source = ""
+    if load_panel:
+        rows, source = materialize_evaluation_rows(manifest)
+    return {
+        "manifest": manifest,
+        "panel": None,
+        "rows": rows,
+        "rows_source": source,
+    }
+
+
+def format_prepare_error(exc) -> str:
+    """One log line. The type and message stay inside the wrapper RuntimeError."""
+    text = f"{type(exc).__name__}: {exc}".replace("\n", " ").strip()
+    text = " ".join(text.split())
+    if len(text) > 3500:
+        text = text[:3500] + "..."
+    return text
+
+
+def rank_ic_prepare_run_id() -> str:
+    """Identity shared by every worker of this launch, and by no previous one."""
+    run = os.environ.get("TORCHELASTIC_RUN_ID", "").strip()
+    restart = os.environ.get("TORCHELASTIC_RESTART_COUNT", "0").strip() or "0"
+    if run:
+        return f"{run}-r{restart}"
+    explicit = os.environ.get("KRONOS_TEMPORAL_RANK_IC_PREPARE_ID", "").strip()
+    if explicit:
+        return explicit
+    parts = [
+        os.environ.get("MASTER_ADDR", "").strip(),
+        os.environ.get("MASTER_PORT", "").strip(),
+        os.environ.get("WORLD_SIZE", "").strip(),
+        restart,
+    ]
+    if any(parts[:3]):
+        return "-".join(parts)
+    return "local"
+
+
+def prepare_timeout_seconds() -> float:
+    raw = os.environ.get(
+        "KRONOS_TEMPORAL_RANK_IC_PREPARE_TIMEOUT_SECONDS", ""
+    ).strip()
+    if not raw:
+        return float(PREPARE_TIMEOUT_SECONDS)
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise TemporalRankICSelectionError(
+            "KRONOS_TEMPORAL_RANK_IC_PREPARE_TIMEOUT_SECONDS must be a number "
+            "of seconds"
+        ) from exc
+    if value < 60:
+        raise TemporalRankICSelectionError(
+            "KRONOS_TEMPORAL_RANK_IC_PREPARE_TIMEOUT_SECONDS must be at least 60"
+        )
+    return value
+
+
+def _safe_run_id(run_id) -> str:
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(run_id or "local"))
+    return text[:96] or "local"
+
+
+def prepare_status_path(directory, run_id, rank, kind) -> Path:
+    safe = _safe_run_id(run_id)
+    return (
+        Path(directory)
+        / f"temporal_rank_ic_prepare_{safe}_rank{int(rank)}_{kind}.json"
+    )
+
+
+def _atomic_write_json(path: Path, document: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(document), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def wait_for_status_file(
+    path,
+    *,
+    timeout,
+    role,
+    poll_seconds=2.0,
+    heartbeat_seconds=30.0,
+    sleep=time.sleep,
+    clock=time.monotonic,
+):
+    """Block in Python until ``path`` is ready. This is not a collective."""
+    deadline = clock() + float(timeout)
+    started = clock()
+    next_heartbeat = started
+    while True:
+        if Path(path).is_file():
+            try:
+                document = json.loads(Path(path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                document = None
+            if isinstance(document, dict) and document.get("state") == "ready":
+                return document
+        current = clock()
+        if current >= deadline:
+            raise TemporalRankICSelectionError(
+                "Timed out waiting for Temporal Rank IC prepare "
+                f"({role}) after {float(timeout):.0f}s at {path}. "
+                "This wait does not enter NCCL or all_reduce. "
+                "Refusing to select best_model by val loss."
+            )
+        if current >= next_heartbeat:
+            print(
+                "Temporal Rank IC prepare: "
+                f"{role} elapsed={current - started:.0f}s "
+                f"timeout={float(timeout):.0f}s collective=none "
+                f"path={Path(path).name}",
+                flush=True,
+            )
+            next_heartbeat = current + float(heartbeat_seconds)
+        remaining = deadline - clock()
+        sleep(min(float(poll_seconds), max(0.0, remaining)))
+
+
+def _raise_prepare_failure(detail, exc=None):
+    text = str(detail or "").strip() or "unknown prepare failure"
+    error = RuntimeError(
+        "Temporal Rank IC manifest or panel failed validation: "
+        f"{text}. Refusing to select best_model by val loss or symbol holdout."
+    )
+    if exc is None:
+        raise error
+    raise error from exc
+
+
+def coordinate_rank_ic_prepare(
+    *,
+    rank,
+    world_size,
+    directory,
+    run_id,
+    cheap_check,
+    materialize,
+    exchange_errors,
+    timeout=PREPARE_TIMEOUT_SECONDS,
+    poll_seconds=2.0,
+    heartbeat_seconds=30.0,
+):
+    """Cheap checks on every rank, then rank-0 row materialization.
+
+    Non-zero ranks wait on a status file while rank 0 builds. They must not
+    call ``exchange_errors`` (the only collective) until that file exists.
+    ``exchange_errors`` then shares the underlying exception text so every
+    worker raises the same fail-closed ``RuntimeError``.
+    """
+    rank = int(rank)
+    world_size = int(world_size)
+    local_error = ""
+    runtime = None
+    try:
+        runtime = cheap_check()
+    except Exception as exc:
+        local_error = format_prepare_error(exc)
+        print(
+            "Temporal Rank IC prepare failed during manifest check: "
+            f"{local_error}",
+            flush=True,
+        )
+        import traceback
+        traceback.print_exc()
+
+    if world_size > 1:
+        _atomic_write_json(
+            prepare_status_path(directory, run_id, rank, "cheap"),
+            {
+                "state": "ready",
+                "ok": not local_error,
+                "error": local_error,
+                "rank": rank,
+                "run_id": str(run_id),
+            },
+        )
+
+    if rank == 0 and not local_error:
+        print(
+            "Temporal Rank IC prepare: rank0 materializing rows; "
+            "other ranks wait outside NCCL",
+            flush=True,
+        )
+        try:
+            runtime = materialize(runtime)
+            rows = runtime.get("rows") if isinstance(runtime, dict) else None
+            if not rows:
+                raise TemporalRankICSelectionError(
+                    "Temporal Rank IC produced no evaluation rows"
+                )
+        except Exception as exc:
+            local_error = format_prepare_error(exc)
+            print(
+                "Temporal Rank IC prepare failed during row build: "
+                f"{local_error}",
+                flush=True,
+            )
+            import traceback
+            traceback.print_exc()
+            runtime = None
+
+    if world_size > 1:
+        try:
+            if rank == 0:
+                # Peers write their cheap file before waiting, so this poll
+                # finishes as soon as their manifest check does. It is still
+                # outside NCCL: rank 0 must not publish "done" and enter the
+                # collective while another rank is hashing the panel.
+                for peer in range(1, world_size):
+                    wait_for_status_file(
+                        prepare_status_path(directory, run_id, peer, "cheap"),
+                        timeout=timeout,
+                        role=f"rank0 waiting for rank {peer} manifest check",
+                        poll_seconds=poll_seconds,
+                        heartbeat_seconds=heartbeat_seconds,
+                    )
+                _atomic_write_json(
+                    prepare_status_path(directory, run_id, 0, "done"),
+                    {
+                        "state": "ready",
+                        "ok": not local_error,
+                        "error": local_error,
+                        "n_rows": (
+                            len(runtime["rows"])
+                            if runtime and runtime.get("rows") else 0
+                        ),
+                        "rows_source": (
+                            str(runtime.get("rows_source") or "") if runtime else ""
+                        ),
+                        "run_id": str(run_id),
+                    },
+                )
+            else:
+                wait_for_status_file(
+                    prepare_status_path(directory, run_id, 0, "done"),
+                    timeout=timeout,
+                    role=f"rank {rank} waiting for rank0 row build",
+                    poll_seconds=poll_seconds,
+                    heartbeat_seconds=heartbeat_seconds,
+                )
+        except Exception as exc:
+            text = format_prepare_error(exc)
+            print(
+                f"Temporal Rank IC prepare wait failed: {text}",
+                flush=True,
+            )
+            _raise_prepare_failure(text, exc)
+        try:
+            errors = exchange_errors(local_error)
+        except Exception as exc:
+            text = format_prepare_error(exc)
+            print(
+                f"Temporal Rank IC prepare collective failed: {text}",
+                flush=True,
+            )
+            _raise_prepare_failure(text, exc)
+    else:
+        errors = [local_error] if local_error else []
+
+    problems = [item for item in (errors or []) if item]
+    if local_error and local_error not in problems:
+        problems.append(local_error)
+    if problems:
+        _raise_prepare_failure("; ".join(problems))
+    if rank == 0 and (not isinstance(runtime, dict) or not runtime.get("rows")):
+        _raise_prepare_failure("rank0 finished without evaluation rows")
+    return runtime
 
 
 @contextlib.contextmanager

@@ -18,6 +18,7 @@ for path in (ROOT, FINETUNE):
 import build_temporal_rank_ic_panel as builder
 from temporal_rank_ic_selection import (
     TemporalRankICSelectionError,
+    load_precomputed_rows,
     manifest_sha256,
     validate_manifest_calendar,
 )
@@ -98,8 +99,14 @@ def test_assemble_bakes_ids_and_is_deterministic(tmp_path):
     data = tmp_path / "data"
     _dataset(data)
     metadata = pd.read_csv(data / "asset_metadata.csv")
-    first = builder.assemble_panel(train, val, dates, metadata=metadata, min_names=2)
-    second = builder.assemble_panel(train, val, dates, metadata=metadata, min_names=2)
+    first, first_rows = builder.assemble_panel(
+        train, val, dates, metadata=metadata, min_names=2,
+    )
+    second, second_rows = builder.assemble_panel(
+        train, val, dates, metadata=metadata, min_names=2,
+    )
+    assert len(first_rows) == len(second_rows)
+    assert [row["symbol"] for row in first_rows] == [row["symbol"] for row in second_rows]
     left = tmp_path / "a" / "temporal_rank_ic_panel.pkl"
     right = tmp_path / "b" / "temporal_rank_ic_panel.pkl"
     assert builder.write_panel(first, left) == builder.write_panel(second, right)
@@ -140,7 +147,13 @@ def test_build_pins_sha_without_touching_the_calendar(tmp_path):
     assert pinned["sha256"] == original["sha256"]
     assert pinned["panel_sha256"] == summary["panel_sha256"]
     assert summary["panel_sha256"] == builder.sha256_file(output)
+    rows_path = output.with_name("temporal_rank_ic_rows.pkl")
+    assert summary["rows_sha256"] == builder.sha256_file(rows_path)
+    assert pinned["rows_sha256"] == summary["rows_sha256"]
+    assert pinned["rows_filename"] == "temporal_rank_ic_rows.pkl"
     assert summary["n_dates"] == 2
+    assert pinned["signal_dates"] == original["signal_dates"]
+    assert pinned["sha256"] == original["sha256"]
     validate_manifest_calendar(pinned)
     again = builder.build_from_dataset(
         data,
@@ -151,7 +164,25 @@ def test_build_pins_sha_without_touching_the_calendar(tmp_path):
         min_names=2,
     )
     assert again["panel_sha256"] == summary["panel_sha256"]
+    assert again["rows_sha256"] == summary["rows_sha256"]
     assert again["calendar_sha256"] == original["sha256"]
+    rewritten = json.loads(selection.read_text(encoding="utf-8"))
+    assert rewritten["panel_sha256"] == summary["panel_sha256"]
+    assert rewritten["sha256"] == original["sha256"]
+    assert rewritten["signal_dates"] == original["signal_dates"]
+    loaded_rows = load_precomputed_rows(
+        rows_path,
+        {
+            "signal_dates": pinned["signal_dates"],
+            "panel_sha256": pinned["panel_sha256"],
+            "sha256": pinned["sha256"],
+            "panel_path": str(output),
+        },
+        expected_sha=pinned["rows_sha256"],
+        min_names=2,
+    )
+    assert len(loaded_rows) == summary["n_rows"]
+    assert {row["asof_date"] for row in loaded_rows} == set(dates)
 
 
 def test_build_refuses_a_non_session_and_a_wrong_contract(tmp_path):
@@ -186,6 +217,32 @@ def test_output_cannot_be_val_data_or_a_holdout_path(tmp_path):
         builder.assert_output_path(
             tmp_path / "a-share-120d-temporal-symbol-holdout" / "temporal_rank_ic_panel.pkl",
         )
+
+
+def test_pin_keeps_panel_sha_until_the_bytes_change(tmp_path):
+    selection = tmp_path / "selection_window.json"
+    dates = ["2026-04-01", "2026-04-02"]
+    original = _manifest(selection, dates)
+    panel_sha = "a" * 64
+    first = builder.pin_selection_digests(
+        selection, panel_sha256=panel_sha, rows_sha256="b" * 64,
+    )
+    assert first["panel_sha256"] == panel_sha
+    builder.pin_selection_digests(
+        selection, panel_sha256=panel_sha, rows_sha256="c" * 64,
+    )
+    stored = json.loads(selection.read_text(encoding="utf-8"))
+    assert stored["panel_sha256"] == panel_sha
+    assert stored["rows_sha256"] == "c" * 64
+    assert stored["sha256"] == original["sha256"]
+    assert stored["signal_dates"] == original["signal_dates"]
+    changed = builder.pin_selection_digests(
+        selection, panel_sha256="d" * 64, rows_sha256="c" * 64,
+    )
+    assert changed["panel_sha256"] == "d" * 64
+    final = json.loads(selection.read_text(encoding="utf-8"))
+    assert final["sha256"] == original["sha256"]
+    assert final["signal_dates"] == dates
 
 
 def test_clean_sha_constant_matches_launch():
