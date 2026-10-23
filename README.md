@@ -18,7 +18,7 @@
 |------|------|------|
 | 研究 alpha | **Cosine C2 Best @ Segment 179** | Kronos-small `small_0.1` 经 Bootstrap → Main → Extend → Warmup-Constant → Cosine 退火后的最佳点；主决策指标为 **D10 横截面 Rank IC** |
 | 研究旁路 | Stage 3 / P0a–P1 | Path Alignment、CE-only 对照、rank 辅助等；多数路径未超过 C2 Best，C2 仍是默认 alpha 检查点 |
-| 续训支线（已关闭） | clean C03 / C04 / **epoch2** | 三轮续训在冻结 34 日 OOS 上均未超过 C2：epoch2 配对 D10 方向 **-0.77pp**、幅度 Rank IC **-0.0368**（CI 不含 0）、D10 Rank IC **-0.058**（CI 不含 0）。**epoch2 线已按预设规则关闭，不再追加同合同训练**；详见 [接手文档 §4.2b](docs/HANDOVER_20261021_CN.md) |
+| 续训支线（已关闭） | clean C03 / C04 / **epoch2** / **bigbatch e03b** | 四轮续训均未超过 C2。epoch2 在冻结 34 日 OOS 上配对 D10 方向 **-0.77pp**、幅度 Rank IC **-0.0368**、D10 Rank IC **-0.058**（CI 不含 0）；**bigbatch e03b 在密封新窗口上 IC 0.0525 vs C2 0.0652，配对 CI [-0.0393, -0.0042] 不含 0**。两条线均已按预设规则关闭。详见 [接手文档 §4.2b](docs/HANDOVER_20261021_CN.md) 与 [密封 OOS 判定](docs/SEALED_OOS_RESULT_20260918_20260930_CN.md) |
 | 线上推理 | **Beta V1.2 `Best@871`** | Web UI + Modal Serverless；约 102.4M 参数，独立 App，不覆盖旧 V6 |
 | 历史发布 | Beta v2.1 Best@475 | [ModelScope](https://modelscope.cn/models/luckfu/Kronos-A-Share-Beta-V2-1)；研究发布包，不含 Last / 优化器 |
 
@@ -31,6 +31,8 @@
 2026-10-21 的 Small Clean Epoch2 / 三层评测接手文档：[`docs/HANDOVER_20261021_CN.md`](docs/HANDOVER_20261021_CN.md)。**结论：epoch2 的冻结 34 日 OOS 已完成，方向与幅度/排序均退化，线已关闭；C2 仍是唯一基线。** 报告见 [`finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json`](finetune/reports/small_clean_epoch2_vs_c2_full_oos_20261021.json)。
 
 2026-10-22 的下一步方案：[`docs/NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md`](docs/NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md)。**不再开新训练；构造 2026-09-18 → 09-30 的密封窗口，按事先写死的规则一次性判定 C2 / bigbatch e03b / SweetSpot native / C07 SWA。**
+
+2026-10-23 的密封 OOS 判定（signal 2026-09-18 → 09-30，8 个交易日，38,100 窗口，`sealed_first_use=true`）：[`docs/SEALED_OOS_RESULT_20260918_20260930_CN.md`](docs/SEALED_OOS_RESULT_20260918_20260930_CN.md)。**C2 的 D10 日均 Rank IC = 0.0652，落在 0.05–0.10 档（弱但非零）→ 只写 `|pred_d10| ≥ 5%` 子集与事前流动性过滤的第 8b 步回测，不做全样本 TopK；bigbatch e03b IC 0.0525 < C2 0.0652，配对 Δ=-0.0128、CI [-0.0393, -0.0042]，不晋级关线。** C2 自身 alpha 从 8 月的 0.172 衰减到 9 月下旬的 0.065，且末 3 天几乎归零 —— 按**弱 alpha + 事前过滤后交易**对待。报告见 [`finetune/reports/small_sealed_oos_20260918_20260930.json`](finetune/reports/small_sealed_oos_20260918_20260930.json)。TimesFM 线（SweetSpot native / C07 SWA）的 §3.3 判定**尚未执行**。
 
 ## 线上推理部署（Beta V1.2）
 

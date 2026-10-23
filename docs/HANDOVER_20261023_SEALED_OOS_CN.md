@@ -16,14 +16,25 @@ origin/master 已同步
 git pull origin master
 ```
 
-## 正在跑的任务
+## 已完成的任务
 
 ```text
 kernel: wynstonliu/kronos-small-sealed-oos-20260803-20260930
 版本:   v3
-状态:   RUNNING（2026-10-23 09:24 时在 08-07/42 天）
+状态:   COMPLETE（2026-10-23 09:14 最后一次运行）
 配置:   42 天全量，C2 best + E03b best，sample_count=1，双 T4
 ```
+
+**判定已完成**，见 [`SEALED_OOS_RESULT_20260918_20260930_CN.md`](SEALED_OOS_RESULT_20260918_20260930_CN.md)；
+机器可读记录见 [`finetune/reports/small_sealed_oos_20260918_20260930.json`](../finetune/reports/small_sealed_oos_20260918_20260930.json)。
+
+| §3 规则 | 结果 |
+|---|---|
+| §3.1 C2 alpha | IC **0.06523** → 档位 **0.05–0.10**（弱但非零）→ 写第 8b 步，只做 `\|pred_d10\| ≥ 5%` 子集 + 事前流动性过滤 |
+| §3.2 e03b 晋级 | **不通过，关线**。e03b IC 0.05247 < C2 0.06523；配对 Δ=-0.01276，CI [-0.03926, -0.00420] |
+| §3.3 TimesFM overlay | **未判定**（SweetSpot native / C07 SWA 的 sealed OOS 尚未评测） |
+
+> `sealed_first_use=true`：该窗口已用掉一次，之后任何候选再用即视为已污染。
 
 页面：
 
@@ -53,14 +64,14 @@ kaggle kernels output wynstonliu/kronos-small-sealed-oos-20260803-20260930 -p ./
 | C2 best checkpoint | `wynstonliu/kronos-small-c2-best-checkpoint`（SHA `4ee469d…`） |
 | E03b 权重 | `wynstonliu/kronos-small-clean-bigbatch-e03b`（kernel output） |
 
-## 跑完后按 §3 判定
+## 判定依据（§3）
 
 文档：[`NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md`](NEXT_STEP_SEALED_WINDOW_PLAN_20261022_CN.md)
 
 - **§3.1 C2**：9 天 D10 日均 Rank IC ≥0.10 / 0.05–0.10 / <0.05；
 - **§3.2 E03b 晋级**：E03b IC > C2 且配对 bootstrap 95% CI 不含 0；
-- 结论写 `docs/SEALED_OOS_RESULT_20260918_20260930_CN.md`；
-- 报告 JSON 放 `finetune/reports/`；
+- 结论写 `docs/SEALED_OOS_RESULT_20260918_20260930_CN.md`（**已写**）；
+- 报告 JSON 放 `finetune/reports/`（**已写**：`small_sealed_oos_20260918_20260930.json`）；
 - 写完再构造 10-09 → 10-23 第二片（等 11-06 标签成熟）。
 
 ## 已知问题

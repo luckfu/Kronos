@@ -1,0 +1,927 @@
+{
+  "report": "small_sealed_oos_c2_vs_bigbatch_e03b",
+  "generated_at": "2026-10-23T02:44:01.380654+00:00",
+  "sealed_first_use": true,
+  "status": "complete",
+  "contract": {
+    "kernel": "wynstonliu/kronos-small-sealed-oos-20260803-20260930",
+    "dataset": "wynstonliu/a-share-120d-oos-20260803-20260930",
+    "dataset_license": "CC0-1.0",
+    "signal_window_full": "2026-08-03 -> 2026-09-30",
+    "trading_days_full": 42,
+    "signal_window_first_use": "2026-09-18 -> 2026-09-30",
+    "trading_days_first_use": 8,
+    "first_use_dates": [
+      "2026-09-18",
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30"
+    ],
+    "target_end": "2026-10-21",
+    "lookback_horizon": "120/10",
+    "cost_bilateral": 0.003,
+    "bootstrap": {
+      "method": "paired moving block",
+      "block_full": 10,
+      "block_first_use": 5,
+      "replicates": 2000,
+      "seed": 20261022
+    },
+    "metric": "D10 日均 Rank IC (Spearman, 按 signal date 平均)"
+  },
+  "candidates": {
+    "c2_best": {
+      "role": "baseline",
+      "source": "smmt315/kronos-small-0-1-stage2-cosine-refinement-c2",
+      "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a",
+      "segment": 179
+    },
+    "bigbatch_best": {
+      "role": "candidate",
+      "source": "wynstonliu/kronos-small-clean-bigbatch-e03b",
+      "sha256": "f2fb12a5fe36d3d7171331efc037a22494a74f6f52793338daa118cc778ab65b",
+      "segment": 457,
+      "training": {
+        "batch_per_gpu": 64,
+        "world_size": 2,
+        "global_batch": 128,
+        "lr": 2e-05,
+        "scheduler": "warmup_constant",
+        "parent": "epoch2 e05 best (seg 501)",
+        "coverage": "520/520 段, 10,397,679 窗口"
+      }
+    }
+  },
+  "windows": {
+    "full_42d": {
+      "note": "42 天中有 34 天是已污染的旧窗口(08-03->09-17)，不得用于选型判定，仅作背景",
+      "c2_best": {
+        "samples": 213564,
+        "path_direction": 0.5356399018561181,
+        "path_return_mae": 0.054557619182680775,
+        "path_return_rmse": 0.0849572197638273,
+        "horizons": {
+          "1": {
+            "direction": 0.5304171114981926,
+            "return_mae": 0.02560857061570837,
+            "return_rmse": 0.039917191815533104
+          },
+          "2": {
+            "direction": 0.5422074881534341,
+            "return_mae": 0.034677624385793374,
+            "return_rmse": 0.052437168956831946
+          },
+          "3": {
+            "direction": 0.5417486093161769,
+            "return_mae": 0.04250655396321728,
+            "return_rmse": 0.06389677393264362
+          },
+          "4": {
+            "direction": 0.5384943155213425,
+            "return_mae": 0.049072343330224866,
+            "return_rmse": 0.07376625530633286
+          },
+          "5": {
+            "direction": 0.533235938641344,
+            "return_mae": 0.05437975464108783,
+            "return_rmse": 0.08150124476207156
+          },
+          "6": {
+            "direction": 0.5326506340019853,
+            "return_mae": 0.059698209786284755,
+            "return_rmse": 0.08907528010438474
+          },
+          "7": {
+            "direction": 0.5314238354778895,
+            "return_mae": 0.06430017599483887,
+            "return_rmse": 0.09591385122549657
+          },
+          "8": {
+            "direction": 0.5286471502687718,
+            "return_mae": 0.068474325385687,
+            "return_rmse": 0.10218770058123809
+          },
+          "9": {
+            "direction": 0.5346687643984941,
+            "return_mae": 0.07195254851722602,
+            "return_rmse": 0.10744358697429798
+          },
+          "10": {
+            "direction": 0.5429051712835496,
+            "return_mae": 0.07490608520673958,
+            "return_rmse": 0.11201436986429884
+          }
+        },
+        "d10_daily_rank_ic": 0.11161198480662388
+      },
+      "bigbatch_best": {
+        "samples": 213564,
+        "path_direction": 0.5286668165046543,
+        "path_return_mae": 0.06298740586605883,
+        "path_return_rmse": 0.09884872825026086,
+        "horizons": {
+          "1": {
+            "direction": 0.5214596092974472,
+            "return_mae": 0.028200056670267086,
+            "return_rmse": 0.04293866702653924
+          },
+          "2": {
+            "direction": 0.5322292146616471,
+            "return_mae": 0.03915078373417741,
+            "return_rmse": 0.059473794048854174
+          },
+          "3": {
+            "direction": 0.5348279672603997,
+            "return_mae": 0.04828654119902415,
+            "return_rmse": 0.073153448330017
+          },
+          "4": {
+            "direction": 0.5323181809668296,
+            "return_mae": 0.05610117927126267,
+            "return_rmse": 0.08489905953501152
+          },
+          "5": {
+            "direction": 0.5291060291060291,
+            "return_mae": 0.06264018960343758,
+            "return_rmse": 0.09429387636689955
+          },
+          "6": {
+            "direction": 0.5277293925942574,
+            "return_mae": 0.06913206571610908,
+            "return_rmse": 0.1037603507978061
+          },
+          "7": {
+            "direction": 0.5253507145399037,
+            "return_mae": 0.07475262459647977,
+            "return_rmse": 0.11204853822356411
+          },
+          "8": {
+            "direction": 0.5239787604652469,
+            "return_mae": 0.07978641739802197,
+            "return_rmse": 0.11958329222963919
+          },
+          "9": {
+            "direction": 0.527134723080669,
+            "return_mae": 0.0840700939337216,
+            "return_rmse": 0.12607093818650456
+          },
+          "10": {
+            "direction": 0.5325335730741136,
+            "return_mae": 0.08775410653808696,
+            "return_rmse": 0.1317729353021082
+          }
+        },
+        "d10_daily_rank_ic": 0.06429452516762198
+      }
+    },
+    "first_use_9d": {
+      "note": "唯一可用于 §3 判定的窗口（sealed，8 个交易日）",
+      "c2_best": {
+        "samples": 38100,
+        "path_direction": 0.536511811023622,
+        "path_return_mae": 0.05765606499081695,
+        "path_return_rmse": 0.08723058086915779,
+        "horizons": {
+          "1": {
+            "direction": 0.5269816272965879,
+            "return_mae": 0.02498939332824657,
+            "return_rmse": 0.045942904095899184
+          },
+          "2": {
+            "direction": 0.5503412073490813,
+            "return_mae": 0.03313788044807941,
+            "return_rmse": 0.052910018779040946
+          },
+          "3": {
+            "direction": 0.5712860892388452,
+            "return_mae": 0.04162372074699427,
+            "return_rmse": 0.06303036364483344
+          },
+          "4": {
+            "direction": 0.5750656167979002,
+            "return_mae": 0.048342725204980626,
+            "return_rmse": 0.07237604643889868
+          },
+          "5": {
+            "direction": 0.5665354330708662,
+            "return_mae": 0.055080415717144955,
+            "return_rmse": 0.08149157763995701
+          },
+          "6": {
+            "direction": 0.5293700787401575,
+            "return_mae": 0.06410557074159588,
+            "return_rmse": 0.09196456889044094
+          },
+          "7": {
+            "direction": 0.5079265091863517,
+            "return_mae": 0.07030951635547604,
+            "return_rmse": 0.10014096939832577
+          },
+          "8": {
+            "direction": 0.4946456692913386,
+            "return_mae": 0.07638501565456704,
+            "return_rmse": 0.10720878708847044
+          },
+          "9": {
+            "direction": 0.5053018372703412,
+            "return_mae": 0.08025180259099585,
+            "return_rmse": 0.1112834782133423
+          },
+          "10": {
+            "direction": 0.5376640419947507,
+            "return_mae": 0.08233460912008889,
+            "return_rmse": 0.11386875586695026
+          }
+        },
+        "d10_daily_rank_ic": 0.06522895029231893
+      },
+      "bigbatch_best": {
+        "samples": 38100,
+        "path_direction": 0.5257769028871391,
+        "path_return_mae": 0.06081451182727199,
+        "path_return_rmse": 0.09281929672400986,
+        "horizons": {
+          "1": {
+            "direction": 0.520498687664042,
+            "return_mae": 0.026505781716930094,
+            "return_rmse": 0.04208927510621513
+          },
+          "2": {
+            "direction": 0.5462204724409448,
+            "return_mae": 0.03502522603283639,
+            "return_rmse": 0.05446271476555524
+          },
+          "3": {
+            "direction": 0.5625196850393701,
+            "return_mae": 0.0442336279778838,
+            "return_rmse": 0.06824136402338868
+          },
+          "4": {
+            "direction": 0.5662992125984252,
+            "return_mae": 0.051505639791332866,
+            "return_rmse": 0.07811210197492117
+          },
+          "5": {
+            "direction": 0.5562992125984252,
+            "return_mae": 0.05812467475608494,
+            "return_rmse": 0.08655727998663852
+          },
+          "6": {
+            "direction": 0.5180577427821522,
+            "return_mae": 0.0677800632227625,
+            "return_rmse": 0.09888546830101383
+          },
+          "7": {
+            "direction": 0.4956692913385827,
+            "return_mae": 0.07407637167787655,
+            "return_rmse": 0.10680062548588092
+          },
+          "8": {
+            "direction": 0.48196850393700785,
+            "return_mae": 0.08021188244369933,
+            "return_rmse": 0.1136905028811159
+          },
+          "9": {
+            "direction": 0.4915223097112861,
+            "return_mae": 0.08433347135976912,
+            "return_rmse": 0.1187812565525439
+          },
+          "10": {
+            "direction": 0.5187139107611548,
+            "return_mae": 0.08634837929354412,
+            "return_rmse": 0.12225690290756618
+          }
+        },
+        "d10_daily_rank_ic": 0.052469265850849565
+      }
+    }
+  },
+  "per_date_daily_rank_ic": {
+    "c2_best": {
+      "2026-08-03": {
+        "d10_daily_rank_ic": 0.22998263210298595,
+        "path_direction": 0.4848420236479938,
+        "path_return_mae": 0.07837174425611601,
+        "path_return_rmse": 0.11869462652748447
+      },
+      "2026-08-04": {
+        "d10_daily_rank_ic": 0.17710753529815737,
+        "path_direction": 0.4503779802287265,
+        "path_return_mae": 0.0696328496370054,
+        "path_return_rmse": 0.1054835376129245
+      },
+      "2026-08-05": {
+        "d10_daily_rank_ic": 0.16007324786339322,
+        "path_direction": 0.47858942065491183,
+        "path_return_mae": 0.06060689467371029,
+        "path_return_rmse": 0.09165692595935102
+      },
+      "2026-08-06": {
+        "d10_daily_rank_ic": 0.08647811789800028,
+        "path_direction": 0.46778380472685005,
+        "path_return_mae": 0.0571287665004543,
+        "path_return_rmse": 0.08819389315532888
+      },
+      "2026-08-07": {
+        "d10_daily_rank_ic": 0.12720080056403338,
+        "path_direction": 0.5290916134030602,
+        "path_return_mae": 0.04905600316187138,
+        "path_return_rmse": 0.0773889904882089
+      },
+      "2026-08-10": {
+        "d10_daily_rank_ic": 0.10987346259433577,
+        "path_direction": 0.5671506000774293,
+        "path_return_mae": 0.04691571263621578,
+        "path_return_rmse": 0.07581617981308021
+      },
+      "2026-08-11": {
+        "d10_daily_rank_ic": 0.15011461866845668,
+        "path_direction": 0.5329655439411537,
+        "path_return_mae": 0.04740202454099898,
+        "path_return_rmse": 0.07659822023849251
+      },
+      "2026-08-12": {
+        "d10_daily_rank_ic": 0.2418039816092296,
+        "path_direction": 0.6072783584978707,
+        "path_return_mae": 0.047259711531529414,
+        "path_return_rmse": 0.07622928910783063
+      },
+      "2026-08-13": {
+        "d10_daily_rank_ic": 0.1597398631837649,
+        "path_direction": 0.5542674666150571,
+        "path_return_mae": 0.050198760273319834,
+        "path_return_rmse": 0.08051497139094138
+      },
+      "2026-08-14": {
+        "d10_daily_rank_ic": 0.20800380623247378,
+        "path_direction": 0.5510547706599574,
+        "path_return_mae": 0.051064719451143575,
+        "path_return_rmse": 0.07978127905046649
+      },
+      "2026-08-17": {
+        "d10_daily_rank_ic": 0.2508553015935476,
+        "path_direction": 0.6278853601859024,
+        "path_return_mae": 0.05077388595738844,
+        "path_return_rmse": 0.07723109004398789
+      },
+      "2026-08-18": {
+        "d10_daily_rank_ic": 0.2998389231211595,
+        "path_direction": 0.6188262638001162,
+        "path_return_mae": 0.05191069003549251,
+        "path_return_rmse": 0.07796059833999082
+      },
+      "2026-08-19": {
+        "d10_daily_rank_ic": 0.1516130006309116,
+        "path_direction": 0.40399070127857417,
+        "path_return_mae": 0.06740955376500803,
+        "path_return_rmse": 0.10098253574563994
+      },
+      "2026-08-20": {
+        "d10_daily_rank_ic": 0.11376985671066983,
+        "path_direction": 0.44063953488372093,
+        "path_return_mae": 0.06395388736962593,
+        "path_return_rmse": 0.09733332402882154
+      },
+      "2026-08-21": {
+        "d10_daily_rank_ic": 0.23508957556750762,
+        "path_direction": 0.411199379965123,
+        "path_return_mae": 0.06746845284486083,
+        "path_return_rmse": 0.09732936087012804
+      },
+      "2026-08-24": {
+        "d10_daily_rank_ic": 0.10193349256020398,
+        "path_direction": 0.3760457010069713,
+        "path_return_mae": 0.06467791313286542,
+        "path_return_rmse": 0.09232981654344784
+      },
+      "2026-08-25": {
+        "d10_daily_rank_ic": 0.11807005525590987,
+        "path_direction": 0.40600309837335397,
+        "path_return_mae": 0.05680893780663571,
+        "path_return_rmse": 0.08535210977918098
+      },
+      "2026-08-26": {
+        "d10_daily_rank_ic": 0.06959447643196101,
+        "path_direction": 0.46809293320425943,
+        "path_return_mae": 0.05152932781683532,
+        "path_return_rmse": 0.08007047726147865
+      },
+      "2026-08-27": {
+        "d10_daily_rank_ic": 0.2367925847014211,
+        "path_direction": 0.4942315137437089,
+        "path_return_mae": 0.052019026230804455,
+        "path_return_rmse": 0.07957537120374464
+      },
+      "2026-08-28": {
+        "d10_daily_rank_ic": 0.15877969142698362,
+        "path_direction": 0.5256633740073601,
+        "path_return_mae": 0.051120603207805565,
+        "path_return_rmse": 0.07903759962033283
+      },
+      "2026-08-31": {
+        "d10_daily_rank_ic": 0.2258591760863775,
+        "path_direction": 0.5860325455249903,
+        "path_return_mae": 0.04776524310125077,
+        "path_return_rmse": 0.0750058539958741
+      },
+      "2026-09-01": {
+        "d10_daily_rank_ic": 0.07538976213529595,
+        "path_direction": 0.6623643410852713,
+        "path_return_mae": 0.04563766138089438,
+        "path_return_rmse": 0.07419037339956921
+      },
+      "2026-09-02": {
+        "d10_daily_rank_ic": -0.044062554723215776,
+        "path_direction": 0.6178875968992248,
+        "path_return_mae": 0.047692552801776526,
+        "path_return_rmse": 0.07882368553003193
+      },
+      "2026-09-03": {
+        "d10_daily_rank_ic": -0.021006160071704368,
+        "path_direction": 0.6076341794225926,
+        "path_return_mae": 0.047712093302870344,
+        "path_return_rmse": 0.07816956724920485
+      },
+      "2026-09-04": {
+        "d10_daily_rank_ic": -0.14245934635155028,
+        "path_direction": 0.5937972475285909,
+        "path_return_mae": 0.05103738195153944,
+        "path_return_rmse": 0.08356294408254517
+      },
+      "2026-09-07": {
+        "d10_daily_rank_ic": -0.06234000481946913,
+        "path_direction": 0.6440480806514153,
+        "path_return_mae": 0.046963725131737265,
+        "path_return_rmse": 0.07609874249349745
+      },
+      "2026-09-08": {
+        "d10_daily_rank_ic": -0.06650622977316333,
+        "path_direction": 0.7061857669187512,
+        "path_return_mae": 0.048446662534562625,
+        "path_return_rmse": 0.07757333996284142
+      },
+      "2026-09-09": {
+        "d10_daily_rank_ic": 0.0030223082449051604,
+        "path_direction": 0.6684057408844065,
+        "path_return_mae": 0.04858153284444715,
+        "path_return_rmse": 0.07764444923440267
+      },
+      "2026-09-10": {
+        "d10_daily_rank_ic": 0.058935027082950224,
+        "path_direction": 0.5635040745052387,
+        "path_return_mae": 0.051025904221051105,
+        "path_return_rmse": 0.08152876612289946
+      },
+      "2026-09-11": {
+        "d10_daily_rank_ic": 0.15417606113360283,
+        "path_direction": 0.4877788554801164,
+        "path_return_mae": 0.05623981806790059,
+        "path_return_rmse": 0.08909991800634963
+      },
+      "2026-09-14": {
+        "d10_daily_rank_ic": 0.08971473836069453,
+        "path_direction": 0.5051804423748545,
+        "path_return_mae": 0.05174821510746042,
+        "path_return_rmse": 0.08242288683182553
+      },
+      "2026-09-15": {
+        "d10_daily_rank_ic": 0.16530434600841418,
+        "path_direction": 0.5205819592628516,
+        "path_return_mae": 0.05459215204007946,
+        "path_return_rmse": 0.08519690569283861
+      },
+      "2026-09-16": {
+        "d10_daily_rank_ic": 0.21706758530553275,
+        "path_direction": 0.5142274844720497,
+        "path_return_mae": 0.05031606973562643,
+        "path_return_rmse": 0.07884565113122832
+      },
+      "2026-09-17": {
+        "d10_daily_rank_ic": 0.12606202690587467,
+        "path_direction": 0.531981370075684,
+        "path_return_mae": 0.04902506594521589,
+        "path_return_rmse": 0.07579759872347633
+      },
+      "2026-09-18": {
+        "d10_daily_rank_ic": 0.12919763777576918,
+        "path_direction": 0.5390756302521008,
+        "path_return_mae": 0.04939417819595869,
+        "path_return_rmse": 0.07399832359917506
+      },
+      "2026-09-21": {
+        "d10_daily_rank_ic": 0.0926815545877422,
+        "path_direction": 0.6728055438891222,
+        "path_return_mae": 0.04677737096616128,
+        "path_return_rmse": 0.07160667853971257
+      },
+      "2026-09-22": {
+        "d10_daily_rank_ic": 0.1030073668746072,
+        "path_direction": 0.6489920201595968,
+        "path_return_mae": 0.050019686329888007,
+        "path_return_rmse": 0.09304808030409364
+      },
+      "2026-09-23": {
+        "d10_daily_rank_ic": 0.1564048179313161,
+        "path_direction": 0.6252571908461054,
+        "path_return_mae": 0.055562385703873035,
+        "path_return_rmse": 0.0837833914895278
+      },
+      "2026-09-24": {
+        "d10_daily_rank_ic": 0.07971549601311963,
+        "path_direction": 0.5062342569269521,
+        "path_return_mae": 0.06134717514030015,
+        "path_return_rmse": 0.0909891629337696
+      },
+      "2026-09-28": {
+        "d10_daily_rank_ic": -0.042452331388392814,
+        "path_direction": 0.4486140277194456,
+        "path_return_mae": 0.06088763868622253,
+        "path_return_rmse": 0.08912568188440824
+      },
+      "2026-09-29": {
+        "d10_daily_rank_ic": 0.007212878727394093,
+        "path_direction": 0.4450440991180176,
+        "path_return_mae": 0.06626974930760168,
+        "path_return_rmse": 0.09471598050809334
+      },
+      "2026-09-30": {
+        "d10_daily_rank_ic": -0.003935818183004193,
+        "path_direction": 0.4061490031479538,
+        "path_return_mae": 0.07097736285226636,
+        "path_return_rmse": 0.0969371549700053
+      }
+    },
+    "bigbatch_best": {
+      "2026-08-03": {
+        "d10_daily_rank_ic": -0.08902338490518652,
+        "path_direction": 0.46534212056600116,
+        "path_return_mae": 0.09435458852776672,
+        "path_return_rmse": 0.1390700313994421
+      },
+      "2026-08-04": {
+        "d10_daily_rank_ic": -0.20014464326628065,
+        "path_direction": 0.42008141112618724,
+        "path_return_mae": 0.08697961986629332,
+        "path_return_rmse": 0.12915473108492975
+      },
+      "2026-08-05": {
+        "d10_daily_rank_ic": -0.09292790294353608,
+        "path_direction": 0.44411935671381514,
+        "path_return_mae": 0.07670094099137233,
+        "path_return_rmse": 0.1150486368249006
+      },
+      "2026-08-06": {
+        "d10_daily_rank_ic": -0.037783347596130425,
+        "path_direction": 0.4589112746997288,
+        "path_return_mae": 0.07137107074626364,
+        "path_return_rmse": 0.11100020518276912
+      },
+      "2026-08-07": {
+        "d10_daily_rank_ic": 0.024883519586595494,
+        "path_direction": 0.5206662792949835,
+        "path_return_mae": 0.06521494536672773,
+        "path_return_rmse": 0.10255283234178313
+      },
+      "2026-08-10": {
+        "d10_daily_rank_ic": 0.01915627563653973,
+        "path_direction": 0.5072783584978707,
+        "path_return_mae": 0.06769022824101117,
+        "path_return_rmse": 0.11968047018824343
+      },
+      "2026-08-11": {
+        "d10_daily_rank_ic": 0.10053964483378731,
+        "path_direction": 0.49421215640727834,
+        "path_return_mae": 0.06568093858739735,
+        "path_return_rmse": 0.10407168320999502
+      },
+      "2026-08-12": {
+        "d10_daily_rank_ic": 0.17048385725777743,
+        "path_direction": 0.5451993805652342,
+        "path_return_mae": 0.06507477398721635,
+        "path_return_rmse": 0.10419871142509335
+      },
+      "2026-08-13": {
+        "d10_daily_rank_ic": 0.04258554159372562,
+        "path_direction": 0.5283723630733501,
+        "path_return_mae": 0.06944513479620702,
+        "path_return_rmse": 0.11149376223172774
+      },
+      "2026-08-14": {
+        "d10_daily_rank_ic": 0.16877037163989703,
+        "path_direction": 0.552293400425779,
+        "path_return_mae": 0.07050750991995268,
+        "path_return_rmse": 0.11113556428834709
+      },
+      "2026-08-17": {
+        "d10_daily_rank_ic": 0.21490220605373803,
+        "path_direction": 0.6039697908597986,
+        "path_return_mae": 0.06971461703917574,
+        "path_return_rmse": 0.10807657311258177
+      },
+      "2026-08-18": {
+        "d10_daily_rank_ic": 0.29241758190944306,
+        "path_direction": 0.6068564787914004,
+        "path_return_mae": 0.06609191090263535,
+        "path_return_rmse": 0.10005920710520466
+      },
+      "2026-08-19": {
+        "d10_daily_rank_ic": 0.13192365142733933,
+        "path_direction": 0.45534676481983727,
+        "path_return_mae": 0.08366831694780975,
+        "path_return_rmse": 0.12660336239219414
+      },
+      "2026-08-20": {
+        "d10_daily_rank_ic": 0.09931109799896616,
+        "path_direction": 0.48327519379844963,
+        "path_return_mae": 0.08059019548740755,
+        "path_return_rmse": 0.12282777620189006
+      },
+      "2026-08-21": {
+        "d10_daily_rank_ic": 0.20682165977393924,
+        "path_direction": 0.4916101530711102,
+        "path_return_mae": 0.07968494019307953,
+        "path_return_rmse": 0.11739962883123908
+      },
+      "2026-08-24": {
+        "d10_daily_rank_ic": 0.11174460043886147,
+        "path_direction": 0.4731990704879938,
+        "path_return_mae": 0.06829505716220106,
+        "path_return_rmse": 0.09958942844137234
+      },
+      "2026-08-25": {
+        "d10_daily_rank_ic": 0.1454873715518026,
+        "path_direction": 0.46262587141750583,
+        "path_return_mae": 0.061071676607648055,
+        "path_return_rmse": 0.09168581637487416
+      },
+      "2026-08-26": {
+        "d10_daily_rank_ic": 0.10546617809981121,
+        "path_direction": 0.5010842207163602,
+        "path_return_mae": 0.05499039707917416,
+        "path_return_rmse": 0.08671572757421134
+      },
+      "2026-08-27": {
+        "d10_daily_rank_ic": 0.22019303921484745,
+        "path_direction": 0.5222028648857917,
+        "path_return_mae": 0.054992079824118155,
+        "path_return_rmse": 0.08418941357971002
+      },
+      "2026-08-28": {
+        "d10_daily_rank_ic": 0.13170957555471258,
+        "path_direction": 0.5315901607592485,
+        "path_return_mae": 0.055545009854058414,
+        "path_return_rmse": 0.08743187947754447
+      },
+      "2026-08-31": {
+        "d10_daily_rank_ic": 0.18051662784431005,
+        "path_direction": 0.5791166214645487,
+        "path_return_mae": 0.05282474957873111,
+        "path_return_rmse": 0.08526293889374137
+      },
+      "2026-09-01": {
+        "d10_daily_rank_ic": 0.0033253301552149243,
+        "path_direction": 0.6131007751937985,
+        "path_return_mae": 0.05218787242266166,
+        "path_return_rmse": 0.08303661781810609
+      },
+      "2026-09-02": {
+        "d10_daily_rank_ic": -0.07097412280421589,
+        "path_direction": 0.5996511627906976,
+        "path_return_mae": 0.05217258954233122,
+        "path_return_rmse": 0.08357515034593993
+      },
+      "2026-09-03": {
+        "d10_daily_rank_ic": -0.040283255030964284,
+        "path_direction": 0.5835496996706064,
+        "path_return_mae": 0.05227947264813163,
+        "path_return_rmse": 0.08356624730405185
+      },
+      "2026-09-04": {
+        "d10_daily_rank_ic": -0.11213874655975924,
+        "path_direction": 0.5598371777476255,
+        "path_return_mae": 0.056577160545216866,
+        "path_return_rmse": 0.08897349600918866
+      },
+      "2026-09-07": {
+        "d10_daily_rank_ic": -0.07000216099573695,
+        "path_direction": 0.6142109344707251,
+        "path_return_mae": 0.05211389437206607,
+        "path_return_rmse": 0.08102977541689027
+      },
+      "2026-09-08": {
+        "d10_daily_rank_ic": -0.041557366052322395,
+        "path_direction": 0.6566220670932713,
+        "path_return_mae": 0.05364299094373543,
+        "path_return_rmse": 0.08290110361792717
+      },
+      "2026-09-09": {
+        "d10_daily_rank_ic": 0.03430459857858302,
+        "path_direction": 0.6142358417377812,
+        "path_return_mae": 0.05208465676124329,
+        "path_return_rmse": 0.08066732859972268
+      },
+      "2026-09-10": {
+        "d10_daily_rank_ic": 0.09117574869744381,
+        "path_direction": 0.5325766395032984,
+        "path_return_mae": 0.051952886420331676,
+        "path_return_rmse": 0.08063130979340366
+      },
+      "2026-09-11": {
+        "d10_daily_rank_ic": 0.07505232641757646,
+        "path_direction": 0.5020562560620756,
+        "path_return_mae": 0.05611672297693338,
+        "path_return_rmse": 0.08964707232704497
+      },
+      "2026-09-14": {
+        "d10_daily_rank_ic": 0.070781185985045,
+        "path_direction": 0.5144547923942568,
+        "path_return_mae": 0.053572348342099174,
+        "path_return_rmse": 0.0922550237627942
+      },
+      "2026-09-15": {
+        "d10_daily_rank_ic": 0.11907588823624186,
+        "path_direction": 0.5291367604267702,
+        "path_return_mae": 0.0565977646845927,
+        "path_return_rmse": 0.08846527845101457
+      },
+      "2026-09-16": {
+        "d10_daily_rank_ic": 0.1651674711868047,
+        "path_direction": 0.5086374223602484,
+        "path_return_mae": 0.05446681470568761,
+        "path_return_rmse": 0.0844911837520251
+      },
+      "2026-09-17": {
+        "d10_daily_rank_ic": 0.10965551071445474,
+        "path_direction": 0.5207451969726373,
+        "path_return_mae": 0.053259613254801996,
+        "path_return_rmse": 0.08156204928583348
+      },
+      "2026-09-18": {
+        "d10_daily_rank_ic": 0.07746855584578548,
+        "path_direction": 0.5305042016806722,
+        "path_return_mae": 0.05362858514646563,
+        "path_return_rmse": 0.08084452280215762
+      },
+      "2026-09-21": {
+        "d10_daily_rank_ic": 0.04515593848011092,
+        "path_direction": 0.6510079798404032,
+        "path_return_mae": 0.05090856227970362,
+        "path_return_rmse": 0.07855841817762493
+      },
+      "2026-09-22": {
+        "d10_daily_rank_ic": 0.08501619748716743,
+        "path_direction": 0.6250314993700126,
+        "path_return_mae": 0.05325514293079076,
+        "path_return_rmse": 0.09004634003185095
+      },
+      "2026-09-23": {
+        "d10_daily_rank_ic": 0.103695399759812,
+        "path_direction": 0.6089229477220239,
+        "path_return_mae": 0.05835947691700916,
+        "path_return_rmse": 0.0884080203544575
+      },
+      "2026-09-24": {
+        "d10_daily_rank_ic": 0.053851490380158455,
+        "path_direction": 0.49370277078085645,
+        "path_return_mae": 0.06445712408425926,
+        "path_return_rmse": 0.09747483875352995
+      },
+      "2026-09-28": {
+        "d10_daily_rank_ic": -0.012660864127531351,
+        "path_direction": 0.4514069718605628,
+        "path_return_mae": 0.06362895616567395,
+        "path_return_rmse": 0.09589968616993176
+      },
+      "2026-09-29": {
+        "d10_daily_rank_ic": 0.03622685295005726,
+        "path_direction": 0.44145317093658126,
+        "path_return_mae": 0.06830462131224191,
+        "path_return_rmse": 0.09765506920736337
+      },
+      "2026-09-30": {
+        "d10_daily_rank_ic": 0.031000556031236328,
+        "path_direction": 0.40426023084994755,
+        "path_return_mae": 0.07396131111575065,
+        "path_return_rmse": 0.10979044144827135
+      }
+    }
+  },
+  "blocks": {
+    "2026-08-03..2026-08-31": {
+      "days": 21,
+      "c2_daily_rank_ic": 0.17202734286197544,
+      "bigbatch_daily_rank_ic": 0.09271588198595049,
+      "contaminated": true
+    },
+    "2026-09-01..2026-09-17": {
+      "days": 13,
+      "c2_daily_rank_ic": 0.04256135072601287,
+      "bigbatch_daily_rank_ic": 0.025660185271412752,
+      "contaminated": true
+    },
+    "2026-09-18..2026-09-30": {
+      "days": 8,
+      "c2_daily_rank_ic": 0.06522895029231893,
+      "bigbatch_daily_rank_ic": 0.052469265850849565,
+      "contaminated": false
+    }
+  },
+  "paired_bootstrap": {
+    "full_42d": {
+      "dates": 42,
+      "c2_ic": 0.11161198480662388,
+      "bigbatch_ic": 0.06429452516762198,
+      "delta_ic": -0.047317459639001906,
+      "ci95": [
+        -0.07086600686432946,
+        -0.011444179059461677
+      ],
+      "block": 10,
+      "replicates": 2000,
+      "seed": 20261022
+    },
+    "first_use_9d": {
+      "dates": 8,
+      "c2_ic": 0.06522895029231893,
+      "bigbatch_ic": 0.052469265850849565,
+      "delta_ic": -0.012759684441469358,
+      "ci95": [
+        -0.03925568686201189,
+        -0.0042016955812879935
+      ],
+      "block": 5,
+      "replicates": 2000,
+      "seed": 20261022
+    }
+  },
+  "supplementary": {
+    "c2_absolute_daily_rank_ic_first_use": {
+      "point_estimate": 0.06522895029231893,
+      "ci95_block4_5000_seed20261022": [
+        0.01632032401261037,
+        0.11413757657202747
+      ],
+      "note": "kernel 只给出配对差的 CI，未给绝对值的 CI；此为本地补充计算，用于判断 §3.1 阈值稳健性"
+    },
+    "c2_last3_first_use_dates": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30"
+    ],
+    "c2_last3_daily_rank_ic": [
+      -0.042452331388392814,
+      0.007212878727394093,
+      -0.003935818183004193
+    ]
+  },
+  "decision": {
+    "s3_1_c2_alpha_on_new_window": {
+      "rule": "C2 D10 日均 Rank IC: >=0.10 / 0.05-0.10 / <0.05",
+      "value": 0.06522895029231893,
+      "band": "0.05-0.10",
+      "conclusion": "弱于 34 日窗口（0.1424）但非零",
+      "action": "写第 8b 步执行约束回测，但只针对 |pred_d10| >= 5% 子集与事前流动性过滤；不做全样本 TopK",
+      "fragility": "点估计定档，但 95%CI [0.0163, 0.1141] 同时跨 0.05 与 0.10 两道阈值；且 8 天中末 3 天 IC 为 -0.0425, +0.0072, -0.0039，几乎归零。规则按事先写死版本执行，脆弱性在此备案。"
+    },
+    "s3_2_bigbatch_promotion": {
+      "rule": "E03b D10 日均 Rank IC > C2 且 配对 bootstrap 95% CI 不含 0",
+      "e03b_ic": 0.052469265850849565,
+      "c2_ic": 0.06522895029231893,
+      "delta_ic": -0.012759684441469358,
+      "ci95": [
+        -0.03925568686201189,
+        -0.0042016955812879935
+      ],
+      "promoted": false,
+      "conclusion": "不晋级，关线。e03b IC 低于 C2（第一项即不满足）；配对 CI 不含 0 但方向为负，e03b 显著更差。"
+    },
+    "s3_3_timesfm_overlay": {
+      "rule": "DirAcc 相对多数类基线的超额 >= +3pp 且日均 IC >= 0.05",
+      "status": "not_evaluated",
+      "note": "SweetSpot native 与 C07 SWA 的 sealed OOS 尚未评测，§3.3 未判定。"
+    }
+  },
+  "caveats": [
+    "sealed_first_use=true：本窗口已用于一次判定，之后任何候选再用它即视为已污染，不得再用于选型。",
+    "full_42d 的 C2 IC 0.1116 不可用于判定：其中 34 天(08-03->09-17)是已被 C2/C03/C04/epoch2/C07/C08/SweetSpot/S01/S02 反复使用的旧窗口，存在 winner's curse。",
+    "§3.1 的档位判定基于 8 个交易日的点估计，绝对值的 95%CI 跨两道阈值。",
+    "第 8a 步固定规则回测与第 8b 步执行约束回测均未执行；TimesFM 线 §3.3 未判定。"
+  ],
+  "not_done": [
+    "第 8a 步固定规则回测（5 条预注册规则）与第 8b 步执行约束回测（涨跌停/停牌/滑点，新代码）",
+    "TimesFM SweetSpot native / C07 SWA 的 sealed OOS 评测与 §3.3 判定",
+    "analyze_predictions.py 的 horizon=10 不重叠 cohort 修正（TimesFM 第 7 步前置）",
+    "finetune/reports/c2_amplitude_calibration_fit_on_34d.json（幅度标定映射，§5 第 7 条）",
+    "SWANLAB_API_KEY 轮换（仓库内仍是字面量）",
+    "第二片 2026-10-09 -> 10-23（D10 标签 2026-11-06 成熟后）"
+  ],
+  "provenance": {
+    "summary_json": "artifacts/kernels/sealed_oos/small_sealed_oos/summary.json（Kaggle kernel Output）",
+    "per_date": "同上 kernel stdout 日志的 date_done 行：d10_daily_rank_ic / path_direction / path_return_mae / path_return_rmse",
+    "note": "artifacts/ 被 .gitignore 忽略，本 JSON 为唯一入库的机器可读记录。"
+  }
+}
