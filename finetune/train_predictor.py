@@ -2713,7 +2713,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         if temporal_rank_ic_enabled(config):
             print(
                 "Best checkpoint selection: temporal_rank_ic_v1 "
-                "(daily D10 Rank IC, 16-path median). "
+                "(daily D10 Rank IC, single-path). "
                 "Validation loss is logged and does not select best_model."
             )
         else:

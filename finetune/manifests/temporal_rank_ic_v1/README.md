@@ -54,7 +54,7 @@ python -u finetune/small_clean_bigbatch_relay/push_chunk.py 1
   "protocol_id": "temporal_rank_ic_v1",
   "split_kind": "temporal",
   "horizon": "D10",
-  "n_paths": 16,
+  "n_paths": 1,
   "path_aggregation": "median",
   "temperature": 0.65,
   "top_p": 0.8,

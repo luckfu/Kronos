@@ -22,8 +22,10 @@ INITIAL_PARENT = "wynstonliu/kronos-small-clean-bigbatch-e03b"
 
 def slug(chunk):
     # Round 2 from e03b best; deliberately NOT e04b (closed line).
-    # Kaggle slugifies the title; keep title/slug in lockstep with the
-    # already-running E01: .../kronos-small-clean-bigbatch2-e01-from-e03b
+    # e01 burned; e01b/e01c NCCL; e01d 16-path too slow; e01e single-path + new SwanLab.
+    # Local-only slug patch — do not commit.
+    if chunk == 1:
+        return "kronos-small-clean-bigbatch2-e01e-from-e03b"
     return f"kronos-small-clean-bigbatch2-e{chunk:02d}-from-e03b"
 
 
@@ -158,7 +160,7 @@ namespace["main"]()
     (build / code_file).write_text(code)
     metadata = {
         "id": f"{OWNER}/{slug(args.chunk)}",
-        "title": f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} from e03b",
+        "title": ("Kronos Small Clean Bigbatch2 E01d from e03b" if args.chunk == 1 else f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} from e03b"),
         "code_file": code_file, "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4",

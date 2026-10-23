@@ -218,7 +218,7 @@ def test_best_metric_document_carries_protocol_fields():
     assert document["segment"] == 10
     assert document["step"] == 6400
     assert document["n_dates"] == 12
-    assert document["n_paths"] == 16
+    assert document["n_paths"] == 1
     assert document["path_agg"] == "median"
     assert document["manifest_sha256"] == "abc"
     assert document["val_loss_selects_best"] is False
@@ -1121,7 +1121,7 @@ def test_other_ranks_wait_outside_broadcast_during_score(tmp_path):
         return {
             "daily_rank_ic_mean": 0.042,
             "n_dates": 60,
-            "n_paths": 16,
+            "n_paths": 1,
             "path_agg": "median",
             "manifest_sha256": "abc",
             "samples": 100,
@@ -1242,7 +1242,7 @@ def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
         return {
             "daily_rank_ic_mean": 0.11,
             "n_dates": 60,
-            "n_paths": 16,
+            "n_paths": 1,
             "path_agg": "median",
             "manifest_sha256": "deadbeef",
             "samples": 12,
