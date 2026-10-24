@@ -99,6 +99,17 @@ def main():
             "before resuming. Does not invent Rank IC metrics."
         ),
     )
+    parser.add_argument(
+        "--recovered-parent-dataset",
+        type=str,
+        default="",
+        help=(
+            "Mount a durable recovered-parent Dataset (owner/slug) instead of "
+            "a cancelled kernel Output. Use when CANCEL_ACKNOWLEDGED parents "
+            "cannot be added as kernel_sources. Skips kernel parent COMPLETE "
+            "gate; still requires last_state.pt in the dataset."
+        ),
+    )
     args = parser.parse_args()
     if args.chunk < 1:
         parser.error("chunk must be positive")
@@ -148,6 +159,12 @@ def main():
         config["run_id"] = args.run_id
     if args.recover_incomplete_parent:
         config["recover_incomplete_parent"] = True
+    recovered_dataset = (args.recovered_parent_dataset or "").strip()
+    if recovered_dataset:
+        config["recovered_parent_dataset"] = recovered_dataset
+        # Dataset already carries a sealed durable boundary; runtime recover
+        # is only needed when mounting a raw incomplete kernel Output.
+        config.pop("recover_incomplete_parent", None)
     build.mkdir(parents=True, exist_ok=True)
     code = f'''import base64, hashlib, io, json, os, runpy, sys, threading, time, zipfile
 from pathlib import Path
@@ -183,8 +200,9 @@ namespace["main"]()
         "machine_shape": "NvidiaTeslaT4",
         # Training prices and the temporal panel are different mounts. The
         # holdout dataset is not a fallback when the panel mount is missing.
-        "dataset_sources": [DATASET, panel_dataset],
-        "kernel_sources": [parent],
+        "dataset_sources": [DATASET, panel_dataset]
+        + ([recovered_dataset] if recovered_dataset else []),
+        "kernel_sources": [] if recovered_dataset else [parent],
     }
     (build / "kernel-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (build / "build_manifest.json").write_text(json.dumps(config, indent=2) + "\n")
@@ -221,7 +239,24 @@ namespace["main"]()
         if not any(s in status_text.lower() for s in ("403", "permission", "cannot access kernel")):
             raise RuntimeError(f"Could not verify target status: {status_text}")
         print("Target status is permission-like; treating the slug as absent and proceeding", flush=True)
-    if args.chunk > 1:
+    if args.chunk > 1 and recovered_dataset:
+        listing = subprocess.check_output(
+            cli + ["datasets", "files", recovered_dataset, "--page-size", "200"],
+            text=True,
+        )
+        if "last_state.pt" not in listing:
+            raise RuntimeError(
+                f"Recovered parent dataset {recovered_dataset} is missing last_state.pt"
+            )
+        if "Kronos-Tokenizer-base" not in listing and "model.safetensors" not in listing:
+            # Basename-only listings still include tokenizer model.safetensors.
+            pass
+        print(
+            f"Using recovered parent dataset {recovered_dataset} "
+            "(no cancelled kernel_sources mount)",
+            flush=True,
+        )
+    elif args.chunk > 1:
         parent_status = subprocess.check_output(cli + ["kernels", "status", parent], text=True)
         parent_ok = "COMPLETE" in parent_status
         parent_cancelled = "CANCEL_ACKNOWLEDGED" in parent_status or "CANCELLED" in parent_status
@@ -264,7 +299,7 @@ namespace["main"]()
                     "-o",
                     "-q",
                     "--file-pattern",
-                    "last_state\.pt",
+                    r"last_state\.pt",
                 ]
             )
             found = list(probe.rglob("last_state.pt"))
