@@ -128,8 +128,11 @@ def main():
             if not args.allow_source_change:
                 raise RuntimeError("Source changed across chunks; use the original source bundle")
             print("Source changed deliberately; continuing with the new bundle", flush=True)
-        # A Git commit after submission does not change the submitted source bundle.
-        commit = saved["source_commit"]
+            # Deliberate source change: record the new HEAD commit, not the
+            # previous chunk's frozen SHA.
+        else:
+            # Same bundle: a later Git commit must not rewrite the pinned SHA.
+            commit = saved["source_commit"]
     parent = args.parent_kernel or (INITIAL_PARENT if args.chunk == 1 else f"{OWNER}/{slug(args.chunk - 1)}")
     config = {"chunk": args.chunk, "source_sha256": digest,
               "source_commit": commit, "parent_kernel": parent, "owner": OWNER}
@@ -239,7 +242,41 @@ namespace["main"]()
             )
         listing = subprocess.check_output(cli + ["kernels", "files", parent,
                                                   "--page-size", "200", "--format", "json"], text=True)
-        if "last_state.pt" not in listing:
+        if "last_state.pt" in listing:
+            pass
+        elif args.recover_incomplete_parent and parent_cancelled:
+            # CANCEL_ACKNOWLEDGED Outputs often return an empty files listing
+            # even though blobs are still downloadable / mountable. Probe for
+            # last_state.pt via kernels output --file-pattern.
+            probe = Path("/tmp") / f"kronos_parent_probe_{slug(args.chunk - 1)}"
+            if probe.exists():
+                import shutil
+                shutil.rmtree(probe)
+            probe.mkdir(parents=True)
+            subprocess.check_call(
+                cli
+                + [
+                    "kernels",
+                    "output",
+                    parent,
+                    "-p",
+                    str(probe),
+                    "-o",
+                    "-q",
+                    "--file-pattern",
+                    "last_state\.pt",
+                ]
+            )
+            found = list(probe.rglob("last_state.pt"))
+            if not found:
+                raise RuntimeError(
+                    "CANCEL_ACKNOWLEDGED parent has no downloadable last_state.pt"
+                )
+            print(
+                f"Parent files API empty; verified downloadable last_state at {found[0]}",
+                flush=True,
+            )
+        else:
             raise RuntimeError("Published parent state missing from Output")
     subprocess.run(cli + ["kernels", "push", "-p", str(build),
                           "--timeout", "43200", "--accelerator", "NvidiaTeslaT4"], check=True)
