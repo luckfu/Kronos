@@ -10,10 +10,11 @@ Calendar: ``finetune/manifests/temporal_rank_ic_v1/selection_window.json``.
 Panel bytes: ``finetune/build_temporal_rank_ic_panel.py`` (not stored in git).
 Optional precomputed windows live beside that panel as
 ``temporal_rank_ic_rows.pkl``. Dual-GPU startup hashes the manifest on every
-rank, then only rank 0 materializes rows. Other ranks wait on a status file
-and do not enter NCCL until that build has finished. Mid-train scoring is the
-same shape: only rank 0 runs the temporal forward; peers poll a status
-file and must not enter ``broadcast`` until the score finishes.
+rank, then every rank materializes rows in parallel. Peers publish a status
+file and must not enter NCCL until every rank has finished building. Mid-train
+scoring date-shards the frozen rows across ranks (same PATH_SEED per date so
+a date's path samples are shard-invariant), aggregates per-day Spearman on
+rank 0 via status files, and never enters ``broadcast`` during the forward.
 """
 
 from __future__ import annotations
@@ -361,6 +362,99 @@ def daily_d10_rank_ic_mean(rows, *, min_names=MIN_NAMES_PER_DATE):
         "daily_rank_ic_mean": sum(scores) / len(scores),
         "n_dates": len(scores),
         "per_date": per_date,
+    }
+
+
+def partition_rows_by_date(rows, rank, world_size):
+    """Assign each signal date to exactly one rank.
+
+    Dates are the sorted unique ``asof_date`` values. Date ``i`` goes to
+    ``i % world_size``. All rows for a date stay together so Spearman stays
+    local to the owning rank. ``world_size <= 1`` returns a shallow copy.
+    """
+    rank = int(rank)
+    world_size = int(world_size)
+    rows = list(rows or [])
+    if world_size <= 1:
+        return rows
+    if rank < 0 or rank >= world_size:
+        raise TemporalRankICSelectionError(
+            f"Rank IC shard rank {rank} is outside world_size={world_size}"
+        )
+    dates = sorted({str(row["asof_date"]) for row in rows})
+    owned = {day for index, day in enumerate(dates) if index % world_size == rank}
+    return [row for row in rows if str(row["asof_date"]) in owned]
+
+
+def aggregate_sharded_daily_rank_ic(shards, *, expected_dates=None):
+    """Merge per-date ICs from date shards into one daily mean.
+
+    Fail closed on duplicate dates across shards, non-finite scores, an empty
+    union, or a mismatch against ``expected_dates`` when that list is given.
+    """
+    if not shards:
+        raise TemporalRankICSelectionError(
+            "Temporal Rank IC received no shard summaries to aggregate"
+        )
+    merged = {}
+    samples = 0
+    for shard in shards:
+        if not isinstance(shard, dict):
+            raise TemporalRankICSelectionError(
+                "Temporal Rank IC shard summary must be a dict"
+            )
+        per_date = shard.get("per_date") or {}
+        if not isinstance(per_date, dict):
+            raise TemporalRankICSelectionError(
+                "Temporal Rank IC shard is missing a per_date map"
+            )
+        try:
+            samples += int(shard.get("samples") or 0)
+        except (TypeError, ValueError) as exc:
+            raise TemporalRankICSelectionError(
+                "Temporal Rank IC shard samples must be an int"
+            ) from exc
+        for day, score in per_date.items():
+            key = str(day)
+            if key in merged:
+                raise TemporalRankICSelectionError(
+                    f"Temporal Rank IC date {key} appeared in more than one shard"
+                )
+            try:
+                value = float(score)
+            except (TypeError, ValueError) as exc:
+                raise TemporalRankICSelectionError(
+                    f"Temporal Rank IC date {key} has a non-numeric score"
+                ) from exc
+            if not math.isfinite(value):
+                raise TemporalRankICSelectionError(
+                    f"Temporal Rank IC date {key} has a non-finite score"
+                )
+            merged[key] = value
+    if expected_dates is not None:
+        expected = [str(day) for day in expected_dates]
+        expected_set = set(expected)
+        missing = [day for day in expected if day not in merged]
+        extra = sorted(day for day in merged if day not in expected_set)
+        if missing or extra:
+            raise TemporalRankICSelectionError(
+                "Temporal Rank IC shard union does not match the frozen calendar: "
+                f"missing={missing[:5]}{'...' if len(missing) > 5 else []} "
+                f"extra={extra[:5]}{'...' if len(extra) > 5 else []}"
+            )
+        order = expected
+    else:
+        order = sorted(merged)
+    if not order:
+        raise TemporalRankICSelectionError(
+            "Temporal Rank IC shards produced no dated scores"
+        )
+    scores = [merged[day] for day in order]
+    return {
+        "daily_rank_ic_mean": sum(scores) / len(scores),
+        "n_dates": len(scores),
+        "per_date": {day: merged[day] for day in order},
+        "samples": int(samples),
     }
 
 
@@ -1248,12 +1342,12 @@ def coordinate_rank_ic_prepare(
     poll_seconds=2.0,
     heartbeat_seconds=30.0,
 ):
-    """Cheap checks on every rank, then rank-0 row materialization.
+    """Cheap checks on every rank, then parallel row materialization.
 
-    Non-zero ranks wait on a status file while rank 0 builds. They must not
-    call ``exchange_errors`` (the only collective) until that file exists.
-    ``exchange_errors`` then shares the underlying exception text so every
-    worker raises the same fail-closed ``RuntimeError``.
+    Every rank builds its own rows so mid-train date sharding can score on
+    both GPUs. Status files gate the only collective (``exchange_errors``):
+    no rank enters NCCL until every peer has published ``done``. That keeps
+    a multi-minute panel hash / row load outside the default 600s watchdog.
     """
     rank = int(rank)
     world_size = int(world_size)
@@ -1283,10 +1377,10 @@ def coordinate_rank_ic_prepare(
             },
         )
 
-    if rank == 0 and not local_error:
+    if not local_error:
         print(
-            "Temporal Rank IC prepare: rank0 materializing rows; "
-            "other ranks wait outside NCCL",
+            f"Temporal Rank IC prepare: rank{rank} materializing rows; "
+            "peers wait outside NCCL until every rank publishes done",
             flush=True,
         )
         try:
@@ -1309,40 +1403,32 @@ def coordinate_rank_ic_prepare(
 
     if world_size > 1:
         try:
-            if rank == 0:
-                # Peers write their cheap file before waiting, so this poll
-                # finishes as soon as their manifest check does. It is still
-                # outside NCCL: rank 0 must not publish "done" and enter the
-                # collective while another rank is hashing the panel.
-                for peer in range(1, world_size):
-                    wait_for_status_file(
-                        prepare_status_path(directory, run_id, peer, "cheap"),
-                        timeout=timeout,
-                        role=f"rank0 waiting for rank {peer} manifest check",
-                        poll_seconds=poll_seconds,
-                        heartbeat_seconds=heartbeat_seconds,
-                    )
-                _atomic_write_json(
-                    prepare_status_path(directory, run_id, 0, "done"),
-                    {
-                        "state": "ready",
-                        "ok": not local_error,
-                        "error": local_error,
-                        "n_rows": (
-                            len(runtime["rows"])
-                            if runtime and runtime.get("rows") else 0
-                        ),
-                        "rows_source": (
-                            str(runtime.get("rows_source") or "") if runtime else ""
-                        ),
-                        "run_id": str(run_id),
-                    },
-                )
-            else:
+            _atomic_write_json(
+                prepare_status_path(directory, run_id, rank, "done"),
+                {
+                    "state": "ready",
+                    "ok": not local_error,
+                    "error": local_error,
+                    "rank": rank,
+                    "n_rows": (
+                        len(runtime["rows"])
+                        if runtime and runtime.get("rows") else 0
+                    ),
+                    "rows_source": (
+                        str(runtime.get("rows_source") or "") if runtime else ""
+                    ),
+                    "run_id": str(run_id),
+                },
+            )
+            for peer in range(world_size):
+                if peer == rank:
+                    continue
                 wait_for_status_file(
-                    prepare_status_path(directory, run_id, 0, "done"),
+                    prepare_status_path(directory, run_id, peer, "done"),
                     timeout=timeout,
-                    role=f"rank {rank} waiting for rank0 row build",
+                    role=(
+                        f"rank{rank} waiting for rank{peer} row build"
+                    ),
                     poll_seconds=poll_seconds,
                     heartbeat_seconds=heartbeat_seconds,
                 )
@@ -1370,8 +1456,10 @@ def coordinate_rank_ic_prepare(
         problems.append(local_error)
     if problems:
         _raise_prepare_failure("; ".join(problems))
-    if rank == 0 and (not isinstance(runtime, dict) or not runtime.get("rows")):
-        _raise_prepare_failure("rank0 finished without evaluation rows")
+    if not isinstance(runtime, dict) or not runtime.get("rows"):
+        _raise_prepare_failure(
+            f"rank{rank} finished without evaluation rows"
+        )
     return runtime
 
 
@@ -1406,63 +1494,104 @@ def isolated_path_seed():
             torch.cuda.set_rng_state_all(saved_cuda)
 
 
+def _seed_path_rng(seed):
+    """Reset Python/NumPy/Torch RNGs to ``seed`` for one signal date."""
+    import random
+
+    import numpy as np
+    import torch
+
+    seed = int(seed) & 0xFFFFFFFF
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
 def _predict_temporal_d10_batch(model, tokenizer, rows, device, batch_size, manifest):
-    """One seeded pass. Caller owns eval mode and the path-seed context."""
+    """One seeded pass. Caller owns eval mode and the path-seed context.
+
+    Path sampling is re-seeded to ``PATH_SEED`` at the start of every signal
+    date (rows must already be sorted by ``(asof_date, symbol)``). That makes
+    a date's draws independent of other dates, so date-sharded dual-GPU
+    scoring matches a single-rank pass over the same rows.
+    """
     import numpy as np
     import torch
     from model.kronos import auto_regressive_inference
 
     predictions = []
-    for offset in range(0, len(rows), batch_size):
-        batch = rows[offset:offset + batch_size]
-        x = torch.as_tensor(np.stack([row["x"] for row in batch]), device=device)
-        stamp = torch.as_tensor(np.stack([row["stamp"] for row in batch]), device=device)
-        sector = torch.as_tensor(
-            [row["sector_id"] for row in batch], dtype=torch.long, device=device,
-        )
-        size = torch.as_tensor(
-            [row["size_percentile"] for row in batch], dtype=torch.float32, device=device,
-        )
-        autocast = (
-            torch.autocast("cuda", dtype=torch.float16)
-            if device.type == "cuda" else contextlib.nullcontext()
-        )
-        with torch.inference_mode(), autocast:
-            forecasts = auto_regressive_inference(
-                tokenizer, model, x, stamp[:, :LOOKBACK], stamp[:, LOOKBACK:WINDOW],
-                max_context=512, pred_len=PREDICT, clip=5,
-                T=TEMPERATURE, top_k=TOP_K, top_p=TOP_P,
-                sample_count=N_PATHS, verbose=False,
-                sector_id=sector, size_percentile=size, return_samples=True,
+    total = len(rows)
+    offset = 0
+    while offset < total:
+        day = str(rows[offset]["asof_date"])
+        end = offset + 1
+        while end < total and str(rows[end]["asof_date"]) == day:
+            end += 1
+        _seed_path_rng(PATH_SEED)
+        day_rows = rows[offset:end]
+        for local in range(0, len(day_rows), batch_size):
+            batch = day_rows[local:local + batch_size]
+            x = torch.as_tensor(np.stack([row["x"] for row in batch]), device=device)
+            stamp = torch.as_tensor(
+                np.stack([row["stamp"] for row in batch]), device=device,
             )
-        for index, row in enumerate(batch):
-            predicted_close = (
-                forecasts[index, :, -PREDICT:, 3].astype(np.float64)
-                * (float(row["std"][3]) + 1e-5)
-                + float(row["mean"][3])
+            sector = torch.as_tensor(
+                [row["sector_id"] for row in batch], dtype=torch.long, device=device,
             )
-            predicted = median_path_d10_return(predicted_close[:, -1], row["last_close"])
-            predictions.append({
-                "asof_date": row["asof_date"],
-                "symbol": row["symbol"],
-                "predicted": predicted,
-                "actual": float(row["actual"]),
-            })
-        done = min(offset + batch_size, len(rows))
-        if offset == 0 or done == len(rows) or (offset // batch_size) % 20 == 0:
-            print(
-                f"Temporal Rank IC windows {done}/{len(rows)} "
-                f"segment_dates={len(manifest['signal_dates'])}",
-                flush=True,
+            size = torch.as_tensor(
+                [row["size_percentile"] for row in batch],
+                dtype=torch.float32,
+                device=device,
             )
+            autocast = (
+                torch.autocast("cuda", dtype=torch.float16)
+                if device.type == "cuda" else contextlib.nullcontext()
+            )
+            with torch.inference_mode(), autocast:
+                forecasts = auto_regressive_inference(
+                    tokenizer, model, x, stamp[:, :LOOKBACK], stamp[:, LOOKBACK:WINDOW],
+                    max_context=512, pred_len=PREDICT, clip=5,
+                    T=TEMPERATURE, top_k=TOP_K, top_p=TOP_P,
+                    sample_count=N_PATHS, verbose=False,
+                    sector_id=sector, size_percentile=size, return_samples=True,
+                )
+            for index, row in enumerate(batch):
+                predicted_close = (
+                    forecasts[index, :, -PREDICT:, 3].astype(np.float64)
+                    * (float(row["std"][3]) + 1e-5)
+                    + float(row["mean"][3])
+                )
+                predicted = median_path_d10_return(
+                    predicted_close[:, -1], row["last_close"],
+                )
+                predictions.append({
+                    "asof_date": row["asof_date"],
+                    "symbol": row["symbol"],
+                    "predicted": predicted,
+                    "actual": float(row["actual"]),
+                })
+            done = offset + min(local + batch_size, len(day_rows))
+            batch_index = (offset + local) // batch_size
+            if (offset == 0 and local == 0) or done == total or batch_index % 20 == 0:
+                print(
+                    f"Temporal Rank IC windows {done}/{total} "
+                    f"segment_dates={len(manifest['signal_dates'])}",
+                    flush=True,
+                )
+        offset = end
     return predictions
 
 
-def evaluate_temporal_d10_rank_ic(model, tokenizer, runtime, device):
+def evaluate_temporal_d10_rank_ic(
+    model, tokenizer, runtime, device, *, rank=0, world_size=1,
+):
     """Single-path D10 Rank IC on the frozen temporal rows.
 
-    The path seed applies only inside this call. Training RNGs and train/eval
-    mode are restored before the next segment.
+    With ``world_size > 1`` this scores only the date shard owned by ``rank``.
+    The path seed applies only inside this call (re-seeded per date). Training
+    RNGs and train/eval mode are restored before the next segment.
     """
     manifest = runtime["manifest"]
     rows = runtime.get("rows")
@@ -1472,6 +1601,20 @@ def evaluate_temporal_d10_rank_ic(model, tokenizer, runtime, device):
                 "Temporal Rank IC rows are not loaded on this rank"
             )
         rows = build_evaluation_rows(manifest, runtime["panel"])
+    rows = partition_rows_by_date(rows, rank, world_size)
+    if not rows:
+        return {
+            "daily_rank_ic_mean": None,
+            "n_dates": 0,
+            "per_date": {},
+            "n_paths": N_PATHS,
+            "path_agg": PATH_AGG,
+            "manifest_sha256": manifest["sha256"],
+            "samples": 0,
+            "selection_protocol": PROTOCOL_ID,
+            "shard_rank": int(rank),
+            "shard_world_size": int(world_size),
+        }
     was_training = bool(model.training)
     model.eval()
     try:
@@ -1489,6 +1632,8 @@ def evaluate_temporal_d10_rank_ic(model, tokenizer, runtime, device):
         "manifest_sha256": manifest["sha256"],
         "samples": len(predictions),
         "selection_protocol": PROTOCOL_ID,
+        "shard_rank": int(rank),
+        "shard_world_size": int(world_size),
     })
     return summary
 
@@ -1513,17 +1658,19 @@ def coordinate_rank_ic_score(
     run_id,
     segment,
     score_fn,
+    expected_dates=None,
     timeout=SCORE_TIMEOUT_SECONDS,
     poll_seconds=2.0,
     heartbeat_seconds=30.0,
 ):
-    """Rank 0 runs the long temporal forward; peers wait outside NCCL.
+    """Every rank scores its date shard; rank 0 aggregates via status files.
 
-    Dual-GPU e01c died because rank 1 entered ``broadcast`` for the score
-    float while rank 0 was still scanning ~300k windows under the default
-    600s watchdog. Peers must poll a status file until rank 0 publishes the
-    measured Rank IC (or an error). No collective runs during the forward.
-    The metric is unchanged: rank 0 still owns the single-path path seed.
+    Dual-GPU e01c died because rank 1 entered ``broadcast`` while rank 0 was
+    still scanning ~300k windows under the default 600s watchdog. e01e then
+    timed out the 12h wall clock with rank 0 alone still mid-forward. Both
+    ranks now run ``score_fn`` (date-sharded), publish shard JSON, and stay
+    outside NCCL until rank 0 has merged the per-day Spearman means. Fail
+    closed on shard errors, duplicate dates, or a calendar mismatch.
     """
     rank = int(rank)
     world_size = int(world_size)
@@ -1544,36 +1691,149 @@ def coordinate_rank_ic_score(
             _raise_score_failure("score_fn returned no daily_rank_ic_mean")
         measured = unpack_rank_ic_broadcast(summary.get("daily_rank_ic_mean"))
         if measured is None:
+            # Empty shard on world_size=1 is still a hard failure.
+            if int(summary.get("n_dates") or 0) == 0 and summary.get("per_date") == {}:
+                _raise_score_failure("score_fn returned no dated Rank IC scores")
             _raise_score_failure("score_fn returned a non-finite Rank IC")
         return summary
 
+    shard_path = prepare_status_path(
+        directory, run_id, rank, f"score_seg{segment}_shard",
+    )
     done_path = prepare_status_path(
         directory, run_id, 0, f"score_seg{segment}_done",
     )
     local_error = ""
-    summary = None
-    if rank == 0:
+    shard_summary = None
+    print(
+        "Temporal Rank IC score: "
+        f"rank{rank} evaluating date shard "
+        f"(segment={segment}, world_size={world_size}, "
+        f"timeout={float(timeout):.0f}s); peers stay outside NCCL",
+        flush=True,
+    )
+    try:
+        shard_summary = score_fn()
+        if not isinstance(shard_summary, dict):
+            raise TemporalRankICSelectionError(
+                "Temporal Rank IC shard score returned a non-dict"
+            )
+        if "per_date" not in shard_summary:
+            raise TemporalRankICSelectionError(
+                "Temporal Rank IC shard score returned no per_date map"
+            )
+        # Empty shards are allowed only when the calendar truly has no
+        # dates for this rank; aggregation fail-closes on missing dates.
+    except Exception as exc:
+        local_error = format_prepare_error(exc)
         print(
-            "Temporal Rank IC score: rank0 evaluating; "
-            "other ranks wait outside NCCL "
-            f"(segment={segment}, timeout={float(timeout):.0f}s)",
+            f"Temporal Rank IC score failed during forward: {local_error}",
             flush=True,
         )
+        import traceback
+        traceback.print_exc()
+        shard_summary = None
+
+    shard_payload = {
+        "state": "ready",
+        "ok": not local_error and shard_summary is not None,
+        "error": local_error,
+        "segment": segment,
+        "rank": rank,
+        "world_size": world_size,
+        "run_id": str(run_id),
+    }
+    if shard_summary is not None and not local_error:
+        per_date = {
+            str(day): float(score)
+            for day, score in (shard_summary.get("per_date") or {}).items()
+        }
+        shard_payload.update({
+            "per_date": per_date,
+            "n_dates": int(shard_summary.get("n_dates") or len(per_date)),
+            "n_paths": int(shard_summary.get("n_paths") or N_PATHS),
+            "path_agg": str(shard_summary.get("path_agg") or PATH_AGG),
+            "manifest_sha256": str(shard_summary.get("manifest_sha256") or ""),
+            "samples": int(shard_summary.get("samples") or 0),
+            "selection_protocol": str(
+                shard_summary.get("selection_protocol") or PROTOCOL_ID
+            ),
+            "daily_rank_ic_mean": (
+                None
+                if shard_summary.get("daily_rank_ic_mean") is None
+                else float(shard_summary["daily_rank_ic_mean"])
+            ),
+        })
+    _atomic_write_json(shard_path, shard_payload)
+
+    summary = None
+    if rank == 0:
+        shards = []
+        if local_error or shard_summary is None:
+            # Still wait for peers so they are not left hanging on done,
+            # then fail closed with the local error after aggregation try.
+            pass
+        else:
+            shards.append({
+                "per_date": shard_payload.get("per_date") or {},
+                "samples": int(shard_payload.get("samples") or 0),
+            })
+        aggregate_error = local_error
         try:
-            summary = score_fn()
-            if not isinstance(summary, dict) or "daily_rank_ic_mean" not in summary:
-                raise TemporalRankICSelectionError(
-                    "Temporal Rank IC score returned no daily_rank_ic_mean"
+            for peer in range(1, world_size):
+                peer_path = prepare_status_path(
+                    directory, run_id, peer, f"score_seg{segment}_shard",
                 )
+                document = wait_for_status_file(
+                    peer_path,
+                    timeout=timeout,
+                    role=(
+                        f"rank0 waiting for rank{peer} score shard "
+                        f"segment={segment}"
+                    ),
+                    poll_seconds=poll_seconds,
+                    heartbeat_seconds=heartbeat_seconds,
+                    phase="score",
+                )
+                if not document.get("ok"):
+                    detail = str(document.get("error") or "").strip() or (
+                        f"rank{peer} score shard failed without an error payload"
+                    )
+                    raise TemporalRankICSelectionError(detail)
+                shards.append({
+                    "per_date": document.get("per_date") or {},
+                    "samples": int(document.get("samples") or 0),
+                })
+            if aggregate_error:
+                raise TemporalRankICSelectionError(aggregate_error)
+            if not shards:
+                raise TemporalRankICSelectionError(
+                    "Temporal Rank IC produced no shard summaries"
+                )
+            summary = aggregate_sharded_daily_rank_ic(
+                shards, expected_dates=expected_dates,
+            )
+            # Carry protocol metadata from this rank's shard when present.
+            if shard_summary is not None:
+                for key in (
+                    "n_paths", "path_agg", "manifest_sha256",
+                    "selection_protocol",
+                ):
+                    if key in shard_summary and shard_summary[key] is not None:
+                        summary[key] = shard_summary[key]
+            summary.setdefault("n_paths", N_PATHS)
+            summary.setdefault("path_agg", PATH_AGG)
+            summary.setdefault("selection_protocol", PROTOCOL_ID)
+            summary["shard_world_size"] = world_size
             measured = unpack_rank_ic_broadcast(summary.get("daily_rank_ic_mean"))
             if measured is None:
                 raise TemporalRankICSelectionError(
-                    "Temporal Rank IC score returned a non-finite Rank IC"
+                    "Temporal Rank IC aggregate returned a non-finite Rank IC"
                 )
         except Exception as exc:
-            local_error = format_prepare_error(exc)
+            aggregate_error = format_prepare_error(exc)
             print(
-                f"Temporal Rank IC score failed during forward: {local_error}",
+                f"Temporal Rank IC score aggregate failed: {aggregate_error}",
                 flush=True,
             )
             import traceback
@@ -1581,12 +1841,13 @@ def coordinate_rank_ic_score(
             summary = None
         payload = {
             "state": "ready",
-            "ok": not local_error and summary is not None,
-            "error": local_error,
+            "ok": not aggregate_error and summary is not None,
+            "error": aggregate_error,
             "segment": segment,
             "run_id": str(run_id),
+            "shard_world_size": world_size,
         }
-        if summary is not None and not local_error:
+        if summary is not None and not aggregate_error:
             payload.update({
                 "daily_rank_ic_mean": float(summary["daily_rank_ic_mean"]),
                 "n_dates": int(summary.get("n_dates") or 0),
@@ -1599,49 +1860,49 @@ def coordinate_rank_ic_score(
                 ),
             })
         _atomic_write_json(done_path, payload)
-    else:
-        try:
-            document = wait_for_status_file(
-                done_path,
-                timeout=timeout,
-                role=f"rank {rank} waiting for rank0 score segment={segment}",
-                poll_seconds=poll_seconds,
-                heartbeat_seconds=heartbeat_seconds,
-                phase="score",
-            )
-        except Exception as exc:
-            text = format_prepare_error(exc)
-            print(f"Temporal Rank IC score wait failed: {text}", flush=True)
-            _raise_score_failure(text, exc)
-        if not document.get("ok"):
-            detail = str(document.get("error") or "").strip() or (
-                "rank0 score failed without an error payload"
-            )
-            _raise_score_failure(detail)
-        measured = unpack_rank_ic_broadcast(document.get("daily_rank_ic_mean"))
-        if measured is None:
+        if aggregate_error or summary is None:
             _raise_score_failure(
-                "rank0 score status had no finite daily_rank_ic_mean"
+                aggregate_error or "rank0 finished without a score"
             )
-        summary = {
-            "daily_rank_ic_mean": float(measured),
-            "n_dates": int(document.get("n_dates") or 0),
-            "n_paths": int(document.get("n_paths") or N_PATHS),
-            "path_agg": str(document.get("path_agg") or PATH_AGG),
-            "manifest_sha256": str(document.get("manifest_sha256") or ""),
-            "samples": int(document.get("samples") or 0),
-            "selection_protocol": str(
-                document.get("selection_protocol") or PROTOCOL_ID
-            ),
-        }
+        return summary
 
-    if rank == 0:
-        if local_error or summary is None:
-            _raise_score_failure(local_error or "rank0 finished without a score")
-        measured = unpack_rank_ic_broadcast(summary.get("daily_rank_ic_mean"))
-        if measured is None:
-            _raise_score_failure("rank0 score lost its finite Rank IC")
-    return summary
+    try:
+        document = wait_for_status_file(
+            done_path,
+            timeout=timeout,
+            role=f"rank {rank} waiting for rank0 score aggregate segment={segment}",
+            poll_seconds=poll_seconds,
+            heartbeat_seconds=heartbeat_seconds,
+            phase="score",
+        )
+    except Exception as exc:
+        text = format_prepare_error(exc)
+        print(f"Temporal Rank IC score wait failed: {text}", flush=True)
+        _raise_score_failure(text, exc)
+    if local_error:
+        _raise_score_failure(local_error)
+    if not document.get("ok"):
+        detail = str(document.get("error") or "").strip() or (
+            "rank0 score aggregate failed without an error payload"
+        )
+        _raise_score_failure(detail)
+    measured = unpack_rank_ic_broadcast(document.get("daily_rank_ic_mean"))
+    if measured is None:
+        _raise_score_failure(
+            "rank0 score status had no finite daily_rank_ic_mean"
+        )
+    return {
+        "daily_rank_ic_mean": float(measured),
+        "n_dates": int(document.get("n_dates") or 0),
+        "n_paths": int(document.get("n_paths") or N_PATHS),
+        "path_agg": str(document.get("path_agg") or PATH_AGG),
+        "manifest_sha256": str(document.get("manifest_sha256") or ""),
+        "samples": int(document.get("samples") or 0),
+        "selection_protocol": str(
+            document.get("selection_protocol") or PROTOCOL_ID
+        ),
+        "shard_world_size": int(document.get("shard_world_size") or world_size),
+    }
 
 
 
