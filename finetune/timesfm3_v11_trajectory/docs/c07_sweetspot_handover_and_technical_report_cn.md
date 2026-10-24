@@ -66,7 +66,7 @@
 
 ### 坑 2：安全与 Token 隔离纪律（严禁泄露敏感 Key）
 - **ModelScope 写权限 Token**：**绝对严禁** 写死在任何代码文本、配置文件或提交到 GitHub 的 commit 中。必须且只能从环境变量 `MODELSCOPE_API_TOKEN` 动态读取。
-- **SwanLab Key**：实验监控平台的只读/打点 Key（`fmEPDGk4IItxgqSZKGLi8`）为公开打点用途，代码中已预置默认常量，接手后开箱即用。
+- **SwanLab Key**：实验监控平台凭据必须从环境变量 `SWANLAB_API_KEY` 或同名 Kaggle Secret 读取，禁止写入代码默认值。
 
 ### 坑 3：Kaggle 动态代码注入布尔值序列化陷阱
 - **现象**：若在 `push_chunk.py` 中使用 `json.dumps(config)` 替换代码中的 `CHUNK_CONFIG` 占位符，JSON 会输出小写的 `true`/`false`，Python 解释器在运行时会直接抛出 `NameError: name 'true' is not defined`。

@@ -58,6 +58,18 @@ subprocess.run(["pip", "install", "-q", "swanlab"], check=True)
 
 import torch
 
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
+
 if "sm_60" not in torch.cuda.get_arch_list():
     raise RuntimeError(f"PyTorch {torch.__version__} lacks P100 sm_60 support")
 print({"torch": torch.__version__, "cuda_arches": torch.cuda.get_arch_list()}, flush=True)
@@ -85,7 +97,7 @@ print(
     flush=True,
 )
 
-os.environ["SWANLAB_API_KEY"] = "fmEPDGk4IItxgqSZKGLi8"
+os.environ["SWANLAB_API_KEY"] = load_swanlab_api_key()
 os.environ.update(
     {
         "KRONOS_SMALL_V21_STAGE": "main",

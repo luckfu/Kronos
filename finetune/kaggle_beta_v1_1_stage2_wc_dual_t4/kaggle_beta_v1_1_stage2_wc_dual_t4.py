@@ -17,7 +17,16 @@ OUTPUT_NAME = "beta_v1_1_stage2_wc_dual_t4"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = OUTPUT_NAME
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
+
+def load_kaggle_swanlab_api_key():
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 MODEL_REPO = "luckfu/Kronos-A-Share-Beta-V1-1"
 EXPECTED_BEST_SHA256 = (
     "b890771368737c6c93825165695afc16b57870f4692f87a563392cc96e405673"
@@ -354,7 +363,7 @@ def stream_training(repo: Path, env: dict[str, str], output_root: Path, run) -> 
 def start_swanlab(env: dict[str, str]):
     import swanlab
 
-    api_key = env.get("SWANLAB_API_KEY", "").strip() or SWANLAB_API_KEY_FALLBACK
+    api_key = env.get("SWANLAB_API_KEY", "").strip() or load_kaggle_swanlab_api_key() or SWANLAB_API_KEY_FALLBACK
     swanlab.login(api_key=api_key)
     run = swanlab.init(
         id=SWANLAB_RUN_ID,

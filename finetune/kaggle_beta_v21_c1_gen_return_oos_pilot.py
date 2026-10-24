@@ -62,7 +62,7 @@ SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = OUTPUT_NAME
 SWANLAB_URL = f"https://swanlab.cn/@{SWANLAB_WORKSPACE}/{SWANLAB_PROJECT}/runs/{SWANLAB_RUN_ID}"
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
 
 # Evaluation order matters: Seg9 (final candidate) first, then Seg0 (parent).
 CHECKPOINTS = (

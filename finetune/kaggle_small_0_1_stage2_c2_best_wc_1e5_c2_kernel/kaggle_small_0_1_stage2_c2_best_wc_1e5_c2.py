@@ -13,6 +13,18 @@ import tempfile
 import time
 from pathlib import Path
 
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
+
 
 SOURCE_COMMIT = "54f8b2674ab5404bc3d7a9a0e50135ac7f37f39c"
 OUTPUT_NAME = "small_0.1_stage2_c2_best_wc_1e5_c2"
@@ -199,7 +211,7 @@ def main():
         "KRONOS_CONDITION_MIN_LR": FIXED_LR,
         "KRONOS_USE_AMP": "1",
         "KRONOS_AMP_DTYPE": "float16",
-        "SWANLAB_API_KEY": "fmEPDGk4IItxgqSZKGLi8",
+        "SWANLAB_API_KEY": load_swanlab_api_key(),
         "SWANLAB_PROJECT": "finance",
         "SWANLAB_EXPERIMENT_NAME": SWANLAB_RUN_ID,
         "SWANLAB_RUN_ID": SWANLAB_RUN_ID,
