@@ -2627,11 +2627,12 @@ def _exchange_prepare_errors(local_error, device, rank, world_size):
 
 
 def prepare_temporal_rank_ic_for_launch(config, device, rank, world_size, save_dir):
-    """Manifest checks on every rank. Only rank 0 builds or loads rows.
+    """Manifest checks on every rank, then every rank builds or loads rows.
 
-    Other ranks poll a status file. The NCCL all-gather runs after rank 0
-    publishes that the build finished, so a multi-minute row build cannot
-    trip the default 600s watchdog.
+    Peers publish status files and must not enter the NCCL all-gather until
+    every rank has finished materializing, so a multi-minute row build cannot
+    trip the default 600s watchdog. Rows on every rank enable date-sharded
+    mid-train Rank IC scoring.
     """
     import tempfile
 
@@ -2724,10 +2725,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
 
     rank_ic_runtime = None
     if temporal_rank_ic_enabled(config):
-        # Every rank hashes the manifest first. Only rank 0 builds rows.
-        # Other ranks must not enter all_reduce until that build publishes
-        # a status file; the default NCCL watchdog is 600s and the build
-        # can take 8–15 minutes.
+        # Every rank hashes the manifest, then every rank materializes rows
+        # in parallel. Status files gate the all_gather so a multi-minute
+        # build cannot trip the default 600s NCCL watchdog. Rows on every
+        # rank are required for date-sharded mid-train scoring.
         rank_ic_runtime = prepare_temporal_rank_ic_for_launch(
             config, device, rank, world_size, save_dir,
         )
@@ -2740,6 +2741,12 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 f"source={rank_ic_runtime.get('rows_source', 'built')} "
                 f"sha256={manifest['sha256']} "
                 f"train_time_upper_bound={manifest['train_time_upper_bound']}",
+                flush=True,
+            )
+        elif rank_ic_runtime is not None:
+            print(
+                f"Temporal Rank IC rows ready on rank{rank}: "
+                f"{len(rank_ic_runtime.get('rows') or [])} windows",
                 flush=True,
             )
     distributed_barrier(device, 'kronos_temporal_rank_ic_ready')
@@ -4106,36 +4113,42 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     )
                 return
 
-            def _run_rank0_score():
+            def _run_shard_score():
                 if rank_ic_runtime is None or not rank_ic_runtime.get("rows"):
                     raise RuntimeError(
-                        "Temporal Rank IC rows are not loaded on rank 0"
+                        f"Temporal Rank IC rows are not loaded on rank {rank}"
                     )
                 print(
                     "Running temporal D10 Rank IC at "
                     f"Segment {next_segment}: "
-                    f"{len(rank_ic_runtime['rows'])} windows, "
+                    f"rank={rank}/{world_size} "
+                    f"rows={len(rank_ic_runtime['rows'])} "
+                    f"(date-sharded), "
                     f"{rank_ic_interval}-segment cadence.",
                     flush=True,
                 )
                 return evaluate_temporal_d10_rank_ic(
-                    core_model, tokenizer, rank_ic_runtime, device,
+                    core_model,
+                    tokenizer,
+                    rank_ic_runtime,
+                    device,
+                    rank=rank,
+                    world_size=world_size,
                 )
 
-            # Rank 0 scores; peers poll a status file outside NCCL. The
-            # measured float is published in that file — no broadcast during
-            # the multi-hour forward.
+            # Every rank scores its date shard; rank 0 aggregates via status
+            # files. No NCCL / broadcast during the multi-hour forward.
+            expected_dates = None
+            if rank_ic_runtime and rank_ic_runtime.get("manifest"):
+                expected_dates = rank_ic_runtime["manifest"].get("signal_dates")
             summary = coordinate_rank_ic_score(
                 rank=rank,
                 world_size=world_size,
                 directory=save_dir,
                 run_id=f"{rank_ic_prepare_run_id()}-seg{next_segment}",
                 segment=next_segment,
-                score_fn=_run_rank0_score if rank == 0 else (
-                    lambda: (_ for _ in ()).throw(
-                        AssertionError("non-zero rank must not score")
-                    )
-                ),
+                score_fn=_run_shard_score,
+                expected_dates=expected_dates,
                 timeout=score_timeout_seconds(),
             )
             measured = float(summary["daily_rank_ic_mean"])

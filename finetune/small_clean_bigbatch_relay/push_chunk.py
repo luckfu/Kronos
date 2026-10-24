@@ -22,10 +22,12 @@ INITIAL_PARENT = "wynstonliu/kronos-small-clean-bigbatch-e03b"
 
 def slug(chunk):
     # Round 2 from e03b best; deliberately NOT e04b (closed line).
-    # e01 burned; e01b/e01c NCCL; e01d 16-path too slow; e01e single-path + new SwanLab.
-    # Local-only slug patch — do not commit.
+    # e01 burned; e01b/e01c NCCL; e01d 16-path too slow; e01e single-path +
+    # new SwanLab (12h timeout mid Seg30); e01f = dual-rank date-shard resume.
     if chunk == 1:
         return "kronos-small-clean-bigbatch2-e01e-from-e03b"
+    if chunk == 2:
+        return "kronos-small-clean-bigbatch2-e01f-from-e03b"
     return f"kronos-small-clean-bigbatch2-e{chunk:02d}-from-e03b"
 
 
@@ -41,6 +43,7 @@ def source_bundle():
     ):
         files.append(ROOT / "finetune" / f"{name}.py")
     files.append(HERE / "launch.py")
+    files.append(HERE / "recover_incomplete_chunk.py")
     manifest = ROOT / "finetune/manifests/temporal_rank_ic_v1/selection_window.json"
     files.append(manifest)
     stream = io.BytesIO()
@@ -87,6 +90,15 @@ def main():
                         help="Use the parent weights but a fresh optimizer (no state resume)")
     parser.add_argument("--run-id", type=str, default="",
                         help="Override the SwanLab run id")
+    parser.add_argument(
+        "--recover-incomplete-parent",
+        action="store_true",
+        help=(
+            "Allow a CANCEL_ACKNOWLEDGED / incomplete parent Output: the "
+            "launch recovers last_model + durable sidecars from last_state "
+            "before resuming. Does not invent Rank IC metrics."
+        ),
+    )
     args = parser.parse_args()
     if args.chunk < 1:
         parser.error("chunk must be positive")
@@ -131,6 +143,8 @@ def main():
         config["fresh_probe"] = True
     if args.run_id:
         config["run_id"] = args.run_id
+    if args.recover_incomplete_parent:
+        config["recover_incomplete_parent"] = True
     build.mkdir(parents=True, exist_ok=True)
     code = f'''import base64, hashlib, io, json, os, runpy, sys, threading, time, zipfile
 from pathlib import Path
@@ -160,7 +174,7 @@ namespace["main"]()
     (build / code_file).write_text(code)
     metadata = {
         "id": f"{OWNER}/{slug(args.chunk)}",
-        "title": ("Kronos Small Clean Bigbatch2 E01d from e03b" if args.chunk == 1 else f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} from e03b"),
+        "title": ("Kronos Small Clean Bigbatch2 E01e From E03b" if args.chunk == 1 else ("Kronos Small Clean Bigbatch2 E01f From E03b" if args.chunk == 2 else f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} From E03b")),
         "code_file": code_file, "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4",
@@ -206,8 +220,23 @@ namespace["main"]()
         print("Target status is permission-like; treating the slug as absent and proceeding", flush=True)
     if args.chunk > 1:
         parent_status = subprocess.check_output(cli + ["kernels", "status", parent], text=True)
-        if "COMPLETE" not in parent_status:
-            raise RuntimeError("Previous chunk is not COMPLETE")
+        parent_ok = "COMPLETE" in parent_status
+        parent_cancelled = "CANCEL_ACKNOWLEDGED" in parent_status or "CANCELLED" in parent_status
+        if not parent_ok:
+            if not (args.recover_incomplete_parent and parent_cancelled):
+                raise RuntimeError(
+                    "Previous chunk is not COMPLETE"
+                    + (
+                        "; re-run with --recover-incomplete-parent for a "
+                        "CANCEL_ACKNOWLEDGED parent that still has last_state"
+                        if parent_cancelled else ""
+                    )
+                )
+            print(
+                "Parent is CANCEL_ACKNOWLEDGED; continuing with "
+                "--recover-incomplete-parent",
+                flush=True,
+            )
         listing = subprocess.check_output(cli + ["kernels", "files", parent,
                                                   "--page-size", "200", "--format", "json"], text=True)
         if "last_state.pt" not in listing:

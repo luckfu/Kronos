@@ -270,9 +270,61 @@ def main():
         # Keep the original starting-parent SHA across chunks.  The module
         # constant is only a fallback for chunk 1, where it is recomputed from
         # the mounted parent weights.
-        parent_manifest = json.loads((continuation / "experiment_manifest.json").read_text())
-        recipe["parent_best_sha256"] = parent_manifest["recipe"]["parent_best_sha256"]
-        boundary = validate_output(continuation, torch, recipe, parent=True)
+        recover_incomplete = bool(CHUNK_CONFIG.get("recover_incomplete_parent"))
+        parent_manifest_path = continuation / "experiment_manifest.json"
+        if parent_manifest_path.is_file():
+            parent_manifest = json.loads(parent_manifest_path.read_text())
+            recipe["parent_best_sha256"] = parent_manifest["recipe"]["parent_best_sha256"]
+        elif recover_incomplete:
+            # Incomplete CANCEL_ACKNOWLEDGED parents never wrote the manifest.
+            # Keep the round-2 e03b best SHA from this module's constant.
+            phase(
+                "parent_manifest_missing",
+                note="recovering incomplete parent; using recipe.parent_best_sha256",
+                parent_best_sha256=recipe["parent_best_sha256"],
+            )
+        else:
+            raise RuntimeError(
+                "Parent is missing experiment_manifest.json; pass "
+                "recover_incomplete_parent to rebuild a durable boundary"
+            )
+        try:
+            boundary = validate_output(continuation, torch, recipe, parent=True)
+        except RuntimeError as exc:
+            if not recover_incomplete:
+                raise
+            phase(
+                "parent_incomplete",
+                error=str(exc),
+                note="recovering last_state durable boundary into working/",
+            )
+            relay_dir = Path(__file__).resolve().parent
+            if str(relay_dir) not in sys.path:
+                sys.path.insert(0, str(relay_dir))
+            from recover_incomplete_chunk import recover_incomplete_chunk
+            recovered = runtime / "recovered_parent" / continuation.name
+            boundary = recover_incomplete_chunk(
+                continuation,
+                recovered,
+                repo_root=repo,
+                torch=torch,
+                recipe=recipe,
+                chunk=int(CHUNK_CONFIG.get("chunk") or 1) - 1 or 1,
+                parent_kernel=str(CHUNK_CONFIG.get("parent_kernel") or PARENT),
+                reason=(
+                    "CANCEL_ACKNOWLEDGED or incomplete Output; "
+                    "exported last_model from last_state and sealed "
+                    f"stopped boundary at next_epoch"
+                ),
+            )
+            boundary = validate_output(recovered, torch, recipe, parent=True)
+            continuation = recovered
+            phase(
+                "parent_recovered",
+                next_epoch=boundary,
+                next_segment=boundary + 1,
+                recovered=str(recovered),
+            )
         if boundary == TOTAL_SEGMENTS:
             raise RuntimeError("Parent has already completed the coverage plan")
         parent = continuation / "checkpoints/last_model"

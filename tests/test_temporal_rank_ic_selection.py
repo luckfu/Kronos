@@ -23,6 +23,7 @@ from temporal_rank_ic_selection import (
     PROTOCOL_ID,
     SELECTION_METRIC,
     TemporalRankICSelectionError,
+    aggregate_sharded_daily_rank_ic,
     assert_frozen_manifest_present,
     build_evaluation_rows,
     build_rank_ic_best_metric,
@@ -32,6 +33,7 @@ from temporal_rank_ic_selection import (
     load_temporal_selection_manifest,
     manifest_sha256,
     median_path_d10_return,
+    partition_rows_by_date,
     rank_ic_is_improvement,
     reconcile_resumed_rank_ic_threshold,
     require_pinned_panel_sha,
@@ -190,13 +192,83 @@ def test_short_cross_section_fails_closed():
         daily_d10_rank_ic_mean(rows, min_names=MIN_NAMES_PER_DATE)
 
 
+def test_partition_rows_by_date_is_exclusive_and_covers_all_dates():
+    rows = [
+        {"asof_date": "2026-07-06", "symbol": "AAA"},
+        {"asof_date": "2026-07-06", "symbol": "BBB"},
+        {"asof_date": "2026-07-07", "symbol": "AAA"},
+        {"asof_date": "2026-07-08", "symbol": "CCC"},
+        {"asof_date": "2026-07-09", "symbol": "DDD"},
+    ]
+    shard0 = partition_rows_by_date(rows, rank=0, world_size=2)
+    shard1 = partition_rows_by_date(rows, rank=1, world_size=2)
+    assert [row["asof_date"] for row in shard0] == [
+        "2026-07-06", "2026-07-06", "2026-07-08",
+    ]
+    assert [row["asof_date"] for row in shard1] == [
+        "2026-07-07", "2026-07-09",
+    ]
+    assert len(shard0) + len(shard1) == len(rows)
+    assert partition_rows_by_date(rows, rank=0, world_size=1) == rows
+    with pytest.raises(TemporalRankICSelectionError, match="outside world_size"):
+        partition_rows_by_date(rows, rank=2, world_size=2)
+
+
+def test_aggregate_sharded_daily_rank_ic_matches_single_rank_mean():
+    rows = [
+        {"asof_date": "2026-07-06", "predicted": 0.10, "actual": 0.20},
+        {"asof_date": "2026-07-06", "predicted": 0.30, "actual": 0.40},
+        {"asof_date": "2026-07-06", "predicted": 0.50, "actual": 0.10},
+        {"asof_date": "2026-07-07", "predicted": 0.20, "actual": 0.30},
+        {"asof_date": "2026-07-07", "predicted": 0.40, "actual": 0.50},
+        {"asof_date": "2026-07-07", "predicted": 0.60, "actual": 0.10},
+        {"asof_date": "2026-07-08", "predicted": 0.15, "actual": 0.25},
+        {"asof_date": "2026-07-08", "predicted": 0.35, "actual": 0.45},
+        {"asof_date": "2026-07-08", "predicted": 0.55, "actual": 0.05},
+        {"asof_date": "2026-07-09", "predicted": 0.05, "actual": 0.50},
+        {"asof_date": "2026-07-09", "predicted": 0.25, "actual": 0.40},
+        {"asof_date": "2026-07-09", "predicted": 0.45, "actual": 0.30},
+    ]
+    single = daily_d10_rank_ic_mean(rows, min_names=3)
+    shards = []
+    for rank in (0, 1):
+        owned = partition_rows_by_date(rows, rank=rank, world_size=2)
+        part = daily_d10_rank_ic_mean(owned, min_names=3)
+        shards.append({
+            "per_date": part["per_date"],
+            "samples": len(owned),
+        })
+    merged = aggregate_sharded_daily_rank_ic(
+        shards,
+        expected_dates=["2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09"],
+    )
+    assert merged["n_dates"] == single["n_dates"] == 4
+    assert merged["samples"] == len(rows)
+    assert merged["per_date"] == single["per_date"]
+    assert abs(merged["daily_rank_ic_mean"] - single["daily_rank_ic_mean"]) < 1e-12
+
+
+def test_aggregate_sharded_daily_rank_ic_fails_on_duplicate_or_missing_dates():
+    with pytest.raises(TemporalRankICSelectionError, match="more than one shard"):
+        aggregate_sharded_daily_rank_ic([
+            {"per_date": {"2026-07-06": 0.1}, "samples": 3},
+            {"per_date": {"2026-07-06": 0.2}, "samples": 3},
+        ])
+    with pytest.raises(TemporalRankICSelectionError, match="does not match"):
+        aggregate_sharded_daily_rank_ic(
+            [{"per_date": {"2026-07-06": 0.1}, "samples": 3}],
+            expected_dates=["2026-07-06", "2026-07-07"],
+        )
+
+
 def test_path_median_matches_numpy_even_count():
-    closes = [float(value) for value in range(1, 17)]
+    # N_PATHS=1: a single path close is the median of itself.
+    closes = [float(value) for value in range(1, N_PATHS + 1)]
     last = 10.0
     expected = float(np.median(np.asarray(closes) / last - 1.0))
     assert median_path_d10_return(closes, last) == pytest.approx(expected)
     with pytest.raises(TemporalRankICSelectionError):
-        median_path_d10_return(closes[:-1], last)
+        median_path_d10_return(closes + [99.0], last)
 
 
 def test_best_metric_document_carries_protocol_fields():
@@ -805,26 +877,34 @@ def test_rank1_timeout_does_not_enter_the_collective(tmp_path):
     from temporal_rank_ic_selection import coordinate_rank_ic_prepare
 
     calls = []
+    builds = []
 
     def exchange(local_error):
         calls.append(local_error)
         return [local_error] if local_error else []
 
-    with pytest.raises(RuntimeError, match="all_reduce") as caught:
+    def materialize(_checked):
+        builds.append("build")
+        return {
+            "manifest": {"signal_dates": ["2026-07-06"]},
+            "rows": [{"symbol": "AAA"}],
+            "rows_source": "built",
+        }
+
+    with pytest.raises(RuntimeError, match="Timed out") as caught:
         coordinate_rank_ic_prepare(
             rank=1,
             world_size=2,
             directory=tmp_path,
             run_id="timeout-run",
             cheap_check=lambda: {"manifest": {"signal_dates": ["2026-07-06"]}},
-            materialize=lambda _checked: (_ for _ in ()).throw(
-                AssertionError("rank 1 built rows")
-            ),
+            materialize=materialize,
             exchange_errors=exchange,
             timeout=0.2,
             poll_seconds=0.01,
             heartbeat_seconds=30,
         )
+    assert builds == ["build"]
     assert calls == []
     assert "val loss" in str(caught.value)
     assert "NCCL" in str(caught.value)
@@ -832,12 +912,13 @@ def test_rank1_timeout_does_not_enter_the_collective(tmp_path):
 
 def test_other_ranks_wait_outside_the_collective_during_row_build(tmp_path):
     import threading
+    import time as time_mod
 
     from temporal_rank_ic_selection import coordinate_rank_ic_prepare
 
     order = []
     lock = threading.Lock()
-    started = threading.Event()
+    started = threading.Barrier(2)
     release = threading.Event()
     failures = []
     builds = []
@@ -849,25 +930,28 @@ def test_other_ranks_wait_outside_the_collective_during_row_build(tmp_path):
             return {"manifest": {"signal_dates": ["2026-07-06"]}, "rows": None}
         return _cheap
 
-    def materialize(_checked):
-        builds.append("build")
-        started.set()
-        with lock:
-            order.append((0, "materialize-start"))
-        assert release.wait(timeout=5)
-        with lock:
-            order.append((0, "materialize-end"))
-        return {
-            "manifest": {"signal_dates": ["2026-07-06"]},
-            "rows": [{"symbol": "AAA"}],
-            "rows_source": "built",
-        }
+    def materialize(rank):
+        def _materialize(_checked):
+            builds.append(rank)
+            with lock:
+                order.append((rank, "materialize-start"))
+            started.wait(timeout=5)
+            assert release.wait(timeout=5)
+            with lock:
+                order.append((rank, "materialize-end"))
+            return {
+                "manifest": {"signal_dates": ["2026-07-06"]},
+                "rows": [{"symbol": f"R{rank}"}],
+                "rows_source": "built",
+            }
+        return _materialize
 
     def exchange(rank):
         def _exchange(local_error):
             with lock:
                 order.append((rank, "exchange"))
                 assert (0, "materialize-end") in order
+                assert (1, "materialize-end") in order
             return [local_error] if local_error else []
         return _exchange
 
@@ -879,11 +963,7 @@ def test_other_ranks_wait_outside_the_collective_during_row_build(tmp_path):
                 directory=tmp_path,
                 run_id="ddp-run",
                 cheap_check=cheap(rank),
-                materialize=materialize if rank == 0 else (
-                    lambda _checked: (_ for _ in ()).throw(
-                        AssertionError("rank 1 built rows")
-                    )
-                ),
+                materialize=materialize(rank),
                 exchange_errors=exchange(rank),
                 timeout=5,
                 poll_seconds=0.01,
@@ -895,19 +975,36 @@ def test_other_ranks_wait_outside_the_collective_during_row_build(tmp_path):
     workers = [threading.Thread(target=run, args=(rank,)) for rank in (1, 0)]
     for worker in workers:
         worker.start()
-    assert started.wait(timeout=5)
-    with lock:
-        assert not any(item[1] == "exchange" for item in order)
+    deadline = time_mod.time() + 5
+    while time_mod.time() < deadline:
+        with lock:
+            starts = [item for item in order if item[1] == "materialize-start"]
+            if len(starts) == 2:
+                assert not any(item[1] == "exchange" for item in order)
+                break
+        time_mod.sleep(0.01)
+    else:
+        raise AssertionError(f"ranks did not both start materialize: {order}")
     release.set()
     for worker in workers:
         worker.join(timeout=5)
         assert not worker.is_alive()
     assert failures == []
-    assert builds == ["build"]
+    assert sorted(builds) == [0, 1]
     with lock:
         assert (0, "materialize-end") in order
+        assert (1, "materialize-end") in order
+        assert (0, "exchange") in order
         assert (1, "exchange") in order
-        assert order.index((0, "materialize-end")) < order.index((1, "exchange"))
+        last_materialize = max(
+            order.index((0, "materialize-end")),
+            order.index((1, "materialize-end")),
+        )
+        first_exchange = min(
+            order.index((0, "exchange")),
+            order.index((1, "exchange")),
+        )
+        assert last_materialize < first_exchange
 
 
 def test_rank0_build_error_reaches_every_rank(tmp_path):
@@ -961,7 +1058,7 @@ def test_rank0_build_error_reaches_every_rank(tmp_path):
     for worker in workers:
         worker.join(timeout=5)
         assert not worker.is_alive()
-    assert builds == ["build"]
+    assert sorted(builds) == ["build", "build"]
     assert sorted(rank for rank, _exc in failures) == [0, 1]
     for _rank, exc in failures:
         assert isinstance(exc, RuntimeError)
@@ -1046,8 +1143,7 @@ def test_launch_prepare_keeps_rank1_out_of_all_reduce(tmp_path, monkeypatch):
                 2,
                 str(tmp_path),
             )
-            if rank == 0:
-                assert len(runtime["rows"]) == 1
+            assert len(runtime["rows"]) == 1
         except Exception as exc:
             failures.append((rank, exc))
 
@@ -1059,7 +1155,7 @@ def test_launch_prepare_keeps_rank1_out_of_all_reduce(tmp_path, monkeypatch):
         assert not worker.is_alive()
     assert failures == []
     with lock:
-        assert events.count(("prepare", True)) == 1
+        assert events.count(("prepare", True)) == 2
         assert events.count(("prepare", False)) == 2
         prepare_at = events.index(("prepare", True))
         exchange_at = min(
@@ -1080,9 +1176,18 @@ def test_rank1_score_wait_does_not_enter_broadcast(tmp_path):
 
     def score():
         calls.append("score")
-        raise AssertionError("rank 1 must not score")
+        return {
+            "daily_rank_ic_mean": 0.01,
+            "n_dates": 1,
+            "per_date": {"2026-07-07": 0.01},
+            "n_paths": 1,
+            "path_agg": "median",
+            "manifest_sha256": "abc",
+            "samples": 3,
+            "selection_protocol": PROTOCOL_ID,
+        }
 
-    with pytest.raises(RuntimeError, match="broadcast") as caught:
+    with pytest.raises(RuntimeError, match="Timed out") as caught:
         coordinate_rank_ic_score(
             rank=1,
             world_size=2,
@@ -1090,43 +1195,59 @@ def test_rank1_score_wait_does_not_enter_broadcast(tmp_path):
             run_id="score-timeout",
             segment=1,
             score_fn=score,
+            expected_dates=["2026-07-06", "2026-07-07"],
             timeout=0.2,
             poll_seconds=0.01,
             heartbeat_seconds=30,
         )
-    assert calls == []
-    assert "val loss" in str(caught.value)
+    assert calls == ["score"]
+    assert "val loss" in str(caught.value) or "val-loss" in str(caught.value)
     assert "NCCL" in str(caught.value) or "broadcast" in str(caught.value)
 
 
 def test_other_ranks_wait_outside_broadcast_during_score(tmp_path):
     import threading
+    import time as time_mod
 
     from temporal_rank_ic_selection import coordinate_rank_ic_score
 
     order = []
     lock = threading.Lock()
-    started = threading.Event()
+    started = threading.Barrier(2)
     release = threading.Event()
     failures = []
     results = {}
 
-    def score():
-        with lock:
-            order.append((0, "score-start"))
-        started.set()
-        assert release.wait(timeout=5)
-        with lock:
-            order.append((0, "score-end"))
-        return {
-            "daily_rank_ic_mean": 0.042,
-            "n_dates": 60,
-            "n_paths": 1,
-            "path_agg": "median",
-            "manifest_sha256": "abc",
-            "samples": 100,
-            "selection_protocol": PROTOCOL_ID,
-        }
+    def score(rank):
+        def _score():
+            with lock:
+                order.append((rank, "score-start"))
+            started.wait(timeout=5)
+            assert release.wait(timeout=5)
+            with lock:
+                order.append((rank, "score-end"))
+            if rank == 0:
+                return {
+                    "daily_rank_ic_mean": 0.04,
+                    "n_dates": 1,
+                    "per_date": {"2026-07-06": 0.04},
+                    "n_paths": 1,
+                    "path_agg": "median",
+                    "manifest_sha256": "abc",
+                    "samples": 50,
+                    "selection_protocol": PROTOCOL_ID,
+                }
+            return {
+                "daily_rank_ic_mean": 0.044,
+                "n_dates": 1,
+                "per_date": {"2026-07-07": 0.044},
+                "n_paths": 1,
+                "path_agg": "median",
+                "manifest_sha256": "abc",
+                "samples": 50,
+                "selection_protocol": PROTOCOL_ID,
+            }
+        return _score
 
     def run(rank):
         try:
@@ -1136,11 +1257,8 @@ def test_other_ranks_wait_outside_broadcast_during_score(tmp_path):
                 directory=tmp_path,
                 run_id="score-ddp",
                 segment=1,
-                score_fn=score if rank == 0 else (
-                    lambda: (_ for _ in ()).throw(
-                        AssertionError("rank 1 scored")
-                    )
-                ),
+                score_fn=score(rank),
+                expected_dates=["2026-07-06", "2026-07-07"],
                 timeout=5,
                 poll_seconds=0.01,
                 heartbeat_seconds=30,
@@ -1154,18 +1272,29 @@ def test_other_ranks_wait_outside_broadcast_during_score(tmp_path):
     workers = [threading.Thread(target=run, args=(rank,)) for rank in (1, 0)]
     for worker in workers:
         worker.start()
-    assert started.wait(timeout=5)
-    with lock:
-        assert (0, "score-start") in order
-        assert not any(item[1] == "returned" for item in order)
+    deadline = time_mod.time() + 5
+    while time_mod.time() < deadline:
+        with lock:
+            starts = [item for item in order if item[1] == "score-start"]
+            if len(starts) == 2:
+                assert not any(item[1] == "returned" for item in order)
+                break
+        time_mod.sleep(0.01)
+    else:
+        raise AssertionError(f"ranks did not both start score: {order}")
     release.set()
     for worker in workers:
         worker.join(timeout=5)
         assert not worker.is_alive()
     assert failures == []
-    assert results == {0: 0.042, 1: 0.042}
+    assert results[0] == pytest.approx(0.042)
+    assert results[1] == pytest.approx(0.042)
     with lock:
-        assert order.index((0, "score-end")) < order.index((1, "returned"))
+        last_score = max(
+            order.index((0, "score-end")),
+            order.index((1, "score-end")),
+        )
+        assert last_score < order.index((1, "returned"))
 
 
 def test_rank0_score_error_reaches_every_rank(tmp_path):
@@ -1179,9 +1308,24 @@ def test_rank0_score_error_reaches_every_rank(tmp_path):
     failures = []
     scores = []
 
-    def score():
-        scores.append("score")
-        raise TemporalRankICSelectionError("non-finite Rank IC on 2026-07-06")
+    def score(rank):
+        def _score():
+            scores.append(rank)
+            if rank == 0:
+                raise TemporalRankICSelectionError(
+                    "non-finite Rank IC on 2026-07-06"
+                )
+            return {
+                "daily_rank_ic_mean": 0.01,
+                "n_dates": 1,
+                "per_date": {"2026-07-07": 0.01},
+                "n_paths": 1,
+                "path_agg": "median",
+                "manifest_sha256": "abc",
+                "samples": 3,
+                "selection_protocol": PROTOCOL_ID,
+            }
+        return _score
 
     def run(rank):
         try:
@@ -1191,11 +1335,8 @@ def test_rank0_score_error_reaches_every_rank(tmp_path):
                 directory=tmp_path,
                 run_id="score-err",
                 segment=1,
-                score_fn=score if rank == 0 else (
-                    lambda: (_ for _ in ()).throw(
-                        AssertionError("rank 1 scored")
-                    )
-                ),
+                score_fn=score(rank),
+                expected_dates=["2026-07-06", "2026-07-07"],
                 timeout=5,
                 poll_seconds=0.01,
                 heartbeat_seconds=30,
@@ -1209,7 +1350,7 @@ def test_rank0_score_error_reaches_every_rank(tmp_path):
     for worker in workers:
         worker.join(timeout=5)
         assert not worker.is_alive()
-    assert scores == ["score"]
+    assert sorted(scores) == [0, 1]
     assert sorted(rank for rank, _exc in failures) == [0, 1]
     for _rank, exc in failures:
         assert isinstance(exc, RuntimeError)
@@ -1230,23 +1371,39 @@ def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
     failures = []
     measured = {}
 
-    def fake_evaluate(model, tokenizer, runtime, device):
+    def fake_evaluate(model, tokenizer, runtime, device, *, rank=0, world_size=1):
         del model, tokenizer, runtime, device
         with lock:
-            events.append("evaluate")
+            events.append(("evaluate", int(rank)))
             assert "broadcast_float" not in events
         time_mod = __import__("time")
-        time_mod.sleep(0.25)
+        time_mod.sleep(0.15)
         with lock:
             assert "broadcast_float" not in events
+        if int(rank) == 0:
+            return {
+                "daily_rank_ic_mean": 0.10,
+                "n_dates": 1,
+                "per_date": {"2026-07-06": 0.10},
+                "n_paths": 1,
+                "path_agg": "median",
+                "manifest_sha256": "deadbeef",
+                "samples": 6,
+                "selection_protocol": PROTOCOL_ID,
+                "shard_rank": 0,
+                "shard_world_size": int(world_size),
+            }
         return {
-            "daily_rank_ic_mean": 0.11,
-            "n_dates": 60,
+            "daily_rank_ic_mean": 0.12,
+            "n_dates": 1,
+            "per_date": {"2026-07-07": 0.12},
             "n_paths": 1,
             "path_agg": "median",
             "manifest_sha256": "deadbeef",
-            "samples": 12,
+            "samples": 6,
             "selection_protocol": PROTOCOL_ID,
+            "shard_rank": 1,
+            "shard_world_size": int(world_size),
         }
 
     def fake_broadcast_flag(flag, device, rank):
@@ -1269,19 +1426,17 @@ def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(trainer, "score_timeout_seconds", lambda: 5.0)
 
-    # Build a minimal closure environment similar to train_model's helper.
     def run(rank):
         try:
             use_temporal_rank_ic = True
             rank_ic_evaluated = False
             next_segment = 1
-            rank_ic_interval = 10
             world_size = 2
             save_dir = str(tmp_path)
             device = SimpleNamespace(type="cpu")
             rank_ic_runtime = {
-                "rows": [{"symbol": "AAA"}] if rank == 0 else None,
-                "manifest": {"signal_dates": ["2026-07-06"]},
+                "rows": [{"symbol": "AAA"}],
+                "manifest": {"signal_dates": ["2026-07-06", "2026-07-07"]},
             }
             core_model = object()
             tokenizer = object()
@@ -1294,9 +1449,14 @@ def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
                 if not trainer.broadcast_rank0_flag(due, device, rank):
                     return
 
-                def _run_rank0_score():
+                def _run_shard_score():
                     return trainer.evaluate_temporal_d10_rank_ic(
-                        core_model, tokenizer, rank_ic_runtime, device,
+                        core_model,
+                        tokenizer,
+                        rank_ic_runtime,
+                        device,
+                        rank=rank,
+                        world_size=world_size,
                     )
 
                 summary = trainer.coordinate_rank_ic_score(
@@ -1305,11 +1465,8 @@ def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
                     directory=save_dir,
                     run_id=f"{trainer.rank_ic_prepare_run_id()}-seg{next_segment}",
                     segment=next_segment,
-                    score_fn=_run_rank0_score if rank == 0 else (
-                        lambda: (_ for _ in ()).throw(
-                            AssertionError("non-zero rank must not score")
-                        )
-                    ),
+                    score_fn=_run_shard_score,
+                    expected_dates=rank_ic_runtime["manifest"]["signal_dates"],
                     timeout=trainer.score_timeout_seconds(),
                     poll_seconds=0.01,
                     heartbeat_seconds=30,
@@ -1330,7 +1487,9 @@ def test_train_score_keeps_rank1_out_of_broadcast(tmp_path, monkeypatch):
     assert failures == []
     assert measured == {0: 0.11, 1: 0.11}
     with lock:
-        assert events.count("evaluate") == 1
+        assert sorted(
+            item for item in events if isinstance(item, tuple) and item[0] == "evaluate"
+        ) == [("evaluate", 0), ("evaluate", 1)]
         assert "broadcast_float" not in events
         assert any(
             item[0] == "broadcast_flag" for item in events if isinstance(item, tuple)
