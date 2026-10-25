@@ -274,7 +274,19 @@ def main():
         parent_manifest_path = continuation / "experiment_manifest.json"
         if parent_manifest_path.is_file():
             parent_manifest = json.loads(parent_manifest_path.read_text())
-            recipe["parent_best_sha256"] = parent_manifest["recipe"]["parent_best_sha256"]
+            parent_recipe = parent_manifest.get("recipe") or {}
+            inherited = parent_recipe.get("parent_best_sha256")
+            if inherited:
+                recipe["parent_best_sha256"] = inherited
+            else:
+                # Recovered parents sometimes wrote a thin recipe without the
+                # lineage SHA; keep the round-2 e03b best from this module.
+                phase(
+                    "parent_best_sha256_missing",
+                    note="parent manifest recipe lacks parent_best_sha256; "
+                         "using launch BEST_SHA",
+                    parent_best_sha256=recipe["parent_best_sha256"],
+                )
         elif recover_incomplete:
             # Incomplete CANCEL_ACKNOWLEDGED parents never wrote the manifest.
             # Keep the round-2 e03b best SHA from this module's constant.
