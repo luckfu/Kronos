@@ -106,6 +106,12 @@ def write_durable_sidecar(root, boundary, progress, recipe, *, chunk, parent_ker
                           reason):
     """Rewrite progress/summary/manifest to a stopped durable boundary."""
     root = Path(root)
+    recipe = dict(recipe or {})
+    if not recipe.get("parent_best_sha256"):
+        raise RuntimeError(
+            "recover recipe must include parent_best_sha256 "
+            "(e03b best SHA lineage for later chunks)"
+        )
     boundary = int(boundary)
     now = _utc_now()
     durable_progress = dict(progress)
