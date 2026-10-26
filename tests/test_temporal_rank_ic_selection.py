@@ -88,7 +88,7 @@ def _write_manifest(directory, dates=DATES, panel_name="temporal_rank_ic_panel.p
 
 
 def test_sparse_schedule_matches_large_validation():
-    assert DEFAULT_INTERVAL_SEGMENTS == 10
+    assert DEFAULT_INTERVAL_SEGMENTS == 20
     for segment in range(1, 521):
         assert should_run_temporal_rank_ic(segment, 520, 10) == (
             should_run_large_validation(segment, 520, 10)
@@ -558,14 +558,14 @@ def test_window_builder_uses_the_manifest_calendar_only():
     assert rows[0]["actual"] == pytest.approx(expected)
 
 
-def test_config_flag_defaults_off_and_bigbatch_interval_stays_ten(monkeypatch):
+def test_config_flag_defaults_off_and_bigbatch_interval_stays_twenty(monkeypatch):
     from config import Config
 
     monkeypatch.delenv("KRONOS_CHECKPOINT_SELECTION_PROTOCOL", raising=False)
     monkeypatch.setenv("KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS", "1000000")
     config = Config()
     assert config.checkpoint_selection_protocol == ""
-    assert config.temporal_rank_ic_interval_segments == 10
+    assert config.temporal_rank_ic_interval_segments == 20
 
     monkeypatch.setenv("KRONOS_CHECKPOINT_SELECTION_PROTOCOL", "val_loss")
     assert Config().checkpoint_selection_protocol == ""
@@ -579,7 +579,7 @@ def test_config_flag_defaults_off_and_bigbatch_interval_stays_ten(monkeypatch):
     monkeypatch.setenv("KRONOS_TEMPORAL_RANK_IC_PANEL", "temporal_rank_ic_panel.pkl")
     enabled = Config()
     assert enabled.checkpoint_selection_protocol == "temporal_rank_ic_v1"
-    assert enabled.temporal_rank_ic_interval_segments == 10
+    assert enabled.temporal_rank_ic_interval_segments == 20
     assert enabled.best_selection_metric == "objective"
 
     monkeypatch.setenv("KRONOS_CHECKPOINT_SELECTION_PROTOCOL", "symbol_holdout")

@@ -32,7 +32,7 @@ from pathlib import Path
 
 PROTOCOL_ID = "temporal_rank_ic_v1"
 SELECTION_METRIC = "temporal_daily_d10_rank_ic"
-DEFAULT_INTERVAL_SEGMENTS = 10
+DEFAULT_INTERVAL_SEGMENTS = 20
 N_PATHS = 1
 PATH_AGG = "median"
 TEMPERATURE = 0.65
@@ -45,7 +45,7 @@ PREDICT = 10
 WINDOW = LOOKBACK + PREDICT
 TIE_EPSILON = 1e-6
 MIN_NAMES_PER_DATE = 30
-INFERENCE_BATCH = 4
+INFERENCE_BATCH = 24
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
 MANIFEST_RELATIVE = Path(
     "finetune/manifests/temporal_rank_ic_v1/selection_window.json"
@@ -58,8 +58,8 @@ ROWS_SHA_KEY = "rows_sha256"
 PANEL_DATASET_ENV = "KRONOS_TEMPORAL_RANK_IC_PANEL_DATASET"
 ROWS_PATH_ENV = "KRONOS_TEMPORAL_RANK_IC_ROWS"
 PREPARE_TIMEOUT_SECONDS = 45 * 60
-# Status-file wait while rank 0 scores ~300k single-path windows on one T4.
-# With N_PATHS=1 expect ~1h-class Seg1; keep headroom. Override with
+# Status-file wait while ranks score ~150k single-path windows (batch 24).
+# With N_PATHS=1 expect sub-hour class; keep headroom. Override with
 # KRONOS_TEMPORAL_RANK_IC_SCORE_TIMEOUT_SECONDS.
 SCORE_TIMEOUT_SECONDS = 4 * 60 * 60
 _PANEL_SHA = re.compile(r"^[0-9a-f]{64}$")

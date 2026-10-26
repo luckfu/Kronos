@@ -25,13 +25,16 @@ def slug(chunk):
     # e01 burned; e01b/e01c NCCL; e01d 16-path too slow; e01e single-path +
     # new SwanLab (12h timeout mid Seg30); e01f = dual-rank date-shard resume;
     # e01g = e01f Seg80-best relay with --max-segments=40 (12h margin);
-    # e01h = e01g ERROR fix (parent_best_sha256 fallback + recovered dataset v2).
+    # e01h = e01g ERROR fix (parent_best_sha256 fallback + recovered dataset v2);
+    # e01i = e01h Seg125 relay + Rank IC speedups (batch 24, N=20). NOT auto e04.
     if chunk == 1:
         return "kronos-small-clean-bigbatch2-e01e-from-e03b"
     if chunk == 2:
         return "kronos-small-clean-bigbatch2-e01f-from-e03b"
     if chunk == 3:
         return "kronos-small-clean-bigbatch2-e01h-from-e03b"
+    if chunk == 4:
+        return "kronos-small-clean-bigbatch2-e01i-from-e03b"
     return f"kronos-small-clean-bigbatch2-e{chunk:02d}-from-e03b"
 
 
@@ -198,7 +201,13 @@ namespace["main"]()
     (build / code_file).write_text(code)
     metadata = {
         "id": f"{OWNER}/{slug(args.chunk)}",
-        "title": ("Kronos Small Clean Bigbatch2 E01e From E03b" if args.chunk == 1 else ("Kronos Small Clean Bigbatch2 E01f From E03b" if args.chunk == 2 else ("Kronos Small Clean Bigbatch2 E01h From E03b" if args.chunk == 3 else f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} From E03b"))),
+        "title": (
+            "Kronos Small Clean Bigbatch2 E01e From E03b" if args.chunk == 1 else
+            "Kronos Small Clean Bigbatch2 E01f From E03b" if args.chunk == 2 else
+            "Kronos Small Clean Bigbatch2 E01h From E03b" if args.chunk == 3 else
+            "Kronos Small Clean Bigbatch2 E01i From E03b" if args.chunk == 4 else
+            f"Kronos Small Clean Bigbatch2 E{args.chunk:02d} From E03b"
+        ),
         "code_file": code_file, "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4",
