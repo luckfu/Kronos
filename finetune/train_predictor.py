@@ -524,6 +524,22 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
     return guard
 
 
+# New ops/telemetry guard keys added after Bootstrap chunk1. Older last_state.pt
+# files omit them — grandfather (current env/config wins). If present, they must
+# still match unless listed in RESUME_OPS_ALLOW_CHANGE_KEYS (intentional relay
+# ops updates that do not affect weights/AdamW continuity).
+RESUME_GUARD_GRANDFATHER_MISSING_KEYS = frozenset({
+    'validation_interval_segments',
+    'val_batch_size',
+    'disable_best_updates',
+})
+# Intentional Bootstrap relay ops that may change across chunks (e.g. ablation
+# cadence 10 → 5) without rewriting parent weights.
+RESUME_OPS_ALLOW_CHANGE_KEYS = frozenset({
+    'condition_ablation_interval_segments',
+})
+
+
 def validate_resume_guard(saved, current, ignore_keys=None):
     if not isinstance(saved, dict):
         raise ValueError(
@@ -531,22 +547,50 @@ def validate_resume_guard(saved, current, ignore_keys=None):
         )
     ignored = set(ignore_keys or ())
     current = {key: value for key, value in current.items() if key not in ignored}
-    missing = sorted(set(current) - set(saved))
+    missing = sorted(
+        set(current) - set(saved) - RESUME_GUARD_GRANDFATHER_MISSING_KEYS
+    )
     if missing:
         raise ValueError(
             f'Resume checkpoint is missing guard fields: {missing}'
         )
+    grandfathered = sorted(
+        (set(current) - set(saved)) & RESUME_GUARD_GRANDFATHER_MISSING_KEYS
+    )
+    if grandfathered:
+        print(
+            'Resume guard: grandfathering missing ops fields from current env/config: '
+            + ', '.join(grandfathered),
+            flush=True,
+        )
+    changed_ops = []
     for key, expected in current.items():
+        if key not in saved:
+            # Grandfathered new field — current env/config applies.
+            continue
         actual = saved.get(key)
+        mismatch = False
         if isinstance(expected, float):
             if not math.isclose(float(actual), expected, rel_tol=0.0, abs_tol=1e-12):
-                raise ValueError(
-                    f'Resume guard mismatch for {key}: {actual!r} != {expected!r}'
-                )
+                mismatch = True
         elif actual != expected:
-            raise ValueError(
-                f'Resume guard mismatch for {key}: {actual!r} != {expected!r}'
-            )
+            mismatch = True
+        if not mismatch:
+            continue
+        if key in RESUME_OPS_ALLOW_CHANGE_KEYS:
+            changed_ops.append((key, actual, expected))
+            continue
+        raise ValueError(
+            f'Resume guard mismatch for {key}: {actual!r} != {expected!r}'
+        )
+    if changed_ops:
+        detail = ', '.join(
+            f'{key}: {actual!r} → {expected!r}' for key, actual, expected in changed_ops
+        )
+        print(
+            'Resume guard: allowing intentional ops telemetry change(s): ' + detail,
+            flush=True,
+        )
 
 
 def restore_optimizer_for_scheduler_transition(
