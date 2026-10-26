@@ -297,7 +297,23 @@ namespace["main"]()
     parent_status = subprocess.check_output(
         ["kaggle", "kernels", "status", PARENT_KERNEL], text=True
     )
-    if "COMPLETE" not in parent_status:
+    # Self-parent: prior COMPLETE output remains the kernel_source input even
+    # when the latest attempt ended ERROR (failed resume). Allow COMPLETE or,
+    # with --force, ERROR so a guard fix can overwrite the failed version.
+    parent_ok = "COMPLETE" in parent_status
+    if (
+        not parent_ok
+        and args.force
+        and PARENT_KERNEL.endswith("/" + SLUG)
+        and "ERROR" in parent_status
+    ):
+        parent_ok = True
+        print(
+            "Self-parent latest status ERROR; --force re-push will reuse prior "
+            "COMPLETE output as kernel_source.",
+            flush=True,
+        )
+    if not parent_ok:
         raise RuntimeError(f"Parent bootstrap kernel not COMPLETE: {parent_status}")
 
     status = subprocess.run(
