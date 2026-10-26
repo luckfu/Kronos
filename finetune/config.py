@@ -278,9 +278,10 @@ class Config:
         ).strip()
         # Independent of KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS. Bigbatch
         # sets that interval very high because full validation already runs
-        # every segment; Rank IC stays on the protocol default of 10.
+        # every segment; Rank IC stays on the protocol default of 20
+        # (N=10 escape hatch; see VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN).
         self.temporal_rank_ic_interval_segments = int(os.getenv(
-            "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS", "10"
+            "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS", "20"
         ))
         if self.checkpoint_selection_protocol == "temporal_rank_ic_v1":
             if (

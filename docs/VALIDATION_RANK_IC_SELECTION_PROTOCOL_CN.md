@@ -74,13 +74,13 @@ validation_large_interval_segments = 10
 | 项 | 值 |
 |---|---|
 | 评测单位 | **segment**（不是 micro-batch / 不是 wall-clock 分钟） |
-| 默认间隔 **N** | **每 10 个 segment** |
-| 强制点 | 本 run/本 epoch 的 **segment 1**、每个满足 `segment % 10 == 0` 的点、以及 **最后一个完成的 segment**（含墙钟提前停） |
-| 与现网对齐 | N=10 ≡ 现有 `validation_large_interval_segments` 默认 |
+| 默认间隔 **N** | **每 20 个 segment**（2026-10-26 起；原 N=10） |
+| 强制点 | 本 run/本 epoch 的 **segment 1**、每个满足 `segment % 20 == 0` 的点、以及 **最后一个完成的 segment**（含墙钟提前停） |
+| 与现网对齐 | 原 N=10 ≡ `validation_large_interval_segments`；现因墙钟启用协议预留的 N=20 逃生门 |
 
 可选加速（**仅 pilot 日志**，不改变「谁是 best」的定义）：同一套日期协议下可先用更少日期做冒烟；**写入 `best_model` 的正式分数**必须用冻结满规格窗 + 当前 `n_paths`（现为 1）与 `path_agg=median`。
 
-若双 T4 墙钟证明 N=10 不可承受：只允许改成 **N=20**，且必须修订本文并留 commit；禁止改成「看 loss 曲线再手挑」。
+**N=20 修订（2026-10-26）**：双 T4 实测 N=10 时单次 Temporal Rank IC（60 日 panel、`N_PATHS=1`、日期分片）约 **87 分钟**，每 10 段训练仅约 25 分钟，校验占墙钟约 **78%**，满足「双 T4 墙钟证明 N=10 不可承受」。按本文原逃生门改成 **N=20**；禁止改成「看 loss 曲线再手挑」。
 
 ### 3.3 val loss 的地位
 
@@ -222,7 +222,7 @@ e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`pus
 |---|---|
 | protocol_id | `temporal_rank_ic_v1` |
 | frozen_date | 2026-10-23（Asia/Shanghai） |
-| sparse_N_segments | 10 |
+| sparse_N_segments | 20 |
 | n_paths | 1 |
 | path_aggregation | median |
 | horizon | D10 |
@@ -237,7 +237,7 @@ e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`pus
 | 项 | 位置 |
 |---|---|
 | 协议判断、manifest SHA、日均 Rank IC、单路径 | `finetune/temporal_rank_ic_selection.py` |
-| 稀疏触发（第 1 段、每 10 段、计划末段，外加本 run 首段与墙钟/chunk 末段）并写 `best_model` | `finetune/train_predictor.py` |
+| 稀疏触发（第 1 段、每 20 段、计划末段，外加本 run 首段与墙钟/chunk 末段）并写 `best_model` | `finetune/train_predictor.py` |
 | 开关 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL` | `finetune/config.py` |
 | bigbatch2 默认打开 | `finetune/small_clean_bigbatch_relay/launch.py` |
 | 选型窗日历与面板构建 | `finetune/manifests/temporal_rank_ic_v1/selection_window.json`、`finetune/build_temporal_rank_ic_panel.py`、同目录 README |
@@ -252,3 +252,8 @@ e01（按 val loss 选模）已取消。`panel_sha256` 还是空的时候，`pus
 `best_metric.json` 在该模式下写入 `daily_rank_ic_mean`、`segment`、`step`、`n_dates`、`n_paths`、`n_paths=1`、`path_agg=median`、`selection_protocol=temporal_rank_ic_v1`、manifest SHA，并标记 `val_loss_selects_best=false`。IC 并列（绝对差 &lt; 1e-6）保留更早的 checkpoint。
 
 e01（val loss 选模）已取消。面板 SHA 钉上之前不要热重推 bigbatch2。晋级替换 C2 仍只走 §5.2，本实现不改那道门。
+
+**实现调参备注（2026-10-26，不改冻结字段）**
+
+- 稀疏间隔已切到 **N=20**（见 §3.2 / §8）；`launch.py` 与 `DEFAULT_INTERVAL_SEGMENTS` 同步为 20。
+- `INFERENCE_BATCH`（`finetune/temporal_rank_ic_selection.py`）从 **4 → 24**：不在协议冻结字段（冻结的是 n_paths / path_seed / T / top_p / top_k / lookback / predict / 日历 / panel SHA）。batch 改变每日期内 RNG 消耗顺序，**打破跨 checkpoint 的噪声配对**。切换后的**首次** Temporal Rank IC 分数作为新基准；晋级替换 C2 仍只认 §5.2 独立验证。

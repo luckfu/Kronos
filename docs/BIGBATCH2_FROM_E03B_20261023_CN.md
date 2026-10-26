@@ -43,7 +43,7 @@ e01 已取消。下面是取消前那次 val-loss 运行的记录，不要热重
 
 ## 选模协议（下一轮）
 
-e01 已取消，当时按 val loss 选 best，**不要**事后用 Rank IC 重选那次输出，也不要在面板就绪前热重推。下一轮启动默认 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL=temporal_rank_ic_v1`：每 10 个 segment（加首段和末段）用时间切分日频 D10 Rank IC（单路径）更新 `best_model`。val loss 仍记录。晋级替换 C2 仍只走 §5.2。
+e01 已取消，当时按 val loss 选 best，**不要**事后用 Rank IC 重选那次输出，也不要在面板就绪前热重推。下一轮启动默认 `KRONOS_CHECKPOINT_SELECTION_PROTOCOL=temporal_rank_ic_v1`：每 20 个 segment（加首段和末段；2026-10-26 起由 N=10 逃生门切到 N=20）用时间切分日频 D10 Rank IC（单路径）更新 `best_model`。val loss 仍记录。晋级替换 C2 仍只走 §5.2。
 
 选型日历已冻结：`finetune/manifests/temporal_rank_ic_v1/selection_window.json`，**60** 个交易日（`2026-04-01` → `2026-06-30`），`sha256` `0721b3defca10d2dab4dcaf433f1efab12304340298e6304fca6d3c9a9f3ce0d`，`train_time_upper_bound` `2024-12-31`。日期列表见 [`VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md`](VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN.md) §7。
 
