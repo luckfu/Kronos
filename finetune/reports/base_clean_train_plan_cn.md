@@ -321,3 +321,15 @@ Base 草案同样预留：
 - [ ] **新 SwanLab 板禁止回放 parent `metrics.jsonl`**（同板接力才允许 `resume=allow` + 续写）
 - [ ] 若必须回放：用真实 `updates_per_seg`（≈313 / `len(train_loader)`）算 chart step，**禁止**默认 625
 - [ ] 看板 `segment` 标量不作健康判据；以日志 `Segment N/M, Step a/b` + forecast 为准
+
+## 2026-10-26 条件通路盯点（Base vs Small 结构差）
+
+Validation `Condition Full/None/Shuffled`：Bootstrap 早期 Full−None / Full−Shuffled ≈ **−6e-5 / −1e-5 量级贴 0** 为预期（条件输出层零 init → no-op；双 LR 预热中）。
+
+**硬盯：**
+- [ ] Seg **50–100** 后若 Full−Shuffled delta 仍贴 0 → 警惕 `context_layer=10` 条件注入未生效（行业 emb + 市值 MLP 是 Base 相对 Small 的主结构差）
+- [ ] 判读看日志 `Validation Condition Full/None/Shuffled Forecast`（当前未单独打 SwanLab key）
+- [ ] 本信号**不**单独 abort 本 chunk；下 chunk 接力时复读，进入 Main 前复读
+
+观测锚点（长跑 ~Seg20）：Full/None/Shuffled ≈ 2.68448 / 2.68454 / 2.68448；Δ Full−None ≈ −6.2e-5，Full−Shuffled ≈ −4.7e-6。
+
