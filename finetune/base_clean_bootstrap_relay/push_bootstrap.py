@@ -1,8 +1,7 @@
-"""Build Base-clean Bootstrap long-run kernel (continue timing seg1).
+"""Build/push Base-clean Bootstrap long-run chunk 2 (segs 22–41).
 
-PREP ONLY by default: builds artifacts and prints checklist.
-Does NOT call `kaggle kernels push` unless `--push` is passed
-(and Elon has explicitly nodded in the group).
+Continues from COMPLETE self slug (resume_segment=22), same SwanLab board.
+Pass `--push --force` after Elon nod (self-overwrite idle COMPLETE slug).
 """
 
 from __future__ import annotations
@@ -23,13 +22,15 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "user281434")
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
-PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap-timing"
+# Self-parent: previous COMPLETE of this same slug (chunk 1 segs 2→21).
+PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap"
 SLUG = "kronos-base-clean-0-1-bootstrap"
 TITLE = "Kronos Base Clean 0.1 Bootstrap"
-# Timing seg1 best_model SHA (equals last_model after seg1).
-PARENT_BEST_SHA256 = (
-    "0581fccf6b25d85e0d0864dbc2535cbff3619771871720246463171fc0b779ab"
+# Chunk1 last_model SHA (equals best_model at seg21; resume from last only).
+PARENT_LAST_SHA256 = (
+    "f618552a6f03469271c096122c86b5a883a478d43803c7fb435d0757e4b4807b"
 )
+PARENT_BEST_SHA256 = PARENT_LAST_SHA256  # frozen; no Best writes this chunk
 MAX_SEGMENTS = 20
 BATCH_SIZE = 32
 ACCUMULATION_STEPS = 8
@@ -115,7 +116,7 @@ def main() -> None:
     parser.add_argument(
         "--push",
         action="store_true",
-        help="Actually push to Kaggle (FORBIDDEN until Elon explicitly nods)",
+        help="Actually push to Kaggle (Elon nodded for 12h relay)",
     )
     parser.add_argument(
         "--force",
@@ -197,15 +198,25 @@ namespace["main"]()
         "dataset_sources": metadata["dataset_sources"],
         "kernel_sources": metadata["kernel_sources"],
         "parent_kernel": PARENT_KERNEL,
-        "parent_weights": "best_model",
+        "parent_weights": "last_model",
+        "parent_last_sha256": PARENT_LAST_SHA256,
         "parent_best_sha256": PARENT_BEST_SHA256,
         "parent_weights_note": (
-            "Same-stage continuation via full timing Output tree (last_state "
-            "resumes optimizer). Preferred tag best_model; after timing seg1 "
-            "best_sha == last_sha."
+            "Same-stage self-parent via full Output tree (last_state resumes "
+            "optimizer). Bootstrap continues from last only; "
+            "KRONOS_DISABLE_BEST_UPDATES=1."
         ),
-        "resume_segment": 2,
+        "resume_segment": 22,
+        "expected_completed_segments": 21,
         "max_segments_per_run": MAX_SEGMENTS,
+        "validation": {
+            "quick_samples": 2048,
+            "interval_segments": 5,
+            "condition_ablation_interval_segments": 5,
+            "val_batch_size": 64,
+            "disable_best_updates": True,
+            "chunk_end_required": True,
+        },
         "batch": {
             "batch_size": BATCH_SIZE,
             "accumulation_steps": ACCUMULATION_STEPS,
@@ -232,7 +243,8 @@ namespace["main"]()
             "experiment_name": "base_clean_0.1_bootstrap",
             "run_id": "base_clean_0_1_bootstrap",
             "resume": "allow",
-            "note": "NEW board — does NOT continue base_clean_0.1_bootstrap_timing",
+            "replay_after_segment": 21,
+            "note": "SAME board — continue base_clean_0.1_bootstrap (chunk 2)",
         },
         "lineage": {
             "stage": "bootstrap",
@@ -286,7 +298,7 @@ namespace["main"]()
         ["kaggle", "kernels", "status", PARENT_KERNEL], text=True
     )
     if "COMPLETE" not in parent_status:
-        raise RuntimeError(f"Parent timing kernel not COMPLETE: {parent_status}")
+        raise RuntimeError(f"Parent bootstrap kernel not COMPLETE: {parent_status}")
 
     status = subprocess.run(
         ["kaggle", "kernels", "status", metadata["id"]],

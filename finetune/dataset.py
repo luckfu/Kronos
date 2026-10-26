@@ -608,6 +608,21 @@ class QlibDataset(Dataset):
         self.fixed_validation_manifest_sha256 = None
         self.validation_period_codes = None
         self.validation_period_names = {}
+        # Without a fixed manifest, honour KRONOS_VALIDATION_QUICK_SAMPLES so
+        # Bootstrap telemetry can use a true quick subset (not the full holdout).
+        if (
+            data_type == 'val'
+            and not fixed_manifest_path
+            and not bool(getattr(self.config, 'validation_full_only', False))
+        ):
+            quick = int(getattr(self.config, 'validation_quick_samples', 0) or 0)
+            if quick > 0:
+                self.quick_validation_count = min(quick, self.n_samples)
+                print(
+                    '[VAL] Quick telemetry subset (no fixed manifest): '
+                    f'{self.quick_validation_count:,} of {self.n_samples:,} samples '
+                    f'(KRONOS_VALIDATION_QUICK_SAMPLES={quick})'
+                )
         if data_type == 'val' and fixed_manifest_path:
             (
                 self.coverage_order, fixed_manifest, manifest_sha,

@@ -1,8 +1,8 @@
-"""Kaggle entry for Base-clean Bootstrap long-run chunk (continue timing seg1).
+"""Kaggle entry for Base-clean Bootstrap long-run chunk 2 (segs 22–41).
 
-PREP/ready-to-push only until Elon nods. Continues same-stage bootstrap from
-COMPLETE timing kernel output (resume_segment=2). New SwanLab board
-base_clean_0.1_bootstrap (does NOT continue timing board).
+Continues same-stage bootstrap from COMPLETE self slug output
+(resume_segment=22). Same SwanLab board base_clean_0.1_bootstrap.
+Continue from last only — no Best writes (KRONOS_DISABLE_BEST_UPDATES=1).
 """
 
 from __future__ import annotations
@@ -21,11 +21,16 @@ OUTPUT_NAME = "base_clean_0.1_bootstrap"
 RUN_ID = "base_clean_0_1_bootstrap"
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
 DATA_SHA = "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
-PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap-timing"
+# Self-parent: previous COMPLETE output of this same slug (chunk 1: segs 2→21).
+PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap"
 PARENT_OUTPUT_NAME = "base_clean_0.1_bootstrap"
-# Prefer best_model (Small pattern). After timing seg1, best_sha == last_sha.
-PARENT_WEIGHTS = "best_model"
-EXPECTED_RESUME_SEGMENT = 2
+# Bootstrap continues from last only (optimizer via last_state). Best is frozen.
+PARENT_WEIGHTS = "last_model"
+EXPECTED_RESUME_SEGMENT = 22
+EXPECTED_COMPLETED_SEGMENTS = 21
+PARENT_LAST_SHA256 = (
+    "f618552a6f03469271c096122c86b5a883a478d43803c7fb435d0757e4b4807b"
+)
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 BATCH_SIZE = 32
@@ -108,8 +113,8 @@ def prepare_data(input_root: Path, target: Path) -> Path:
     return target
 
 
-def find_timing_continuation(input_root: Path) -> tuple[Path, dict]:
-    """Locate COMPLETE timing output tree; prefer best_model, resume via last_state."""
+def find_bootstrap_continuation(input_root: Path) -> tuple[Path, dict]:
+    """Locate COMPLETE bootstrap chunk output; resume via last_state only."""
     # Prefer paths under the known output name to avoid accidental matches.
     preferred = sorted(
         input_root.glob(f"**/{PARENT_OUTPUT_NAME}/checkpoints/last_state.pt")
@@ -120,7 +125,7 @@ def find_timing_continuation(input_root: Path) -> tuple[Path, dict]:
         states = sorted(input_root.glob("**/last_state.pt"))
         if len(states) != 1:
             raise RuntimeError(
-                f"Expected exactly one timing last_state.pt; "
+                f"Expected exactly one bootstrap last_state.pt; "
                 f"preferred={preferred} all={states}"
             )
         state_path = states[0]
@@ -139,18 +144,22 @@ def find_timing_continuation(input_root: Path) -> tuple[Path, dict]:
     ]
     missing = [name for name in required if not (source_root / name).is_file()]
     if missing:
-        raise RuntimeError(f"Incomplete timing continuation at {source_root}: {missing}")
+        raise RuntimeError(f"Incomplete bootstrap continuation at {source_root}: {missing}")
 
     progress = json.loads((source_root / "progress.json").read_text())
     summary = json.loads((source_root / "summary.json").read_text())
     final = summary.get("final_result", summary)
     if progress.get("status") not in {"stopped", "completed"}:
-        raise RuntimeError(f"Timing parent not durable: {progress}")
+        raise RuntimeError(f"Bootstrap parent not durable: {progress}")
     resume_segment = int(final.get("resume_segment", int(progress.get("current_segment", 0)) + 1))
     completed = int(final.get("completed_segments", progress.get("current_segment", 0)))
-    if resume_segment != EXPECTED_RESUME_SEGMENT or completed != 1:
+    if (
+        resume_segment != EXPECTED_RESUME_SEGMENT
+        or completed != EXPECTED_COMPLETED_SEGMENTS
+    ):
         raise RuntimeError(
-            f"Expected timing seg1 → resume_segment={EXPECTED_RESUME_SEGMENT}; "
+            f"Expected bootstrap chunk1 → completed={EXPECTED_COMPLETED_SEGMENTS} "
+            f"resume_segment={EXPECTED_RESUME_SEGMENT}; "
             f"got completed={completed} resume_segment={resume_segment}"
         )
 
@@ -158,6 +167,11 @@ def find_timing_continuation(input_root: Path) -> tuple[Path, dict]:
     last = source_root / "checkpoints/last_model/model.safetensors"
     best_sha = sha256(best)
     last_sha = sha256(last)
+    if last_sha != PARENT_LAST_SHA256:
+        raise RuntimeError(
+            f"Parent last_model SHA mismatch: expected {PARENT_LAST_SHA256[:12]}… "
+            f"got {last_sha[:12]}…"
+        )
     best_metric = json.loads(
         (source_root / "checkpoints/best_model/best_metric.json").read_text()
     )
@@ -167,7 +181,8 @@ def find_timing_continuation(input_root: Path) -> tuple[Path, dict]:
         "parent_weights": PARENT_WEIGHTS,
         "parent_weights_note": (
             "Same-stage continuation copies full output tree (last_state drives "
-            "optimizer resume). Preferred tag is best_model (Small pattern)."
+            "optimizer resume). Bootstrap continues from last only; Best writes "
+            "disabled (KRONOS_DISABLE_BEST_UPDATES=1)."
         ),
         "best_model_sha256": best_sha,
         "last_model_sha256": last_sha,
@@ -203,7 +218,7 @@ def main() -> None:
         updates_per_seg_approx=20000 // (BATCH_SIZE * NPROC),
         max_segments=MAX_SEGMENTS,
         swanlab_board=EXPERIMENT,
-        note="Continue timing seg1; NEW SwanLab board (not timing); HF-clean lineage",
+        note="Continue bootstrap segs22–41; SAME SwanLab board; last-only (no Best writes)",
     )
 
     phase(
@@ -256,7 +271,7 @@ def main() -> None:
 
     input_root = Path(os.environ.get("KRONOS_KAGGLE_INPUT_ROOT", "/kaggle/input"))
     data_root = prepare_data(input_root, Path("/kaggle/working/kronos_base_clean/data"))
-    continuation_root, parent_info = find_timing_continuation(input_root)
+    continuation_root, parent_info = find_bootstrap_continuation(input_root)
 
     # Write a small sidecar so Output documents which parent weights were preferred.
     sidecar = Path("/kaggle/working/bootstrap_parent_manifest.json")
@@ -271,7 +286,7 @@ def main() -> None:
         "PYTHONUNBUFFERED": "1",
         "KRONOS_BASE_CLEAN_STAGE": "bootstrap",
         "KRONOS_BASE_CLEAN_OUTPUT_NAME": OUTPUT_NAME,
-        # Enable same-stage continuation from timing Output (do NOT disable).
+        # Enable same-stage continuation from prior bootstrap Output.
         "KRONOS_BASE_CLEAN_DISABLE_AUTO_CONTINUATION": "0",
         "KRONOS_BASE_CLEAN_CONTINUATION_ROOT": str(continuation_root),
         "KRONOS_BASE_CLEAN_DATA_ROOT": str(data_root),
@@ -280,6 +295,13 @@ def main() -> None:
         "KRONOS_ACCUMULATION_STEPS": str(ACCUMULATION_STEPS),
         "KRONOS_TORCHRUN_NPROC_PER_NODE": str(NPROC),
         "KRONOS_SWANLAB_REPLAY_AFTER_SEGMENT": str(replay_after),
+        # Hard requirements for this push.
+        "KRONOS_VALIDATION_QUICK_SAMPLES": "2048",
+        "KRONOS_VALIDATION_LARGE_SAMPLES": "2048",
+        "KRONOS_VALIDATION_INTERVAL_SEGMENTS": "5",
+        "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS": "5",
+        "KRONOS_DISABLE_BEST_UPDATES": "1",
+        "KRONOS_VAL_BATCH_SIZE": "64",
         "SWANLAB_PROJECT": "finance",
         "SWANLAB_WORKSPACE": "roc_fu",
         "SWANLAB_EXPERIMENT_NAME": EXPERIMENT,

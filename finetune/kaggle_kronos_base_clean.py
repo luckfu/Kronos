@@ -398,6 +398,18 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
                 "KRONOS_VALIDATION_LARGE_SAMPLES", "2048"
             ),
             "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS": "1000000",
+            # Relay telemetry: true quick subset, every-5 + chunk-end val/ablation,
+            # continue from last only (no Best writes on Bootstrap).
+            "KRONOS_VALIDATION_INTERVAL_SEGMENTS": os.getenv(
+                "KRONOS_VALIDATION_INTERVAL_SEGMENTS", "5"
+            ),
+            "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS": os.getenv(
+                "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS", "5"
+            ),
+            "KRONOS_DISABLE_BEST_UPDATES": os.getenv(
+                "KRONOS_DISABLE_BEST_UPDATES", "1"
+            ),
+            "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
         })
     return env
 

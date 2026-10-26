@@ -1,3 +1,4 @@
+import contextlib
 import os
 import sys
 import json
@@ -488,6 +489,7 @@ def build_resume_guard(config, effective_epochs, segments_per_coverage):
         'dataset_manifest_sha256', 'bootstrap_completed_segments',
         'fixed_validation_manifest_sha256', 'validation_quick_samples',
         'validation_large_samples', 'validation_large_interval_segments',
+        'validation_interval_segments', 'val_batch_size', 'disable_best_updates',
         'validation_full_only',
         'use_beta_v21_auxiliary', 'beta_v21_auxiliary_warmup_steps',
         'beta_v21_ranking_weight',
@@ -739,6 +741,14 @@ def create_dataloaders(config: dict, rank: int, world_size: int):
         if use_ddp else None
     )
 
+    val_batch_size = int(config.get('val_batch_size') or config['batch_size'])
+    if val_batch_size <= 0:
+        raise ValueError('val_batch_size must be positive')
+    if rank == 0 and val_batch_size != int(config['batch_size']):
+        print(
+            f"[Rank {rank}] Validation batch_size={val_batch_size} "
+            f"(train batch_size={config['batch_size']})"
+        )
     train_loader = DataLoader(
         train_dataset, batch_size=config['batch_size'], sampler=train_sampler,
         shuffle=False, num_workers=config.get('num_workers', 2),
@@ -747,12 +757,12 @@ def create_dataloaders(config: dict, rank: int, world_size: int):
     quick_val_loader = None
     if quick_dataset is not None:
         quick_val_loader = DataLoader(
-            quick_dataset, batch_size=config['batch_size'], sampler=quick_val_sampler,
+            quick_dataset, batch_size=val_batch_size, sampler=quick_val_sampler,
             shuffle=False, num_workers=config.get('num_workers', 2),
             pin_memory=torch.cuda.is_available(), drop_last=False
         )
     large_val_loader = DataLoader(
-        valid_dataset, batch_size=config['batch_size'], sampler=large_val_sampler,
+        valid_dataset, batch_size=val_batch_size, sampler=large_val_sampler,
         shuffle=False, num_workers=config.get('num_workers', 2),
         pin_memory=torch.cuda.is_available(), drop_last=False
     )
@@ -1218,6 +1228,32 @@ def should_run_large_validation(segment, total_segments, interval):
     return segment == 1 or segment % interval == 0 or segment == total_segments
 
 
+def should_run_segment_validation(
+    segment,
+    total_segments,
+    interval,
+    *,
+    start_segment=0,
+    max_segments_per_run=0,
+):
+    """Decide whether this coverage segment runs validation.
+
+    interval<=0 keeps legacy every-segment validation. Otherwise validate on
+    every N global segments and always on chunk/coverage end so a relay stop
+    still gets a durable telemetry point.
+    """
+    segment = int(segment)
+    total_segments = int(total_segments)
+    interval = int(interval)
+    if interval <= 0:
+        return True
+    if segment == total_segments:
+        return True
+    if segment_run_limit_reached(start_segment, segment, max_segments_per_run):
+        return True
+    return segment % interval == 0
+
+
 def best_selection_value(metric, quick_metrics, large_metrics=None):
     """Return the configured checkpoint-selection loss, or None if not evaluated."""
     values = {
@@ -1373,6 +1409,17 @@ def move_auxiliary_labels(labels, device):
         key: value.to(device, non_blocking=True)
         for key, value in labels.items()
     }
+
+
+
+def slice_auxiliary_labels(labels, start, end):
+    if labels is None:
+        return None
+    return {key: value[start:end] for key, value in labels.items()}
+
+
+def slice_optional_tensor(tensor, start, end):
+    return None if tensor is None else tensor[start:end]
 
 
 def format_validation_value(value):
@@ -2698,8 +2745,20 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
     # avoids initializing a CUDA backend just to hold a disabled scaler.
     scaler = torch.amp.GradScaler('cuda') if scale_gradients else None
     if rank == 0:
+        accumulation_steps = max(1, int(config.get('accumulation_steps', 1)))
+        if config['batch_size'] % accumulation_steps != 0:
+            raise ValueError(
+                "KRONOS_BATCH_SIZE must be divisible by KRONOS_ACCUMULATION_STEPS "
+                f"(got batch_size={config['batch_size']}, "
+                f"accumulation_steps={accumulation_steps})"
+            )
+        micro_bs = config['batch_size'] // accumulation_steps
         effective_bs = config['batch_size'] * world_size
-        print(f"Effective BATCHSIZE per GPU: {config['batch_size']}, Total: {effective_bs}")
+        print(
+            f"Effective BATCHSIZE per GPU: {config['batch_size']} "
+            f"(micro={micro_bs} x accum={accumulation_steps}), "
+            f"n_gpu={world_size}, effective_global={effective_bs}"
+        )
         print(
             f"Predictor AMP: {amp_dtype_name}"
             f"{' autocast' if use_amp else ''}; gradient scaling: "
@@ -3670,6 +3729,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         epoch_forecast_loss_sum = 0.0
         epoch_batches = 0
         interrupted_step = 0
+        accumulation_steps = max(1, int(config.get('accumulation_steps', 1)))
         for i, batch in enumerate(train_loader):
             monitor_interval = int(config.get('condition_monitor_interval_steps', 0))
             monitor_due = bool(
@@ -3677,91 +3737,156 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 and monitor_interval > 0
                 and (batch_idx_global + 1) % monitor_interval == 0
             )
-            core_model.collect_condition_stats = monitor_due
-            batch_x, batch_x_stamp = batch[0], batch[1]
             use_beta_v21 = bool(config.get('use_beta_v21_auxiliary', False))
-            auxiliary_labels = batch[-1] if use_beta_v21 else None
-            batch_sector = batch[2] if len(batch) > 2 and config.get('use_sector_features', True) else None
-            batch_size_bucket = batch[3] if len(batch) > 3 and config.get('use_size_features', True) else None
-            batch_size_percentile = batch[4] if len(batch) > 4 and config.get('use_size_percentile', False) else None
+            ori_batch_x, ori_batch_x_stamp = batch[0], batch[1]
+            ori_auxiliary_labels = batch[-1] if use_beta_v21 else None
+            ori_batch_sector = (
+                batch[2] if len(batch) > 2 and config.get('use_sector_features', True) else None
+            )
+            ori_batch_size_bucket = (
+                batch[3] if len(batch) > 3 and config.get('use_size_features', True) else None
+            )
+            ori_batch_size_percentile = (
+                batch[4] if len(batch) > 4 and config.get('use_size_percentile', False) else None
+            )
             if config.get('disable_condition_inputs', False):
-                batch_sector = batch_size_bucket = batch_size_percentile = None
-            batch_x = batch_x.to(device, non_blocking=True)
-            batch_x_stamp = batch_x_stamp.to(device, non_blocking=True)
-            if batch_sector is not None:
-                batch_sector = batch_sector.to(device, non_blocking=True)
-            if batch_size_bucket is not None:
-                batch_size_bucket = batch_size_bucket.to(device, non_blocking=True)
-            if batch_size_percentile is not None:
-                batch_size_percentile = batch_size_percentile.to(device, non_blocking=True)
-            auxiliary_labels = move_auxiliary_labels(auxiliary_labels, device)
-
-            # Tokenize input data on-the-fly
-            with torch.no_grad():
-                token_seq_0, token_seq_1 = tokenizer.encode(batch_x, half=True)
-
-            # Prepare inputs and targets for the language model
-            token_in = [token_seq_0[:, :-1], token_seq_1[:, :-1]]
-            token_out = [token_seq_0[:, 1:], token_seq_1[:, 1:]]
-
-            # Keep tokenization in float32; AMP applies only to the predictor.
-            with torch.autocast(
-                device_type=device.type,
-                dtype=amp_dtype or torch.float16,
-                enabled=use_amp,
-            ):
-                model_output = model(
-                    token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
-                    sector_id=batch_sector, size_bucket=batch_size_bucket,
-                    size_percentile=batch_size_percentile,
-                    return_auxiliary=use_beta_v21,
-                    asof_index=int(config['lookback_window']) - 1,
+                ori_batch_sector = ori_batch_size_bucket = ori_batch_size_percentile = None
+            ori_batch_x = ori_batch_x.to(device, non_blocking=True)
+            ori_batch_x_stamp = ori_batch_x_stamp.to(device, non_blocking=True)
+            if ori_batch_sector is not None:
+                ori_batch_sector = ori_batch_sector.to(device, non_blocking=True)
+            if ori_batch_size_bucket is not None:
+                ori_batch_size_bucket = ori_batch_size_bucket.to(device, non_blocking=True)
+            if ori_batch_size_percentile is not None:
+                ori_batch_size_percentile = ori_batch_size_percentile.to(
+                    device, non_blocking=True
                 )
-                if use_beta_v21:
-                    logits, auxiliary_predictions = model_output
-                else:
-                    logits = model_output
-                core_model.collect_condition_stats = False
-            # Losses in float32 outside autocast (bf16 autocast covers only the
-            # predictor forward); matches the fp32 validation loss path.
-            logits = to_float32(logits)
-            if use_beta_v21:
-                auxiliary_predictions = to_float32(auxiliary_predictions)
-            with torch.autocast(device_type=device.type, enabled=False):
-                losses = compute_predictor_losses(core_model.head, logits, token_out, config)
-                auxiliary_losses = None
-                normalized_losses = None
-                if use_beta_v21:
-                    auxiliary_losses = compute_auxiliary_losses(
-                        auxiliary_predictions['return'],
-                        auxiliary_predictions['barrier'],
-                        auxiliary_labels,
-                    )
-                    loss, normalized_losses = compose_beta_v21_objective(
-                        losses['weighted_forecast'],
-                        losses['history'],
-                        auxiliary_losses,
-                        v21_normalizer,
-                        batch_idx_global,
-                        warmup_steps=int(
-                            config.get('beta_v21_auxiliary_warmup_steps', 1000)
-                        ),
-                        ranking_weight=float(
-                            config.get('beta_v21_ranking_weight', 0.05)
-                        ),
-                    )
-                else:
-                    loss = losses['objective']
-                s1_loss = losses['objective_s1']
-                s2_loss = losses['objective_s2']
+            ori_auxiliary_labels = move_auxiliary_labels(ori_auxiliary_labels, device)
 
-            # Backward pass and optimization
+            if ori_batch_x.shape[0] % accumulation_steps != 0:
+                raise RuntimeError(
+                    "Update batch size must divide evenly by accumulation_steps: "
+                    f"batch={int(ori_batch_x.shape[0])}, accum={accumulation_steps}"
+                )
+            micro_size = int(ori_batch_x.shape[0]) // accumulation_steps
+
+            # Tokenizer-style accumulation: one DataLoader batch = one optimizer
+            # update; split into micros for peak memory (micro x accum x n_gpu).
             optimizer.zero_grad()
+            current_batch_total_loss = 0.0
+            current_full_loss = 0.0
+            current_history_loss = 0.0
+            current_forecast_loss = 0.0
+            current_s1_loss = 0.0
+            current_s2_loss = 0.0
+            auxiliary_losses = None
+            normalized_losses = None
+            losses = None
+            loss = None
+
+            for micro_idx in range(accumulation_steps):
+                start_idx = micro_idx * micro_size
+                end_idx = (micro_idx + 1) * micro_size
+                batch_x = ori_batch_x[start_idx:end_idx]
+                batch_x_stamp = ori_batch_x_stamp[start_idx:end_idx]
+                batch_sector = slice_optional_tensor(
+                    ori_batch_sector, start_idx, end_idx
+                )
+                batch_size_bucket = slice_optional_tensor(
+                    ori_batch_size_bucket, start_idx, end_idx
+                )
+                batch_size_percentile = slice_optional_tensor(
+                    ori_batch_size_percentile, start_idx, end_idx
+                )
+                auxiliary_labels = slice_auxiliary_labels(
+                    ori_auxiliary_labels, start_idx, end_idx
+                )
+                is_last_micro = micro_idx == accumulation_steps - 1
+                core_model.collect_condition_stats = bool(monitor_due and is_last_micro)
+
+                sync_context = contextlib.nullcontext()
+                if (
+                    isinstance(model, DDP)
+                    and accumulation_steps > 1
+                    and not is_last_micro
+                    and device.type != 'xla'
+                ):
+                    sync_context = model.no_sync()
+
+                with sync_context:
+                    with torch.no_grad():
+                        token_seq_0, token_seq_1 = tokenizer.encode(batch_x, half=True)
+                    token_in = [token_seq_0[:, :-1], token_seq_1[:, :-1]]
+                    token_out = [token_seq_0[:, 1:], token_seq_1[:, 1:]]
+                    with torch.autocast(
+                        device_type=device.type,
+                        dtype=amp_dtype or torch.float16,
+                        enabled=use_amp,
+                    ):
+                        model_output = model(
+                            token_in[0], token_in[1], batch_x_stamp[:, :-1, :],
+                            sector_id=batch_sector, size_bucket=batch_size_bucket,
+                            size_percentile=batch_size_percentile,
+                            return_auxiliary=use_beta_v21,
+                            asof_index=int(config['lookback_window']) - 1,
+                        )
+                        if use_beta_v21:
+                            logits, auxiliary_predictions = model_output
+                        else:
+                            logits = model_output
+                        core_model.collect_condition_stats = False
+                    logits = to_float32(logits)
+                    if use_beta_v21:
+                        auxiliary_predictions = to_float32(auxiliary_predictions)
+                    with torch.autocast(device_type=device.type, enabled=False):
+                        losses = compute_predictor_losses(
+                            core_model.head, logits, token_out, config
+                        )
+                        auxiliary_losses = None
+                        normalized_losses = None
+                        if use_beta_v21:
+                            auxiliary_losses = compute_auxiliary_losses(
+                                auxiliary_predictions['return'],
+                                auxiliary_predictions['barrier'],
+                                auxiliary_labels,
+                            )
+                            loss, normalized_losses = compose_beta_v21_objective(
+                                losses['weighted_forecast'],
+                                losses['history'],
+                                auxiliary_losses,
+                                v21_normalizer,
+                                batch_idx_global,
+                                warmup_steps=int(
+                                    config.get('beta_v21_auxiliary_warmup_steps', 1000)
+                                ),
+                                ranking_weight=float(
+                                    config.get('beta_v21_ranking_weight', 0.05)
+                                ),
+                            )
+                        else:
+                            loss = losses['objective']
+                    loss_scaled = loss / accumulation_steps
+                    if scaler is not None:
+                        scaler.scale(loss_scaled).backward()
+                    else:
+                        loss_scaled.backward()
+
+                current_batch_total_loss += float(loss.item())
+                current_full_loss += float(losses['full_sequence'].item())
+                current_history_loss += float(losses['history'].item())
+                current_forecast_loss += float(losses['forecast'].item())
+                current_s1_loss += float(losses['objective_s1'].item())
+                current_s2_loss += float(losses['objective_s2'].item())
+
+            avg_loss = current_batch_total_loss / accumulation_steps
+            avg_full_loss = current_full_loss / accumulation_steps
+            avg_history_loss = current_history_loss / accumulation_steps
+            avg_forecast_loss = current_forecast_loss / accumulation_steps
+            s1_loss_value = current_s1_loss / accumulation_steps
+            s2_loss_value = current_s2_loss / accumulation_steps
+
             if scaler is not None:
-                scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-            else:
-                loss.backward()
             applied_family_lrs = learning_rates_by_family(optimizer)
             monitoring_stats = {}
             if auxiliary_losses is not None:
@@ -3803,7 +3928,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
             )
             if run_first_step_check:
                 first_step_state = begin_first_step_sync_check(
-                    core_model, batch_x, device, rank, world_size
+                    core_model, ori_batch_x, device, rank, world_size
                 )
             if device.type == 'xla':
                 # Same as xm.optimizer_step (reduce_gradients + step + sync),
@@ -3828,10 +3953,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     first_step_state, core_model, optimizer, device, rank, world_size
                 )
                 first_step_check_done = True
-            epoch_loss_sum += float(loss.item())
-            epoch_full_loss_sum += float(losses['full_sequence'].item())
-            epoch_history_loss_sum += float(losses['history'].item())
-            epoch_forecast_loss_sum += float(losses['forecast'].item())
+            epoch_loss_sum += avg_loss
+            epoch_full_loss_sum += avg_full_loss
+            epoch_history_loss_sum += avg_history_loss
+            epoch_forecast_loss_sum += avg_forecast_loss
             epoch_batches += 1
 
             # Logging (Master Process Only)
@@ -3839,14 +3964,16 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 family_lrs = learning_rates_by_family(optimizer)
                 adaptation_lr = family_lrs['adaptation']
                 condition_lr = family_lrs['condition']
+                update_batch = int(ori_batch_x.shape[0])
                 print(
                     f"[Rank {rank}, Segment {epoch_idx + 1}/{effective_epochs}, Step {i + 1}/{len(train_loader)}] "
                     f"Adaptation LR {adaptation_lr:.10e}, "
-                    f"Condition LR {condition_lr:.10e}, Loss: {loss.item():.4f}, "
-                    f"Forecast: {losses['forecast'].item():.4f}, "
-                    f"History: {losses['history'].item():.4f}, "
-                    f"GlobalBatch: {int(batch_x.shape[0]) * world_size} "
-                    f"({int(batch_x.shape[0])} x {world_size} replicas)"
+                    f"Condition LR {condition_lr:.10e}, Loss: {avg_loss:.4f}, "
+                    f"Forecast: {avg_forecast_loss:.4f}, "
+                    f"History: {avg_history_loss:.4f}, "
+                    f"GlobalBatch: {update_batch * world_size} "
+                    f"({update_batch} x {world_size} replicas; "
+                    f"micro={micro_size} x accum={accumulation_steps})"
                 )
                 if monitoring_stats:
                     print(
@@ -3888,21 +4015,24 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     total_segments=effective_epochs,
                     step=i + 1,
                     total_steps=len(train_loader),
-                    loss=float(loss.item()),
+                    loss=float(avg_loss),
                     average_loss=epoch_loss_sum / epoch_batches,
-                    full_sequence_loss=float(losses['full_sequence'].item()),
-                    history_loss=float(losses['history'].item()),
-                    forecast_loss=float(losses['forecast'].item()),
+                    full_sequence_loss=float(avg_full_loss),
+                    history_loss=float(avg_history_loss),
+                    forecast_loss=float(avg_forecast_loss),
                     learning_rate=adaptation_lr,
                     adaptation_learning_rate=adaptation_lr,
                     condition_learning_rate=condition_lr,
+                    micro_batch_size=micro_size,
+                    accumulation_steps=accumulation_steps,
+                    effective_global_batch=update_batch * world_size,
                     **monitoring_stats,
                 )
             if rank == 0 and logger:
                 family_lrs = learning_rates_by_family(optimizer)
-                logger.log_metric('train_predictor_loss_batch', loss.item(), step=batch_idx_global)
-                logger.log_metric('train_S1_loss_each_batch', s1_loss.item(), step=batch_idx_global)
-                logger.log_metric('train_S2_loss_each_batch', s2_loss.item(), step=batch_idx_global)
+                logger.log_metric('train_predictor_loss_batch', avg_loss, step=batch_idx_global)
+                logger.log_metric('train_S1_loss_each_batch', s1_loss_value, step=batch_idx_global)
+                logger.log_metric('train_S2_loss_each_batch', s2_loss_value, step=batch_idx_global)
                 logger.log_metric(
                     'predictor_learning_rate', family_lrs['adaptation'],
                     step=batch_idx_global,
@@ -4006,45 +4136,88 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 best_val_loss=None if not math.isfinite(best_val_loss) else best_val_loss,
                 device=str(device),
             )
+        selection_metric = config.get('best_selection_metric', 'objective')
+        validation_interval = int(config.get('validation_interval_segments', 0) or 0)
+        run_segment_validation = should_run_segment_validation(
+            epoch_idx + 1,
+            effective_epochs,
+            validation_interval,
+            start_segment=start_epoch,
+            max_segments_per_run=max_segments_per_run,
+        )
+        # Keep ranks aligned: only rank 0 decides; others follow the flag.
+        run_segment_validation = broadcast_rank0_flag(
+            run_segment_validation if rank == 0 else False, device, rank
+        )
         ablation_interval = int(config.get('condition_ablation_interval_segments', 0))
         run_condition_ablation = bool(
-            ablation_interval > 0
-            and (epoch_idx == start_epoch or (epoch_idx + 1) % ablation_interval == 0)
+            run_segment_validation
+            and ablation_interval > 0
+            and (
+                (epoch_idx + 1) % ablation_interval == 0
+                or segment_run_limit_reached(
+                    start_epoch, epoch_idx + 1, max_segments_per_run
+                )
+                or (epoch_idx + 1) == effective_epochs
+            )
         )
-        selection_metric = config.get('best_selection_metric', 'objective')
         large_interval = int(
             config.get('validation_large_interval_segments', 10)
         )
-        run_large_validation = validation_full_only or should_run_large_validation(
-            epoch_idx + 1, effective_epochs, large_interval
+        run_large_validation = bool(
+            run_segment_validation
+            and (
+                validation_full_only
+                or should_run_large_validation(
+                    epoch_idx + 1, effective_epochs, large_interval
+                )
+            )
         )
         large_metrics = None
         quick_metrics = None
-        if not validation_full_only:
-            prepare_model_for_validation(model, device, optimizer)
-            quick_metrics = evaluate_validation(
-                model, tokenizer, val_loader, device, config, amp_dtype,
-                run_condition_ablation=run_condition_ablation,
-                period_names=getattr(valid_dataset, 'validation_period_names', {}),
-                rank=rank,
-            )
-        if run_large_validation:
+        validation_skipped = not run_segment_validation
+        if validation_skipped:
             if rank == 0:
                 print(
-                    f"Running fixed large validation at Segment {epoch_idx + 1}: "
-                    f"{len(valid_dataset):,} samples."
+                    f"Validation skipped at Segment {epoch_idx + 1} "
+                    f"(interval={validation_interval}; "
+                    "quick telemetry / ablation deferred).",
+                    flush=True,
                 )
-            prepare_model_for_validation(model, device, optimizer)
-            large_metrics = evaluate_validation(
-                model, tokenizer, large_val_loader, device, config, amp_dtype,
-                run_condition_ablation=False,
-                period_names=getattr(valid_dataset, 'validation_period_names', {}),
-                rank=rank,
-            )
+            primary_metrics = {
+                'objective_loss': None,
+                'full_sequence_loss': None,
+                'history_loss': None,
+                'forecast_loss': None,
+                'weighted_forecast_loss': None,
+                'periods': {},
+            }
+        else:
+            if not validation_full_only:
+                prepare_model_for_validation(model, device, optimizer)
+                quick_metrics = evaluate_validation(
+                    model, tokenizer, val_loader, device, config, amp_dtype,
+                    run_condition_ablation=run_condition_ablation,
+                    period_names=getattr(valid_dataset, 'validation_period_names', {}),
+                    rank=rank,
+                )
+            if run_large_validation:
+                if rank == 0:
+                    print(
+                        f"Running fixed large validation at Segment {epoch_idx + 1}: "
+                        f"{len(valid_dataset):,} samples."
+                    )
+                prepare_model_for_validation(model, device, optimizer)
+                large_metrics = evaluate_validation(
+                    model, tokenizer, large_val_loader, device, config, amp_dtype,
+                    run_condition_ablation=False,
+                    period_names=getattr(valid_dataset, 'validation_period_names', {}),
+                    rank=rank,
+                )
 
-        primary_metrics = large_metrics if validation_full_only else quick_metrics
-        if primary_metrics is None:
-            raise RuntimeError("No validation metrics were produced")
+            primary_metrics = large_metrics if validation_full_only else quick_metrics
+            if primary_metrics is None:
+                raise RuntimeError("No validation metrics were produced")
         avg_val_loss = primary_metrics['objective_loss']
         avg_val_full_loss = primary_metrics['full_sequence_loss']
         avg_val_history_loss = primary_metrics['history_loss']
@@ -4066,13 +4239,21 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         rank_ic_evaluated = False
         rank_ic_updated_best = False
 
-        if use_temporal_rank_ic:
+        if use_temporal_rank_ic or validation_skipped:
             # Val loss stays in the logs below. It must not move best_model.
             improved = False
         else:
             improved = selection_is_improvement(
                 selection_metric, selection_val_loss, best_val_loss
             )
+            if bool(config.get('disable_best_updates', False)):
+                if improved and rank == 0:
+                    print(
+                        "Best update suppressed (KRONOS_DISABLE_BEST_UPDATES=1); "
+                        "Bootstrap continues from last only.",
+                        flush=True,
+                    )
+                improved = False
             if improved:
                 best_val_loss = selection_val_loss
                 epochs_without_improvement = 0
@@ -4237,11 +4418,14 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
         # --- End of Epoch Summary & Checkpointing (Master Process Only) ---
         if rank == 0:
             print(f"\n--- Coverage Segment {epoch_idx + 1}/{effective_epochs} Summary ---")
-            print(f"Validation Loss: {avg_val_loss:.8f}")
-            print(
-                f"Validation Forecast/History/Full: {avg_val_forecast_loss:.8f} / "
-                f"{avg_val_history_loss:.8f} / {avg_val_full_loss:.8f}"
-            )
+            if validation_skipped:
+                print("Validation Loss: skipped (interval)")
+            else:
+                print(f"Validation Loss: {avg_val_loss:.8f}")
+                print(
+                    f"Validation Forecast/History/Full: {avg_val_forecast_loss:.8f} / "
+                    f"{avg_val_history_loss:.8f} / {avg_val_full_loss:.8f}"
+                )
             weighted_val_forecast = primary_metrics.get('weighted_forecast_loss')
             if weighted_val_forecast is not None:
                 print(
@@ -4288,7 +4472,10 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                     calibration_baseline=freeze_baseline,
                 ):
                     print(alert_line, flush=True)
-            if config.get('use_beta_v21_auxiliary', False):
+            if (
+                (not validation_skipped)
+                and config.get('use_beta_v21_auxiliary', False)
+            ):
                 print(
                     "Validation v2.1 Score/Return/Bias/Barrier/Rank: "
                     f"{format_validation_value(primary_metrics.get('beta_v21_score'))} / "
@@ -4344,10 +4531,14 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         "(does not select best_model)"
                     )
             else:
+                best_text = (
+                    f"{best_val_loss:.8f}"
+                    if math.isfinite(best_val_loss) else "unset"
+                )
                 print(
                     "Validation Train Average/Best: "
                     f"{epoch_loss_sum / max(epoch_batches, 1):.8f} / "
-                    f"{best_val_loss:.8f}"
+                    f"{best_text}"
                 )
                 if selection_val_loss is None:
                     print(f"Best selection metric: {selection_metric}=not evaluated")
@@ -4373,7 +4564,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                         f"{metrics['full_sequence_loss']:.8f} "
                         f"({metrics['samples']:,} samples)"
                     )
-            if ablation_metrics:
+            if ablation_metrics and not validation_skipped:
                 print(
                     "Validation Condition Full/None/Shuffled Forecast: "
                     f"{avg_val_forecast_loss:.8f} / "
@@ -4392,7 +4583,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 )
             print(f"Time This Epoch: {format_time(time.time() - epoch_start_time)}")
             print(f"Total Time Elapsed: {format_time(time.time() - start_time)}\n")
-            if logger:
+            if logger and (not validation_skipped) and avg_val_loss is not None:
                 logger.log_metric('val_predictor_loss_epoch', avg_val_loss, epoch=epoch_idx)
 
             if improved:
@@ -4442,8 +4633,13 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 with open(os.path.join(snapshot_path, 'snapshot_metric.json'), 'w') as handle:
                     json.dump({
                         'segment': int(next_segment),
-                        'forecast_loss': float(avg_val_forecast_loss),
-                        'objective_loss': float(avg_val_loss),
+                        'forecast_loss': (
+                            None if avg_val_forecast_loss is None
+                            else float(avg_val_forecast_loss)
+                        ),
+                        'objective_loss': (
+                            None if avg_val_loss is None else float(avg_val_loss)
+                        ),
                         'selection_metric': selection_metric,
                         'selection_value': (
                             None if selection_val_loss is None
@@ -4498,7 +4694,7 @@ def train_model(model, tokenizer, device, config, save_dir, logger, rank, world_
                 device=str(device),
                 **memory_metrics,
             )
-            if not validation_full_only:
+            if (not validation_full_only) and (not validation_skipped):
                 append_metric(
                     save_dir,
                     type='validation',

@@ -124,6 +124,26 @@ class Config:
             raise ValueError(
                 "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS must be positive"
             )
+        # 0 = validate every segment (legacy). N>0 = every N global segments,
+        # plus always at chunk/coverage end (see should_run_segment_validation).
+        self.validation_interval_segments = int(
+            os.getenv("KRONOS_VALIDATION_INTERVAL_SEGMENTS", "0")
+        )
+        if self.validation_interval_segments < 0:
+            raise ValueError(
+                "KRONOS_VALIDATION_INTERVAL_SEGMENTS must be non-negative"
+            )
+        # Optional independent validation micro-batch (defaults to train batch).
+        val_batch_raw = os.getenv("KRONOS_VAL_BATCH_SIZE", "").strip()
+        self.val_batch_size = (
+            int(val_batch_raw) if val_batch_raw else int(os.getenv("KRONOS_BATCH_SIZE", "4"))
+        )
+        if self.val_batch_size <= 0:
+            raise ValueError("KRONOS_VAL_BATCH_SIZE must be positive")
+        # Bootstrap telemetry: continue from last only; do not overwrite best_model.
+        self.disable_best_updates = os.getenv(
+            "KRONOS_DISABLE_BEST_UPDATES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.history_replay_ratio = float(
             os.getenv("KRONOS_HISTORY_REPLAY_RATIO", "0")
         )
@@ -580,8 +600,13 @@ class Config:
         ).strip().lower() in {"1", "true", "yes", "on"}
         self.context_layer = int(os.getenv("KRONOS_CONTEXT_LAYER", "10"))
 
-        # Gradient accumulation to simulate a larger batch size.
-        self.accumulation_steps = 1
+        # Gradient accumulation: DataLoader batch is the per-GPU update batch;
+        # it is split into `accumulation_steps` micros for peak-memory control
+        # (tokenizer-style). Effective global batch = batch_size * world_size.
+        # Example for dual-T4 Base: batch_size=32, accum=8 → micro=4, global=64.
+        self.accumulation_steps = max(
+            1, int(os.getenv("KRONOS_ACCUMULATION_STEPS", "1"))
+        )
 
         # AdamW optimizer parameters.
         self.adam_beta1 = 0.9
