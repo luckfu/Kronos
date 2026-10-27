@@ -2,6 +2,8 @@
 
 用途：换机器接手时只看这一页。执行口径以 `20261027_cond_identity_gate_protocol_cn.md` 为准，本文只是索引 + 待办。
 
+**下一步的单独交接**：`20261027_cond_identity_next_step_handover_cn.md`（补 Small 低 Δ 参照点，含改哪 4 处、今天踩过的 6 个坑、payload 重建脚本）。
+
 ---
 
 ## 0. 一句话现状
