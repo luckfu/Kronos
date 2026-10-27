@@ -96,7 +96,7 @@ kernel 源码快照已入库（[`../cond_identity/README.md`](../cond_identity/R
 
 ```bash
 export KAGGLE_API_TOKEN=<user281434 或 luckfu>
-.venv-swanlab-api/bin/kaggle kernels pull user281434/kronos-base-cond-sector-gain-sweep -p /tmp/kb
+kaggle kernels pull user281434/kronos-base-cond-sector-gain-sweep -p /tmp/kb
 ```
 
 然后：
@@ -131,8 +131,8 @@ push = pathlib.Path('/tmp/kb/push'); push.mkdir(exist_ok=True)
 ```
 
 ```bash
-.venv-swanlab-api/bin/kaggle kernels push -p /tmp/kb/push
-.venv-swanlab-api/bin/kaggle kernels logs <ref> > /tmp/boot.log   # 找 phase=sweep_cell / decompose_done
+kaggle kernels push -p /tmp/kb/push
+kaggle kernels logs <ref> > /tmp/boot.log   # 找 phase=sweep_cell / decompose_done
 ```
 
 **耗时**：装 torch ~8 分钟 + 计算 ~2 分钟。

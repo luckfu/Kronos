@@ -72,8 +72,8 @@
 ## 5. 新机器上要准备什么
 
 - **凭据（不进仓库）**：`KAGGLE_API_TOKEN`（user281434，用于 push/pull kernel 与读 output）、`SWANLAB_API_KEY`（拉日志）。本机放在 `.kaggle_home/.t_user281434` 与 `.kaggle_home/.swanlab_key`，该目录被 gitignore（`*`），**换机后需重新提供**。
-- **Python**：仓库自带 `.venv-swanlab-api`（kaggle CLI 2.2.4 + swanlab 0.10.1），拉日志用：
-  `KAGGLE_API_TOKEN=... .venv-swanlab-api/bin/kaggle kernels logs <ref>`
+- **Python**：装 [`requirements-dev.txt`](../../requirements-dev.txt) 即可（kaggle 2.2.4 + swanlab 0.10.1 + pytest）。旧文档里的 `.venv-swanlab-api` 路径已不存在，命令统一用 `kaggle`：
+  `KAGGLE_API_TOKEN=... kaggle kernels logs <ref>`
 - **SwanLab 取数**：曲线里**没有** `sector_embedding_weight_norm` 与 ablation 指标，只有 **logs** 里有（`Condition Monitor JSON` / `Validation Condition Full/None/Shuffled`）。别再翻曲线。
 - **改 kernel 的流程**（源码快照 2026-10-27 已入库：[`../cond_identity/README.md`](../cond_identity/README.md)；跑 kernel 仍靠自带的自解压 payload）：
   1. `kaggle kernels pull <ref>` 得到 wrapper；
@@ -108,8 +108,8 @@
 
 ```bash
 export KAGGLE_API_TOKEN=<user281434 的 token>   # 不在仓库里，需重新提供
-.venv-swanlab-api/bin/kaggle kernels status user281434/kronos-base-cond-sector-gain-sweep
-.venv-swanlab-api/bin/kaggle kernels logs   user281434/kronos-base-cond-sector-gain-sweep > /tmp/base_sweep.log
+kaggle kernels status user281434/kronos-base-cond-sector-gain-sweep
+kaggle kernels logs   user281434/kronos-base-cond-sector-gain-sweep > /tmp/base_sweep.log
 ```
 
 日志里找这几行（每格一行）：

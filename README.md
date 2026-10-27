@@ -100,6 +100,15 @@ python -m pip install -r webui/requirements.txt
 python -m pip install modelscope
 ```
 
+Kaggle / SwanLab 工具链与测试依赖单独放在 [`requirements-dev.txt`](requirements-dev.txt)（`kaggle==2.2.4`、`swanlab==0.10.1`、`pytest`），需要跑 kernel 或本地测试时再装：
+
+```bash
+python -m pip install -r requirements-dev.txt
+pytest tests/test_smoke_cpu.py -q   # 无数据、无权重、无 GPU 的冒烟测试
+```
+
+Python 3.12 是验证过的版本；3.13 下 `requirements.txt` 的 `pandas==2.2.2` 需要升到 2.2.3（Kaggle kernel 里已这么做）。
+
 下载 Beta V1.2 模型仓库到默认发布目录：
 
 ```bash
