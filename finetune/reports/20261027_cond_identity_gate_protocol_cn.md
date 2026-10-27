@@ -67,6 +67,8 @@
 
 `20261027_sector_emb_collapse_probe.md` 自证：B 把 `size_mlp` 放大成近常向量（size 128 vs sector 15）。一个全市场同向的市值偏置即可把 `trunk_ratio` 顶过 0.02，而身份为零。**能量门与内容门不是两份独立证据。**
 
+**Small C2 就是实例**：`condition_output_norm=29.05`，其中 `size_mlp` 输出 29.41（跨分位 cos 0.977 ≈ 常数）、`sector_emb` 行范数仅 1.485。那个 0.065 的能量门里约 95% 是恒定 size bias，而恒定分量在 `Full−Shuffled` 中**严格抵消**——对它贡献为 0。
+
 ### 1.4 两条读数不同源
 
 - Small PASS 来自离线 kernel（`kronos-small-c2-cond-identity-ablation` + `cond_identity_ablation_result.json`），**代码与 JSON 均不在 master**；
@@ -88,6 +90,21 @@
 | **G3 下游可用** | OOS Rank IC / 行业中性化后增量 | 正号且量级可报，单独出表 | 只有这层进论文 |
 
 必报的分解行（G1 下挂）：`FS_sector`（换行业、保市值）与 `FS_size`（换市值、保行业）。现在的 roll-1 同时置换三者，无法归因到“行业身份”。
+
+**2×2 实测已做（Small C2 seg179，2026-10-27，n=2000，16 s）**
+
+| 量 | 值 | 占 fs_both | 相对零假设 |
+|---|---|---|---|
+| `fs_sector`（只换行业） | **−5.58e-4** | 26% | **12σ** |
+| `fs_size`（只换市值） | **−1.56e-3** | 72% | **52σ** |
+| `fs_both`（两者同换） | **−2.16e-3** | 100% | 226σ |
+| 置换零假设 \|null\| | ≤4.7e-5 | — | — |
+
+- 两项近似可加（残差 −1.1e-5），说明行业与市值是**两路独立贡献**，不是同一个东西的两种写法；
+- **行业身份确实存在**（不是“白学”），但市值分位约是它的 3 倍；
+- 身份只占“条件收益”的 **24.7%**（`fs_both / (Full−None)`），其余 ~75% 是恒定偏置。
+
+落盘：`finetune/reports/20261027_cond_identity_2x2_small_c2.json`（含 parity 对照：`full`/`none` 与原 ablation kernel 逐位一致，`both` 差 3.1e-5，归因 fp16 非确定性）。
 
 **为什么用 `perm_a vs perm_b` 作零假设**：1e-5 不是噪声底，它只是 Base 在 γ=1 下的历史巧合值。两个不同置换之差由构造决定其量级，且**自动随该模型自身的条件敏感度缩放**，因此跨架构可比、跨阶段可比。成本是每个 eval 多一次前向。
 
@@ -341,6 +358,7 @@ P0-2 的落盘要求：`fs_mean`、`fs_sd`（跨置换）、`null`、`fs_sector`
 | 2026-10-27 | P0-2 定锚 ②+③：**durable last + A3**；**段号不作锚**；**COMPLETE 前落盘快照** | §3 锚点（A5 + A3）生效；§4.1 快照规则转为对 P0-2 的硬要求；Seg175 退役 |
 | 2026-10-27 | A+C 长叉等 P0-1/2/3，不开 | §7 三条前置未满足；长叉保持关闭 |
 | 2026-10-27 | Bootstrap 裸跑继续（无 γ） | §12 不变；§7 长叉与 live Bootstrap 隔离 |
+| 2026-10-27 | 跑 Small C2 的 2×2 分解（新 kernel `kronos-small-c2-cond-identity-2x2`，16 s）：行业 26% / 市值 72%，两项可加，行业 12σ | §2 的 G1 分解要求转为实测；落 `20261027_cond_identity_2x2_small_c2.json`；“行业层白学”的假设被否 |
 | 2026-10-27 | 抓 SwanLab 日志实测轨迹：横轴改「已见窗口」；分辨率改按实测 `SE(FS)≈1e-5@2048`（撤回“需 30k”） | §4.2① 与 ③ 生效；数据落 `20261027_cond_delta_trajectory.json`；Small 长跑板缺失不影响（`small_0.1_main` 首点＝Bootstrap 末态） |
 | 2026-10-27 | **砍掉 A/C 两条修复（γ、非零 init）**；保留三样：Δ 对齐判据、FS–Δ 曲线、分辨率（sd→n） | §4.2 新建并生效；§5 新增 P0-5；P0-3 降为条件性（§6）；§7 长叉配方回退为 bare-add + zero-init；“抬 γ/条件 LR”需先由曲线判“下方” |
 

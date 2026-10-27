@@ -1,0 +1,67 @@
+{
+  "what": "Small C2 (seg179) condition-identity 2x2 decomposition: sector-only shuffle vs size-percentile-only shuffle",
+  "date": "2026-10-27",
+  "kernel": "user281434/kronos-small-c2-cond-identity-2x2 (v1)",
+  "harness": "repo finetune/train_predictor.py forward (teacher-forced), same val loader as the original ablation kernel",
+  "checkpoint": {
+    "dataset": "user281434/kronos-small-0-1-cosine-c2-best-seg179",
+    "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a"
+  },
+  "data_manifest_sha256": "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd",
+  "protocol": {
+    "n": 2000,
+    "batch": 64,
+    "shuffle": "torch.roll(shifts=1) on the val batch; shift=2 as permutation null",
+    "amp": "fp16 autocast"
+  },
+  "ce": {
+    "full": 2.283136875152588,
+    "none": 2.291893516540527,
+    "s1": 2.2836953773498534,
+    "s2": 2.28364857673645,
+    "z1": 2.2846975135803222,
+    "z2": 2.28472758102417,
+    "b1": 2.2852994327545164,
+    "b2": 2.285289846420288
+  },
+  "effects": {
+    "fs_sector": -0.000558502197265387,
+    "fs_size": -0.00156063842773424,
+    "fs_both": -0.0021625576019284054,
+    "fs_sector_share": 0.25826003282749876,
+    "fs_size_share": 0.7216632871848503,
+    "additivity_residual": 4.341697692877844e-05,
+    "full_minus_none": -0.00875664138793919,
+    "identity_share_of_conditioning_gain": 0.24696199217510117
+  },
+  "permutation_null": {
+    "sector": 4.680061340334163e-05,
+    "size": -3.00674438475923e-05,
+    "both": 9.586334228206539e-06
+  },
+  "sigma_vs_null": {
+    "sector": 11.933651220595095,
+    "size": 51.90459274306454,
+    "both": 225.5875447744521
+  },
+  "parity_check": {
+    "note": "full/none reproduce the original ablation kernel exactly; both-shuffle differs by 3.1e-5 (1.5% of the effect), attributable to fp16/GPU nondeterminism across separate autocast blocks",
+    "full_this_run": 2.283136875152588,
+    "full_original": 2.283136875152588,
+    "none_this_run": 2.291893516540527,
+    "none_original": 2.291893516540527,
+    "both_this_run": 2.2852994327545164,
+    "both_original": 2.285136920928955,
+    "fs_both_this_run": -0.0021625576019284054,
+    "fs_both_original": -0.002000045776366921
+  },
+  "energy_decomposition": {
+    "condition_output_norm_mean": 29.05049902200699,
+    "trunk_input_norm_mean": 447.47082901000977,
+    "trunk_ratio_median": 0.06503040343523026,
+    "sector_mean_row_norm": 1.4854241609573364,
+    "size_mlp_mean_out_norm": 29.412090301513672,
+    "note": "the measured 0.065 trunk_ratio is ~95% the near-constant size_mlp output, which cancels exactly in Full-Shuffled and therefore contributes zero to the identity gate"
+  },
+  "runtime_seconds": 16.26610565185547
+}
