@@ -8,6 +8,8 @@
 >
 > **⚠️ 本文 §2 的权重位置是错的**：`luckfu/kronos-small-0-1-bootstrap` 实为 1 段 timing 探针（Δ=8.9e-5）。真末态在 **`wynstonliu/kronos-small-0-1-bootstrap-final`**（Δ=0.016691）。更正细节与三源验证见 §7.2。
 >
+> **后续**：P0-5 的第 3 点（Δ=0.0269）也已补上，见 `20261027_cond_identity_2x2_small_mainfinal.json` 与 `20261027_cond_identity_handover_cn.md` §7.4。三点全在噪声、`fs_sector` 上界 1.2e-5 → **P0-5 结项，P0-3 不启用**。
+>
 > **另加一条坑（第 7 条）**：跨账号 `kernel_sources` 挂不上——用 A 账号推、挂 B 账号的私有 kernel，Kaggle 会**静默**把 `kernel_sources` 写成 `[""]` 且不报错，kernel 照样起跑、到 `resolve_c2` 才失败。**挂载方必须与 kernel 属主同账号。**
 
 上一页：`20261027_cond_identity_handover_cn.md`（全局现状）。本文只讲**一件事**：怎么补上那个缺口。

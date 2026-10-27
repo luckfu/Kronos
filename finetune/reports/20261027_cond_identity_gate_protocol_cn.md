@@ -25,7 +25,7 @@
 |---|---|
 | P0-1 | **partial（Monitor-only）**：Seg155/170/175 的 ‖W‖_F 与每元素 RMS 已入账（见 `20261027_p0_cond_identity_results_cn.md`）；行范数 / 行间余弦 / cos(row,mean) / between-sector **未测，且已不可能补**——ckpt 被 self-parent `last_model` 覆盖（→ §4.1） |
 | P0-2 | **已开**：同管重评；Base 改钉 **durable last**，**Seg175 退役、不再当锚**；n 由实测定（**n=2048 已够：SE≈1e-5**，见 §4.2③）；A3 见 §3 |
-| **P0-5（新增）** | **Small FS–Δ 曲线**：≥3 个不同 Δ 的 ckpt 同 harness 出 `FS(Δ)`；拿不到低 Δ 点则降级为单点比较 |
+| **P0-5（新增）** | **Small FS–Δ 曲线**：≥3 个不同 Δ 的 ckpt 同 harness 出 `FS(Δ)`；拿不到低 Δ 点则降级为单点比较。**2026-10-27 晚：已成 4 点，结项，判“Base 落在低 Δ 噪声平台内”** |
 | P0-3 | **降为条件性**：仅当 P0-5 判“Base 显著低于曲线”才做 |
 | P0-4 | 未测（墙钟 / updates per seg） |
 | 冷启长叉 | **暂不开**；配方回退为 bare-add + zero-init（A/C 已砍） |
@@ -94,7 +94,11 @@
 
 **Base 2×2 实测（Seg281，2026-10-27）**：`fs_sector +1.2e-5`（符号反、小于自身零假设 1.5e-5）、`fs_size −9.6e-6`、`fs_both −1.4e-5`。**没有任何可测身份效应**；8× 行业增益也拉不动（CE 仅 −2.5e-5）。
 
-**Small @ Δ=0.0167 2×2 实测（Bootstrap-final best_model，2026-10-27 晚）**：`fs_sector −9.2e-6`、`fs_size −3.6e-5`、`fs_both −2.7e-5`、null ≤1.5e-5。**同样没有可测身份效应**。两点合起来：低 Δ 端（0.0084 与 0.0167）两边都在噪声里，Base 不异常；身份要到 Δ≈0.075 才显著（C2：−5.58e-4）。落盘 `20261027_cond_identity_2x2_small_bootfinal.json`。
+**Small @ Δ=0.0167 2×2 实测（Bootstrap-final best_model，2026-10-27 晚）**：`fs_sector −9.2e-6`、`fs_size −3.6e-5`、`fs_both −2.7e-5`、null ≤1.5e-5。**同样没有可测身份效应**。落盘 `20261027_cond_identity_2x2_small_bootfinal.json`。
+
+**Small @ Δ=0.0269 2×2 实测（Main-final best_model，2026-10-27 深夜）**：`fs_sector −2.55e-6`（0.04× 自身地板）、`fs_size −5.13e-5`（1.18× 自身地板，首次过线）、`fs_both −5.46e-5`、null ≤2.0e-5。落盘 `20261027_cond_identity_2x2_small_mainfinal.json`。
+
+**三点合起来**：`Δ ≤ 0.027` 时 `|fs_sector| < 1.2e-5`，全部在各自地板之下；Base 的 `+1.2e-5` 正好是这个包络的上沿，**故判“Base 落在低 Δ 噪声平台内”，§4.2 判读表第一行生效，P0-3 不启用**。行业身份要到 Δ≈0.075 才显著（C2：−5.58e-4）。
 
 **由此加一条口径**：Base 上同一个 `both-shuffled` 量**两次测量差 2.7e-5**，是置换零假设（1.8e-6）的 15 倍 → **置换 null 只覆盖置换噪声，不覆盖复现噪声**。判门地板应取 `max(3·null, 复测差)`；Base 的实测地板 ≈3e-5。落盘 `20261027_cond_identity_2x2_base_seg281.json`。
 
@@ -313,7 +317,7 @@ SE(FS) @ n=2048 ≈ 1e-5      （对应 sd(逐窗ΔCE) ≈ 4.5e-4）
 |---|---|---|---|---|
 | **P0-1** | `sector_emb` 几何：‖W‖_F、每元素 RMS（已完成，Monitor-only）、行范数分布、行间余弦、between-sector 占比（**已不可测**） | ~0 | 3 行数 | **partial PASS**：Seg175 RMS=0.00615 → 起步中（0.005–0.02），只能说“未达可比状态”；行几何因 ckpt 覆盖永久缺失，需从下一 durable 快照补（§4.1） |
 | **P0-2** | 同 harness 重评 Small C2 与 **Base durable last**；**先量 `sd(Δ)` 定 n**，再出 `(Δ, FS, null, 2×2, ci95)` | 半天 | 一行点 + 可判性 | **进行中**。Seg175 退役；A3 见 §3；n 未定前不得判 G1 |
-| **P0-5** | **Small FS–Δ 曲线**：≥3 个不同 Δ 的 Small ckpt，同 harness 出 `FS(Δ)` | 半天（纯评测） | 曲线 + 每个点的 Δ | 曲线成立与否决定 §4.2 走哪条判读；拿不到低 Δ 点则降级为单点 |
+| **P0-5** | **Small FS–Δ 曲线**：≥3 个不同 Δ 的 Small ckpt，同 harness 出 `FS(Δ)` | 半天（纯评测） | 曲线 + 每个点的 Δ | **已完成（4 点：0.0084 / 0.0167 / 0.0269 / 0.0749）。低 Δ 段（≤0.027）`|fs_sector| < 1.2e-5`，全部在地板下，是上界不是拟合曲线；只有 C2（0.0749）可分。判“Base 落在噪声平台内，不显著低于曲线”→ §4.2 第一行成立，P0-3 不启用** |
 | **P0-3** | 冻结 trunk 条件专训探针（§6）**——条件性启用** | 1–2 小时级 | `FS*(γ, lr)` | **仅当 P0-5 判“Base 显著低于曲线”才做**；否则不做 |
 | **P0-4** | 实测单 seg 墙钟、updates/seg、val+ablation 占比 | ~0 | 预算表 | 反推本轮可承载段数 |
 
@@ -431,6 +435,7 @@ P0-2 的落盘要求：`fs_mean`、`fs_sd`（跨置换）、`null`、`fs_sector`
 | 2026-10-27 | 抓 SwanLab 日志实测轨迹：横轴改「已见窗口」；分辨率改按实测 `SE(FS)≈1e-5@2048`（撤回“需 30k”） | §4.2① 与 ③ 生效；数据落 `20261027_cond_delta_trajectory.json`；Small 长跑板缺失不影响（`small_0.1_main` 首点＝Bootstrap 末态） |
 | 2026-10-27 | **砍掉 A/C 两条修复（γ、非零 init）**；保留三样：Δ 对齐判据、FS–Δ 曲线、分辨率（sd→n） | §4.2 新建并生效；§5 新增 P0-5；P0-3 降为条件性（§6）；§7 长叉配方回退为 bare-add + zero-init；“抬 γ/条件 LR”需先由曲线判“下方” |
 | 2026-10-27 晚 | 补测 Small@Δ=0.0167（Bootstrap-final best_model，`fs_sector −9.23e-6`、`fs_size −3.64e-5`、null ≤1.5e-5）：**命中“噪声”支**，Base@Δ=0.0084 不异常，二者同处曲线低 Δ 段 | §4.2 判读表第一行（“落在曲线上=只是没走够”）成立；**“Base 身份通道被压住”假设作废**；§4.4 决策路径止于第 1 步之前，γ/注入位点不动；P0-5 已得 2 点（0.0167 / 0.0749），仍缺第 3 点；落 `20261027_cond_identity_2x2_small_bootfinal.json` |
+| 2026-10-27 深夜 | 补第 3 点 Small@Δ=0.0269（`luckfu/kronos-small-0-1-main-final/best_model`，`fs_sector −2.55e-6`、`fs_size −5.13e-5`、null ≤2.0e-5）：`fs_sector` 仍在地板下（0.04×），`fs_size` 首次以 1.18× 过自身地板 | **P0-5 结项**（4 点）；低 Δ 段判为**上界 1.2e-5**而非拟合曲线，禁止用三点拟合指数；§4.2 判读表第一行（落在曲线上）生效，**P0-3 不启用**；落 `20261027_cond_identity_2x2_small_mainfinal.json` |
 | 2026-10-27 晚 | 更正权重来源：`luckfu/kronos-small-0-1-bootstrap` 是 1 段 timing 探针（Δ=8.9e-5），**不是** Bootstrap 末态；末态在 `wynstonliu/kronos-small-0-1-bootstrap-final`（Δ=0.016691，三源交叉验证一致） | 执行口径：Small 侧 Bootstrap 末态一律取 `bootstrap-final/best_model`；`luckfu/kronos-small-bootstrap-end-cond-2x2` v1 作废不引用 |
 
 > 记录规则：凡改变**锚点 / 门阈值 / 管线条数 / 是否开叉**的决定，必须在本表追加一行并写明对哪一节生效；口头决定不计。

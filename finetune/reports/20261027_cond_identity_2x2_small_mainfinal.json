@@ -1,0 +1,206 @@
+{
+  "what": "Small 0.1 Main-final (Δ=0.02695) condition-identity 2x2 decomposition. Third point of the Small-side FS–Δ curve (P0-5), same harness / n / alpha grid as the Bootstrap-final and C2 runs.",
+  "date": "2026-10-27",
+  "kernel": "luckfu/kronos-small-mainfinal-cond-2x2 (v1, COMPLETE)",
+  "harness": "offline forward only (teacher-forced), same 2000-window val loader and same launch script as the Bootstrap-final run; bare add, no γ, no training",
+  "protocol": {
+    "n": 2000,
+    "batch": 64,
+    "shuffle": "torch.roll(shifts=1) on the val batch; shift=2 as permutation null",
+    "amp": "fp16 autocast",
+    "alpha_grid": [
+      1.0,
+      1.5,
+      2.0,
+      3.0,
+      4.0,
+      8.0
+    ],
+    "beta_control": 0.5
+  },
+  "checkpoint": {
+    "kernel_output": "luckfu/kronos-small-0-1-main-final",
+    "path": "/kaggle/input/notebooks/luckfu/kronos-small-0-1-main-final/kronos_small_v21/outputs/models/small_0.1_main/checkpoints/best_model",
+    "which": "best_model (not last_model)",
+    "sha256": "8d0752f34029c6ff34c50eb064b884f87a8e7dda157d25f422f8ecc328f4f674",
+    "segment": 1066,
+    "cum_segments": 1066,
+    "cum_windows": 21320000,
+    "recipe": "Small 0.1 Main (chunks 1-4 -> main-final), bare add, no gamma"
+  },
+  "state": {
+    "sector_WF": 5.68778133392334,
+    "delta_rms": 0.026949,
+    "delta_rms_formula": "‖W‖_F / sqrt(87*512)",
+    "trunk_ratio_median": 0.017382877878844738,
+    "condition_output_norm_mean": 23.89727485179901,
+    "trunk_input_norm_mean": 1378.589744567871,
+    "sector_mean_row_norm": 0.5338290929794312,
+    "sector_relative_injection": 0.000387228
+  },
+  "ce": {
+    "full": 2.49919677734375,
+    "none": 2.4999832401275635,
+    "shuffled": 2.499272415161133,
+    "s1": 2.499199329376221,
+    "s2": 2.499218963623047,
+    "z1": 2.499248113632202,
+    "z2": 2.499233589172363,
+    "b1": 2.4992513275146484,
+    "b2": 2.4992508544921876
+  },
+  "deltas": {
+    "full_minus_none": -0.0007864627838136684,
+    "full_minus_shuffled": -7.563781738317843e-05
+  },
+  "decompose_2x2": {
+    "fs_sector": -2.552032471125898e-06,
+    "fs_size": -5.133628845221949e-05,
+    "fs_both": -5.4550170898615136e-05,
+    "null_sector": -1.9634246826161217e-05,
+    "null_size": 1.4524459838849424e-05,
+    "null_both": 4.730224607563116e-07,
+    "seconds": 15.712059259414673
+  },
+  "derived": {
+    "abs_fs_sector": 2.552032471125898e-06,
+    "abs_fs_size": 5.133628845221949e-05,
+    "three_times_null_sector": 5.890274047848365e-05,
+    "three_times_null_size": 4.357337951654827e-05,
+    "three_times_null_both": 1.4190673822689348e-06,
+    "additivity_residual": 6.618e-07,
+    "identity_share_of_conditioning_gain": 0.06936,
+    "abs_fs_sector_over_global_floor": 0.0851,
+    "abs_fs_size_over_global_floor": 1.7112,
+    "abs_fs_sector_over_own_floor": 0.0433,
+    "abs_fs_size_over_own_floor": 1.178,
+    "fs_size_own_floor": 4.357337951654827e-05,
+    "fs_sector_own_floor": 5.890274047848365e-05
+  },
+  "judging_floor": {
+    "rule": "floor = max(3*|null|, retest_diff); retest_diff = 3e-5 measured on Base",
+    "value_used": 3e-05
+  },
+  "verdict_for_this_point": {
+    "rule_doc": "20261027_cond_identity_next_step_handover_cn.md §1 / §6",
+    "measured_fs_sector": -2.552032471125898e-06,
+    "hit": "branch_B",
+    "statement": "At Δ=0.02695 fs_sector is -2.55e-6: 11.8x below the global 3e-5 floor and 23x below its own 3*|null| (5.89e-5). Still pure noise. fs_size (-5.13e-5) is the first quantity on the Small curve to clear its own floor (4.36e-5) at all, but only by 1.18x, and this harness has no per-window sd, so it is suggestive rather than resolved."
+  },
+  "fs_delta_curve": {
+    "purpose": "P0-5: Small-side FS(Δ) reference curve, same harness, >=3 distinct Δ",
+    "points": [
+      {
+        "label": "Base Seg281",
+        "delta": 0.008434882977615701,
+        "fs_sector": 1.2062072753948883e-05,
+        "fs_size": -9.548187255958851e-06,
+        "null_sector": -1.5193939209012797e-05,
+        "null_size": -4.840850829967991e-06,
+        "regime": "noise",
+        "model": "Base",
+        "source": "20261027_cond_identity_2x2_base_seg281.json"
+      },
+      {
+        "label": "Small Bootstrap-final",
+        "delta": 0.01669104,
+        "fs_sector": -9.227752685525559e-06,
+        "fs_size": -3.6409378051605046e-05,
+        "null_sector": -1.6212463380682607e-06,
+        "null_size": 1.5100479125784716e-05,
+        "regime": "noise",
+        "model": "Small",
+        "source": "20261027_cond_identity_2x2_small_bootfinal.json"
+      },
+      {
+        "label": "Small Main-final",
+        "delta": 0.026949,
+        "fs_sector": -2.552032471125898e-06,
+        "fs_size": -5.133628845221949e-05,
+        "null_sector": -1.9634246826161217e-05,
+        "null_size": 1.4524459838849424e-05,
+        "regime": "noise",
+        "model": "Small",
+        "source": "this file"
+      },
+      {
+        "label": "Small C2",
+        "delta": 0.07489435073771336,
+        "fs_sector": -0.000558502197265387,
+        "fs_size": -0.00156063842773424,
+        "null_sector": 4.680061340334163e-05,
+        "null_size": -3.00674438475923e-05,
+        "regime": "resolved (18.6x floor for sector)",
+        "model": "Small",
+        "source": "20261027_cond_identity_2x2_small_c2.json"
+      }
+    ],
+    "shape": {
+      "sector": "flat in noise from Δ=0.0084 to 0.0270 (|fs_sector| <= 1.2e-5, three points, all below the 3e-5 floor), then jumps to -5.58e-4 at Δ=0.0749. The only resolved sector point is C2.",
+      "delta_measured": "|fs_sector| decreases across the three noise points (1.21e-5 -> 9.23e-6 -> 2.55e-6), which is scatter, not a real decline: all three are below their own permutation null or within one null-width. Do NOT fit a slope through them.",
+      "implied_exponent": "2.73 (Bootstrap-final -> C2) or 5.27 (Main-final -> C2); the exponent is unstable because the low-Δ points are not resolved. Only the qualitative claim (strongly superlinear, no measurable identity below Δ≈0.03) is supported.",
+      "upper_bound": "for Δ <= 0.027, |fs_sector| < 1.2e-5 (envelope of the three noise points)"
+    },
+    "p0_5_status": "SATISFIED for point count (3 Small points + Base cross-check = 4 distinct Δ). The curve's low-Δ leg is a measured upper bound rather than a fitted line, because at Δ < 0.03 the sector identity is not separable on this harness at n=2000. Getting a resolved low-Δ point would need either a much bigger n or a model that has already grown the channel."
+  },
+  "sector_gain_sweep": [
+    {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "ce_full": 2.49919677734375,
+      "fs_sector": -2.552032471125898e-06,
+      "fs_size": -5.133628845221949e-05
+    },
+    {
+      "alpha": 1.5,
+      "beta": 1.0,
+      "ce_full": 2.4991865768432615,
+      "fs_sector": -3.810882568622276e-06,
+      "fs_size": -4.902648925808606e-05
+    },
+    {
+      "alpha": 2.0,
+      "beta": 1.0,
+      "ce_full": 2.4991779403686523,
+      "fs_sector": -6.052017211821692e-06,
+      "fs_size": -4.562187194823153e-05
+    },
+    {
+      "alpha": 3.0,
+      "beta": 1.0,
+      "ce_full": 2.499138904571533,
+      "fs_sector": -2.539062500028777e-05,
+      "fs_size": -5.733489990245033e-05
+    },
+    {
+      "alpha": 4.0,
+      "beta": 1.0,
+      "ce_full": 2.499136281967163,
+      "fs_sector": -2.1799087524421168e-05,
+      "fs_size": -4.235267639174367e-05
+    },
+    {
+      "alpha": 8.0,
+      "beta": 1.0,
+      "ce_full": 2.4991276206970214,
+      "fs_sector": -4.3340682983394885e-05,
+      "fs_size": -3.697013854964126e-05
+    },
+    {
+      "alpha": 1.0,
+      "beta": 0.5,
+      "ce_full": 2.499491882324219,
+      "fs_sector": 7.728576660426256e-06,
+      "fs_size": -3.219985961910865e-05
+    }
+  ],
+  "readings": {
+    "sector_still_absent": "fs_sector is -2.55e-6, i.e. 0.04x its own floor (5.89e-5). At Δ=0.027 the sector identity channel is still not there.",
+    "size_is_the_first_channel_to_show": "fs_size -5.13e-5 clears its own floor (4.36e-5) by only 1.18x, and is 94% of fs_both. It is the first point on the curve where any channel clears its floor at all, and it is size, not sector — directionally consistent with C2 where size is 3x sector, but too marginal to call resolved.",
+    "gamma_still_does_not_help": "alpha=8 reaches fs_sector -4.33e-5 (1.4x floor) for 6.9e-5 of CE. Same signature as Bootstrap-final and Base: the sector vector behaves like a small bias correction at these Δ.",
+    "additivity_holds_here": "fs_sector + fs_size = -5.39e-5 vs fs_both = -5.46e-5, residual +6.6e-7 — near-perfect additivity, better than the Bootstrap-final run (residual -1.8e-5) and comparable to C2 (-1.1e-5 on effects 100x larger).",
+    "no_decline_in_the_channel": "the apparent drop of |fs_sector| from 9.2e-6 (Δ=0.0167) to 2.6e-6 (Δ=0.027) is scatter: both are far below the floor and below their own permutation null. Do not report it as the channel weakening.",
+    "caveat": "single checkpoint, n=2000, one permutation pair, no per-window sd / ci95 in this harness, no lr_at_eval (nothing trained)."
+  },
+  "boundary": "forward only; no training; model/ and finetune/ untouched; live Bootstrap untouched; Small production freeze untouched."
+}
