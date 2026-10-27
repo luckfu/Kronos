@@ -88,10 +88,9 @@
 
 ---
 
-## 7. Base γ 扫描：**已推送、正在跑**（v2）
+## 7. Base γ 扫描：**已跑完**（v2 COMPLETE）——结论在 §7.1
 
-> 状态：`user281434/kronos-base-cond-sector-gain-sweep` **v2 RUNNING**（v1 因 `SyntaxError: name 'C2_SHA' is used prior to global declaration` 立即失败，已修）。
-> 它会自己跑完，**家里这台不用再推**，只需取结果。
+> 状态：`user281434/kronos-base-cond-sector-gain-sweep` **v2 COMPLETE**（v1 因 `SyntaxError` 立即失败，已修）。结果见 §7.1，原始数在 `20261027_cond_identity_2x2_base_seg281.json`。
 
 **它做什么**：把 Base 那个 chunk 的 `last_model` 挂进来，在同一个 2000 窗验证集上做 3 件事——
 1. Base 的 **2×2 分解**（`fs_sector` / `fs_size` / 置换零假设）；
@@ -132,3 +131,25 @@ export KAGGLE_API_TOKEN=<user281434 的 token>   # 不在仓库里，需重新�
 - 权重从 `kernel_sources` 挂载（`**/checkpoints/last_model/model.safetensors`），不走 dataset。
 
 **这一跑不碰任何生产代码**：只读权重 + 只做前向，不改 `model/`、`finetune/`、relay。
+
+### 7.1 结果（Base Seg281，2026-10-27）
+
+| 量 | Base@Seg281 | Small C2（参照） |
+|---|---|---|
+| Δ（每元素 RMS） | 0.00843 | 0.0749 |
+| 行业相对注入 | 0.017% | 0.332% |
+| `Full−None` | −1.04e-4 | −8.76e-3 |
+| `Full−Shuffled` | −4.0e-5（复测 −1.4e-5） | −2.16e-3 |
+| `fs_sector` | **+1.2e-5**（符号反，且小于自身零假设 1.5e-5） | −5.58e-4（26%） |
+| `fs_size` | −9.6e-6（约为零假设的 2 倍） | −1.56e-3（72%） |
+
+**四条读数**
+
+1. **Base 现在没有任何可测的身份效应**——sector 与 size 都在噪声里。
+2. **“置换零假设”低估了真实噪声**：同一个 `both-shuffled` 量测两次差 **2.7e-5**（−4.0e-5 vs −1.4e-5），是置换零假设（1.8e-6）的 15 倍。所以 Base 的判读地板是 **~3e-5**，不是 1.8e-6。→ 协议 §2 的零假设口径需要按机型加一条“复测一致性”检查。
+3. **8× 行业增益拉不动它**：`fs_sector` 仍在噪声；CE 只降 2.5e-5（α=4）。说明行业向量现在更像一个小的偏置修正，不是身份通道。
+4. **按单位注入归一，Base 的行业通道比 Small 弱 ~11 倍**：α=8 时相对注入 1.34e-3（Small 3.32e-3），效率 0.015 vs 0.168。
+
+**关键缺口**：Base 的 Δ=0.0084 **低于 Small 最早可测的点**（cum 516 时 0.0167）。所以“还没长成”和“长不成”现在分不开——**需要一个低 Δ 的 Small 参照点**。
+
+补法（便宜）：`luckfu/kronos-small-0-1-bootstrap` 这个 kernel 的输出里有 Bootstrap 末态权重，用 luckfu 的 token 取下来，拿**同一个 kernel**跑一遍 2×2。挂载方式和 Base 完全一样。

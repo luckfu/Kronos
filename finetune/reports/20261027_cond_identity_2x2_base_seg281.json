@@ -1,0 +1,95 @@
+{
+  "what": "Base clean bootstrap (Seg281, last_model of the just-finished chunk): 2x2 identity split + sector-gain dose response",
+  "date": "2026-10-27",
+  "kernel": "user281434/kronos-base-cond-sector-gain-sweep (v2, COMPLETE)",
+  "checkpoint": {
+    "kernel_output": "user281434/kronos-base-clean-0-1-bootstrap",
+    "path": "kronos_base_clean/outputs/models/base_clean_0.1_bootstrap/checkpoints/last_model",
+    "segment": 281
+  },
+  "state": {
+    "sector_WF": 2.2693440914154053,
+    "delta_rms": 0.008434882977615701,
+    "windows_seen": 5620000,
+    "trunk_ratio_median": 0.0049936,
+    "sector_row_norm": 0.24329922462665424,
+    "trunk_input_norm_approx": 1450.0,
+    "sector_relative_injection": 0.00016779256870803742
+  },
+  "ce": {
+    "full": 2.603995735168457,
+    "none": 2.60409961,
+    "shuffled": 2.60403617
+  },
+  "deltas": {
+    "full_minus_none": -0.000103872299,
+    "full_minus_shuffled": -4.0430069e-05
+  },
+  "decompose_2x2": {
+    "fs_sector": 1.2062072753948883e-05,
+    "fs_size": -9.548187255958851e-06,
+    "fs_both": -1.3748168945504347e-05,
+    "null_sector": -1.5193939209012797e-05,
+    "null_size": -4.840850829967991e-06,
+    "null_both": -1.8272399899821323e-06
+  },
+  "alpha_sweep": [
+    {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "ce_full": 2.603995735168457,
+      "fs_sector": 1.2062072753948883e-05,
+      "fs_size": -9.548187255958851e-06
+    },
+    {
+      "alpha": 1.5,
+      "beta": 1.0,
+      "ce_full": 2.603999988555908,
+      "fs_sector": 1.0549545288007778e-05,
+      "fs_size": -1.2994766235507882e-05
+    },
+    {
+      "alpha": 2.0,
+      "beta": 1.0,
+      "ce_full": 2.6039920063018798,
+      "fs_sector": 9.880065917844405e-06,
+      "fs_size": -1.4636993408423393e-05
+    },
+    {
+      "alpha": 3.0,
+      "beta": 1.0,
+      "ce_full": 2.6039825820922853,
+      "fs_sector": -8.563995361754451e-07,
+      "fs_size": -1.1238098144517039e-05
+    },
+    {
+      "alpha": 4.0,
+      "beta": 1.0,
+      "ce_full": 2.603970886230469,
+      "fs_sector": -8.230209350479356e-06,
+      "fs_size": -3.612518310536217e-05
+    },
+    {
+      "alpha": 8.0,
+      "beta": 1.0,
+      "ce_full": 2.6039709758758547,
+      "fs_sector": 1.9639968872109392e-05,
+      "fs_size": -1.8247604369747705e-05
+    },
+    {
+      "alpha": 1.0,
+      "beta": 0.5,
+      "ce_full": 2.6040396766662597,
+      "fs_sector": -1.6822814941086506e-06,
+      "fs_size": -4.32777404801854e-06
+    }
+  ],
+  "readings": {
+    "no_measurable_identity": "fs_sector +1.2e-5 (positive, wrong sign) is smaller than its own permutation null (1.5e-5); fs_size -9.5e-6 is ~2x its null (4.8e-6); nothing is above the real floor",
+    "floor_is_not_the_null": "the same 'both-shuffled' quantity measured twice differs by 2.7e-5 (ablation -4.0e-5 vs decompose b1 -1.4e-5), i.e. run-to-run instability ~3e-5 is 15x the permutation null (1.8e-6); the permutation null alone understates the floor for this model",
+    "no_sector_kick": "an 8x sector gain moves fs_sector not at all (noise) and CE by only -2.5e-5 (alpha=4), so the sector vector behaves like a small bias correction, not an identity channel",
+    "efficiency_vs_small": "at alpha=8 the relative injection is 1.34e-3 (vs Small 3.32e-3) and fs_sector stays ~2e-5 => identity per unit relative injection ~0.015 vs Small 0.168, i.e. ~11x weaker",
+    "caveat": "Base delta 0.0084 is below Small's earliest measurable point (0.0167 at cum 516), so there is no Small reference at this stage; 'not shaped' and 'not yet shaped' are indistinguishable without that point"
+  },
+  "next": "measure Small at low delta: pull the Bootstrap-end checkpoint from luckfu/kronos-small-0-1-bootstrap and run this same kernel on it"
+}
