@@ -10,18 +10,20 @@ Small C2）都是在 Kaggle 上跑的纯前向探针。它们的源码此前**�
 base64 payload 里**，`scratch/` 又被 `.gitignore` 整体排除，所以换台机器后
 `git clone` 拿不到任何能复现这些数字的代码。这一页把那段代码原样落库。
 
-来源（两个可访问的 kernel 各解包一次）：
+来源（四个 kernel 各解包一次）：
 
-| kernel | payload sha256 | 解出 |
-|---|---|---|
-| `user281434/kronos-base-cond-sector-gain-sweep` v2 | `aadf6d3a…648d3` | `launch_cond_identity_2x2.py`（Base 变体）+ 三个代码文件 |
-| `user281434/kronos-small-c2-cond-identity-2x2` v1 | `34124ae2…6127b` | `launch_cond_identity_2x2_small_c2.py`（C2 变体） |
+| 点 | kernel | payload sha256 | 入库脚本 |
+|---|---|---|---|
+| Base Seg281 | `user281434/kronos-base-cond-sector-gain-sweep` v2 | `aadf6d3a…648d3` | `launch_cond_identity_2x2.py` |
+| Small Bootstrap-final | `wynstonliu/kronos-small-bootfinal-cond-2x2` v1 | `a768f10e…01ba3` | `launch_cond_identity_2x2_bootfinal.py` |
+| Small Main-final | `luckfu/kronos-small-mainfinal-cond-2x2` v1 | `8b418327…f6a7ad` | `launch_cond_identity_2x2_mainfinal.py` |
+| Small C2 | `user281434/kronos-small-c2-cond-identity-2x2` v1 | `34124ae2…6127b` | `launch_cond_identity_2x2_small_c2.py` |
 
-两个 kernel 的 `model/kronos.py`、`finetune/config.py`、`finetune/train_predictor.py`
-**逐字节相同**，所以只存一份：
+四个 kernel 的 `model/kronos.py`、`finetune/config.py`、`finetune/train_predictor.py`
+**逐字节相同**（同一份 sha：`7d88cff0…` / `8b293373…` / `47003988…`），所以只存一份：
 
 ```
-payload …/launch_*.py      →  launch_cond_identity_2x2.py / …_small_c2.py
+payload …/launch_*.py      →  四个 launch_cond_identity_2x2*.py
 model/kronos.py            →  payload_snapshot/model/kronos.py
 finetune/config.py         →  payload_snapshot/finetune/config.py
 finetune/train_predictor.py→  payload_snapshot/finetune/train_predictor.py
@@ -67,18 +69,17 @@ kaggle datasets download smmt315/a-share-120d-temporal-symbol-holdout -p /tmp/ho
 # 3) 权重：对应 kernel output（私有，需账号权限），见下表
 ```
 
-跑法就是脚本的 `main()`：在 Kaggle GPU 上执行
-`python finetune/cond_identity/launch_cond_identity_2x2.py`，或用原 kernel 的
-wrapper（base64 自解压 + `runpy`）执行同一路径。
+跑法就是脚本的 `main()`：在 Kaggle GPU 上执行对应点的脚本（见下表），或用原
+kernel 的 wrapper（base64 自解压 + `runpy`）执行同一路径。
 
 ### 四个点各自的取数位置
 
-| 点 | kernel（产物） | checkpoint | Δ |
+| 点 | 脚本 | checkpoint | Δ |
 |---|---|---|---|
-| Base Seg281 | `user281434/kronos-base-cond-sector-gain-sweep` v2 | `user281434/kronos-base-clean-0-1-bootstrap` → `last_model` | 0.00843 |
-| Small Bootstrap-final | `wynstonliu/kronos-small-bootfinal-cond-2x2` | `wynstonliu/kronos-small-0-1-bootstrap-final` → `best_model` | 0.01669 |
-| Small Main-final | `luckfu/kronos-small-mainfinal-cond-2x2` | `luckfu/kronos-small-0-1-main-final` → `best_model` | 0.02695 |
-| Small C2 | `user281434/kronos-small-c2-cond-identity-2x2` v1 | Kaggle dataset `user281434/kronos-small-0-1-cosine-c2-best-seg179`（sha `4ee469d4…`） | 0.07489 |
+| Base Seg281 | `launch_cond_identity_2x2.py` | `user281434/kronos-base-clean-0-1-bootstrap` → `last_model` | 0.00843 |
+| Small Bootstrap-final | `launch_cond_identity_2x2_bootfinal.py` | `wynstonliu/kronos-small-0-1-bootstrap-final` → `best_model` | 0.01669 |
+| Small Main-final | `launch_cond_identity_2x2_mainfinal.py` | `luckfu/kronos-small-0-1-main-final` → `best_model` | 0.02695 |
+| Small C2 | `launch_cond_identity_2x2_small_c2.py` | Kaggle dataset `user281434/kronos-small-0-1-cosine-c2-best-seg179`（sha `4ee469d4…`） | 0.07489 |
 
 结果数字在 `finetune/reports/20261027_cond_identity_2x2_*.json`，判读见
 `finetune/reports/20261027_cond_identity_handover_cn.md`。
@@ -88,14 +89,20 @@ wrapper（base64 自解压 + `runpy`）执行同一路径。
 > 已是 `torch.randperm` 真批置换（见 `launch_cond_identity_2x2_small_c2.py` 对应的
 > snapshot）。四个点因此确实同口径；那段 JSON 文本是旧模板没更新，**以代码为准**。
 
-### 从 Base 切到 Small 要改的 4 处
+### 四个变体之间的差异（留作核对 / 新增点参考）
 
-Small C2 的启动脚本已原样保留（`launch_cond_identity_2x2_small_c2.py`，按 sha256
-解析 checkpoint、`context_layer=6`），**不需要**下面的改动。下表适用于
-Bootstrap-final 与 Main-final 这两个点——它们的 kernel 在 `wynstonliu` / `luckfu`
-账号下，本机无权限读取，只能按文档还原：
+四个脚本已全部入库，不再需要手工还原。它们的差异只有下表这些：
 
-脚本里的常量是 Base 变体，换 Small 时改：
+| 位置 | Base | Small（bootstrap / main / C2） |
+|---|---|---|
+| `kernel_sources`（push 时的 metadata） | `user281434/kronos-base-clean-0-1-bootstrap` | 对应 Small kernel output |
+| `resolve_c2()` 的 glob 后缀 | `checkpoints/last_model/model.safetensors` | `checkpoints/best_model/model.safetensors`（C2 变体按 sha256 解析） |
+| `resolve_c2()` 的关键词 | `"base_clean_0.1_bootstrap"` | `"small_0.1_bootstrap"` / `"small_0.1_main"`（C2 用 dataset 名） |
+| `KRONOS_CONTEXT_LAYER` / `config["context_layer"]` / `model_kwargs["context_layer"]` | `10` | `6`（Small 8 层，注入第 6 层） |
+
+> 已知小瑕疵：main-final 变体的 `EXPERIMENT` 常量仍是 `small_boot_cond_identity_ablation`
+> （从 bootstrap kernel 复制后没改），只影响输出目录命名，不影响数值；为保持
+> 逐字节来源一致，未改。
 
 | 位置 | Base | Small |
 |---|---|---|

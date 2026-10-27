@@ -75,7 +75,7 @@
 - **Python**：装 [`requirements-dev.txt`](../../requirements-dev.txt) 即可（kaggle 2.2.4 + swanlab 0.10.1 + pytest）。旧文档里的 `.venv-swanlab-api` 路径已不存在，命令统一用 `kaggle`：
   `KAGGLE_API_TOKEN=... kaggle kernels logs <ref>`
 - **SwanLab 取数**：曲线里**没有** `sector_embedding_weight_norm` 与 ablation 指标，只有 **logs** 里有（`Condition Monitor JSON` / `Validation Condition Full/None/Shuffled`）。别再翻曲线。
-- **改 kernel 的流程**（源码快照 2026-10-27 已入库：[`../cond_identity/README.md`](../cond_identity/README.md)；跑 kernel 仍靠自带的自解压 payload）：
+- **改 kernel 的流程**（源码快照 2026-10-27 已入库（四个变体）：[`../cond_identity/README.md`](../cond_identity/README.md)；跑 kernel 仍靠自带的自解压 payload）：
   1. `kaggle kernels pull <ref>` 得到 wrapper；
   2. wrapper 里 `base64` 的 zip 解出仓库子集（`model/`、`finetune/`、`scratch/<实验>/launch_*.py`）；
   3. 改 `launch_*.py` → 重新 zip → base64 → 替换 wrapper 里的 payload **并同步更新那行 sha256 断言**；
