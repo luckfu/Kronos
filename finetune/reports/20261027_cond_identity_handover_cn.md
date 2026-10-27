@@ -10,6 +10,8 @@
 
 新增的行业/市值条件层**两个都在工作**，但**身份只占条件收益的 25%，其中行业占 6%、市值占 18%**；剩下 75% 是一个全市场共享的常向量（对身份零贡献）。行业通道**不是没学到，是权重给得太小**——增益拉到 18× 仍不饱和，但纯 CE 的最优解就钉在 1 倍。
 
+**2026-10-27 晚更新**：Base 与 Small 在低 Δ 端**都没有可测身份**（Small@Δ=0.0167 的 `fs_sector` = −9.2e-6，在 3e-5 地板以下）。**“Base 落后有结构”的假设被否，争论收口**，配方不动，继续裸跑。见 §7.2。
+
 ---
 
 ## 1. 今天落地的三个实测（都已进仓库）
@@ -48,8 +50,9 @@
 
 1. **零训练 · 今天就做**：C2 上推理侧 `γ_sector ∈ {1, 1.5, 2, 3, 4}`，**用下游指标选**（Rank IC / OOS / 行业中性化后增量），不用 CE 选。
    - 若 γ\* 显著优于 1 → 进第 3 步；若无响应 → **停**，行业通道不值得再投入。
-2. **等 chunk 结束**：Base 的 2×2（复用同一个 kernel，改 `kernel_sources` 指到 bootstrap kernel，去掉 C2 的 sha 断言）。看是不是也 ~25/75 → 是则“同一条曲线”，不是则行业通道在 Base 上确实被压住。
+2. ✅ **已完成**：Base 的 2×2（§7.1，Seg281）与 Small 低 Δ 的 2×2（§7.2，Δ=0.0167）。**判读：Base 在正常轨道上，争论收口，不动配方。**
 3. **只在第 1 步通过后**：重训，γ 固定为 γ\*（**不要做成 learnable**，CE 会把它压回 1），行业 LR 可选 2–5× 仅作加速。
+4. **P0-5 还差一个点**：已有点 `(0.0167, −9.2e-6)` 与 `(0.0749, −5.58e-4)`；补 `main-timing/best_model`（Δ≈0.027, cum 1066）即可凑 ≥3 点，仍零训练、同一条 kernel。
 
 ---
 
@@ -154,4 +157,76 @@ export KAGGLE_API_TOKEN=<user281434 的 token>   # 不在仓库里，需重新�
 
 **关键缺口**：Base 的 Δ=0.0084 **低于 Small 最早可测的点**（cum 516 时 0.0167）。所以“还没长成”和“长不成”现在分不开——**需要一个低 Δ 的 Small 参照点**。
 
-补法（便宜）：`luckfu/kronos-small-0-1-bootstrap` 这个 kernel 的输出里有 Bootstrap 末态权重，用 luckfu 的 token 取下来，拿**同一个 kernel**跑一遍 2×2。挂载方式和 Base 完全一样。
+> ✅ **已补齐（2026-10-27 晚）**：见 §7.2。结论是 **Base 正常，争论收口**。
+
+---
+
+### 7.2 Small @ Δ=0.0167 的 2×2：**命中“噪声”支，争论收口**（2026-10-27 晚）
+
+**做了什么**：把 `user281434/kronos-base-cond-sector-gain-sweep` v2 的 kernel 源码解包，按 next-step 交接 §3 改 4 处（`kernel_sources` → Small Bootstrap 末态；glob → `best_model`；路径关键词 → `small_0.1_bootstrap`；`context_layer` 10 → 6），其余照抄（`num_sectors=86`、`use_size_percentile=True`、`use_condition_scale=False`、n=2000、batch 64、α 网格 {1,1.5,2,3,4,8}、β=0.5 对照）。
+
+**跑在哪**：`wynstonliu/kronos-small-bootfinal-cond-2x2`（v1，COMPLETE，纯前向 ~32 s + 装 torch ~6 min）。
+
+**权重**：`wynstonliu/kronos-small-0-1-bootstrap-final` → `checkpoints/best_model`，`sha256 f21eeed1…ae630`，`sector_emb ‖W‖_F = 3.5227194` → **Δ = 0.016691**（正是预注册的那个点）。
+
+#### 数字
+
+| 量 | Small@Δ=0.0167（本跑） | 地板 `max(3·null, 3e-5)` | Base@Δ=0.0084 | Small C2@Δ=0.0749 |
+|---|---|---|---|---|
+| `fs_sector` | **−9.23e-6** | 3e-5 | +1.21e-5 | −5.58e-4 |
+| `fs_size` | **−3.64e-5** | 3e-5（自身 3·null 4.53e-5） | −9.55e-6 | −1.56e-3 |
+| `fs_both` | −2.72e-5 | 3e-5 | −1.37e-5 | −2.16e-3 |
+| null (sector/size/both) | −1.62e-6 / +1.51e-5 / −7.03e-6 | — | −1.52e-5 / −4.84e-6 / −1.83e-6 | ≤4.7e-5 |
+| `Full−None` | −6.44e-4 | — | −1.04e-4 | −8.76e-3 |
+| 身份占条件收益 | 4.2% | — | 13% | 24.7% |
+| `trunk_ratio` | 1.04e-2 | — | 4.99e-3 | 6.5e-2 |
+
+#### 判读（照 next-step 交接 §1/§6 的预注册规则，未自由发挥）
+
+规则二选一：`fs_sector` 有 −2e-4 量级 → Base 落后有结构；`fs_sector` ≤3e-5 → Base 在正常轨道。
+
+实测 `|fs_sector| = 9.2e-6`，**比 3e-5 地板低 3.3 倍，纯噪声**。→ **命中第二条**：
+
+> **Base 不异常。** Small 自己在 Δ=0.0167 这个点也没有可测的行业身份。Base@Δ=0.0084 的 `+1.2e-5` 不是“被压住”，而是**同一条曲线更靠前的位置**。
+
+四条读数：
+
+1. **不要为“Base 落后”动 γ / 注入位点**——前提被否了。协议 §4.4 的决策路径停在第一步之前。
+2. **`fs_size` 也不可分**：−3.64e-5，卡在自身 3·null（4.53e-5）与全局地板（3e-5）之间。这个 Δ 上**两条通道都没起来**，不像 C2 那样市值明显强于行业。
+3. **α=8 仍拉不动**：`fs_sector` 只到 −3.32e-5（还在楼板），CE 降 8.1e-5。与 Base 同一签名——低 Δ 时行业向量只是个小偏置修正。
+4. **身份对 Δ 是强超线性的**：Δ ×4.5（0.0167→0.0749）换来 `fs_sector` ×60（−9.2e-6→−5.58e-4），隐含指数 ≈2.7。**所以“同样的每窗口位移率”不能线性外推身份**——这正好解释了为什么 Base 现在什么都量不到。
+
+#### 落盘
+
+`finetune/reports/20261027_cond_identity_2x2_small_bootfinal.json`（含完整 ce 八元组、α 扫描 7 格、地板口径、三源交叉验证、以及下面这条更正）。
+
+#### ⚠️ 更正：next-step 交接 §2 指错了 kernel
+
+原文说 Bootstrap 末态在 `luckfu/kronos-small-0-1-bootstrap`。**实际那个 kernel 是个 1 段的 timing 探针**——SwanLab run 名 `small_0.1_bootstrap_timing`，日志写着 `Chunk limit reached after 1 segment(s)`。它的 `best_model` 只有 `‖W‖_F = 0.01878` → **Δ = 8.9e-5，小了约 187 倍**。照它跑会得到一个毫无意义的“Small 低 Δ 点”。
+
+真实的 Bootstrap 链是：
+
+```
+luckfu/kronos-small-0-1-bootstrap        (1 段 timing, 不是末态)
+  └─ luckfu/kronos-small-0-1-chunk-1c    → seg 241
+     └─ luckfu/kronos-small-0-1-chunk-2  → seg 386
+        └─ wynstonliu/kronos-small-0-1-chunk-3          → seg 531
+           └─ wynstonliu/kronos-small-0-1-bootstrap-final → seg 532–534  ← 末态在这
+```
+
+**三源交叉验证**（都指向同一个权重）：
+1. 本跑加载 `bootstrap-final/best_model`，读到 `‖W‖_F = 3.522719383`；
+2. `wynstonliu/kronos-small-0-1-main-timing` 显式声明 `stage2_parent … /bootstrap-final/checkpoints/best_model`、`selection: bootstrap_best`，其第一个 Monitor 点 = **3.5229811668395996**；
+3. `20261027_cond_delta_trajectory.json` 的 `bootstrap_end.W_F` = **3.5229811668395996**，与 2 逐位相同。
+
+**作废产物**：`luckfu/kronos-small-bootstrap-end-cond-2x2` v1（COMPLETE）是照错权重跑的，全在 1e-6 噪声，**不要引用**。该 kernel 删除被拒（403），以私有状态留作痕迹。
+
+**另一处小坑**：跨账号 `kernel_sources` 挂不上。用 `user281434` 推、挂 `luckfu/…` 时，Kaggle 静默把 `kernel_sources` 写成 `[""]`，kernel 照样起跑但一定在 `resolve_c2` 报 `no best_model found`。**挂载方必须与 kernel 属主同账号**（本次最终用 `wynstonliu` 推、挂 `wynstonliu` 的 output）。
+
+---
+
+### 7.3 收口之后该干什么
+
+按协议 §4.2 的预算表：Base 到 Small Bootstrap-final 的 Δ（0.0167）还要 **~520 段**，到 Small C2 的 Δ（0.0749）要 **~2,325 段**。**继续裸跑，别动配方**（γ / 注入位点 / margin 都没有依据）。
+
+同时，本跑给 P0-5（Small 侧 `FS–Δ` 曲线）添了**第二个点**（第一个是 C2）：`(0.0167, fs_sector −9.2e-6)` 与 `(0.0749, −5.58e-4)`。要凑够 ≥3 点，下一个便宜的点是 `wynstonliu/kronos-small-0-1-main-timing` 的 `best_model`（Δ≈0.0270，cum 1066）——同一条 kernel 改 `kernel_sources` 即可，不需要新训练。

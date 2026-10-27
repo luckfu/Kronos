@@ -1,5 +1,15 @@
 # 下一步交接：补 Small 的低 Δ 参照点（2026-10-27 收尾）
 
+> ## ✅ 已完成（2026-10-27 晚）——本页保留作过程记录
+>
+> **结果**：`fs_sector = −9.23e-6`、`fs_size = −3.64e-5`、null ≤1.5e-5，地板 3e-5。
+> **命中 §1 表格的第二条 → Base 完全在正常轨道上，争论收口。**
+> 跑在 `wynstonliu/kronos-small-bootfinal-cond-2x2`；结果落 `20261027_cond_identity_2x2_small_bootfinal.json`；完整判读见 `20261027_cond_identity_handover_cn.md` §7.2。
+>
+> **⚠️ 本文 §2 的权重位置是错的**：`luckfu/kronos-small-0-1-bootstrap` 实为 1 段 timing 探针（Δ=8.9e-5）。真末态在 **`wynstonliu/kronos-small-0-1-bootstrap-final`**（Δ=0.016691）。更正细节与三源验证见 §7.2。
+>
+> **另加一条坑（第 7 条）**：跨账号 `kernel_sources` 挂不上——用 A 账号推、挂 B 账号的私有 kernel，Kaggle 会**静默**把 `kernel_sources` 写成 `[""]` 且不报错，kernel 照样起跑、到 `resolve_c2` 才失败。**挂载方必须与 kernel 属主同账号。**
+
 上一页：`20261027_cond_identity_handover_cn.md`（全局现状）。本文只讲**一件事**：怎么补上那个缺口。
 
 ---
@@ -28,11 +38,24 @@
 
 ## 2. 那个点在哪（已确认存在）
 
+> **更正（2026-10-27 晚）**：下面这块路径描述**是错的**，实际是 timing 探针。真末态见本节末尾的“更正后”。
+
 ```
 kernel:  luckfu/kronos-small-0-1-bootstrap        (COMPLETE)
 输出:    kronos_small_v21/outputs/models/small_0.1_bootstrap/checkpoints/
          ├─ best_model/    ← 用这个（≈seg 516，对应的正是 Δ=0.0167）
          └─ last_model/
+```
+
+**更正后（实际使用的）**：
+
+```
+kernel:  wynstonliu/kronos-small-0-1-bootstrap-final   (COMPLETE)
+输出:    kronos_small_v21/outputs/models/small_0.1_bootstrap/checkpoints/best_model
+         sha256 f21eeed1e4dd7fdda4a5939981576157d6ad9e7d59ddb05721087fb7a50ae630
+         sector_emb ‖W‖_F = 3.5227194  →  Δ = 0.016691
+链:      luckfu/bootstrap(1段timing) → luckfu/chunk-1c(→241) → luckfu/chunk-2(→386)
+         → wynstonliu/chunk-3(→531) → wynstonliu/bootstrap-final(→534)
 ```
 
 `Δ=0.0167` 是从 `small_0.1_main` 的第一个 Condition Monitor 点反推的，而 Main 加载的是 **Bootstrap best_model**。所以**用 best_model**，不要用 last_model。

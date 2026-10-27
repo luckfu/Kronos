@@ -94,6 +94,8 @@
 
 **Base 2×2 实测（Seg281，2026-10-27）**：`fs_sector +1.2e-5`（符号反、小于自身零假设 1.5e-5）、`fs_size −9.6e-6`、`fs_both −1.4e-5`。**没有任何可测身份效应**；8× 行业增益也拉不动（CE 仅 −2.5e-5）。
 
+**Small @ Δ=0.0167 2×2 实测（Bootstrap-final best_model，2026-10-27 晚）**：`fs_sector −9.2e-6`、`fs_size −3.6e-5`、`fs_both −2.7e-5`、null ≤1.5e-5。**同样没有可测身份效应**。两点合起来：低 Δ 端（0.0084 与 0.0167）两边都在噪声里，Base 不异常；身份要到 Δ≈0.075 才显著（C2：−5.58e-4）。落盘 `20261027_cond_identity_2x2_small_bootfinal.json`。
+
 **由此加一条口径**：Base 上同一个 `both-shuffled` 量**两次测量差 2.7e-5**，是置换零假设（1.8e-6）的 15 倍 → **置换 null 只覆盖置换噪声，不覆盖复现噪声**。判门地板应取 `max(3·null, 复测差)`；Base 的实测地板 ≈3e-5。落盘 `20261027_cond_identity_2x2_base_seg281.json`。
 
 必报的分解行（G1 下挂）：`FS_sector`（换行业、保市值）与 `FS_size`（换市值、保行业）。现在的 roll-1 同时置换三者，无法归因到“行业身份”。
@@ -428,5 +430,7 @@ P0-2 的落盘要求：`fs_mean`、`fs_sd`（跨置换）、`null`、`fs_sector`
 | 2026-10-27 | 跑 Small C2 的 2×2 分解（新 kernel `kronos-small-c2-cond-identity-2x2`，16 s）：行业 26% / 市值 72%，两项可加，行业 12σ | §2 的 G1 分解要求转为实测；落 `20261027_cond_identity_2x2_small_c2.json`；“行业层白学”的假设被否 |
 | 2026-10-27 | 抓 SwanLab 日志实测轨迹：横轴改「已见窗口」；分辨率改按实测 `SE(FS)≈1e-5@2048`（撤回“需 30k”） | §4.2① 与 ③ 生效；数据落 `20261027_cond_delta_trajectory.json`；Small 长跑板缺失不影响（`small_0.1_main` 首点＝Bootstrap 末态） |
 | 2026-10-27 | **砍掉 A/C 两条修复（γ、非零 init）**；保留三样：Δ 对齐判据、FS–Δ 曲线、分辨率（sd→n） | §4.2 新建并生效；§5 新增 P0-5；P0-3 降为条件性（§6）；§7 长叉配方回退为 bare-add + zero-init；“抬 γ/条件 LR”需先由曲线判“下方” |
+| 2026-10-27 晚 | 补测 Small@Δ=0.0167（Bootstrap-final best_model，`fs_sector −9.23e-6`、`fs_size −3.64e-5`、null ≤1.5e-5）：**命中“噪声”支**，Base@Δ=0.0084 不异常，二者同处曲线低 Δ 段 | §4.2 判读表第一行（“落在曲线上=只是没走够”）成立；**“Base 身份通道被压住”假设作废**；§4.4 决策路径止于第 1 步之前，γ/注入位点不动；P0-5 已得 2 点（0.0167 / 0.0749），仍缺第 3 点；落 `20261027_cond_identity_2x2_small_bootfinal.json` |
+| 2026-10-27 晚 | 更正权重来源：`luckfu/kronos-small-0-1-bootstrap` 是 1 段 timing 探针（Δ=8.9e-5），**不是** Bootstrap 末态；末态在 `wynstonliu/kronos-small-0-1-bootstrap-final`（Δ=0.016691，三源交叉验证一致） | 执行口径：Small 侧 Bootstrap 末态一律取 `bootstrap-final/best_model`；`luckfu/kronos-small-bootstrap-end-cond-2x2` v1 作废不引用 |
 
 > 记录规则：凡改变**锚点 / 门阈值 / 管线条数 / 是否开叉**的决定，必须在本表追加一行并写明对哪一节生效；口头决定不计。
