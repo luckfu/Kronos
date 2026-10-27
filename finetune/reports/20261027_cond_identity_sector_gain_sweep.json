@@ -1,0 +1,138 @@
+{
+  "what": "Small C2 seg179: forward-only dose-response of the two condition channels (sector gain alpha, size gain beta)",
+  "date": "2026-10-27",
+  "kernel": "user281434/kronos-small-c2-cond-sector-gain-sweep (v1)",
+  "checkpoint": {
+    "dataset": "user281434/kronos-small-0-1-cosine-c2-best-seg179",
+    "sha256": "4ee469d49522f2a155f63bbbac6ef520df47244b06a00df963123b8007b73b5a"
+  },
+  "protocol": {
+    "n": 2000,
+    "batch": 64,
+    "teacher_forced": true,
+    "note": "sector_emb.weight *= alpha; size_mlp[-1].weight/bias *= beta; nothing else touched, no training"
+  },
+  "sector_gain_sweep": [
+    {
+      "phase": "sweep_cell",
+      "time": 1793097579.1000774,
+      "alpha_sector": 1.0,
+      "beta_size": 1.0,
+      "ce_full": 2.283136875152588,
+      "fs_sector": -0.000558502197265387,
+      "fs_size": -0.00156063842773424,
+      "d_ce_vs_baseline": 0.0,
+      "d_fs_sector_vs_baseline": 0.0,
+      "sector_multiplier": 1.0,
+      "identity_per_ce_cost": null
+    },
+    {
+      "phase": "sweep_cell",
+      "time": 1793097585.7513394,
+      "alpha_sector": 2.0,
+      "beta_size": 1.0,
+      "ce_full": 2.283314640045166,
+      "fs_sector": -0.0011462287902830326,
+      "fs_size": -0.0015269699096678302,
+      "d_ce_vs_baseline": 0.00017776489257803618,
+      "d_fs_sector_vs_baseline": -0.0005877265930176456,
+      "sector_multiplier": 2.0523263756084598,
+      "identity_per_ce_cost": -3.306201716740229
+    },
+    {
+      "phase": "sweep_cell",
+      "time": 1793097592.4305296,
+      "alpha_sector": 4.0,
+      "beta_size": 1.0,
+      "ce_full": 2.284893257141113,
+      "fs_sector": -0.0023416328430179156,
+      "fs_size": -0.0014845581054689916,
+      "d_ce_vs_baseline": 0.0017563819885251242,
+      "d_fs_sector_vs_baseline": -0.0017831306457525287,
+      "sector_multiplier": 4.192701218515041,
+      "identity_per_ce_cost": -1.0152294076130135
+    },
+    {
+      "phase": "sweep_cell",
+      "time": 1793097599.1776335,
+      "alpha_sector": 8.0,
+      "beta_size": 1.0,
+      "ce_full": 2.2933915004730223,
+      "fs_sector": -0.004904062271118281,
+      "fs_size": -0.0013803691864016088,
+      "d_ce_vs_baseline": 0.010254625320434307,
+      "d_fs_sector_vs_baseline": -0.004345560073852894,
+      "sector_multiplier": 8.780739440471686,
+      "identity_per_ce_cost": -0.42376585570547687
+    },
+    {
+      "phase": "sweep_cell",
+      "time": 1793097605.9360907,
+      "alpha_sector": 16.0,
+      "beta_size": 1.0,
+      "ce_full": 2.334387145996094,
+      "fs_sector": -0.010094314575195273,
+      "fs_size": -0.001147350311279105,
+      "d_ce_vs_baseline": 0.05125027084350586,
+      "d_fs_sector_vs_baseline": -0.009535812377929886,
+      "sector_multiplier": 18.073903065413894,
+      "identity_per_ce_cost": -0.18606364846437118
+    }
+  ],
+  "size_gain_sweep": [
+    {
+      "phase": "sweep_cell",
+      "time": 1793097612.7642882,
+      "alpha_sector": 1.0,
+      "beta_size": 0.5,
+      "ce_full": 2.286140209197998,
+      "fs_sector": -0.0006461219787596839,
+      "fs_size": -0.0008447360992431818,
+      "d_ce_vs_baseline": 0.0030033340454100887,
+      "d_fs_sector_vs_baseline": -8.761978149429694e-05,
+      "sector_multiplier": 1.156883503634028,
+      "identity_per_ce_cost": -0.029174171160948215
+    },
+    {
+      "phase": "sweep_cell",
+      "time": 1793097619.6322625,
+      "alpha_sector": 1.0,
+      "beta_size": 0.25,
+      "ce_full": 2.288625587463379,
+      "fs_sector": -0.0006661415100097656,
+      "fs_size": -0.0004147911071776811,
+      "d_ce_vs_baseline": 0.005488712310790955,
+      "d_fs_sector_vs_baseline": -0.00010763931274437866,
+      "sector_multiplier": 1.1927285394245835,
+      "identity_per_ce_cost": -0.01961103199611262
+    },
+    {
+      "phase": "sweep_cell",
+      "time": 1793097626.5275478,
+      "alpha_sector": 1.0,
+      "beta_size": 0.0,
+      "ce_full": 2.29175532913208,
+      "fs_sector": -0.000724468231201314,
+      "fs_size": 0.0,
+      "d_ce_vs_baseline": 0.008618453979492013,
+      "d_fs_sector_vs_baseline": -0.00016596603393592702,
+      "sector_multiplier": 1.2971627233492582,
+      "identity_per_ce_cost": -0.019257054029742506
+    }
+  ],
+  "baseline": {
+    "ce_full": 2.283136875152588,
+    "fs_sector": -0.000558502197265387,
+    "fs_size": -0.00156063842773424
+  },
+  "readings": {
+    "no_saturation": "fs_sector tracks alpha almost linearly to 18x (alpha=16 -> 18.1x effect); the channel is under-weighted, not information-exhausted",
+    "ce_cost": "doubling sector costs +1.8e-4 CE (0.008%); 4x costs +1.76e-3 (0.077%); 8x +1.03e-2 (0.45%); 16x +5.1e-2 (2.2%)",
+    "frontier": "first doubling is the best trade (3.3 units of sector identity per unit CE), then diminishing returns",
+    "size_is_optimal": "shrinking the size channel monotonically hurts CE (beta=0.5 -> +3.0e-3; beta=0 -> +8.6e-3), so the size constant is genuinely useful, not junk",
+    "competition_is_mild": "zeroing size only lifts fs_sector by 30% (5.58e-4 -> 7.24e-4); fs_size falls as alpha rises (1.56e-3 -> 1.15e-3 at 16x), i.e. the two channels overlap only slightly",
+    "implication": "plain forecast CE pins the sector gain near 1, so CE alone will never give a strong industry channel; a sector gain of 2-4 buys 2-4x industry identity for 0.008-0.08% CE"
+  },
+  "caveat": "alpha != 1 is off the trained distribution, so the CE cost is an upper bound on what retraining with the same gain would cost; the trunk could co-adapt",
+  "run_note": "kernel ended in ERROR only because the final JSON write referenced an out-of-scope variable; all 8 cells were printed to stdout before that, and this file is reconstructed from those lines"
+}
