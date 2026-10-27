@@ -85,3 +85,50 @@
 - 不要用 G1 判 margin 版的成功（循环论证，只认 G3）。
 - 不要在峰值 LR 段判门；不要用段号当锚（用已见窗口数，§4.2①）。
 - 不要把 CE 份额当经济重要性读（须按注入变异归一，2×2 那一节）。
+
+---
+
+## 7. Base γ 扫描：**已推送、正在跑**（v2）
+
+> 状态：`user281434/kronos-base-cond-sector-gain-sweep` **v2 RUNNING**（v1 因 `SyntaxError: name 'C2_SHA' is used prior to global declaration` 立即失败，已修）。
+> 它会自己跑完，**家里这台不用再推**，只需取结果。
+
+**它做什么**：把 Base 那个 chunk 的 `last_model` 挂进来，在同一个 2000 窗验证集上做 3 件事——
+1. Base 的 **2×2 分解**（`fs_sector` / `fs_size` / 置换零假设）；
+2. **行业增益扫描** α ∈ {1, 1.5, 2, 3, 4, 8}（sector 向量乘 α）；
+3. 一个 **β=0.5** 对照（压市值）。
+
+每格 3 次前向 ≈ 6 s，总计算 ~1 分钟；大头是 torch 安装（~8 分钟）。
+
+**取结果**
+
+```bash
+export KAGGLE_API_TOKEN=<user281434 的 token>   # 不在仓库里，需重新提供
+.venv-swanlab-api/bin/kaggle kernels status user281434/kronos-base-cond-sector-gain-sweep
+.venv-swanlab-api/bin/kaggle kernels logs   user281434/kronos-base-cond-sector-gain-sweep > /tmp/base_sweep.log
+```
+
+日志里找这几行（每格一行）：
+
+```
+{"phase": "decompose_done", "fs_sector": ..., "fs_size": ..., "null_sector": ...}
+{"phase": "sweep_cell", "alpha_sector": 1.0, "beta_size": 1.0, "ce_full": ..., "fs_sector": ..., "fs_size": ...}
+```
+
+**怎么读（这才是重点）**
+
+| 观测 | 含义 | 动作 |
+|---|---|---|
+| α=2~3 时 **`ce_full` 下降** | Base 现在**注入不足**，抬增益是白赚（既得身份又降 loss） | 直接给 Base 定 γ，并可进重训 |
+| `ce_full` 随 α **单调上升** | 它已到自己的 CE 最优点 | 别动，等它自然长 |
+| α=1 那行的 `fs_sector` 占 `fs_both` ≈ 26%/72% | 与 Small 同形状 → “同一条曲线上的不同位置” | 复刻可收口 |
+| `fs_sector` 明显 < Small 的 26% | 行业那一路在 Base 上被额外压住 | 才值得查注入位点 |
+
+**参考基线（Small C2）**：`fs_sector −5.58e-4`(26%)、`fs_size −1.56e-3`(72%)、`full−none −8.76e-3`。
+**Base 当前态（Seg281）**：Δ 0.00844、`trunk_ratio` 5.19e-3、`full−shuffled −2.07e-5`（在噪声底附近，所以 **fs 只能当参考，主看 CE**）。
+
+**若 v2 又失败**：先看 logs 里的最后一条 Traceback。已知的两处适配点（都在 `base_launch.py` 里）：
+- `context_layer` 必须 **10**（Base 是 12 层注入第 10 层；Small 是 6）；
+- 权重从 `kernel_sources` 挂载（`**/checkpoints/last_model/model.safetensors`），不走 dataset。
+
+**这一跑不碰任何生产代码**：只读权重 + 只做前向，不改 `model/`、`finetune/`、relay。
