@@ -14,6 +14,8 @@
 3. **两条管线不得混填**：训练内 telemetry（`train_predictor.py` 每 5 seg 的 ablation）与离线重评（P0-2）分表记录，且在表头标明属于哪条。
 4. 涉及 γ 的 ckpt 必须在**带 `condition_scale` 的 kernel 代码**下评（master 的 hub 加载 `strict=False` 会静默丢 γ）。
 5. 判定只认本表填完的行；未填的格子不得在结论页引用。
+6. **每个判门 ckpt 必须挂不可覆写快照**（`ckpt_snapshot` 路径 + `ckpt_sha256`）；被后续 chunk 覆盖的行作废（协议 §4.1；Seg155/170/175 已发生一次）。
+7. **锚点**：Base 侧锚 `durable last`，**Seg175 已退役**，不得再作为判门锚；判门同时报 A1（val CE）与 A3（`lr_at_eval`）。
 
 ---
 
@@ -40,7 +42,7 @@
 | Base A+C Seg5 | | 87×832 | Normal(0,0.02) | | | | | | | | 已知：5.387 / 0.0201 |
 | Base 裸 Boot Seg155 | | 87×832 | zero | | | | | | | | **待测** |
 | Base 裸 Boot Seg170 | | 87×832 | zero | | | | | | | | **待测** |
-| Base 裸 Boot Seg175 | | 87×832 | zero | | | | | | | | **待测（关键格）** |
+| Base 裸 Boot Seg175 | | 87×832 | zero | 1.6547 | **0.00615** | | | | | Monitor（见 results） | **已测（Monitor-only）；行几何不可测：ckpt 已被覆盖** |
 
 **速查判定（每元素 RMS）**
 
@@ -56,10 +58,11 @@
 
 表头：`管线＝离线重评`（与 §4 的训练内 telemetry **分表**）
 
-| 字段 | 含义 | Small C2 best | Base 裸 Boot@Seg175 | Base A+C（若有） |
+| 字段 | 含义 | Small C2 best | Base **durable last**（Seg175 退役） | Base A+C（若有） |
 |---|---|---|---|---|
 | `ckpt_sha256` | 权重指纹 | | | |
-| `segment` | 段号 | 179（cosine 内） | | |
+| `ckpt_snapshot` | 不可覆写快照路径（空=作废） | | | |
+| `segment` | 段号 | 179（cosine 内） | durable last | |
 | `lr_at_eval` | 该次 eval 的条件 LR | | | |
 | `n` | 评测窗数 | | | |
 | `windows_index_sha256` | 窗 index 指纹（证明同一批） | | | |
@@ -80,14 +83,14 @@
 | ckpt | `FS ≥ max(3·|null|, 1e-3)` | 连续 ≥3 次同号 | CI 下界 > 3·|null| | G1 |
 |---|---|---|---|---|
 | Small C2 best | | | | |
-| Base 裸 Boot@Seg175 | | | | |
+| Base durable last | | | | |
 
 **G2 判定行**
 
 | ckpt | `r_swap ≥ 5%` | `r_swap ≥ r_size` | G2 |
 |---|---|---|---|
 | Small C2 best | | | |
-| Base 裸 Boot@Seg175 | | | |
+| Base durable last | | | |
 
 ---
 
@@ -137,7 +140,7 @@ trunk 全冻，仅训 `sector_emb` / `size_mlp`（+γ）；batch 64；步数 200
 
 ## 7. 结论页（三条，填完上面才写）
 
-1. **P0-1**：Base@Seg175 的 `sector_emb` 每元素 RMS＝______ → 判定：未启动 / 起步 / 已长。
+1. **P0-1**：Seg175 `sector_emb` 每元素 RMS＝**0.00615（实测，Monitor-only）** → 判定：**起步中**；durable last 的完整行几何待补。
 2. **P0-3**：`FS*` 上界＝______（γ＝____，lr＝____）→ 瓶颈：表达 / 优化 / 条件 LR / 信息上限。
 3. **长叉**：开 / 停；若开 → γ＝____、预算 ____ 段（含退火尾）、预注册停看表见协议 §7。
 

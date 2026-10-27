@@ -72,6 +72,8 @@ Kernel：`user281434/kronos-small-c2-cond-identity-ablation`。
 | Seg175 | Full−None≈−8.94e-5，Full−Shuffled≈−1.34e-5；trunk≈4.11e-3（~1.04× vs Seg155≈3.93e-3） |
 | 判定 | 内容仍 **微弱且远未可用**；trunk 无物质跳升 |
 
+> **二更（2026-10-27，批注不改数）：** 该段 ckpt 已被 self-parent `last_model` 覆盖，**本表不可复核**；且实测 `sector_emb` 每元素 RMS：Seg155/170/175 = 0.00560 / 0.00603 / **0.00615**（Small 为 0.074，**差 12.0×**）。据此本段判读由“噪声底”改为“**刚起步**”——机制在走、相干度约 1%，但远未达可比状态。门与新口径见 [`20261027_cond_identity_gate_protocol_cn.md`](20261027_cond_identity_gate_protocol_cn.md) §1.1 / §4。
+
 SwanLab：`base_clean_0.1_bootstrap`。Bootstrap **继续裸跑、不并进 γ**。
 
 ---

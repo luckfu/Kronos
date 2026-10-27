@@ -5,6 +5,13 @@
 模板：`finetune/reports/20261027_p0_cond_identity_fill_in_cn.md`（空表未改）
 状态：**P0-1 partial 复核 PASS（Monitor-only）→ 待合 master**。仅填 Base 裸 Boot Seg155/170/175 的 ‖W‖_F + 每元素 RMS（训练内 Condition Monitor）；行范数 / 行间余弦 / cos(row,mean) / between-sector **未测**；P0-2 / P0-3 / P0-4 **未测**。空格 = 未测，不得发明。
 
+> **导师批注（2026-10-27，只批不改数）**
+> 1. **P0-1 读数采纳**：0.00615 → 起步中。据此协议 §4 已改为“机制在走、差 12.0×、相干度 1.1%”，原“≈0.002 扩散估计/噪声底”表述作废。
+> 2. **§3 的 Base 列请改锚**：Seg175 退役（ckpt 被 self-parent `last_model` 覆盖，不可复现），改填 **durable last**；新旧不可混列。Seg175 一行保留作历史，标“ckpt 不可复现”。
+> 3. **A3 待澄清**：若指 LR 退火锚，Bootstrap durable last **不满足**，该次重评只作“管线对齐 + 基线”，不作 G1 终判（协议 §3）。
+> 4. **结论纪律**：本表 §7 第 2/3 条在 P0-2 数字到齐前保持空白；不得用 FS≈1e-5 作“CE 学不出”的反证。
+> 5. **新增必备列**：`ckpt_snapshot`（不可覆写路径）；空 = 该行作废（协议 §4.1）。
+
 ---
 
 ## 0. 填表约定（沿用模板）
