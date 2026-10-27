@@ -1,0 +1,747 @@
+import os
+
+class Config:
+    """
+    Configuration class for the entire project.
+    """
+
+    def __init__(self):
+        # =================================================================
+        # Data & Feature Parameters
+        # =================================================================
+        # TODO: Update this path to your Qlib data directory.
+        self.qlib_data_path = "~/.qlib/qlib_data/cn_data"
+        self.instrument = 'csi800'
+
+        # Overall time range for data loading from Qlib.
+        self.dataset_begin_time = "2015-01-01"
+        self.dataset_end_time = '2026-12-31'
+
+        # Sliding window parameters for creating samples.  Keep the production
+        # defaults unchanged; long-context experiments (for example 120+10)
+        # opt in through environment variables in their run script.
+        self.lookback_window = int(os.getenv("KRONOS_LOOKBACK_WINDOW", "90"))
+        self.predict_window = int(os.getenv("KRONOS_PREDICT_WINDOW", "10"))
+        if self.lookback_window < 1 or self.predict_window < 1:
+            raise ValueError("KRONOS_LOOKBACK_WINDOW and KRONOS_PREDICT_WINDOW must be positive")
+        self.max_context = 512  # Maximum context length for the model.
+
+        # Features to be used from the raw data.
+        self.feature_list = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        # Time-based features to be generated.
+        self.time_feature_list = ['minute', 'hour', 'weekday', 'day', 'month']
+
+        # Optional static asset metadata used to condition the predictor.
+        # The metadata CSV should contain: symbol, sector, size_bucket.
+        # Leave empty to run the original model without conditioning.
+        self.asset_metadata_path = os.getenv("KRONOS_METADATA_PATH", "./data/a_share/asset_metadata.csv")
+        self.use_context_features = True
+        self.use_sector_features = os.getenv(
+            "KRONOS_USE_SECTOR_FEATURES", "1"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.use_size_features = os.getenv(
+            "KRONOS_USE_SIZE_FEATURES", "1"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.use_size_percentile = os.getenv(
+            "KRONOS_USE_SIZE_PERCENTILE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.disable_condition_inputs = os.getenv(
+            "KRONOS_DISABLE_CONDITION_INPUTS", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.num_sectors = int(os.getenv("KRONOS_NUM_SECTORS", "86"))
+        self.num_size_buckets = int(os.getenv("KRONOS_NUM_SIZE_BUCKETS", "10"))
+        self.size_mlp_hidden_dim = int(os.getenv("KRONOS_SIZE_MLP_HIDDEN_DIM", "64"))
+        # Fix C: drop last-layer zero-init for condition adapters (sector/size).
+        # Default "zero" preserves historical no-op add; smoke uses "normal".
+        self.condition_last_layer_init = os.getenv(
+            "KRONOS_CONDITION_LAST_LAYER_INIT", "zero"
+        ).strip().lower() or "zero"
+        self.condition_last_layer_init_std = float(
+            os.getenv("KRONOS_CONDITION_LAST_LAYER_INIT_STD", "0.02")
+        )
+        # Fix A: learnable residual gain γ on condition inject. Opt-in only.
+        # Bootstrap / pre-A: leave KRONOS_CONDITION_SCALE_INIT unset so the
+        # model builds WITHOUT a condition_scale Parameter (bare add).
+        # Smoke / A+C set KRONOS_CONDITION_SCALE_INIT (e.g. 25) or
+        # KRONOS_USE_CONDITION_SCALE=1.
+        _scale_env = os.getenv("KRONOS_CONDITION_SCALE_INIT")
+        _use_flag = os.getenv("KRONOS_USE_CONDITION_SCALE", "0").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
+        self.use_condition_scale = (
+            _use_flag
+            or (_scale_env is not None and str(_scale_env).strip() != "")
+        )
+        self.condition_scale_init = float(
+            _scale_env if (_scale_env is not None and str(_scale_env).strip() != "")
+            else "1.0"
+        )
+
+        # =================================================================
+        # Dataset Splitting & Paths
+        # =================================================================
+        # Note: The validation/test set starts earlier than the training/validation set ends
+        # to account for the `lookback_window`.
+        self.train_time_range = ["2015-01-01", "2025-12-31"]
+        self.val_time_range = ["2026-01-01", "2026-12-31"]
+        self.test_time_range = ["2027-01-01", "2027-12-31"]
+        self.backtest_time_range = ["2026-01-01", "2026-12-31"]
+
+        # TODO: Directory to save the processed, pickled datasets.
+        self.dataset_path = os.getenv("KRONOS_DATASET_PATH", "./data/a_share/processed_datasets")
+        default_train_path = os.path.join(self.dataset_path, "train_data.pkl")
+        default_val_path = os.path.join(self.dataset_path, "val_data.pkl")
+        self.train_data_paths = tuple(
+            path for path in os.getenv(
+                "KRONOS_TRAIN_DATA_PATHS", default_train_path
+            ).split(os.pathsep) if path
+        )
+        self.val_data_paths = tuple(
+            path for path in os.getenv(
+                "KRONOS_VAL_DATA_PATHS", default_val_path
+            ).split(os.pathsep) if path
+        )
+        self.train_signal_start = os.getenv("KRONOS_TRAIN_SIGNAL_START", "")
+        self.train_signal_end = os.getenv("KRONOS_TRAIN_SIGNAL_END", "")
+        self.val_signal_start = os.getenv("KRONOS_VAL_SIGNAL_START", "")
+        self.val_signal_end = os.getenv("KRONOS_VAL_SIGNAL_END", "")
+        self.dataset_manifest_sha256 = os.getenv(
+            "KRONOS_DATA_MANIFEST_SHA256", ""
+        )
+        self.fixed_validation_manifest_path = os.getenv(
+            "KRONOS_FIXED_VALIDATION_MANIFEST_PATH", ""
+        )
+        self.fixed_validation_manifest_sha256 = os.getenv(
+            "KRONOS_FIXED_VALIDATION_MANIFEST_SHA256", ""
+        )
+        self.exclude_fixed_validation_from_training = os.getenv(
+            "KRONOS_EXCLUDE_FIXED_VALIDATION_FROM_TRAINING", "1"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.validation_quick_samples = int(
+            os.getenv("KRONOS_VALIDATION_QUICK_SAMPLES", "3000")
+        )
+        self.validation_full_only = os.getenv(
+            "KRONOS_VALIDATION_FULL_ONLY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        # Optional escape hatch: when true on multi-worker XLA, only rank 0
+        # iterates the fixed validation set (others keep empty loaders and
+        # still join scalar reductions). Default is sharded validation across
+        # all workers; set KRONOS_VALIDATION_RANK0_ONLY=1 if host RAM OOMs.
+        self.validation_rank0_only = os.getenv(
+            "KRONOS_VALIDATION_RANK0_ONLY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.validation_large_samples = int(
+            os.getenv("KRONOS_VALIDATION_LARGE_SAMPLES", "12000")
+        )
+        self.validation_large_interval_segments = int(
+            os.getenv("KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS", "10")
+        )
+        if not self.validation_full_only and self.validation_quick_samples <= 0:
+            raise ValueError("KRONOS_VALIDATION_QUICK_SAMPLES must be positive")
+        if (
+            not self.validation_full_only
+            and self.validation_large_samples < self.validation_quick_samples
+        ):
+            raise ValueError(
+                "KRONOS_VALIDATION_LARGE_SAMPLES must be at least the quick sample count"
+            )
+        if self.validation_large_interval_segments <= 0:
+            raise ValueError(
+                "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS must be positive"
+            )
+        # 0 = validate every segment (legacy). N>0 = every N global segments,
+        # plus always at chunk/coverage end (see should_run_segment_validation).
+        self.validation_interval_segments = int(
+            os.getenv("KRONOS_VALIDATION_INTERVAL_SEGMENTS", "0")
+        )
+        if self.validation_interval_segments < 0:
+            raise ValueError(
+                "KRONOS_VALIDATION_INTERVAL_SEGMENTS must be non-negative"
+            )
+        # Optional independent validation micro-batch (defaults to train batch).
+        val_batch_raw = os.getenv("KRONOS_VAL_BATCH_SIZE", "").strip()
+        self.val_batch_size = (
+            int(val_batch_raw) if val_batch_raw else int(os.getenv("KRONOS_BATCH_SIZE", "4"))
+        )
+        if self.val_batch_size <= 0:
+            raise ValueError("KRONOS_VAL_BATCH_SIZE must be positive")
+        # Bootstrap telemetry: continue from last only; do not overwrite best_model.
+        self.disable_best_updates = os.getenv(
+            "KRONOS_DISABLE_BEST_UPDATES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.history_replay_ratio = float(
+            os.getenv("KRONOS_HISTORY_REPLAY_RATIO", "0")
+        )
+        self.replay_signal_start = os.getenv("KRONOS_REPLAY_SIGNAL_START", "")
+        self.replay_signal_end = os.getenv("KRONOS_REPLAY_SIGNAL_END", "")
+
+        # =================================================================
+        # Training Hyperparameters
+        # =================================================================
+        self.clip = 5.0  # Clipping value for normalized data to prevent outliers.
+
+        self.epochs = int(os.getenv("KRONOS_EPOCHS", "50"))
+        self.early_stopping_patience = int(
+            os.getenv("KRONOS_EARLY_STOPPING_PATIENCE", "5")
+        )
+        self.log_interval = int(os.getenv("KRONOS_LOG_INTERVAL", "100"))
+        self.batch_size = int(os.getenv("KRONOS_BATCH_SIZE", "4"))
+        self.num_workers = int(os.getenv("KRONOS_NUM_WORKERS", "0"))
+        self.use_amp = os.getenv(
+            "KRONOS_USE_AMP", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.amp_dtype = os.getenv("KRONOS_AMP_DTYPE", "float16").strip().lower()
+        if self.amp_dtype not in {"float16", "fp16", "bfloat16", "bf16"}:
+            raise ValueError(
+                "KRONOS_AMP_DTYPE must be float16/fp16 or bfloat16/bf16"
+            )
+        # Coverage training uses unique windows within each segment and advances
+        # through one fixed permutation before any window is reused. Zero means
+        # a literal full-dataset epoch, which takes about 26 hours on this MPS host.
+        self.n_train_iter = int(os.getenv("KRONOS_TRAIN_SAMPLES_PER_SEGMENT", "20000"))
+        self.n_val_iter = int(os.getenv("KRONOS_VALIDATION_SAMPLES", "2000"))
+        self.coverage_passes = int(os.getenv("KRONOS_COVERAGE_PASSES", "1"))
+        # Limit only the number of completed segments in this process. This is
+        # intentionally separate from epochs so resumed jobs keep one global
+        # coverage plan and one unchanged OneCycle schedule.
+        self.max_segments_per_run = int(
+            os.getenv("KRONOS_MAX_SEGMENTS_PER_RUN", "0")
+        )
+        # Optional wall-clock budget. The trainer checks this only after a
+        # complete segment and its validation, so a timed stop is resumable.
+        self.max_runtime_seconds = float(
+            os.getenv("KRONOS_MAX_RUNTIME_SECONDS", "0")
+        )
+        if self.max_runtime_seconds < 0:
+            raise ValueError("KRONOS_MAX_RUNTIME_SECONDS must be non-negative")
+        self.require_full_coverage = os.getenv(
+            "KRONOS_REQUIRE_FULL_COVERAGE", "1"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.resume_training = os.getenv(
+            "KRONOS_RESUME_TRAINING", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.scheduler_transition_state = os.getenv(
+            "KRONOS_SCHEDULER_TRANSITION_STATE", ""
+        ).strip()
+        if self.resume_training and self.scheduler_transition_state:
+            raise ValueError(
+                "KRONOS_RESUME_TRAINING and KRONOS_SCHEDULER_TRANSITION_STATE "
+                "are mutually exclusive"
+            )
+        self.bootstrap_completed_segments = int(
+            os.getenv("KRONOS_BOOTSTRAP_COMPLETED_SEGMENTS", "0")
+        )
+        if self.bootstrap_completed_segments < 0:
+            raise ValueError("KRONOS_BOOTSTRAP_COMPLETED_SEGMENTS must be non-negative")
+        # When bootstrapping a fresh optimizer from a prior global segment,
+        # this keeps the new coverage permutation independent of the historical
+        # segment number. For example, -130 makes global Segment 131 consume
+        # position 0 of a newly seeded permutation.
+        self.coverage_epoch_offset = int(
+            os.getenv("KRONOS_COVERAGE_EPOCH_OFFSET", "0")
+        )
+        self.train_sampling = os.getenv('KRONOS_TRAIN_SAMPLING', 'coverage')
+        self.sampling_start_segment = int(os.getenv('KRONOS_SAMPLING_START_SEGMENT', '0'))
+        self.sampling_parent_global_step = int(os.getenv('KRONOS_SAMPLING_PARENT_GLOBAL_STEP', '0'))
+        self.sampling_seed = int(os.getenv('KRONOS_SAMPLING_SEED', '20261013'))
+        self.sampling_segments = int(os.getenv('KRONOS_SAMPLING_SEGMENTS', '200'))
+        self.sampling_weighted_ratio = float(os.getenv('KRONOS_SAMPLING_WEIGHTED_RATIO', '0.6'))
+        self.sampling_reference = float(os.getenv('KRONOS_SAMPLING_REFERENCE', '0.05'))
+        self.sampling_exponent = float(os.getenv('KRONOS_SAMPLING_EXPONENT', '1.0'))
+        self.sampling_weight_cap = float(os.getenv('KRONOS_SAMPLING_WEIGHT_CAP', '4.0'))
+        self.expected_sampling_plan_sha256 = os.getenv('KRONOS_SAMPLING_PLAN_SHA256', '').strip()
+        self.sampling_transition_state = os.getenv('KRONOS_SAMPLING_TRANSITION_STATE', '').strip()
+        self.sampling_warmup_steps = int(os.getenv('KRONOS_SAMPLING_WARMUP_STEPS', '1627'))
+        if self.train_sampling not in {'coverage', 'capped_power_mixture_v1'}:
+            raise ValueError('Unsupported training sampling policy')
+        if self.sampling_transition_state and (self.resume_training or self.scheduler_transition_state):
+            raise ValueError('Sampling transition requires a fresh stage Output')
+        bootstrap_best_val_loss = os.getenv(
+            "KRONOS_BOOTSTRAP_BEST_VAL_LOSS", ""
+        ).strip()
+        self.bootstrap_best_val_loss = (
+            float(bootstrap_best_val_loss)
+            if bootstrap_best_val_loss
+            else float("inf")
+        )
+        # Fresh AdamW on an existing output tree: keep best_metric as the
+        # selection threshold and do not load last_state moments.
+        self.keep_existing_best = os.getenv(
+            "KRONOS_KEEP_EXISTING_BEST", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.reset_size_embedding = os.getenv(
+            "KRONOS_RESET_SIZE_EMBEDDING", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.reset_sector_embedding = os.getenv(
+            "KRONOS_RESET_SECTOR_EMBEDDING", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.balance_size_buckets = os.getenv(
+            "KRONOS_BALANCE_SIZE_BUCKETS", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.predictor_loss_mode = os.getenv(
+            "KRONOS_PREDICTOR_LOSS_MODE", "full_sequence"
+        ).strip().lower()
+        if self.predictor_loss_mode not in {"full_sequence", "forecast"}:
+            raise ValueError(
+                "KRONOS_PREDICTOR_LOSS_MODE must be full_sequence or forecast"
+            )
+        self.history_loss_weight = float(
+            os.getenv("KRONOS_HISTORY_LOSS_WEIGHT", "0")
+        )
+        if self.history_loss_weight < 0:
+            raise ValueError("KRONOS_HISTORY_LOSS_WEIGHT must be non-negative")
+        self.best_selection_metric = os.getenv(
+            "KRONOS_BEST_SELECTION_METRIC", "objective"
+        ).strip().lower()
+        if self.best_selection_metric not in {
+            "objective", "full_sequence", "forecast", "history",
+            "validation_large_objective", "beta_v21_score", "ranking",
+            "pairwise_accuracy",
+        }:
+            raise ValueError(
+                "KRONOS_BEST_SELECTION_METRIC must be objective, full_sequence, "
+                "forecast, history, validation_large_objective, beta_v21_score, "
+                "ranking, or pairwise_accuracy"
+            )
+        # Empty / val_loss keeps historical best-by-loss behavior. bigbatch2
+        # sets temporal_rank_ic_v1. The loss metric above stays telemetry.
+        self.checkpoint_selection_protocol = os.getenv(
+            "KRONOS_CHECKPOINT_SELECTION_PROTOCOL", ""
+        ).strip().lower()
+        if self.checkpoint_selection_protocol in {"", "val_loss", "legacy", "off"}:
+            self.checkpoint_selection_protocol = ""
+        elif self.checkpoint_selection_protocol != "temporal_rank_ic_v1":
+            raise ValueError(
+                "KRONOS_CHECKPOINT_SELECTION_PROTOCOL must be empty, val_loss, "
+                "or temporal_rank_ic_v1"
+            )
+        self.temporal_rank_ic_manifest_path = os.getenv(
+            "KRONOS_TEMPORAL_RANK_IC_MANIFEST", ""
+        ).strip()
+        self.temporal_rank_ic_panel_path = os.getenv(
+            "KRONOS_TEMPORAL_RANK_IC_PANEL", ""
+        ).strip()
+        # Independent of KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS. Bigbatch
+        # sets that interval very high because full validation already runs
+        # every segment; Rank IC stays on the protocol default of 20
+        # (N=10 escape hatch; see VALIDATION_RANK_IC_SELECTION_PROTOCOL_CN).
+        self.temporal_rank_ic_interval_segments = int(os.getenv(
+            "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS", "20"
+        ))
+        if self.checkpoint_selection_protocol == "temporal_rank_ic_v1":
+            if (
+                not self.temporal_rank_ic_manifest_path
+                or not self.temporal_rank_ic_panel_path
+            ):
+                raise ValueError(
+                    "temporal_rank_ic_v1 requires KRONOS_TEMPORAL_RANK_IC_MANIFEST "
+                    "and KRONOS_TEMPORAL_RANK_IC_PANEL. A missing manifest fails "
+                    "closed; symbol-holdout val loss cannot select best_model."
+                )
+            if self.temporal_rank_ic_interval_segments <= 0:
+                raise ValueError(
+                    "KRONOS_TEMPORAL_RANK_IC_INTERVAL_SEGMENTS must be positive"
+                )
+            if self.lookback_window != 120 or self.predict_window != 10:
+                raise ValueError(
+                    "temporal_rank_ic_v1 requires lookback 120 and predict window 10"
+                )
+        forecast_weights = os.getenv("KRONOS_FORECAST_HORIZON_WEIGHTS", "").strip()
+        if forecast_weights:
+            self.forecast_horizon_weights = tuple(
+                float(value.strip()) for value in forecast_weights.split(",")
+            )
+            if len(self.forecast_horizon_weights) != self.predict_window:
+                raise ValueError(
+                    "KRONOS_FORECAST_HORIZON_WEIGHTS must provide one value per "
+                    "forecast day"
+                )
+            if any(value <= 0 for value in self.forecast_horizon_weights):
+                raise ValueError("Forecast horizon weights must be positive")
+        else:
+            self.forecast_horizon_weights = tuple(1.0 for _ in range(self.predict_window))
+
+        self.use_beta_v21_auxiliary = os.getenv(
+            "KRONOS_USE_BETA_V21_AUXILIARY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if self.use_beta_v21_auxiliary and (
+            self.lookback_window != 120 or self.predict_window != 10
+        ):
+            raise ValueError(
+                "Beta v2.1 auxiliary training requires 120 lookback and 10 forecast days"
+            )
+        self.beta_v21_auxiliary_warmup_steps = int(
+            os.getenv("KRONOS_BETA_V21_AUXILIARY_WARMUP_STEPS", "1000")
+        )
+        self.beta_v21_ranking_weight = float(
+            os.getenv("KRONOS_BETA_V21_RANKING_WEIGHT", "0.05")
+        )
+        self.beta_v21_ema_decay = float(
+            os.getenv("KRONOS_BETA_V21_EMA_DECAY", "0.99")
+        )
+        self.beta_v21_consistency_samples = int(
+            os.getenv("KRONOS_BETA_V21_CONSISTENCY_SAMPLES", "2048")
+        )
+        self.beta_v21_consistency_sample_count = int(
+            os.getenv("KRONOS_BETA_V21_CONSISTENCY_SAMPLE_COUNT", "1")
+        )
+        self.beta_v21_validation_denominators = os.getenv(
+            "KRONOS_BETA_V21_VALIDATION_DENOMINATORS", ""
+        ).strip()
+        self.beta_v21_auto_calibrate = os.getenv(
+            "KRONOS_BETA_V21_AUTO_CALIBRATE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.beta_v21_force_recalibrate = os.getenv(
+            "KRONOS_BETA_V21_FORCE_RECALIBRATE", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        # Score dens are feeding-paradigm specific. Chronological segment date-sort
+        # dens must not be reused after shuffled_no_segment_date_sort (sparse
+        # same-day ranking). Change this string when same-day batch path lands.
+        self.beta_v21_score_feeding_mode = os.getenv(
+            "KRONOS_BETA_V21_SCORE_FEEDING_MODE",
+            "shuffled_no_segment_date_sort",
+        ).strip() or "shuffled_no_segment_date_sort"
+        # Pack same-day names into each batch without sorting the segment.
+        # Off by default so shuffled coverage feeding is unchanged.
+        self.same_day_ranking_batches = os.getenv(
+            "KRONOS_SAME_DAY_RANKING_BATCHES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+
+        self.collect_validation_auxiliary = os.getenv(
+            "KRONOS_COLLECT_VALIDATION_AUXILIARY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+
+        # Train-time condition identity margin (default OFF — Bootstrap untouched).
+        # L += λ * relu(CE_full − CE_shuffled + m); CE = forecast CE; shuffle =
+        # joint-batch randperm of sector/size (same style as val ablation).
+        # Sector-CE (asof→sector) is alternate/later; not wired here.
+        self.cond_identity_margin = os.getenv(
+            "KRONOS_COND_IDENTITY_MARGIN", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.cond_identity_lambda = float(
+            os.getenv("KRONOS_COND_IDENTITY_LAMBDA", "1.0")
+        )
+        self.cond_identity_margin_m = float(
+            os.getenv("KRONOS_COND_IDENTITY_MARGIN_M", "0.05")
+        )
+        if self.cond_identity_lambda < 0:
+            raise ValueError("KRONOS_COND_IDENTITY_LAMBDA must be non-negative")
+        if self.cond_identity_margin_m < 0:
+            raise ValueError("KRONOS_COND_IDENTITY_MARGIN_M must be non-negative")
+        if self.beta_v21_validation_denominators:
+            denominator_values = tuple(
+                float(value.strip())
+                for value in self.beta_v21_validation_denominators.split(",")
+            )
+            if len(denominator_values) != 5 or any(
+                value <= 0 for value in denominator_values
+            ):
+                raise ValueError(
+                    "KRONOS_BETA_V21_VALIDATION_DENOMINATORS must contain five "
+                    "positive values: path,history,return,barrier,ranking"
+                )
+        if (
+            self.best_selection_metric == "beta_v21_score"
+            and not self.beta_v21_validation_denominators
+            and not self.beta_v21_auto_calibrate
+        ):
+            raise ValueError(
+                "Beta v2.1 checkpoint selection requires fixed validation denominators"
+            )
+        if self.best_selection_metric == "ranking" and not self.use_beta_v21_auxiliary:
+            raise ValueError(
+                "ranking best-checkpoint selection requires Beta v2.1 auxiliary"
+            )
+        if self.best_selection_metric == "ranking" and not self.same_day_ranking_batches:
+            raise ValueError(
+                "ranking best-checkpoint selection requires same-day ranking batches"
+            )
+        if self.best_selection_metric == "pairwise_accuracy" and not self.use_beta_v21_auxiliary:
+            raise ValueError(
+                "pairwise_accuracy best-checkpoint selection requires Beta v2.1 auxiliary"
+            )
+        if (
+            self.best_selection_metric == "pairwise_accuracy"
+            and not self.same_day_ranking_batches
+        ):
+            raise ValueError(
+                "pairwise_accuracy best-checkpoint selection requires same-day ranking batches"
+            )
+        monitor_base = os.getenv("KRONOS_FORECAST_MONITOR_BASE", "").strip()
+        self.forecast_monitor_base = float(monitor_base) if monitor_base else None
+        monitor_margin = os.getenv("KRONOS_FORECAST_MONITOR_MARGIN", "").strip()
+        self.forecast_monitor_margin = (
+            float(monitor_margin) if monitor_base and monitor_margin else (
+                0.015 if monitor_base else None
+            )
+        )
+        # Louder early-drift alert (log only, never a stop): print a banner
+        # when weighted_forecast_loss rises more than the margin above base.
+        drift_base = os.getenv("KRONOS_FORECAST_DRIFT_ALERT_BASE", "").strip()
+        self.forecast_drift_alert_base = float(drift_base) if drift_base else None
+        drift_margin = os.getenv("KRONOS_FORECAST_DRIFT_ALERT_MARGIN", "").strip()
+        self.forecast_drift_alert_margin = (
+            float(drift_margin) if drift_base and drift_margin else (
+                0.005 if drift_base else None
+            )
+        )
+        self.forecast_drift_alert_early_segments = int(
+            os.getenv("KRONOS_FORECAST_DRIFT_ALERT_EARLY_SEGMENTS", "5")
+        )
+        self.log_pairwise_ranking_metrics = os.getenv(
+            "KRONOS_LOG_PAIRWISE_RANKING_METRICS", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if self.beta_v21_auxiliary_warmup_steps < 1:
+            raise ValueError("Beta v2.1 auxiliary warmup steps must be positive")
+        if self.beta_v21_ranking_weight <= 0:
+            raise ValueError("Beta v2.1 ranking weight must be positive")
+        if not 0.0 <= self.beta_v21_ema_decay < 1.0:
+            raise ValueError("Beta v2.1 EMA decay must be in [0, 1)")
+        if self.beta_v21_consistency_samples < 0:
+            raise ValueError("Beta v2.1 consistency samples must be non-negative")
+        if self.beta_v21_consistency_sample_count < 1:
+            raise ValueError("Beta v2.1 consistency sample count must be positive")
+
+        # Learning rates for different model components.
+        self.tokenizer_learning_rate = 2e-4
+        self.predictor_learning_rate = float(
+            os.getenv("KRONOS_PREDICTOR_LEARNING_RATE", "1e-5")
+        )
+        self.condition_learning_rate = float(
+            os.getenv("KRONOS_CONDITION_LEARNING_RATE", "1e-4")
+        )
+        # Off by default so existing two-speed runs keep heads on the predictor
+        # LR. Phase 1 sets this so trunk stays at predictor LR and
+        # norm/dep_layer/head/return_head/barrier_head share condition LR.
+        self.split_trunk_head_learning_rate = os.getenv(
+            "KRONOS_SPLIT_TRUNK_HEAD_LR", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.scheduler_min_learning_rate = float(
+            os.getenv("KRONOS_SCHEDULER_MIN_LR", "1e-6")
+        )
+        self.predictor_min_learning_rate = float(
+            os.getenv(
+                "KRONOS_PREDICTOR_MIN_LR",
+                str(self.scheduler_min_learning_rate),
+            )
+        )
+        self.condition_min_learning_rate = float(
+            os.getenv(
+                "KRONOS_CONDITION_MIN_LR",
+                str(self.scheduler_min_learning_rate),
+            )
+        )
+        self.scheduler_type = os.getenv(
+            "KRONOS_SCHEDULER", "warmup_cosine"
+        ).strip().lower()
+        if self.scheduler_type not in {
+            "warmup_cosine", "warmup_constant", "two_speed", "uniform_cosine", "fixed",
+            "one_cycle", "warmup_constant_cosine",
+        }:
+            raise ValueError(
+                "v1-beta optimized training requires "
+                "KRONOS_SCHEDULER=warmup_cosine, warmup_constant, two_speed, uniform_cosine, "
+                "fixed, one_cycle, or warmup_constant_cosine"
+            )
+        self.scheduler_warmup_ratio = float(
+            os.getenv("KRONOS_SCHEDULER_WARMUP_RATIO", "0.02")
+        )
+        if not 0 <= self.scheduler_warmup_ratio < 1:
+            raise ValueError("KRONOS_SCHEDULER_WARMUP_RATIO must be in [0, 1)")
+        # warmup_constant_cosine (WSD): linear warmup -> hold peak -> cosine to min LR
+        # starting at this fraction of the global optimizer steps. Only read (and only
+        # resume-guarded) for that scheduler, so existing runs are unaffected.
+        self.scheduler_decay_start_ratio = float(
+            os.getenv("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
+        )
+        if self.scheduler_type == "warmup_constant_cosine" and not (
+            self.scheduler_warmup_ratio < self.scheduler_decay_start_ratio < 1
+        ):
+            raise ValueError(
+                "KRONOS_SCHEDULER_DECAY_START_RATIO must be in (warmup ratio, 1)"
+            )
+        self.predictor_warmup_start_learning_rate = float(
+            os.getenv("KRONOS_PREDICTOR_WARMUP_START_LR", "1e-6")
+        )
+        self.condition_warmup_start_learning_rate = float(
+            os.getenv("KRONOS_CONDITION_WARMUP_START_LR", "1e-5")
+        )
+        if not 0 < self.predictor_warmup_start_learning_rate <= self.predictor_learning_rate:
+            raise ValueError("Predictor warmup start LR must be in (0, predictor LR]")
+        if not 0 < self.condition_warmup_start_learning_rate <= self.condition_learning_rate:
+            raise ValueError("Condition warmup start LR must be in (0, condition LR]")
+        self.condition_fast_decay_ratio = float(
+            os.getenv("KRONOS_CONDITION_FAST_DECAY_RATIO", "0.075")
+        )
+        self.condition_fast_decay_learning_rate = float(
+            os.getenv("KRONOS_CONDITION_FAST_DECAY_LR", "1e-5")
+        )
+        if (
+            self.scheduler_type == "two_speed"
+            and not self.scheduler_warmup_ratio < self.condition_fast_decay_ratio < 1
+        ):
+            raise ValueError(
+                "Condition fast-decay ratio must be greater than warmup ratio and less than 1"
+            )
+        if self.scheduler_type == "two_speed" and not (
+            self.condition_min_learning_rate
+            <= self.condition_fast_decay_learning_rate
+            <= self.condition_learning_rate
+        ):
+            raise ValueError(
+                "Condition fast-decay LR must be between condition min and peak LR"
+            )
+        if not 0 < self.predictor_min_learning_rate <= self.predictor_learning_rate:
+            raise ValueError("Predictor min LR must be in (0, predictor LR]")
+        if not 0 < self.condition_min_learning_rate <= self.condition_learning_rate:
+            raise ValueError("Condition min LR must be in (0, condition LR]")
+        if self.scheduler_type == "uniform_cosine":
+            uniform_values = (
+                (
+                    "peak LR",
+                    self.predictor_learning_rate,
+                    self.condition_learning_rate,
+                ),
+                (
+                    "warmup start LR",
+                    self.predictor_warmup_start_learning_rate,
+                    self.condition_warmup_start_learning_rate,
+                ),
+                (
+                    "minimum LR",
+                    self.predictor_min_learning_rate,
+                    self.condition_min_learning_rate,
+                ),
+            )
+            for label, predictor_value, condition_value in uniform_values:
+                if predictor_value != condition_value:
+                    raise ValueError(
+                        f"uniform_cosine requires identical predictor and condition {label}"
+                    )
+        self.gradient_clip_norm = float(
+            os.getenv("KRONOS_GRAD_CLIP_NORM", "3.0")
+        )
+        if self.gradient_clip_norm <= 0:
+            raise ValueError("KRONOS_GRAD_CLIP_NORM must be positive")
+        self.condition_monitor_interval_steps = int(
+            os.getenv("KRONOS_CONDITION_MONITOR_INTERVAL_STEPS", "100")
+        )
+        self.condition_ablation_interval_segments = int(
+            os.getenv("KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS", "10")
+        )
+        if self.condition_monitor_interval_steps < 0:
+            raise ValueError("Condition monitor interval must be non-negative")
+        if self.condition_ablation_interval_segments < 0:
+            raise ValueError("Condition ablation interval must be non-negative")
+        self.trainable_transformer_layers = int(
+            os.getenv("KRONOS_TRAINABLE_TRANSFORMER_LAYERS", "2")
+        )
+        # When set, freeze trunk + forecast/condition modules; train only
+        # return_head and barrier_head (Beta v2.1 ranking heads-only mode).
+        self.train_beta_v21_heads_only = os.getenv(
+            "KRONOS_TRAIN_BETA_V21_HEADS_ONLY", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.context_layer = int(os.getenv("KRONOS_CONTEXT_LAYER", "10"))
+
+        # Gradient accumulation: DataLoader batch is the per-GPU update batch;
+        # it is split into `accumulation_steps` micros for peak-memory control
+        # (tokenizer-style). Effective global batch = batch_size * world_size.
+        # Example for dual-T4 Base: batch_size=32, accum=8 → micro=4, global=64.
+        self.accumulation_steps = max(
+            1, int(os.getenv("KRONOS_ACCUMULATION_STEPS", "1"))
+        )
+
+        # AdamW optimizer parameters.
+        self.adam_beta1 = 0.9
+        self.adam_beta2 = 0.95
+        self.adam_weight_decay = float(
+            os.getenv("KRONOS_ADAM_WEIGHT_DECAY", "0.1")
+        )
+
+        # Optional predictor dropout overrides applied on top of the parent
+        # config.json when the pretrained predictor is built (empty = keep parent).
+        # Weights are unaffected; only nn.Dropout / SDPA dropout_p change.
+        for _name, _env in (
+            ("predictor_resid_dropout_p", "KRONOS_RESID_DROPOUT_P"),
+            ("predictor_ffn_dropout_p", "KRONOS_FFN_DROPOUT_P"),
+            ("predictor_attn_dropout_p", "KRONOS_ATTN_DROPOUT_P"),
+            ("predictor_token_dropout_p", "KRONOS_TOKEN_DROPOUT_P"),
+        ):
+            _raw = os.getenv(_env, "").strip()
+            _value = float(_raw) if _raw else None
+            if _value is not None and not 0.0 <= _value < 1.0:
+                raise ValueError(f"{_env} must be in [0, 1)")
+            setattr(self, _name, _value)
+
+        # Miscellaneous
+        self.seed = 100  # Global random seed for reproducibility.
+        # Keep coverage ordering independently reproducible so a new training
+        # pass can use a different permutation without changing model RNG.
+        self.coverage_seed = int(os.getenv("KRONOS_COVERAGE_SEED", str(self.seed)))
+
+        # =================================================================
+        # Experiment Logging & Saving
+        # =================================================================
+        self.use_comet = False # Set to True only when Comet ML is configured
+        self.comet_config = {
+            # It is highly recommended to load secrets from environment variables
+            # for security purposes. Example: os.getenv("COMET_API_KEY")
+            "api_key": "YOUR_COMET_API_KEY",
+            "project_name": "Kronos-Finetune-Demo",
+            "workspace": "your_comet_workspace" # TODO: Change to your Comet ML workspace name
+        }
+        self.comet_tag = 'finetune_demo'
+        self.comet_name = 'finetune_demo'
+
+        # Base directory for saving model checkpoints and results.
+        # Using a general 'outputs' directory is a common practice.
+        self.save_path = os.getenv("KRONOS_SAVE_PATH", "./outputs/models")
+        self.tokenizer_save_folder_name = 'finetune_tokenizer_demo'
+        self.predictor_save_folder_name = os.getenv(
+            "KRONOS_PREDICTOR_SAVE_FOLDER", "a_share_size_kronos_base"
+        )
+        self.backtest_save_folder_name = 'finetune_backtest_demo'
+
+        # Path for backtesting results.
+        self.backtest_result_path = "./outputs/backtest_results"
+
+        # =================================================================
+        # Model & Checkpoint Paths
+        # =================================================================
+        # TODO: Update these paths to your pretrained model locations.
+        # These can be local paths or Hugging Face Hub model identifiers.
+        self.pretrained_tokenizer_path = os.getenv(
+            "KRONOS_TOKENIZER_PATH", "NeoQuasar/Kronos-Tokenizer-base"
+        )
+        self.pretrained_predictor_path = os.getenv(
+            "KRONOS_PREDICTOR_PATH", "./Kronos-base"
+        )
+
+        # Paths to the fine-tuned models, derived from the save_path.
+        # These will be generated automatically during training.
+        self.finetuned_tokenizer_path = f"{self.save_path}/{self.tokenizer_save_folder_name}/checkpoints/best_model"
+        self.finetuned_predictor_path = f"{self.save_path}/{self.predictor_save_folder_name}/checkpoints/best_model"
+
+        # =================================================================
+        # Backtesting Parameters
+        # =================================================================
+        self.backtest_n_symbol_hold = 50  # Number of symbols to hold in the portfolio.
+        self.backtest_n_symbol_drop = 5  # Number of symbols to drop from the pool.
+        self.backtest_hold_thresh = 5  # Minimum holding period for a stock.
+        self.inference_T = 0.6
+        self.inference_top_p = 0.9
+        self.inference_top_k = 0
+        self.inference_sample_count = 5
+        self.backtest_batch_size = 1000
+        self.backtest_benchmark = self._set_benchmark(self.instrument)
+
+    def _set_benchmark(self, instrument):
+        dt_benchmark = {
+            'csi800': "SH000906",
+            'csi1000': "SH000852",
+            'csi300': "SH000300",
+        }
+        if instrument in dt_benchmark:
+            return dt_benchmark[instrument]
+        else:
+            raise ValueError(f"Benchmark not defined for instrument: {instrument}")

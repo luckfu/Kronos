@@ -92,7 +92,7 @@ kernel:  wynstonliu/kronos-small-0-1-bootstrap-final   (COMPLETE)
 
 ## 5. 重建 payload 的最小脚本
 
-kernel 源码不在仓库里，靠 wrapper 里那段 base64 的自解压 zip。完整流程：
+kernel 源码快照已入库（[`../cond_identity/README.md`](../cond_identity/README.md)）；实际推 kernel 仍靠 wrapper 里那段 base64 的自解压 zip。完整流程：
 
 ```bash
 export KAGGLE_API_TOKEN=<user281434 或 luckfu>

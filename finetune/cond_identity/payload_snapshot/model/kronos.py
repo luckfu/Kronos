@@ -1,0 +1,996 @@
+import numpy as np
+import pandas as pd
+import torch
+from huggingface_hub import PyTorchModelHubMixin
+import sys
+
+from tqdm import trange
+
+sys.path.append("../")
+from model.module import *
+
+
+class KronosTokenizer(nn.Module, PyTorchModelHubMixin):
+    """
+    KronosTokenizer module for tokenizing input data using a hybrid quantization approach.
+
+    This tokenizer utilizes a combination of encoder and decoder Transformer blocks
+    along with the Binary Spherical Quantization (BSQuantizer) to compress and decompress input data.
+
+    Args:
+           d_in (int): Input dimension.
+           d_model (int): Model dimension.
+           n_heads (int): Number of attention heads.
+           ff_dim (int): Feed-forward dimension.
+           n_enc_layers (int): Number of encoder layers.
+           n_dec_layers (int): Number of decoder layers.
+           ffn_dropout_p (float): Dropout probability for feed-forward networks.
+           attn_dropout_p (float): Dropout probability for attention mechanisms.
+           resid_dropout_p (float): Dropout probability for residual connections.
+           s1_bits (int): Number of bits for the pre token in BSQuantizer.
+           s2_bits (int): Number of bits for the post token in BSQuantizer.
+           beta (float): Beta parameter for BSQuantizer.
+           gamma0 (float): Gamma0 parameter for BSQuantizer.
+           gamma (float): Gamma parameter for BSQuantizer.
+           zeta (float): Zeta parameter for BSQuantizer.
+           group_size (int): Group size parameter for BSQuantizer.
+
+    """
+
+    def __init__(self, d_in, d_model, n_heads, ff_dim, n_enc_layers, n_dec_layers, ffn_dropout_p, attn_dropout_p, resid_dropout_p, s1_bits, s2_bits, beta, gamma0, gamma, zeta, group_size):
+
+        super().__init__()
+        self.d_in = d_in
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.ff_dim = ff_dim
+        self.enc_layers = n_enc_layers
+        self.dec_layers = n_dec_layers
+        self.ffn_dropout_p = ffn_dropout_p
+        self.attn_dropout_p = attn_dropout_p
+        self.resid_dropout_p = resid_dropout_p
+
+        self.s1_bits = s1_bits
+        self.s2_bits = s2_bits
+        self.codebook_dim = s1_bits + s2_bits # Total dimension of the codebook after quantization
+        self.embed = nn.Linear(self.d_in, self.d_model)
+        self.head = nn.Linear(self.d_model, self.d_in)
+
+        # Encoder Transformer Blocks
+        self.encoder = nn.ModuleList([
+            TransformerBlock(self.d_model, self.n_heads, self.ff_dim, self.ffn_dropout_p, self.attn_dropout_p, self.resid_dropout_p)
+            for _ in range(self.enc_layers - 1)
+        ])
+        # Decoder Transformer Blocks
+        self.decoder = nn.ModuleList([
+            TransformerBlock(self.d_model, self.n_heads, self.ff_dim, self.ffn_dropout_p, self.attn_dropout_p, self.resid_dropout_p)
+            for _ in range(self.dec_layers - 1)
+        ])
+        self.quant_embed = nn.Linear(in_features=self.d_model, out_features=self.codebook_dim) # Linear layer before quantization
+        self.post_quant_embed_pre = nn.Linear(in_features=self.s1_bits, out_features=self.d_model) # Linear layer after quantization (pre part - s1 bits)
+        self.post_quant_embed = nn.Linear(in_features=self.codebook_dim, out_features=self.d_model) # Linear layer after quantization (full codebook)
+        self.tokenizer = BSQuantizer(self.s1_bits, self.s2_bits, beta, gamma0, gamma, zeta, group_size) # BSQuantizer module
+
+    def forward(self, x):
+        """
+        Forward pass of the KronosTokenizer.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_in).
+
+        Returns:
+            tuple: A tuple containing:
+                - tuple: (z_pre, z) - Reconstructed outputs from decoder with s1_bits and full codebook respectively,
+                         both of shape (batch_size, seq_len, d_in).
+                - torch.Tensor: bsq_loss - Loss from the BSQuantizer.
+                - torch.Tensor: quantized - Quantized representation from BSQuantizer.
+                - torch.Tensor: z_indices - Indices from the BSQuantizer.
+        """
+        z = self.embed(x)
+
+        for layer in self.encoder:
+            z = layer(z)
+
+        z = self.quant_embed(z) # (B, T, codebook)
+
+        bsq_loss, quantized, z_indices = self.tokenizer(z)
+
+        quantized_pre = quantized[:, :, :self.s1_bits] # Extract the first part of quantized representation (s1_bits)
+        z_pre = self.post_quant_embed_pre(quantized_pre)
+
+        z = self.post_quant_embed(quantized)
+
+        # Decoder layers (for pre part - s1 bits)
+        for layer in self.decoder:
+            z_pre = layer(z_pre)
+        z_pre = self.head(z_pre)
+
+        # Decoder layers (for full codebook)
+        for layer in self.decoder:
+            z = layer(z)
+        z = self.head(z)
+
+        return (z_pre, z), bsq_loss, quantized, z_indices
+
+    def indices_to_bits(self, x, half=False):
+        """
+        Converts indices to bit representations and scales them.
+
+        Args:
+            x (torch.Tensor): Indices tensor.
+            half (bool, optional): Whether to process only half of the codebook dimension. Defaults to False.
+
+        Returns:
+            torch.Tensor: Bit representation tensor.
+        """
+        if half:
+            x1 = x[0] # Assuming x is a tuple of indices if half is True
+            x2 = x[1]
+            mask = 2 ** torch.arange(self.codebook_dim//2, device=x1.device, dtype=torch.long) # Create a mask for bit extraction
+            x1 = (x1.unsqueeze(-1) & mask) != 0 # Extract bits for the first half
+            x2 = (x2.unsqueeze(-1) & mask) != 0 # Extract bits for the second half
+            x = torch.cat([x1, x2], dim=-1) # Concatenate the bit representations
+        else:
+            mask = 2 ** torch.arange(self.codebook_dim, device=x.device, dtype=torch.long) # Create a mask for bit extraction
+            x = (x.unsqueeze(-1) & mask) != 0 # Extract bits
+
+        x = x.float() * 2 - 1 # Convert boolean to bipolar (-1, 1)
+        q_scale = 1. / (self.codebook_dim ** 0.5) # Scaling factor
+        x = x * q_scale
+        return x
+
+    def encode(self, x, half=False):
+        """
+        Encodes the input data into quantized indices.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_in).
+            half (bool, optional): Whether to use half quantization in BSQuantizer. Defaults to False.
+
+        Returns:
+            torch.Tensor: Quantized indices from BSQuantizer.
+        """
+        z = self.embed(x)
+        for layer in self.encoder:
+            z = layer(z)
+        z = self.quant_embed(z)
+
+        bsq_loss, quantized, z_indices = self.tokenizer(z, half=half, collect_metrics=False)
+        return z_indices
+
+    def decode(self, x, half=False):
+        """
+        Decodes quantized indices back to the input data space.
+
+        Args:
+            x (torch.Tensor): Quantized indices tensor.
+            half (bool, optional): Whether the indices were generated with half quantization. Defaults to False.
+
+        Returns:
+            torch.Tensor: Reconstructed output tensor of shape (batch_size, seq_len, d_in).
+        """
+        quantized = self.indices_to_bits(x, half)
+        z = self.post_quant_embed(quantized)
+        for layer in self.decoder:
+            z = layer(z)
+        z = self.head(z)
+        return z
+
+
+class Kronos(nn.Module, PyTorchModelHubMixin):
+    """
+    Kronos Model.
+
+    Args:
+        s1_bits (int): Number of bits for pre tokens.
+        s2_bits (int): Number of bits for post tokens.
+        n_layers (int): Number of Transformer blocks.
+        d_model (int): Dimension of the model's embeddings and hidden states.
+        n_heads (int): Number of attention heads in the MultiheadAttention layers.
+        ff_dim (int): Dimension of the feedforward network in the Transformer blocks.
+        ffn_dropout_p (float): Dropout probability for the feedforward network.
+        attn_dropout_p (float): Dropout probability for the attention layers.
+        resid_dropout_p (float): Dropout probability for residual connections.
+        token_dropout_p (float): Dropout probability for token embeddings.
+        learn_te (bool): Whether to use learnable temporal embeddings.
+        num_sectors (int): Number of sector IDs; zero disables sector conditioning.
+        num_size_buckets (int): Number of size buckets; zero disables size conditioning.
+        use_size_percentile (bool): Whether to add a continuous size-percentile MLP.
+        condition_last_layer_init (str): zero (default) or normal/nonzero for Fix C.
+        condition_last_layer_init_std (float): std for Normal init when not zero.
+        use_condition_scale (bool): if True, create learnable γ Parameter (Fix A).
+            Default False = historical bare add (Bootstrap / pre-A). Smoke sets True.
+        condition_scale_init (float): residual gain γ₀ when use_condition_scale (e.g. 25).
+    """
+
+    def __init__(self, s1_bits, s2_bits, n_layers, d_model, n_heads, ff_dim, ffn_dropout_p, attn_dropout_p, resid_dropout_p, token_dropout_p, learn_te, num_sectors=0, num_size_buckets=0, context_layer=0, use_size_percentile=False, size_mlp_hidden_dim=64, use_beta_v21_auxiliary=False, condition_last_layer_init="zero", condition_last_layer_init_std=0.02, use_condition_scale=False, condition_scale_init=1.0):
+        super().__init__()
+        self.s1_bits = s1_bits
+        self.s2_bits = s2_bits
+        self.n_layers = n_layers
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.learn_te = learn_te
+        self.ff_dim = ff_dim
+        self.ffn_dropout_p = ffn_dropout_p
+        self.attn_dropout_p = attn_dropout_p
+        self.resid_dropout_p = resid_dropout_p
+        self.token_dropout_p = token_dropout_p
+        self.num_sectors = int(num_sectors)
+        self.num_size_buckets = int(num_size_buckets)
+        self.context_layer = int(context_layer)
+        self.use_size_percentile = bool(use_size_percentile)
+        self.size_mlp_hidden_dim = int(size_mlp_hidden_dim)
+        self.use_beta_v21_auxiliary = bool(use_beta_v21_auxiliary)
+        self.condition_last_layer_init = str(condition_last_layer_init).strip().lower()
+        self.condition_last_layer_init_std = float(condition_last_layer_init_std)
+        self.use_condition_scale = bool(use_condition_scale)
+        self.condition_scale_init = float(condition_scale_init)
+        if not 0 <= self.context_layer <= self.n_layers:
+            raise ValueError(f"context_layer must be in [0, {self.n_layers}], got {self.context_layer}")
+
+        self.s1_vocab_size = 2 ** self.s1_bits
+        self.token_drop = nn.Dropout(self.token_dropout_p)
+        self.embedding = HierarchicalEmbedding(self.s1_bits, self.s2_bits, self.d_model)
+        self.time_emb = TemporalEmbedding(self.d_model, self.learn_te)
+        self.sector_emb = nn.Embedding(self.num_sectors + 1, self.d_model) if self.num_sectors > 0 else None
+        self.size_emb = nn.Embedding(self.num_size_buckets + 1, self.d_model) if self.num_size_buckets > 0 else None
+        self.size_mlp = (
+            nn.Sequential(
+                nn.Linear(2, self.size_mlp_hidden_dim),
+                nn.SiLU(),
+                nn.Linear(self.size_mlp_hidden_dim, self.d_model),
+            )
+            if self.use_size_percentile else None
+        )
+        self.transformer = nn.ModuleList([
+            TransformerBlock(self.d_model, self.n_heads, self.ff_dim, self.ffn_dropout_p, self.attn_dropout_p, self.resid_dropout_p)
+            for _ in range(self.n_layers)
+        ])
+        self.norm = RMSNorm(self.d_model)
+        self.dep_layer = DependencyAwareLayer(self.d_model)
+        self.head = DualHead(self.s1_bits, self.s2_bits, self.d_model)
+        self.return_head = nn.Linear(self.d_model, 4) if self.use_beta_v21_auxiliary else None
+        self.barrier_head = nn.Linear(self.d_model, 3) if self.use_beta_v21_auxiliary else None
+        self.apply(self._init_weights)
+        # Condition last-layer init. Historical default is zeros_ (no-op add) so a
+        # pretrained trunk keeps its behavior while adapters learn. Fix C smoke
+        # uses Normal(0, std) to drop the zero-init bottleneck.
+        self._init_condition_last_layers()
+        # Fix A: learnable residual gain γ on condition add. Opt-in only —
+        # Bootstrap / pre-A must stay bare add (no Parameter) so Seg161 resume
+        # matches checkpoint keys. Smoke sets use_condition_scale + γ₀ via env.
+        if self.use_condition_scale:
+            self.condition_scale = nn.Parameter(
+                torch.tensor(float(self.condition_scale_init), dtype=torch.float32)
+            )
+        else:
+            self.condition_scale = None
+
+
+    def _init_condition_last_layers(self):
+        """Initialize sector/size last layers (zero historical, or Normal for Fix C)."""
+        mode = self.condition_last_layer_init
+        std = float(self.condition_last_layer_init_std)
+        use_normal = mode in {"normal", "nonzero", "n"}
+        def _apply(tensor):
+            if use_normal:
+                nn.init.normal_(tensor, mean=0.0, std=std)
+            else:
+                nn.init.zeros_(tensor)
+        if self.sector_emb is not None:
+            _apply(self.sector_emb.weight)
+        if self.size_emb is not None:
+            _apply(self.size_emb.weight)
+        if self.size_mlp is not None:
+            _apply(self.size_mlp[-1].weight)
+            _apply(self.size_mlp[-1].bias)
+
+    def _init_weights(self, module):
+
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0, std=self.embedding.d_model ** -0.5)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, RMSNorm):
+            nn.init.ones_(module.weight)
+
+    def _add_context(self, x, sector_id=None, size_bucket=None, size_percentile=None):
+        """Add static asset metadata to every timestep in a token sequence."""
+        context_parts = []
+        if sector_id is not None:
+            if self.sector_emb is None:
+                raise ValueError("sector_id was provided but num_sectors is 0")
+            if sector_id.ndim != 1 or sector_id.shape[0] != x.shape[0]:
+                raise ValueError(f"sector_id must have shape [batch], got {tuple(sector_id.shape)}")
+            context_parts.append(self.sector_emb(sector_id.long()))
+        if size_bucket is not None:
+            if self.size_emb is None:
+                raise ValueError("size_bucket was provided but num_size_buckets is 0")
+            if size_bucket.ndim != 1 or size_bucket.shape[0] != x.shape[0]:
+                raise ValueError(f"size_bucket must have shape [batch], got {tuple(size_bucket.shape)}")
+            context_parts.append(self.size_emb(size_bucket.long()))
+        if size_percentile is not None:
+            if self.size_mlp is None:
+                raise ValueError("size_percentile was provided but use_size_percentile is false")
+            if size_percentile.ndim != 1 or size_percentile.shape[0] != x.shape[0]:
+                raise ValueError(
+                    f"size_percentile must have shape [batch], got {tuple(size_percentile.shape)}"
+                )
+            percentile = size_percentile.to(dtype=x.dtype)
+            known = torch.isfinite(percentile)
+            percentile = torch.nan_to_num(percentile, nan=0.5).clamp(0.0, 1.0)
+            continuous_features = torch.stack([percentile, known.to(x.dtype)], dim=-1)
+            context_parts.append(self.size_mlp(continuous_features))
+        if context_parts:
+            condition = torch.stack(context_parts, dim=0).sum(dim=0)
+            # Fix A (opt-in): learnable γ. Else historical bare add (Bootstrap).
+            if self.condition_scale is not None:
+                scaled = self.condition_scale.to(dtype=condition.dtype) * condition
+                scale_value = float(self.condition_scale.detach().float().item())
+            else:
+                scaled = condition
+                scale_value = 1.0
+            if getattr(self, "collect_condition_stats", False):
+                with torch.no_grad():
+                    trunk_norm = x.detach().float().norm(dim=-1).mean()
+                    raw_norm = condition.detach().float().norm(dim=-1).mean()
+                    condition_norm = scaled.detach().float().norm(dim=-1).mean()
+                    self.last_condition_stats = {
+                        "condition_output_norm": float(condition_norm.item()),
+                        "condition_raw_norm": float(raw_norm.item()),
+                        "condition_scale": scale_value,
+                        "trunk_input_norm": float(trunk_norm.item()),
+                        "condition_trunk_norm_ratio": float(
+                            (condition_norm / (trunk_norm + 1e-8)).item()
+                        ),
+                    }
+            x = x + scaled.unsqueeze(1)
+        elif getattr(self, "collect_condition_stats", False):
+            scale_value = (
+                float(self.condition_scale.detach().float().item())
+                if self.condition_scale is not None
+                else 1.0
+            )
+            self.last_condition_stats = {
+                "condition_output_norm": 0.0,
+                "condition_raw_norm": 0.0,
+                "condition_scale": scale_value,
+                "trunk_input_norm": float(
+                    x.detach().float().norm(dim=-1).mean().item()
+                ),
+                "condition_trunk_norm_ratio": 0.0,
+            }
+        return x
+
+    def encode_context(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None, size_percentile=None):
+        x = self.embedding([s1_ids, s2_ids])
+        if stamp is not None:
+            x = x + self.time_emb(stamp)
+        if self.context_layer == 0:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket, size_percentile=size_percentile)
+        x = self.token_drop(x)
+        for layer_idx, layer in enumerate(self.transformer):
+            if self.context_layer > 0 and layer_idx == self.context_layer:
+                x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket, size_percentile=size_percentile)
+            x = layer(x, key_padding_mask=padding_mask)
+        if self.context_layer == self.n_layers:
+            x = self._add_context(x, sector_id=sector_id, size_bucket=size_bucket, size_percentile=size_percentile)
+        return self.norm(x)
+
+    def predict_s1(self, context):
+        return self.head(context)
+
+    def predict_s2(self, context, s1_ids, padding_mask=None, is_causal=None):
+        sibling_embed = self.embedding.emb_s1(s1_ids)
+        x2 = self.dep_layer(context, sibling_embed, key_padding_mask=padding_mask, is_causal=is_causal)
+        return self.head.cond_forward(x2)
+
+    def predict_s2_candidates(self, context, candidate_s1_ids, position_start=None, is_causal=None):
+        """Return s2 logits conditioned on candidate s1 ids per future position.
+
+        context is [B,T,D], candidate_s1_ids is [B,H,K]. The dependency layer
+        is evaluated in one expanded batch, avoiding repeated Transformer passes.
+        Full-length queries preserve RoPE positions, causal masks and the
+        hidden-state residual. Other query IDs do not affect a selected query.
+        """
+        b, t, d = context.shape
+        _, h, k = candidate_s1_ids.shape
+        start = t - h if position_start is None else int(position_start)
+        if candidate_s1_ids.shape[0] != b or not (0 <= start <= t - h):
+            raise ValueError('Candidate positions must lie within context')
+        expanded_context = context[:, None].expand(b, k, t, d).reshape(b * k, t, d)
+        full_ids = candidate_s1_ids.new_zeros((b, k, t))
+        full_ids[:, :, start:start + h] = candidate_s1_ids.transpose(1, 2)
+        sibling = self.embedding.emb_s1(full_ids.reshape(b * k, t))
+        x2 = self.dep_layer(expanded_context, sibling, is_causal=is_causal)
+        logits = self.head.cond_forward(x2[:, start:start + h])
+        return logits.reshape(b, k, h, -1).transpose(1, 2)
+
+    def forward(self, s1_ids, s2_ids, stamp=None, padding_mask=None, use_teacher_forcing=False, s1_targets=None, sector_id=None, size_bucket=None, size_percentile=None, return_auxiliary=False, asof_index=None):
+        """
+        Args:
+            s1_ids (torch.Tensor): Input tensor of s1 token IDs. Shape: [batch_size, seq_len]
+            s2_ids (torch.Tensor): Input tensor of s2 token IDs. Shape: [batch_size, seq_len]
+            stamp (torch.Tensor, optional): Temporal stamp tensor. Shape: [batch_size, seq_len]. Defaults to None.
+            padding_mask (torch.Tensor, optional): Mask for padding tokens. Shape: [batch_size, seq_len]. Defaults to None.
+            use_teacher_forcing (bool, optional): Whether to use teacher forcing for s1 decoding. Defaults to False.
+            s1_targets (torch.Tensor, optional): Target s1 token IDs for teacher forcing. Shape: [batch_size, seq_len]. Defaults to None.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]:
+                - s1 logits: Logits for s1 token predictions. Shape: [batch_size, seq_len, s1_vocab_size]
+                - s2_logits: Logits for s2 token predictions, conditioned on s1. Shape: [batch_size, seq_len, s2_vocab_size]
+        """
+        x = self.encode_context(s1_ids, s2_ids, stamp, padding_mask, sector_id, size_bucket, size_percentile)
+        s1_logits = self.predict_s1(x)
+
+        if use_teacher_forcing:
+            sibling_embed = self.embedding.emb_s1(s1_targets)
+        else:
+            s1_probs = F.softmax(s1_logits.detach(), dim=-1)
+            sample_s1_ids = torch.multinomial(s1_probs.view(-1, self.s1_vocab_size), 1).view(s1_ids.shape)
+            sibling_embed = self.embedding.emb_s1(sample_s1_ids)
+
+        x2 = self.dep_layer(x, sibling_embed, key_padding_mask=padding_mask)
+        s2_logits = self.head.cond_forward(x2)
+        logits = (s1_logits, s2_logits)
+        if not return_auxiliary:
+            return logits
+        if self.return_head is None or self.barrier_head is None:
+            raise ValueError("return_auxiliary requires use_beta_v21_auxiliary=True")
+        if asof_index is None:
+            raise ValueError("asof_index is required for auxiliary predictions")
+        asof_index = int(asof_index)
+        if not 0 <= asof_index < x.shape[1]:
+            raise ValueError(
+                f"asof_index must be in [0, {x.shape[1] - 1}], got {asof_index}"
+            )
+        h_asof = x[:, asof_index, :]
+        return logits, {
+            "return": self.return_head(h_asof),
+            "barrier": self.barrier_head(h_asof),
+        }
+
+    def decode_s1(self, s1_ids, s2_ids, stamp=None, padding_mask=None, sector_id=None, size_bucket=None, size_percentile=None):
+        """
+        Decodes only the s1 tokens.
+
+        This method performs a forward pass to predict only s1 tokens. It returns the s1 logits
+        and the context representation from the Transformer, which can be used for subsequent s2 decoding.
+
+        Args:
+            s1_ids (torch.Tensor): Input tensor of s1 token IDs. Shape: [batch_size, seq_len]
+            s2_ids (torch.Tensor): Input tensor of s2 token IDs. Shape: [batch_size, seq_len]
+            stamp (torch.Tensor, optional): Temporal stamp tensor. Shape: [batch_size, seq_len]. Defaults to None.
+            padding_mask (torch.Tensor, optional): Mask for padding tokens. Shape: [batch_size, seq_len]. Defaults to None.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]:
+                - s1 logits: Logits for s1 token predictions. Shape: [batch_size, seq_len, s1_vocab_size]
+                - context: Context representation from the Transformer. Shape: [batch_size, seq_len, d_model]
+        """
+        x = self.embedding([s1_ids, s2_ids])
+        if stamp is not None:
+            time_embedding = self.time_emb(stamp)
+            x = x + time_embedding
+        if self.context_layer == 0:
+            x = self._add_context(
+                x, sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
+        x = self.token_drop(x)
+
+        for layer_idx, layer in enumerate(self.transformer):
+            if self.context_layer > 0 and layer_idx == self.context_layer:
+                x = self._add_context(
+                    x, sector_id=sector_id, size_bucket=size_bucket,
+                    size_percentile=size_percentile,
+                )
+            x = layer(x, key_padding_mask=padding_mask)
+        if self.context_layer == self.n_layers:
+            x = self._add_context(
+                x, sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
+
+        x = self.norm(x)
+
+        s1_logits = self.head(x)
+        return s1_logits, x
+
+    def decode_s2(self, context, s1_ids, padding_mask=None):
+        """
+        Decodes the s2 tokens, conditioned on the context and s1 tokens.
+
+        This method decodes s2 tokens based on a pre-computed context representation (typically from `decode_s1`)
+        and the s1 token IDs. It uses the dependency-aware layer and the conditional s2 head to predict s2 tokens.
+
+        Args:
+            context (torch.Tensor): Context representation from the transformer (output of decode_s1).
+                                     Shape: [batch_size, seq_len, d_model]
+            s1_ids (torch.Tensor): Input tensor of s1 token IDs. Shape: [batch_size, seq_len]
+            padding_mask (torch.Tensor, optional): Mask for padding tokens. Shape: [batch_size, seq_len]. Defaults to None.
+
+        Returns:
+            torch.Tensor: s2 logits. Shape: [batch_size, seq_len, s2_vocab_size]
+        """
+        sibling_embed = self.embedding.emb_s1(s1_ids)
+        x2 = self.dep_layer(context, sibling_embed, key_padding_mask=padding_mask)
+        return self.head.cond_forward(x2)
+
+
+def nucleus_remove_mask(logits, top_p):
+    """Boolean mask, True where the token falls outside the nucleus.
+
+    `logits` is [batch, vocab], already temperature-scaled. The nucleus is the
+    smallest set of highest-probability tokens whose mass is at least `top_p`
+    (Holtzman et al.). Tied logits keep the lower original index, because an
+    unstable sort can swap those tokens between the sampling forward and the
+    log-prob replay. A prefix whose mass lands exactly on `top_p` does not
+    pull in the following token.
+    """
+    if logits.ndim != 2:
+        raise ValueError(f'nucleus mask expects [batch, vocab] logits, got {tuple(logits.shape)}')
+    # Probability math is float32 even when the caller still holds fp16/bf16 logits.
+    scaled = logits.float()
+    sorted_logits, sorted_indices = torch.sort(scaled, dim=-1, descending=True, stable=True)
+    probabilities = torch.softmax(sorted_logits, dim=-1)
+    preceding_mass = torch.cumsum(probabilities, dim=-1) - probabilities
+    remove_sorted = preceding_mass >= float(top_p)
+    remove_sorted = remove_sorted.clone()
+    remove_sorted[..., 0] = False
+    remove = torch.zeros_like(remove_sorted)
+    remove.scatter_(1, sorted_indices, remove_sorted)
+    return remove
+
+
+def temperature_nucleus_logits(logits, temperature, top_p):
+    """Float logits divided by temperature, then the production nucleus.
+
+    Sampling and filtered log-prob both call this so a token drawn at
+    (T, top_p) is in support for that same pair. Temperature is applied in
+    float32 before the mask; scaling in fp16/bf16 and masking in float32
+    drops boundary tokens that the sampler just drew.
+    """
+    scaled = logits.float() / float(temperature)
+    if float(top_p) >= 1.0:
+        return scaled
+    return scaled.masked_fill(nucleus_remove_mask(scaled, top_p), float('-inf'))
+
+
+def repair_out_of_support_sample(logits, draws):
+    """Map a multinomial index that landed on a masked logit back into the nucleus.
+
+    `torch.multinomial` can return a zero-mass index when the CDF undershoots 1
+    (PyTorch issue 4858; the CUDA kernel's fallback is the same failure).
+    The replacement is the in-support mode, which the nucleus always keeps.
+    """
+    chosen = logits.gather(-1, draws)
+    fallback = torch.argmax(logits, dim=-1, keepdim=True)
+    return torch.where(torch.isfinite(chosen), draws, fallback)
+
+
+def top_k_top_p_filtering(
+        logits,
+        top_k: int = 0,
+        top_p: float = 1.0,
+        filter_value: float = -float("Inf"),
+        min_tokens_to_keep: int = 1,
+):
+    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    Args:
+        logits: logits distribution shape (batch size, vocabulary size)
+        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        Make sure we keep at least min_tokens_to_keep per batch example in the output
+    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
+    """
+    if top_k > 0:
+        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        logits[indices_to_remove] = filter_value
+        return logits
+
+    if top_p < 1.0:
+        remove = nucleus_remove_mask(logits, top_p)
+        if min_tokens_to_keep > 1:
+            keep = min(min_tokens_to_keep, logits.size(-1))
+            top_idx = torch.topk(logits, keep, dim=-1).indices
+            remove = remove.scatter(1, top_idx, torch.zeros_like(top_idx, dtype=torch.bool))
+        logits[remove] = filter_value
+        return logits
+
+
+def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_logits=True):
+    # top_k > 0 still wins and ignores top_p, matching the historical filter.
+    use_nucleus = (
+        top_p is not None and float(top_p) < 1.0
+        and not (top_k is not None and top_k > 0)
+    )
+    if use_nucleus:
+        logits = temperature_nucleus_logits(logits, temperature, top_p)
+    else:
+        logits = logits / temperature
+        if top_k is not None or top_p is not None:
+            if (top_k is not None and top_k > 0) or (top_p is not None and top_p < 1.0):
+                logits = top_k_top_p_filtering(
+                    logits, top_k=0 if top_k is None else top_k,
+                    top_p=1.0 if top_p is None else top_p,
+                )
+
+    probs = F.softmax(logits, dim=-1)
+
+    if not sample_logits:
+        _, x = torch.topk(probs, k=1, dim=-1)
+    else:
+        x = torch.multinomial(probs, num_samples=1)
+        if use_nucleus:
+            x = repair_out_of_support_sample(logits, x)
+
+    return x
+
+
+
+def _xla_mark_step(device):
+    """Flush the XLA live graph after each AR decode step on TPU.
+
+    ``auto_regressive_inference`` unrolls ``pred_len`` decode steps. Without a
+    mark_step boundary, torch_xla can retain one giant graph spanning the whole
+    unroll (teacher-forcing + AR in the same validation batch made this worse
+    after fp32 master weights / AdamW state were already allocated).
+    """
+    if getattr(device, 'type', None) != 'xla':
+        return
+    try:
+        import torch_xla.core.xla_model as xm
+    except ImportError:
+        return
+    xm.mark_step()
+
+
+def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False, sample_logits=True):
+    with torch.no_grad():
+        x = torch.clip(x, -clip, clip)
+
+        device = x.device
+        x = x.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x.size(1), x.size(2)).to(device)
+        x_stamp = x_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x_stamp.size(1), x_stamp.size(2)).to(device)
+        y_stamp = y_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, y_stamp.size(1), y_stamp.size(2)).to(device)
+
+        def repeat_condition(condition, name, dtype):
+            if condition is None:
+                return None
+            if condition.ndim == 0:
+                condition = condition.reshape(1)
+            if condition.ndim != 1:
+                raise ValueError(f"{name} must have shape [batch], got {tuple(condition.shape)}")
+            return condition.unsqueeze(1).repeat(1, sample_count).reshape(-1).to(
+                device=device, dtype=dtype
+            )
+
+        sector_id = repeat_condition(sector_id, "sector_id", torch.long)
+        size_bucket = repeat_condition(size_bucket, "size_bucket", torch.long)
+        size_percentile = repeat_condition(
+            size_percentile, "size_percentile", torch.float32
+        )
+
+        x_token = tokenizer.encode(x, half=True)
+        
+        initial_seq_len = x.size(1)
+        batch_size = x_token[0].size(0)
+        total_seq_len = initial_seq_len + pred_len
+        full_stamp = torch.cat([x_stamp, y_stamp], dim=1)
+
+        generated_pre = x_token[0].new_empty(batch_size, pred_len)
+        generated_post = x_token[1].new_empty(batch_size, pred_len)
+
+        pre_buffer = x_token[0].new_zeros(batch_size, max_context)
+        post_buffer = x_token[1].new_zeros(batch_size, max_context)
+        buffer_len = min(initial_seq_len, max_context)
+        if buffer_len > 0:
+            start_idx = max(0, initial_seq_len - max_context)
+            pre_buffer[:, :buffer_len] = x_token[0][:, start_idx:start_idx + buffer_len]
+            post_buffer[:, :buffer_len] = x_token[1][:, start_idx:start_idx + buffer_len]
+
+        if verbose:
+            ran = trange
+        else:
+            ran = range
+        for i in ran(pred_len):
+            current_seq_len = initial_seq_len + i
+            window_len = min(current_seq_len, max_context)
+
+            if current_seq_len <= max_context:
+                input_tokens = [
+                    pre_buffer[:, :window_len],
+                    post_buffer[:, :window_len]
+                ]
+            else:
+                input_tokens = [pre_buffer, post_buffer]
+
+            context_end = current_seq_len
+            context_start = max(0, context_end - max_context)
+            current_stamp = full_stamp[:, context_start:context_end, :].contiguous()
+
+            s1_logits, context = model.decode_s1(
+                input_tokens[0], input_tokens[1], current_stamp,
+                sector_id=sector_id, size_bucket=size_bucket,
+                size_percentile=size_percentile,
+            )
+            s1_logits = s1_logits[:, -1, :]
+            sample_pre = sample_from_logits(
+                s1_logits, temperature=T, top_k=top_k, top_p=top_p,
+                sample_logits=sample_logits,
+            )
+
+            s2_logits = model.decode_s2(context, sample_pre)
+            s2_logits = s2_logits[:, -1, :]
+            sample_post = sample_from_logits(
+                s2_logits, temperature=T, top_k=top_k, top_p=top_p,
+                sample_logits=sample_logits,
+            )
+
+            generated_pre[:, i] = sample_pre.squeeze(-1)
+            generated_post[:, i] = sample_post.squeeze(-1)
+
+            if current_seq_len < max_context:
+                pre_buffer[:, current_seq_len] = sample_pre.squeeze(-1)
+                post_buffer[:, current_seq_len] = sample_post.squeeze(-1)
+            else:
+                pre_buffer.copy_(torch.roll(pre_buffer, shifts=-1, dims=1))
+                post_buffer.copy_(torch.roll(post_buffer, shifts=-1, dims=1))
+                pre_buffer[:, -1] = sample_pre.squeeze(-1)
+                post_buffer[:, -1] = sample_post.squeeze(-1)
+
+            _xla_mark_step(device)
+
+        full_pre = torch.cat([x_token[0], generated_pre], dim=1)
+        full_post = torch.cat([x_token[1], generated_post], dim=1)
+
+        context_start = max(0, total_seq_len - max_context)
+        input_tokens = [
+            full_pre[:, context_start:total_seq_len].contiguous(),
+            full_post[:, context_start:total_seq_len].contiguous()
+        ]
+        z = tokenizer.decode(input_tokens, half=True)
+        z = z.reshape(-1, sample_count, z.size(1), z.size(2))
+        samples = z.float().cpu().numpy()
+        forecasts = samples if return_samples else np.mean(samples, axis=1)
+        if not return_generated_tokens:
+            return forecasts
+        tokens = {
+            "s1": generated_pre.reshape(-1, sample_count, pred_len).cpu().numpy(),
+            "s2": generated_post.reshape(-1, sample_count, pred_len).cpu().numpy(),
+        }
+        return forecasts, tokens
+
+
+def calc_time_stamps(x_timestamp):
+    time_df = pd.DataFrame()
+    time_df['minute'] = x_timestamp.dt.minute
+    time_df['hour'] = x_timestamp.dt.hour
+    time_df['weekday'] = x_timestamp.dt.weekday
+    time_df['day'] = x_timestamp.dt.day
+    time_df['month'] = x_timestamp.dt.month
+    return time_df
+
+
+class KronosPredictor:
+
+    def __init__(self, model, tokenizer, device=None, max_context=512, clip=5):
+        self.tokenizer = tokenizer
+        self.model = model
+        self.max_context = max_context
+        self.clip = clip
+        self.price_cols = ['open', 'high', 'low', 'close']
+        self.vol_col = 'volume'
+        self.amt_vol = 'amount'
+        self.time_cols = ['minute', 'hour', 'weekday', 'day', 'month']
+        
+        # Auto-detect device if not specified
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda:0"
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        
+        self.device = device
+
+        self.tokenizer = self.tokenizer.to(self.device)
+        self.model = self.model.to(self.device)
+
+    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+
+        x_tensor = torch.from_numpy(np.array(x).astype(np.float32)).to(self.device)
+        x_stamp_tensor = torch.from_numpy(np.array(x_stamp).astype(np.float32)).to(self.device)
+        y_stamp_tensor = torch.from_numpy(np.array(y_stamp).astype(np.float32)).to(self.device)
+
+        sector_tensor = None if sector_id is None else torch.as_tensor(sector_id, device=self.device)
+        size_tensor = None if size_bucket is None else torch.as_tensor(size_bucket, device=self.device)
+        percentile_tensor = None if size_percentile is None else torch.as_tensor(
+            size_percentile, device=self.device, dtype=torch.float32
+        )
+        preds = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
+                                          self.clip, T, top_k, top_p, sample_count, verbose,
+                                          sector_id=sector_tensor, size_bucket=size_tensor,
+                                          size_percentile=percentile_tensor,
+                                          return_samples=return_samples)
+        if return_samples:
+            preds = preds[:, :, -pred_len:, :]
+        else:
+            preds = preds[:, -pred_len:, :]
+        return preds
+
+    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("Input must be a pandas DataFrame.")
+
+        if not all(col in df.columns for col in self.price_cols):
+            raise ValueError(f"Price columns {self.price_cols} not found in DataFrame.")
+
+        df = df.copy()
+        if self.vol_col not in df.columns:
+            df[self.vol_col] = 0.0  # Fill missing volume with zeros
+            df[self.amt_vol] = 0.0  # Fill missing amount with zeros
+        if self.amt_vol not in df.columns and self.vol_col in df.columns:
+            df[self.amt_vol] = df[self.vol_col] * df[self.price_cols].mean(axis=1)
+
+        if df[self.price_cols + [self.vol_col, self.amt_vol]].isnull().values.any():
+            raise ValueError("Input DataFrame contains NaN values in price or volume columns.")
+
+        x_time_df = calc_time_stamps(x_timestamp)
+        y_time_df = calc_time_stamps(y_timestamp)
+
+        x = df[self.price_cols + [self.vol_col, self.amt_vol]].values.astype(np.float32)
+        x_stamp = x_time_df.values.astype(np.float32)
+        y_stamp = y_time_df.values.astype(np.float32)
+
+        x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+
+        x = (x - x_mean) / (x_std + 1e-5)
+        x = np.clip(x, -self.clip, self.clip)
+
+        x = x[np.newaxis, :]
+        x_stamp = x_stamp[np.newaxis, :]
+        y_stamp = y_stamp[np.newaxis, :]
+
+        preds = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose,
+                              sector_id=sector_id, size_bucket=size_bucket,
+                              size_percentile=size_percentile,
+                              return_samples=return_samples)
+
+        preds = preds.squeeze(0)
+        if return_samples:
+            preds = preds * (x_std[None, None, :] + 1e-5) + x_mean[None, None, :]
+            return preds
+
+        preds = preds * (x_std + 1e-5) + x_mean
+
+        pred_df = pd.DataFrame(preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp)
+        return pred_df
+
+
+    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+        """
+        Perform parallel (batch) prediction on multiple time series. All series must have the same historical length and prediction length (pred_len).
+
+        Args:
+            df_list (List[pd.DataFrame]): List of input DataFrames, each containing price columns and optional volume/amount columns.
+            x_timestamp_list (List[pd.DatetimeIndex or Series]): List of timestamps corresponding to historical data, length should match the number of rows in each DataFrame.
+            y_timestamp_list (List[pd.DatetimeIndex or Series]): List of future prediction timestamps, length should equal pred_len.
+            pred_len (int): Number of prediction steps.
+            T (float): Sampling temperature.
+            top_k (int): Top-k filtering threshold.
+            top_p (float): Top-p (nucleus sampling) threshold.
+            sample_count (int): Number of parallel samples per series, automatically averaged internally.
+            verbose (bool): Whether to display autoregressive progress.
+
+        Returns:
+            List[pd.DataFrame]: List of prediction results in the same order as input, each DataFrame contains
+                                `open, high, low, close, volume, amount` columns, indexed by corresponding `y_timestamp`.
+        """
+        # Basic validation
+        if not isinstance(df_list, (list, tuple)) or not isinstance(x_timestamp_list, (list, tuple)) or not isinstance(y_timestamp_list, (list, tuple)):
+            raise ValueError("df_list, x_timestamp_list, y_timestamp_list must be list or tuple types.")
+        if not (len(df_list) == len(x_timestamp_list) == len(y_timestamp_list)):
+            raise ValueError("df_list, x_timestamp_list, y_timestamp_list must have consistent lengths.")
+
+        num_series = len(df_list)
+
+        x_list = []
+        x_stamp_list = []
+        y_stamp_list = []
+        means = []
+        stds = []
+        seq_lens = []
+        y_lens = []
+
+        for i in range(num_series):
+            df = df_list[i]
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"Input at index {i} is not a pandas DataFrame.")
+            if not all(col in df.columns for col in self.price_cols):
+                raise ValueError(f"DataFrame at index {i} is missing price columns {self.price_cols}.")
+
+            df = df.copy()
+            if self.vol_col not in df.columns:
+                df[self.vol_col] = 0.0
+                df[self.amt_vol] = 0.0
+            if self.amt_vol not in df.columns and self.vol_col in df.columns:
+                df[self.amt_vol] = df[self.vol_col] * df[self.price_cols].mean(axis=1)
+
+            if df[self.price_cols + [self.vol_col, self.amt_vol]].isnull().values.any():
+                raise ValueError(f"DataFrame at index {i} contains NaN values in price or volume columns.")
+
+            x_timestamp = x_timestamp_list[i]
+            y_timestamp = y_timestamp_list[i]
+
+            x_time_df = calc_time_stamps(x_timestamp)
+            y_time_df = calc_time_stamps(y_timestamp)
+
+            x = df[self.price_cols + [self.vol_col, self.amt_vol]].values.astype(np.float32)
+            x_stamp = x_time_df.values.astype(np.float32)
+            y_stamp = y_time_df.values.astype(np.float32)
+
+            if x.shape[0] != x_stamp.shape[0]:
+                raise ValueError(f"Inconsistent lengths at index {i}: x has {x.shape[0]} vs x_stamp has {x_stamp.shape[0]}.")
+            if y_stamp.shape[0] != pred_len:
+                raise ValueError(f"y_timestamp length at index {i} should equal pred_len={pred_len}, got {y_stamp.shape[0]}.")
+
+            x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+            x_norm = (x - x_mean) / (x_std + 1e-5)
+            x_norm = np.clip(x_norm, -self.clip, self.clip)
+
+            x_list.append(x_norm)
+            x_stamp_list.append(x_stamp)
+            y_stamp_list.append(y_stamp)
+            means.append(x_mean)
+            stds.append(x_std)
+
+            seq_lens.append(x_norm.shape[0])
+            y_lens.append(y_stamp.shape[0])
+
+        # Require all series to have consistent historical and prediction lengths for batch processing
+        if len(set(seq_lens)) != 1:
+            raise ValueError(f"Parallel prediction requires all series to have consistent historical lengths, got: {seq_lens}")
+        if len(set(y_lens)) != 1:
+            raise ValueError(f"Parallel prediction requires all series to have consistent prediction lengths, got: {y_lens}")
+
+        x_batch = np.stack(x_list, axis=0).astype(np.float32)           # (B, seq_len, feat)
+        x_stamp_batch = np.stack(x_stamp_list, axis=0).astype(np.float32) # (B, seq_len, time_feat)
+        y_stamp_batch = np.stack(y_stamp_list, axis=0).astype(np.float32) # (B, pred_len, time_feat)
+
+        preds = self.generate(
+            x_batch, x_stamp_batch, y_stamp_batch, pred_len,
+            T, top_k, top_p, sample_count, verbose,
+            sector_id=sector_id, size_bucket=size_bucket,
+            size_percentile=size_percentile,
+            return_samples=return_samples,
+        )
+        if return_samples:
+            preds = preds[:, :, -pred_len:, :]
+            return [
+                preds[i] * (stds[i][None, None, :] + 1e-5) + means[i][None, None, :]
+                for i in range(num_series)
+            ]
+
+        preds = preds[:, -pred_len:, :]
+
+        pred_dfs = []
+        for i in range(num_series):
+            preds_i = preds[i] * (stds[i] + 1e-5) + means[i]
+            pred_df = pd.DataFrame(preds_i, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp_list[i])
+            pred_dfs.append(pred_df)
+
+        return pred_dfs
