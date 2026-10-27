@@ -7,9 +7,7 @@ It mounts ``wynstonliu/kronos-small-0-1-bootstrap-final`` -> ``checkpoints/best_
 context_layer=6, and measures the Δ=0.01669 point. The three code files in
 ``payload_snapshot/`` are byte-identical across all four kernels.
 
-Runs only against ``payload_snapshot/`` (see README). The ``EXPERIMENT``
-constant still says "small_boot..." in the main-final variant because the file
-was copied from the bootstrap kernel; it only affects output naming.
+Runs only against ``payload_snapshot/`` (see README).
 """
 
 from __future__ import annotations
