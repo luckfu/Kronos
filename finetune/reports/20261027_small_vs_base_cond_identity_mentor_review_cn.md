@@ -3,7 +3,8 @@
 日期：2026-10-27（Asia/Shanghai）  
 作者侧：量化交易模型大师 / 群讨论纪要  
 仓库：`luckfu/Kronos`  
-状态：**假说与实验设计待拍板；未开新长叉；live Bootstrap 保持无 γ 裸加**
+状态：**已拍板 → 执行口径见 [`20261027_cond_identity_gate_protocol_cn.md`](20261027_cond_identity_gate_protocol_cn.md)**；未开新长叉；live Bootstrap 保持无 γ 裸加  
+批注：本文为**审阅原稿**，保留以便对照；自 §8 起不再作为执行依据。
 
 ---
 
@@ -130,6 +131,10 @@ SwanLab：`base_clean_0.1_bootstrap`。Bootstrap **继续裸跑、不并进 γ**
 
 ## 8. 请导师审阅的点
 
+> **导师批注（2026-10-27，四项均已裁）：** 双门口径、n=2000、冷启长叉、margin 的结论与**替换后的门定义/锚点/P0 清单**见 [`20261027_cond_identity_gate_protocol_cn.md`](20261027_cond_identity_gate_protocol_cn.md)；P0 结果按 [`20261027_p0_cond_identity_fill_in_cn.md`](20261027_p0_cond_identity_fill_in_cn.md) 填报复核。  
+> 一句话：现行双门只能作内部 triage（能量门降为遥测/护栏）；长叉方向同意但**暂不开**，须先过 P0-1/2/3；先无 margin，且 margin 版不得用 G1 判成功。  
+> 下文 1–4 为原提问，**保留不改**。
+
 1. 双门与「微弱且远未可用」表述是否可接受为论文/实验协议口径。  
 2. Small n=2000 quick PASS 是否足以支持「CE 可学出身份」的对称破缺论述（是否要求全量 holdout 复测）。  
 3. 下一刀是否同意 **HF 冷启真 A+C 长叉**，以及建议最小段数 / 中期停看指标（sector ‖W‖_F、trunk_ratio、Full−Shuffled）。  
@@ -139,6 +144,8 @@ SwanLab：`base_clean_0.1_bootstrap`。Bootstrap **继续裸跑、不并进 γ**
 
 ## 9. 附件索引（同仓库 / 实验笔记）
 
+- `finetune/reports/20261027_cond_identity_gate_protocol_cn.md` — **导师裁定 + 替换后的门定义 / 锚点 / P0 清单（执行依据）**  
+- `finetune/reports/20261027_p0_cond_identity_fill_in_cn.md` — P0 落盘空表模板（填完提交复核）  
 - `finetune/SMALL_0_1_MODEL_AND_TRAINING_TECHNICAL_REPORT_CN.md` — Small Bootstrap=1% warmup+cosine 双 LR 等血缘  
 - `finetune/reports/base_clean_train_plan_cn.md` — Base 计划与 cl=10 等差异  
 - `finetune/base_clean_bootstrap_relay/notes/20261027_sector_emb_collapse_probe.md`  
