@@ -1,7 +1,13 @@
-"""Build/push Base-clean Bootstrap long-run chunk 2 (segs 22–41).
+"""Build/push a Base-clean Bootstrap relay chunk (default: chunk 3).
 
-Continues from COMPLETE self slug (resume_segment=22), same SwanLab board.
-Pass `--push --force` after Elon nod (self-overwrite idle COMPLETE slug).
+Continues from the previous COMPLETE chunk's output (resume_segment is read at
+runtime from its progress.json), same SwanLab board. Pass `--push` to push.
+
+2026-10-28 relay: the previous chunk ended at coverage segment 317
+(resume 318) under user281434. This push runs under luckfu, mounting the
+shared user281434 notebook; later chunks self-parent under luckfu.
+Current runtime code is the cond_identity payload snapshot (the code the
+training chunks actually ran), not HEAD.
 """
 
 from __future__ import annotations
@@ -20,21 +26,28 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "user281434")
+OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "luckfu")
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
-# Self-parent: previous COMPLETE of this same slug (chunk 1 segs 2→21).
-PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap"
+# Parent output: chunk 2 lives on user281434's shared notebook. Later luckfu
+# chunks should pass KRONOS_PARENT_KERNEL=luckfu/kronos-base-clean-0-1-bootstrap.
+PARENT_KERNEL = os.environ.get(
+    "KRONOS_PARENT_KERNEL", "user281434/kronos-base-clean-0-1-bootstrap"
+)
 SLUG = "kronos-base-clean-0-1-bootstrap"
 TITLE = "Kronos Base Clean 0.1 Bootstrap"
-# Chunk1 last_model SHA (equals best_model at seg21; resume from last only).
-PARENT_LAST_SHA256 = (
-    "f618552a6f03469271c096122c86b5a883a478d43803c7fb435d0757e4b4807b"
-)
-PARENT_BEST_SHA256 = PARENT_LAST_SHA256  # frozen; no Best writes this chunk
-MAX_SEGMENTS = 20
+# Parent chunk ended at completed=317 / resume=318 (log: "resume from coverage
+# segment 318"). Pins are injected into the kernel; empty disables the guard.
+RESUME_SEGMENT = int(os.environ.get("KRONOS_BOOTSTRAP_EXPECTED_RESUME", "318"))
+COMPLETED_SEGMENTS = int(os.environ.get("KRONOS_BOOTSTRAP_EXPECTED_COMPLETED", "317"))
+PARENT_LAST_SHA256 = os.environ.get("KRONOS_BOOTSTRAP_PARENT_LAST_SHA256", "").strip()
+PARENT_BEST_SHA256 = os.environ.get("KRONOS_BOOTSTRAP_PARENT_BEST_SHA256", "").strip()
+MAX_SEGMENTS = int(os.environ.get("KRONOS_BOOTSTRAP_MAX_SEGMENTS", "36"))
 BATCH_SIZE = 32
 ACCUMULATION_STEPS = 8
 NPROC = 2
+# The training chunks actually ran with the 2026-10-27 runtime snapshot
+# (Fix A/C present but default-off). Keep the relay on identical code.
+RUNTIME_SNAPSHOT = ROOT / "finetune" / "cond_identity" / "payload_snapshot"
 
 
 def local_credential() -> str:
@@ -60,10 +73,18 @@ def local_credential() -> str:
     return ""
 
 
+def _runtime_file(rel: Path) -> Path:
+    """Prefer the 2026-10-27 runtime snapshot over HEAD for the files it covers."""
+    snapshot = RUNTIME_SNAPSHOT / rel
+    return snapshot if snapshot.is_file() else ROOT / rel
+
+
 def source_bundle() -> bytes:
-    files = [ROOT / "requirements.txt"]
+    entries: list[tuple[Path, Path]] = [(Path("requirements.txt"), ROOT / "requirements.txt")]
     for directory in ("model", "finetune/utils"):
-        files.extend(sorted((ROOT / directory).glob("*.py")))
+        for path in sorted((ROOT / directory).glob("*.py")):
+            rel = path.relative_to(ROOT)
+            entries.append((rel, _runtime_file(rel)))
     for name in (
         "config",
         "dataset",
@@ -77,16 +98,20 @@ def source_bundle() -> bytes:
         "power_law_sampler",
         "temporal_rank_ic_selection",
     ):
-        files.append(ROOT / "finetune" / f"{name}.py")
-    files.append(HERE / "launch_bootstrap.py")
+        rel = Path("finetune") / f"{name}.py"
+        entries.append((rel, _runtime_file(rel)))
+    entries.append(
+        (
+            Path("finetune/base_clean_bootstrap_relay/launch_bootstrap.py"),
+            HERE / "launch_bootstrap.py",
+        )
+    )
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in files:
+        for arcname, path in entries:
             if not path.is_file():
                 raise FileNotFoundError(path)
-            info = zipfile.ZipInfo(
-                path.relative_to(ROOT).as_posix(), (2026, 10, 26, 0, 0, 0)
-            )
+            info = zipfile.ZipInfo(arcname.as_posix(), (2026, 10, 26, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(info, path.read_bytes())
     return stream.getvalue()
@@ -147,6 +172,9 @@ print(json.dumps({{"phase": "started", "time": time.time(), "slug": {SLUG!r}}}),
 os.environ["PYTHONUNBUFFERED"] = "1"
 # Injected at push-time only (not committed). Prefer UserSecrets / env first.
 os.environ.setdefault("SWANLAB_API_KEY", {credential!r})
+os.environ.setdefault("KRONOS_BOOTSTRAP_EXPECTED_RESUME", {str(RESUME_SEGMENT)!r})
+os.environ.setdefault("KRONOS_BOOTSTRAP_EXPECTED_COMPLETED", {str(COMPLETED_SEGMENTS)!r})
+os.environ.setdefault("KRONOS_BOOTSTRAP_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
 payload = base64.b64decode({base64.b64encode(payload).decode()!r})
 assert hashlib.sha256(payload).hexdigest() == {digest!r}
 repo = Path("/kaggle/working/base_clean_source")
@@ -202,12 +230,17 @@ namespace["main"]()
         "parent_last_sha256": PARENT_LAST_SHA256,
         "parent_best_sha256": PARENT_BEST_SHA256,
         "parent_weights_note": (
-            "Same-stage self-parent via full Output tree (last_state resumes "
+            "Same-stage continuation via full Output tree (last_state resumes "
             "optimizer). Bootstrap continues from last only; "
-            "KRONOS_DISABLE_BEST_UPDATES=1."
+            "KRONOS_DISABLE_BEST_UPDATES=1. First luckfu chunk mounts the "
+            "shared user281434 notebook; later chunks self-parent under luckfu."
         ),
-        "resume_segment": 22,
-        "expected_completed_segments": 21,
+        "runtime_snapshot": (
+            "finetune/cond_identity/payload_snapshot "
+            "(model/kronos.py, finetune/config.py, finetune/train_predictor.py)"
+        ),
+        "resume_segment": RESUME_SEGMENT,
+        "expected_completed_segments": COMPLETED_SEGMENTS,
         "max_segments_per_run": MAX_SEGMENTS,
         "validation": {
             "quick_samples": 2048,
@@ -243,8 +276,8 @@ namespace["main"]()
             "experiment_name": "base_clean_0.1_bootstrap",
             "run_id": "base_clean_0_1_bootstrap",
             "resume": "allow",
-            "replay_after_segment": 21,
-            "note": "SAME board — continue base_clean_0.1_bootstrap (chunk 2)",
+            "replay_after_segment": COMPLETED_SEGMENTS,
+            "note": "SAME board — continue base_clean_0.1_bootstrap (relay chunk)",
         },
         "lineage": {
             "stage": "bootstrap",

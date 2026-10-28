@@ -111,6 +111,7 @@ finetune/kaggle_datasets/
 /.kaggle/
 finetune/small_clean_epoch2_relay/build/
 finetune/small_clean_bigbatch_relay/build/
+finetune/base_clean_bootstrap_relay/build/
 
 # Local kernel build bundles (embed source + credentials)
 finetune/small_clean_oos/build_epoch2/

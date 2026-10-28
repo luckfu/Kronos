@@ -1,8 +1,21 @@
-"""Kaggle entry for Base-clean Bootstrap long-run chunk 2 (segs 22–41).
+"""Kaggle entry for Base-clean Bootstrap long-run relay chunks.
 
-Continues same-stage bootstrap from COMPLETE self slug output
-(resume_segment=22). Same SwanLab board base_clean_0.1_bootstrap.
+PROVENANCE (2026-10-28). This is the relay code that actually ran chunk 2
+(payload of ``user281434/kronos-base-clean-0-1-bootstrap``, zip sha256
+6f7f5ba4e711f39738b692ab2a274ab149306517a91f1102300be42e86fd74c9), recovered
+verbatim because HEAD still carried the one-shot chunk-1 version.
+
+Continues same-stage bootstrap from the previous chunk's output
+(last_model + last_state). Same SwanLab board base_clean_0.1_bootstrap.
 Continue from last only — no Best writes (KRONOS_DISABLE_BEST_UPDATES=1).
+
+Chunk size is wall-clock dual-T4. Observed: QUICK=2048 ≈4 min/seg, so the
+default 36 segs is ~2.5h. Override with KRONOS_BOOTSTRAP_MAX_SEGMENTS
+(alias KRONOS_MAX_SEGMENTS_PER_RUN) for longer runs.
+
+Parent validation is opt-in via env: KRONOS_BOOTSTRAP_EXPECTED_RESUME,
+KRONOS_BOOTSTRAP_EXPECTED_COMPLETED, KRONOS_BOOTSTRAP_PARENT_LAST_SHA256.
+Empty = accept any durable parent (continuous relay).
 """
 
 from __future__ import annotations
@@ -26,17 +39,26 @@ PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap"
 PARENT_OUTPUT_NAME = "base_clean_0.1_bootstrap"
 # Bootstrap continues from last only (optimizer via last_state). Best is frozen.
 PARENT_WEIGHTS = "last_model"
-EXPECTED_RESUME_SEGMENT = 22
-EXPECTED_COMPLETED_SEGMENTS = 21
-PARENT_LAST_SHA256 = (
-    "f618552a6f03469271c096122c86b5a883a478d43803c7fb435d0757e4b4807b"
+# Optional pin for a one-shot chunk; empty = accept any durable parent progress.
+EXPECTED_RESUME_SEGMENT = int(os.environ.get("KRONOS_BOOTSTRAP_EXPECTED_RESUME", "0") or 0)
+EXPECTED_COMPLETED_SEGMENTS = int(
+    os.environ.get("KRONOS_BOOTSTRAP_EXPECTED_COMPLETED", "0") or 0
 )
+# Optional SHA pin; empty = trust self-parent last_model as-is (continuous relay).
+PARENT_LAST_SHA256 = os.environ.get("KRONOS_BOOTSTRAP_PARENT_LAST_SHA256", "").strip()
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 BATCH_SIZE = 32
 ACCUMULATION_STEPS = 8
 NPROC = 2
-MAX_SEGMENTS = 20  # ~29 min/seg × 20 ≈ 10h under 12h dual-T4 quota
+# Live QUICK=2048 measured 4.04 min/seg (chunk segs 162-281 = 28813s / 119).
+# This chunk: 36 segs ≈ 145 min + ~6 min boot, sized for a 3h GPU window.
+MAX_SEGMENTS = int(
+    os.environ.get(
+        "KRONOS_BOOTSTRAP_MAX_SEGMENTS",
+        os.environ.get("KRONOS_MAX_SEGMENTS_PER_RUN", "36"),
+    )
+)
 
 
 def phase(name: str, **payload) -> None:
@@ -153,21 +175,25 @@ def find_bootstrap_continuation(input_root: Path) -> tuple[Path, dict]:
         raise RuntimeError(f"Bootstrap parent not durable: {progress}")
     resume_segment = int(final.get("resume_segment", int(progress.get("current_segment", 0)) + 1))
     completed = int(final.get("completed_segments", progress.get("current_segment", 0)))
-    if (
-        resume_segment != EXPECTED_RESUME_SEGMENT
-        or completed != EXPECTED_COMPLETED_SEGMENTS
-    ):
+    if EXPECTED_RESUME_SEGMENT and resume_segment != EXPECTED_RESUME_SEGMENT:
         raise RuntimeError(
-            f"Expected bootstrap chunk1 → completed={EXPECTED_COMPLETED_SEGMENTS} "
-            f"resume_segment={EXPECTED_RESUME_SEGMENT}; "
-            f"got completed={completed} resume_segment={resume_segment}"
+            f"Expected resume_segment={EXPECTED_RESUME_SEGMENT}; got {resume_segment}"
+        )
+    if EXPECTED_COMPLETED_SEGMENTS and completed != EXPECTED_COMPLETED_SEGMENTS:
+        raise RuntimeError(
+            f"Expected completed_segments={EXPECTED_COMPLETED_SEGMENTS}; got {completed}"
+        )
+    if resume_segment < 2 or completed < 1:
+        raise RuntimeError(
+            f"Bootstrap parent progress not usable: completed={completed} "
+            f"resume_segment={resume_segment}"
         )
 
     best = source_root / "checkpoints/best_model/model.safetensors"
     last = source_root / "checkpoints/last_model/model.safetensors"
     best_sha = sha256(best)
     last_sha = sha256(last)
-    if last_sha != PARENT_LAST_SHA256:
+    if PARENT_LAST_SHA256 and last_sha != PARENT_LAST_SHA256:
         raise RuntimeError(
             f"Parent last_model SHA mismatch: expected {PARENT_LAST_SHA256[:12]}… "
             f"got {last_sha[:12]}…"
@@ -210,7 +236,7 @@ def main() -> None:
         dataset=DATASET,
         parent_kernel=PARENT_KERNEL,
         parent_weights=PARENT_WEIGHTS,
-        resume_segment=EXPECTED_RESUME_SEGMENT,
+        resume_segment=EXPECTED_RESUME_SEGMENT or "from_parent",
         micro_bs=BATCH_SIZE // ACCUMULATION_STEPS,
         accum=ACCUMULATION_STEPS,
         n_gpu=NPROC,
@@ -218,7 +244,10 @@ def main() -> None:
         updates_per_seg_approx=20000 // (BATCH_SIZE * NPROC),
         max_segments=MAX_SEGMENTS,
         swanlab_board=EXPERIMENT,
-        note="Continue bootstrap segs22–41; SAME SwanLab board; last-only (no Best writes)",
+        note=(
+            f"Continue bootstrap ~{MAX_SEGMENTS} segs (~12h wall); "
+            "SAME SwanLab board; last-only (no Best writes)"
+        ),
     )
 
     phase(
