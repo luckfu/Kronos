@@ -633,6 +633,33 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
             ),
             "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
         })
+    elif stage == "main":
+        # Mirror Small's Main intent (real Best, full-holdout milestone) at a
+        # cost Base can pay: quick 2048 every 5 for Best + telemetry, the full
+        # 123,836 holdout every 20 segments.  Small could afford full-val every
+        # segment; Base is ~4x larger, where that is ~8-10 min/segment.
+        env.update({
+            "KRONOS_VALIDATION_FULL_ONLY": os.getenv("KRONOS_VALIDATION_FULL_ONLY", "0"),
+            "KRONOS_VALIDATION_QUICK_SAMPLES": os.getenv(
+                "KRONOS_VALIDATION_QUICK_SAMPLES", "2048"
+            ),
+            "KRONOS_VALIDATION_LARGE_SAMPLES": os.getenv(
+                "KRONOS_VALIDATION_LARGE_SAMPLES", "123836"
+            ),
+            "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS": os.getenv(
+                "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS", "20"
+            ),
+            "KRONOS_VALIDATION_INTERVAL_SEGMENTS": os.getenv(
+                "KRONOS_VALIDATION_INTERVAL_SEGMENTS", "5"
+            ),
+            "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS": os.getenv(
+                "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS", "20"
+            ),
+            "KRONOS_DISABLE_BEST_UPDATES": os.getenv(
+                "KRONOS_DISABLE_BEST_UPDATES", "0"
+            ),
+            "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
+        })
     return env
 
 

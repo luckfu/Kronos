@@ -9,9 +9,11 @@ Continues same-stage bootstrap from the previous chunk's output
 (last_model + last_state). Same SwanLab board base_clean_0.1_bootstrap.
 Continue from last only — no Best writes (KRONOS_DISABLE_BEST_UPDATES=1).
 
-Chunk size is wall-clock dual-T4. Observed: QUICK=2048 ≈4 min/seg, so the
-default 36 segs is ~2.5h. Override with KRONOS_BOOTSTRAP_MAX_SEGMENTS
-(alias KRONOS_MAX_SEGMENTS_PER_RUN) for longer runs.
+Chunk size is wall-clock dual-T4. Observed: QUICK=2048 ≈4 min/seg, so a
+10h budget is ~145 segments and needs ~4 handoffs for one 520-segment
+coverage (36-segment chunks needed 14).  KRONOS_BOOTSTRAP_MAX_SEGMENTS
+(alias KRONOS_MAX_SEGMENTS_PER_RUN, default 150) is only an upper bound;
+KRONOS_BOOTSTRAP_RUNTIME_BUDGET_SECONDS (default 36000) ends the chunk.
 
 Parent validation is opt-in via env: KRONOS_BOOTSTRAP_EXPECTED_RESUME,
 KRONOS_BOOTSTRAP_EXPECTED_COMPLETED, KRONOS_BOOTSTRAP_PARENT_LAST_SHA256.
@@ -52,12 +54,18 @@ BATCH_SIZE = 32
 ACCUMULATION_STEPS = 8
 NPROC = 2
 # Live QUICK=2048 measured 4.04 min/seg (chunk segs 162-281 = 28813s / 119).
-# This chunk: 36 segs ≈ 145 min + ~6 min boot, sized for a 3h GPU window.
+# Chunks are wall-clock budgeted (Small's later relays did the same): the
+# segment cap is only an upper bound, the budget decides when the chunk ends.
+# 36-segment chunks needed 14 handoffs for one coverage; ~150/10h needs 4.
+STARTED = time.monotonic()
 MAX_SEGMENTS = int(
     os.environ.get(
         "KRONOS_BOOTSTRAP_MAX_SEGMENTS",
-        os.environ.get("KRONOS_MAX_SEGMENTS_PER_RUN", "36"),
+        os.environ.get("KRONOS_MAX_SEGMENTS_PER_RUN", "150"),
     )
+)
+RUNTIME_BUDGET_SECONDS = int(
+    os.environ.get("KRONOS_BOOTSTRAP_RUNTIME_BUDGET_SECONDS", "36000")
 )
 
 
@@ -243,9 +251,11 @@ def main() -> None:
         effective_global_batch=BATCH_SIZE * NPROC,
         updates_per_seg_approx=20000 // (BATCH_SIZE * NPROC),
         max_segments=MAX_SEGMENTS,
+        runtime_budget_seconds=RUNTIME_BUDGET_SECONDS,
         swanlab_board=EXPERIMENT,
         note=(
-            f"Continue bootstrap ~{MAX_SEGMENTS} segs (~12h wall); "
+            f"Continue bootstrap up to {MAX_SEGMENTS} segs or "
+            f"{RUNTIME_BUDGET_SECONDS}s wall clock; "
             "SAME SwanLab board; last-only (no Best writes)"
         ),
     )
@@ -320,6 +330,11 @@ def main() -> None:
         "KRONOS_BASE_CLEAN_CONTINUATION_ROOT": str(continuation_root),
         "KRONOS_BASE_CLEAN_DATA_ROOT": str(data_root),
         "KRONOS_MAX_SEGMENTS_PER_RUN": str(MAX_SEGMENTS),
+        # Wall clock measured from process start (pip install counted); the
+        # trainer stops only on a complete segment with a resumable last_state.
+        "KRONOS_MAX_RUNTIME_SECONDS": str(
+            max(300, RUNTIME_BUDGET_SECONDS - int(time.monotonic() - STARTED))
+        ),
         "KRONOS_BATCH_SIZE": str(BATCH_SIZE),
         "KRONOS_ACCUMULATION_STEPS": str(ACCUMULATION_STEPS),
         "KRONOS_TORCHRUN_NPROC_PER_NODE": str(NPROC),

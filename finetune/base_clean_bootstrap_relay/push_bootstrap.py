@@ -41,7 +41,11 @@ RESUME_SEGMENT = int(os.environ.get("KRONOS_BOOTSTRAP_EXPECTED_RESUME", "318"))
 COMPLETED_SEGMENTS = int(os.environ.get("KRONOS_BOOTSTRAP_EXPECTED_COMPLETED", "317"))
 PARENT_LAST_SHA256 = os.environ.get("KRONOS_BOOTSTRAP_PARENT_LAST_SHA256", "").strip()
 PARENT_BEST_SHA256 = os.environ.get("KRONOS_BOOTSTRAP_PARENT_BEST_SHA256", "").strip()
-MAX_SEGMENTS = int(os.environ.get("KRONOS_BOOTSTRAP_MAX_SEGMENTS", "36"))
+MAX_SEGMENTS = int(os.environ.get("KRONOS_BOOTSTRAP_MAX_SEGMENTS", "150"))
+# Chunks are wall-clock budgeted; see launch_bootstrap.py.
+RUNTIME_BUDGET_SECONDS = int(
+    os.environ.get("KRONOS_BOOTSTRAP_RUNTIME_BUDGET_SECONDS", "36000")
+)
 BATCH_SIZE = 32
 ACCUMULATION_STEPS = 8
 NPROC = 2
@@ -163,7 +167,7 @@ def _runtime_file(rel: Path) -> Path:
     return snapshot if snapshot.is_file() else ROOT / rel
 
 
-def source_bundle() -> bytes:
+def source_bundle(launcher: str = "launch_bootstrap.py") -> bytes:
     entries: list[tuple[Path, Path]] = [(Path("requirements.txt"), ROOT / "requirements.txt")]
     for directory in ("model", "finetune/utils"):
         for path in sorted((ROOT / directory).glob("*.py")):
@@ -186,8 +190,8 @@ def source_bundle() -> bytes:
         entries.append((rel, _runtime_file(rel)))
     entries.append(
         (
-            Path("finetune/base_clean_bootstrap_relay/launch_bootstrap.py"),
-            HERE / "launch_bootstrap.py",
+            Path(f"finetune/base_clean_bootstrap_relay/{launcher}"),
+            HERE / launcher,
         )
     )
     stream = io.BytesIO()
@@ -256,6 +260,7 @@ os.environ.setdefault("SWANLAB_API_KEY", {credential!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_EXPECTED_RESUME", {str(RESUME_SEGMENT)!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_EXPECTED_COMPLETED", {str(COMPLETED_SEGMENTS)!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
+os.environ.setdefault("KRONOS_BOOTSTRAP_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 payload = base64.b64decode({base64.b64encode(payload).decode()!r})
 assert hashlib.sha256(payload).hexdigest() == {digest!r}
 repo = Path("/kaggle/working/base_clean_source")
@@ -323,6 +328,7 @@ namespace["main"]()
         "resume_segment": RESUME_SEGMENT,
         "expected_completed_segments": COMPLETED_SEGMENTS,
         "max_segments_per_run": MAX_SEGMENTS,
+        "runtime_budget_seconds": RUNTIME_BUDGET_SECONDS,
         "validation": {
             "quick_samples": 2048,
             "interval_segments": 5,
