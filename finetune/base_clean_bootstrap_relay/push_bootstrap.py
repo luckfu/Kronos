@@ -82,33 +82,15 @@ RPC_ROOT = f"{API_ROOT}/v1/kernels.KernelsApiService"
 
 
 def api_session():
-    """Kaggle REST session, or (None, "") when only the CLI is usable.
-
-    2026-10-28: the 2.2.4 CLI client started dying with ``SSLEOFError`` on
-    api.kaggle.com while plain requests/curl to the same endpoint worked, so
-    push/status prefer REST and fall back to the CLI.
-    """
+    """Kaggle REST session (auto-refreshing OAuth), or (None, "") if unavailable."""
     try:
-        import requests
+        import relay_auth
     except ImportError:
         return None, ""
-    token = os.environ.get("KAGGLE_API_TOKEN", "").strip()
-    username = os.environ.get("KAGGLE_USERNAME", "").strip()
-    if not token:
-        path = Path(os.environ.get("KAGGLE_CONFIG_DIR", Path.home() / ".kaggle")) / "credentials.json"
-        if not path.is_file():
-            return None, username
-        try:
-            config = json.loads(path.read_text())
-        except json.JSONDecodeError:
-            return None, username
-        token = str(config.get("access_token", "")).strip()
-        username = username or str(config.get("username", "")).strip()
-    if not token:
-        return None, username
-    session = requests.Session()
-    session.headers.update({"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
-    return session, username
+    try:
+        return relay_auth.session(), relay_auth.username()
+    except Exception:
+        return None, ""
 
 
 def kernel_status_rest(session, ref: str) -> str:

@@ -56,6 +56,15 @@ try:
 except ImportError:  # pragma: no cover - requests ships with kaggle
     requests = None
 
+try:
+    import relay_auth
+except ImportError:  # run from another cwd
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    import relay_auth
+
 DEFAULT_KERNEL = "luckfu/kronos-base-clean-0-1-bootstrap"
 API_ROOT = os.environ.get("KRONOS_KAGGLE_API", "https://api.kaggle.com")
 RPC_ROOT = f"{API_ROOT}/v1/kernels.KernelsApiService"
@@ -100,30 +109,11 @@ def _duration(seconds) -> str:
 # credentials / transport
 # --------------------------------------------------------------------------
 def _session():
-    if requests is None:
-        raise SystemExit("requests is required (pip install -r requirements-dev.txt)")
-    token = os.environ.get("KAGGLE_API_TOKEN", "").strip()
-    if not token:
-        path = Path(os.environ.get("KAGGLE_CONFIG_DIR", Path.home() / ".kaggle")) / "credentials.json"
-        if path.is_file():
-            try:
-                token = str(json.loads(path.read_text()).get("access_token", "")).strip()
-            except json.JSONDecodeError:
-                token = ""
-    session = requests.Session()
-    session.headers.update({"Content-Type": "application/json"})
-    if token:
-        session.headers["Authorization"] = f"Bearer {token}"
-    else:
-        user = os.environ.get("KAGGLE_USERNAME", "").strip()
-        key = os.environ.get("KAGGLE_KEY", "").strip()
-        if user and key:
-            session.auth = (user, key)
-        else:
-            raise SystemExit(
-                "No Kaggle credentials: set KAGGLE_API_TOKEN or run `kaggle auth login`"
-            )
-    return session
+    """Shared REST session; refreshes the 30-min OAuth token on its own."""
+    try:
+        return relay_auth.session()
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def kernel_status(session, ref: str) -> str:
