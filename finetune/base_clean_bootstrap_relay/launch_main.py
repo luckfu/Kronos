@@ -38,7 +38,10 @@ from pathlib import Path
 STARTED = time.monotonic()
 
 EXPERIMENT = "base_clean_0.1_main"
-RUN_ID = "base_clean_0_1_main"
+# A fresh (from-Bootstrap) start replays the segment axis from 1, so every
+# restart MUST get its own run id; same-stage chunk 2+ keeps the id because the
+# segment numbering continues.  Shared ids are what made the board sawtooth.
+RUN_ID = os.environ.get("KRONOS_MAIN_RUN_ID", "base_clean_0_1_main")
 OUTPUT_NAME = "base_clean_0.1_main"
 BOOTSTRAP_OUTPUT_NAME = "base_clean_0.1_bootstrap"
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
@@ -368,6 +371,10 @@ def main() -> None:
         runner="finetune/kaggle_kronos_base_clean.py",
         swanlab_experiment=EXPERIMENT,
         swanlab_run_id=RUN_ID,
+        swanlab_run_note=(
+            "same run id (segment axis continues)" if continuity
+            else "fresh run id required: axis restarts at segment 1"
+        ),
         parent_model=str(parent_model),
         continue_same_stage=continuity,
         max_segments=MAX_SEGMENTS,

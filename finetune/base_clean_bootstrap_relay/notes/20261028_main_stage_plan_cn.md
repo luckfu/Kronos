@@ -169,3 +169,27 @@ board base_clean_0.1_main (new), run id base_clean_0_1_main
 
 **口径提醒**：Main 的 `validation/forecast_loss` 是全量 123,836 口径（seg1 = 2.59933），
 Bootstrap 的是 quick-2048 口径（末段 2.59049），**两者不可直接比**；跨阶段只能比同口径曲线。
+
+## 12. 看板已被污染（2026-10-28 晚）—— 原因与整改
+
+**现象**：`base_clean_0.1_main` 这条 run 的 `segment` 曲线出现 **1→24→1→1→69** 的锯齿，
+validation 点在同一 x 上有多个值。
+
+**原因**：SwanLab 的 x 轴是 `step = (segment−1)×313 + step`，从零启动时 segment 从 1 开始。
+今天先后有 **3 个会话**写进同一个 run id `base_clean_0_1_main`：
+
+| 会话 | 段 | 验证口径 |
+|---|---|---|
+| v2（已取消） | 1–24 | quick-2048 |
+| v3（smoke） | 1 | 全量 123,836，val batch 128 |
+| v4（现行） | 1–… | 全量 123,836，val batch 64 |
+
+三者都从 step≈0 开始写 → 同一 x 上叠了 2–3 个点，`segment` 指标回跳。
+
+**整改**：
+- 从零启动（`bootstrap_weights_only`）**必须换新 run id**：`KRONOS_MAIN_RUN_ID=base_clean_0_1_main_r2`；
+- 同阶段接力（`KRONOS_MAIN_CONTINUE=1`）**保持同一 run id**，因为段号连续、x 轴连续；
+- 判断依据：`metrics.jsonl` 永远是权威记录，看板只是实时观测窗口。
+
+> 教训：Bootstrap 那几棒没这个问题，是因为 trainer 把段号接续成 354、390…（x 轴连续），
+> 而 Main 每次从零重启都会把 segment 重置回 1。

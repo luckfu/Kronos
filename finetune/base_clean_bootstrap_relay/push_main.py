@@ -61,6 +61,7 @@ SECONDS_PER_SEGMENT = float(
     os.environ.get("KRONOS_MAIN_SECONDS_PER_SEGMENT", "566")
 )
 VAL_BATCH_SIZE = os.environ.get("KRONOS_VAL_BATCH_SIZE", "64")
+RUN_ID = os.environ.get("KRONOS_MAIN_RUN_ID", "base_clean_0_1_main")
 MAX_SEGMENTS = int(
     os.environ.get(
         "KRONOS_MAIN_MAX_SEGMENTS",
@@ -115,6 +116,7 @@ os.environ.setdefault("KRONOS_MAIN_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
 os.environ.setdefault("KRONOS_MAIN_SECONDS_PER_SEGMENT", {str(SECONDS_PER_SEGMENT)!r})
 os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
+os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
 os.environ.setdefault("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_MAIN_CONTINUE", {"1" if CONTINUE else "0"!r})
 os.environ.setdefault("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", {str(EXPECTED_BOOTSTRAP_COMPLETED)!r})
@@ -210,10 +212,11 @@ namespace["main"]()
             "project": "finance",
             "workspace": "roc_fu",
             "experiment_name": "base_clean_0.1_main",
-            "run_id": "base_clean_0_1_main",
+            "run_id": RUN_ID,
             "replay_after_segment": None,
             "note": "NEW board (stage switch), never replay bootstrap metrics.jsonl",
         },
+        "swanlab_run_id": RUN_ID,
         "source_sha256": digest,
         "source_commit": commit,
         "build_dir": str(build),
