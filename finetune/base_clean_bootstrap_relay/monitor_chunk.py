@@ -152,7 +152,7 @@ def fetch_log_text(session, ref: str) -> str:
 
 
 def events_from_text(text: str):
-    """Yield console payloads from the persisted blob.
+    """Yield (event_time, console payload) from the persisted blob.
 
     The blob is a JSON list of `{stream_name,time,data}` events, but older
     sessions may come back as plain text or one JSON object per line.
@@ -163,9 +163,11 @@ def events_from_text(text: str):
     if text.startswith("["):
         try:
             for event in json.loads(text):
-                data = event.get("data") if isinstance(event, dict) else None
+                if not isinstance(event, dict):
+                    continue
+                data = event.get("data")
                 if data:
-                    yield data
+                    yield event.get("time"), data
             return
         except json.JSONDecodeError:
             pass
@@ -180,16 +182,16 @@ def events_from_text(text: str):
         try:
             event = json.loads(stripped)
         except json.JSONDecodeError:
-            yield stripped + "\n"
+            yield None, stripped + "\n"
             continue
         if isinstance(event, dict) and event.get("data"):
-            yield str(event["data"])
+            yield event.get("time"), str(event["data"])
         else:
-            yield stripped + "\n"
+            yield None, stripped + "\n"
 
 
 def stream_events(session, ref: str):
-    """Yield console payloads from the SSE feed (or the blob when finished)."""
+    """Yield (event_time, console payload) from the SSE feed or the blob."""
     owner, slug = ref.split("/", 1)
     url = f"{API_ROOT}/v1/kernels/logs/stream/{owner}/{slug}"
     headers = {"Accept": "text/event-stream, */*", "Content-Type": None}
@@ -199,8 +201,8 @@ def stream_events(session, ref: str):
     with session.get(url, headers=headers, stream=True, timeout=(20, 75)) as response:
         response.raise_for_status()
         if "event-stream" not in response.headers.get("content-type", ""):
-            for payload in events_from_text(response.text):
-                yield payload
+            for event in events_from_text(response.text):
+                yield event
             return
         for raw in response.iter_lines(decode_unicode=True):
             if raw is None:
@@ -215,10 +217,10 @@ def stream_events(session, ref: str):
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
-                yield line + "\n"
+                yield None, line + "\n"
                 continue
             if isinstance(event, dict) and event.get("data"):
-                yield str(event["data"])
+                yield event.get("time"), str(event["data"])
 
 
 # --------------------------------------------------------------------------
@@ -451,7 +453,7 @@ def one_shot(ref: str, tail: int, as_json: bool, raw: bool) -> int:
     status = kernel_status(session, ref)
     text = fetch_log_text(session, ref)
     state = ChunkState()
-    for payload in events_from_text(text):
+    for _event_time, payload in events_from_text(text):
         for line in payload.splitlines():
             record = state.feed(line)
             if record and raw:
@@ -504,31 +506,46 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
     print(f"# attaching to {ref} (status={status}); Ctrl-C detaches, training keeps running", flush=True)
 
     state = ChunkState()
-    seen = 0
+    last_event_time = None
     failures = 0
     last_beat = time.time()
     last_line = ""
+    pending = {"record": None, "at": 0.0}
+
+    def flush_pending(force: bool = False) -> None:
+        """Print a held segment record unless a [PROGRESS] line superseded it."""
+        record = pending["record"]
+        if record is None:
+            return
+        if not force and time.time() - pending["at"] < 4.0:
+            return
+        pending["record"] = None
+        _print_record(record, state, as_json)
 
     def beat(force: bool = False) -> None:
-        """One line a minute, so "booted and training" is visible before seg1."""
+        """One trainer line a minute, so "alive" is visible between segments.
+
+        Trainer lines carry their own UTC stamp (added by the runner), so the
+        client clock is not repeated here.
+        """
         nonlocal last_beat
         if not last_line:
             return
         if force or time.time() - last_beat >= 60:
-            stamp = time.strftime("%H:%M:%SZ", time.gmtime())
-            print(f"[{stamp}] · {last_line[:150]}", flush=True)
+            print(f"· {last_line[:170]}", flush=True)
             last_beat = time.time()
 
     while True:
         progressed = False
-        payloads = 0
         finished_stream = False
         try:
-            for payload in stream_events(session, ref):
-                payloads += 1
-                if payloads <= seen:
-                    continue
-                seen = payloads
+            for event_time, payload in stream_events(session, ref):
+                # A reconnect replays from the beginning (or from "now"); dedupe
+                # on the server timestamp instead of a fragile event count.
+                if event_time is not None:
+                    if last_event_time is not None and event_time <= last_event_time:
+                        continue
+                    last_event_time = event_time
                 progressed = True
                 for line in payload.splitlines():
                     last_line = line.strip() or last_line
@@ -536,12 +553,26 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
                     if raw:
                         print(line, flush=True)
                     if record:
-                        _print_record(record, state, as_json)
+                        held = pending["record"]
+                        is_progress = record.get("eta_chunk_seconds") is not None
+                        if is_progress and held and held.get("segment") == record.get("segment"):
+                            pending["record"] = None  # superseded, do not print twice
+                            _print_record(record, state, as_json)
+                        else:
+                            flush_pending(force=True)
+                            pending["record"] = record
+                            pending["at"] = time.time()
                     elif line.lstrip().startswith('{"phase"'):
-                        stamp = time.strftime("%H:%M:%SZ", time.gmtime())
-                        print(f"[{stamp}] # {line.strip()[:220]}", flush=True)
-                        last_beat = time.time()
+                        # GPU heartbeats are already on SwanLab; they would
+                        # otherwise print twice a minute for hours.
+                        if '"phase": "gpu"' in line:
+                            continue
+                        # Server-relative elapsed is stable across replays; the
+                        # client clock is not.
+                        when = f"+{_duration(event_time)}" if event_time else "phase"
+                        print(f"[{when}] # {line.strip()[:220]}", flush=True)
                     else:
+                        flush_pending()
                         beat()
             finished_stream = True
         except KeyboardInterrupt:
@@ -561,8 +592,16 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
                 break
             time.sleep(3)
         if finished_stream:
-            break
+            status = kernel_status(session, ref)
+            if state.finished or state.chunk_limit:
+                break
+            if status in {"COMPLETE", "ERROR", "CANCELED"}:
+                break
+            # The SSE feed can close while the session keeps running: reattach.
+            print(f"# stream closed but session={status}; reattaching", flush=True)
+            time.sleep(2)
 
+    flush_pending(force=True)
     snapshot = state.snapshot()
     print(
         f"-- stream ended: completed={snapshot['completed_segments']}"

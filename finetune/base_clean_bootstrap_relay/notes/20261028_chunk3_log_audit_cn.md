@@ -122,3 +122,33 @@ python3 finetune/base_clean_bootstrap_relay/monitor_chunk.py --tail 12
 - Main 的配方是**重建 optimizer、峰值回到 1e-5**，比在 3e-7 上再跑 11h 更可能推动曲线；
 - 唯一支持继续 Bootstrap 的理由是"多 3.3M 窗口的数据暴露"（条件身份靠数据量），
   按 10-27 的结论这条路**不是没道理**，但 11h 只换来 Δ 位移率不变。
+
+---
+
+## 6. chunk4 实测（2026-10-28 07:52Z 推送，v2）
+
+- 推送走 REST（`SaveKernel`），返回 `versionNumber=2`；CLI 当时已全挂，见 §4.1-3。
+- 启动 3m39s 内完成 device/data/parent 三段；`parent_ready` 显示
+  `resume_segment=354`、`last_model_sha256=a5ad3143…`（= chunk3 的 last），
+  `historical_metrics_lines=1197`、`next_epoch=353` → **续跑位置正确，未重跑 353**。
+- 首个 `[PROGRESS]`（seg354，+615.6s）：
+
+  ```json
+  [PROGRESS] {"segment":354,"total":520,"resume_segment":354,"chunk_end_segment":389,
+  "segment_seconds":232,"avg_segment_seconds":232.0,"run_elapsed_seconds":333,
+  "eta_chunk_seconds":8120.0,"eta_total_seconds":38512.0,"best":2.69015466,"cuda_peak_gb":2.56}
+  ```
+
+- 监控实测命令与输出：
+
+  ```
+  $ python3 finetune/base_clean_bootstrap_relay/monitor_chunk.py --follow
+  [+3m39s] # {"phase": "launch_runner", ...}
+  [08:05:08Z] seg 354/520 | val skipped | best 2.69015 | 3m52s/seg | avg20 3m52s |
+              run 5m33s | ETAchunk 2h15m->389 | peak 2.56GB
+  · [08:04:11Z] [Rank 0, Segment 355/520, Step 98/313] Adaptation LR 3.109e-07, ...
+  ```
+
+  即：**训练途中，段级进度、ETA、当前 step 都能实时看到**；`kaggle kernels output` 那条老路不用了。
+
+- 注意 `\`·\` 行是"活着"心跳（约 1 分钟一条最新的 trainer 行），不是进度；进度看 `seg N/520` 那行。
