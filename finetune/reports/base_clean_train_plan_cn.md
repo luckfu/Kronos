@@ -6,7 +6,8 @@
 **2026-10-26 再修（Elon 群话）：** 写入 Base→Small 历史与 LR 经验；Main 峰值 **锚定 Small 1e-5**；**禁止**因尺寸≈4×自动 ÷4 到 1e-6；M1 短扫否决后才降。  
 **2026-10-26 再修（Elon + 量化交易模型大师）：** **§5.2 数值门槛不再是开训 blocker**——仅 **promote 前勾选**；开训只卡 **M0/M1 可运行**（见 §7）。M1 短扫定为 **5e-6 vs 1e-5**。  
 **2026-10-26 SwanLab：** 群确认对齐 Small——**阶段换新看板**（Bootstrap ≠ Main）；Base 用 `base_clean_0.1_*`，**不续** `smce2_*` / 旧 Beta 板。  
-**2026-10-27 Bootstrap chunk2 推送：** resume_segment=22（chunk1 COMPLETE segs2→21）；同板 `base_clean_0.1_bootstrap` / self-parent slug；硬要求：QUICK=2048（无 fixed-manifest 真子集）、val+Full/None/Shuffled 每5 seg（含 chunk-end）、`KRONOS_DISABLE_BEST_UPDATES=1`（只续 last）；VAL_BATCH=64；跳过 micro 32×1×2（Main 再议）。
+**2026-10-27 Bootstrap chunk2 推送：** resume_segment=22（chunk1 COMPLETE segs2→21）；同板 `base_clean_0.1_bootstrap` / self-parent slug；硬要求：QUICK=2048（无 fixed-manifest 真子集）、val+Full/None/Shuffled 每5 seg（含 chunk-end）、`KRONOS_DISABLE_BEST_UPDATES=1`（只续 last）；VAL_BATCH=64；跳过 micro 32×1×2（Main 再议）。  
+**2026-10-28 Bootstrap chunk3 接力（luckfu）：** chunk2 结束于 coverage segment 317（log `resume from coverage segment 318`）；chunk3 改由 **luckfu** 推送，`kernel_sources` 挂 user281434 的共享 notebook（跨账号）；`resume_segment=318` / `completed=317` / `max_segments=36`；看板仍 `base_clean_0.1_bootstrap`（`resume=allow`，`replay_after=317`）；relay 与 runner 用 2026-10-27 runtime snapshot（Fix A/C 默认关），与 chunk1/2 同代码。
 
 **2026-10-26 开训绿灯：** Elon 绿推 Bootstrap seg1；§7.1 按群默认全部勾完；**Bootstrap timing seg1 已推送且 RUNNING**：`user281434/kronos-base-clean-0-1-bootstrap-timing`（SwanLab `base_clean_0.1_bootstrap_timing`；accum `4×8×2=64`）。整体计划仍为 **approved-for-M1**（非全线定版通过）。§5.2 仍为 promote-only。  
 目标：清掉旧 Base/Beta 血缘文档后，用 **与 Small→C2 同一配方** 在 `NeoQuasar/Kronos-base` 上从零建 A 股血缘；**不以旧 V6/V1.2/V2.1 权重为起点**。
