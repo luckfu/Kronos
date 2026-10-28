@@ -82,3 +82,18 @@ Small Main 每段跑全量 123,836。Base 上实测：1935 个 val batch（batch
 - 推送：[`../push_main.py`](../push_main.py)（REST 优先；`--push --force` 才提交）
 - runner 的 Main 验证默认：[`../../kaggle_kronos_base_clean.py`](../../kaggle_kronos_base_clean.py) `build_environment(..., stage="main")`
 - 监控：[`../monitor_chunk.py`](../monitor_chunk.py)（`--kernel ... --follow` 对任何 slug 通用）
+
+---
+
+## 7. Main smoke 实测（2026-10-28 11:17Z 推送 v1，`max_segments=1`）
+
+| 检查点 | 实测 |
+|---|---|
+| 父权重 | `parent_ready`: `/kaggle/input/notebooks/luckfu/kronos-base-clean-0-1-bootstrap/.../base_clean_0.1_bootstrap`，`approach=weights_only` |
+| optimizer | `optimizer_state_restored=false`（未带 `last_state`，重建） |
+| 学习率 | `Segment 1/520, Step 100/313`: **Adaptation LR = Condition LR = 1.553e-06**（统一峰值计划，非 Bootstrap 双 LR） |
+| 数据 | 10,397,679 窗口 / 20000 per seg，`data_manifest` SHA 与 Bootstrap 一致 |
+| 看板 | `base_clean_0.1_main`（新板，无 replay） |
+
+即：**阶段切换的三件事（父权重=last、optimizer 重建、统一 LR）都按设计生效**。
+全量验证（seg1 必跑 123,836）与 Best 写入的耗时以本棒实测为准，用于修正 §4 的估算。
