@@ -59,7 +59,12 @@ def refresh_access_token(refresh_token: str) -> str:
     """Exchange the refresh token for a fresh 30-min access token."""
     if requests is None:
         raise RuntimeError("requests is required to refresh a Kaggle token")
-    response = requests.post(
+    # Bare requests.post would pick up the (often dead) system proxy.
+    fresh = requests.Session()
+    fresh.trust_env = os.environ.get("KRONOS_USE_SYSTEM_PROXY", "0").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    response = fresh.post(
         _REFRESH_RPC,
         json={"refreshToken": refresh_token, "apiVersion": "API_VERSION_V1"},
         timeout=30,
@@ -114,6 +119,14 @@ def session():
         raise RuntimeError("requests is required (pip install -r requirements-dev.txt)")
     if _STATE["session"] is None:
         client = _AuthSession()
+        # macOS hands requests the system proxy (here 127.0.0.1:7890) through
+        # urllib.request.getproxies(); when that client is down every call dies
+        # with SSLEOFError while curl (which ignores system proxies) works.
+        # Talk to Kaggle directly unless explicitly asked otherwise.
+        if os.environ.get("KRONOS_USE_SYSTEM_PROXY", "0").strip().lower() not in {
+            "1", "true", "yes", "on",
+        }:
+            client.trust_env = False
         client.headers.update({"Content-Type": "application/json"})
         user = os.environ.get("KAGGLE_USERNAME", "").strip()
         key = os.environ.get("KAGGLE_KEY", "").strip()

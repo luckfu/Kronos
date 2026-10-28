@@ -497,6 +497,7 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
 
     state = ChunkState()
     last_event_time = None
+    session_epoch = None
     failures = 0
     last_beat = time.time()
     last_line = ""
@@ -539,6 +540,25 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
                 progressed = True
                 for line in payload.splitlines():
                     last_line = line.strip() or last_line
+                    # A new Kaggle session restarts event times at 0, so a
+                    # timestamp-only dedupe would swallow the new run.  The
+                    # wrapper's first line carries its process epoch.
+                    if '"phase": "started"' in line and '"slug"' in line:
+                        try:
+                            epoch = float(json.loads(line.strip())["time"])
+                        except (ValueError, KeyError, json.JSONDecodeError):
+                            epoch = None
+                        if epoch is not None and (
+                            session_epoch is None or abs(epoch - session_epoch) > 1.0
+                        ):
+                            if session_epoch is not None:
+                                print(
+                                    "# new session detected; resetting counters",
+                                    flush=True,
+                                )
+                            session_epoch = epoch
+                            state = ChunkState()
+                            last_event_time = None
                     record = state.feed(line)
                     if raw:
                         print(line, flush=True)

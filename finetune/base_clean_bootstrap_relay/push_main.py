@@ -60,7 +60,7 @@ SESSION_OVERHEAD_SECONDS = int(
 SECONDS_PER_SEGMENT = float(
     os.environ.get("KRONOS_MAIN_SECONDS_PER_SEGMENT", "566")
 )
-VAL_BATCH_SIZE = os.environ.get("KRONOS_VAL_BATCH_SIZE", "128")
+VAL_BATCH_SIZE = os.environ.get("KRONOS_VAL_BATCH_SIZE", "64")
 MAX_SEGMENTS = int(
     os.environ.get(
         "KRONOS_MAIN_MAX_SEGMENTS",
@@ -199,7 +199,7 @@ namespace["main"]()
             "full_only": True,
             "samples_per_segment": 123836,
             "condition_ablation_interval_segments": 20,
-            "val_batch_size": int(os.environ.get("KRONOS_VAL_BATCH_SIZE", "128")),
+            "val_batch_size": int(os.environ.get("KRONOS_VAL_BATCH_SIZE", "64")),
             "disable_best_updates": False,
             "note": (
                 "Formal stage validates the full 123,836 holdout every segment, "

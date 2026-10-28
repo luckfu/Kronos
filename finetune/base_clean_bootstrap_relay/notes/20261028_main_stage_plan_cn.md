@@ -129,20 +129,43 @@ Small Main 每段跑全量 123,836。Base 上实测：1935 个 val batch（batch
 - 本机 **SOCKS 代理（127.0.0.1:7890）会间歇性断**，表现为 git/requests 的 `SSLError`。git 用
   `git -c http.proxy= push`（绕过代理）可恢复；monitor 已改为退避重试（3s→30s，约 20 分钟才放弃）。
 
-## 9. 本机 TLS 坑（2026-10-28 晚，影响取数不影响训练）
+## 9. 本机网络坑（影响取数，不影响训练）
 
-症状：`requests`/`git` 对 `api.kaggle.com`、`github.com` 报
-`SSLEOFError` / `tlsv1 alert protocol version`，而 `curl` 同一 URL 正常。
+症状：`requests`、`git` 对 `api.kaggle.com` / `github.com` 报 `SSLEOFError`、
+`tlsv1 alert protocol version`，而同一 URL 的 `curl` 正常。
 
-原因：Python 3.12 的 **OpenSSL 3.6 默认启用后量子混合密钥交换（X25519MLKEM768）**，
-本机代理链对它握手失败；curl（LibreSSL）不受影响。
+**根因（已定位）**：macOS 把系统代理（`127.0.0.1:7890`，本地代理客户端）写进
+SystemConfiguration，`requests` 通过 `urllib.request.getproxies()` 自动继承；
+代理客户端挂掉时，所有 Python 请求在握手阶段被 EOF。`curl` 默认不读 macOS 系统代理，
+所以它一直正常。**与 OpenSSL/后量子无关**（一度误判为 MLKEM 组，已排除）。
 
 处置：
-```bash
-# 限制 Groups，关掉 MLKEM 混合
-export OPENSSL_CONF=finetune/base_clean_bootstrap_relay/openssl-legacy.cnf
-# git 另需绕过本机 SOCKS 代理
-git -c http.proxy= push origin master
+- `relay_auth.py` 现在默认 `trust_env=False`，直连 Kaggle；
+  需要走代理时设 `KRONOS_USE_SYSTEM_PROXY=1`。刷新 token 的裸 `requests.post` 也一并修了。
+- git 侧用 `git -c http.proxy= push`（绕过同样的系统/本地代理）。
+
+---
+
+## 10. 验证 batch 128 的实测结论：**没用，已回退 64**
+
+| 设置 | 迭代数 | 每次 batch | 全量验证耗时 | seg1 总时长 |
+|---|---|---|---|---|
+| val batch 64 | 968 | 0.29 s | ~4.7 min | 9m28s（含消融） |
+| val batch 128 | 484 | 0.635 s | ~5.1 min | **9m21s** |
+
+验证不是 batch 受限（估计是数据/反归一化或内存带宽瓶颈），加 batch 不但没省时间，
+还让每段多占 0.07GB。**结论：保持 64（也是 Small 的设置）**，`s/seg ≈ 566s` 不变。
+
+## 11. 正式 Main 第一棒（v4）参数
+
 ```
-配置已入库：`finetune/base_clean_bootstrap_relay/openssl-legacy.cnf`。
-**relay 的所有取数/推送命令都建议带上这两个设置。**
+max_segments = (40500 - 900) // 566 = 69
+full validation every segment (123,836, batch 64), best on full forecast
+ablation every 20 segments
+board base_clean_0.1_main (new), run id base_clean_0_1_main
+```
+69 × 566s ≈ 10h50m + 启动/收尾 ≈ **11h**，仍在 12h 硬上限内（余量 ~55 min）。
+一遍 520 段 ≈ **81.8h ≈ 7.5 棒 ≈ 2.7 周配额**，这是"正式训练全量验证"在 Base 上的真实代价。
+
+**口径提醒**：Main 的 `validation/forecast_loss` 是全量 123,836 口径（seg1 = 2.59933），
+Bootstrap 的是 quick-2048 口径（末段 2.59049），**两者不可直接比**；跨阶段只能比同口径曲线。

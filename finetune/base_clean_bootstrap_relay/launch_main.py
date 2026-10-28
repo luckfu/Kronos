@@ -342,9 +342,10 @@ def main() -> None:
         "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS": os.environ.get(
             "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS", "20"
         ),
-        # Validation is forward-only, so a larger batch does not change the
-        # sample-averaged loss; 128 halves the 968 val iterations to 484.
-        "KRONOS_VAL_BATCH_SIZE": os.environ.get("KRONOS_VAL_BATCH_SIZE", "128"),
+        # Measured 2026-10-28: val batch 128 (484 iterations, 0.635 s/batch)
+        # is *not* faster than 64 (968 iterations, 0.29 s/batch) — the pass is
+        # not batch-bound — so keep 64 (also Small's setting).
+        "KRONOS_VAL_BATCH_SIZE": os.environ.get("KRONOS_VAL_BATCH_SIZE", "64"),
         "SWANLAB_PROJECT": "finance",
         "SWANLAB_WORKSPACE": "roc_fu",
         "SWANLAB_EXPERIMENT_NAME": EXPERIMENT,
