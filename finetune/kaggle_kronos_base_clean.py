@@ -204,6 +204,7 @@ class SegmentReporter:
                 eta_total = max(0, self.total_segments - segment) * average
 
         payload = {
+            "type": "progress",
             "segment": segment,
             "total": self.total_segments,
             "resume_segment": self.resume_segment,

@@ -544,7 +544,11 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
                         print(line, flush=True)
                     if record:
                         held = pending["record"]
-                        is_progress = record.get("eta_chunk_seconds") is not None
+                        is_progress = record.get("type") == "progress" or (
+                            "avg_segment_seconds" in record
+                            and "run_elapsed_seconds" in record
+                            and "chunk_end_segment" in record
+                        )
                         if is_progress and held and held.get("segment") == record.get("segment"):
                             pending["record"] = None  # superseded, do not print twice
                             _print_record(record, state, as_json)
