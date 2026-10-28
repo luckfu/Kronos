@@ -128,3 +128,21 @@ Small Main 每段跑全量 123,836。Base 上实测：1935 个 val batch（batch
 - **OAuth token 30 分钟过期**，`kaggle` CLI 又正好坏着 → 所有取数 401。已加 `relay_auth.py` 自动用 refresh_token 换新 token（不写 `~/.kaggle`）。
 - 本机 **SOCKS 代理（127.0.0.1:7890）会间歇性断**，表现为 git/requests 的 `SSLError`。git 用
   `git -c http.proxy= push`（绕过代理）可恢复；monitor 已改为退避重试（3s→30s，约 20 分钟才放弃）。
+
+## 9. 本机 TLS 坑（2026-10-28 晚，影响取数不影响训练）
+
+症状：`requests`/`git` 对 `api.kaggle.com`、`github.com` 报
+`SSLEOFError` / `tlsv1 alert protocol version`，而 `curl` 同一 URL 正常。
+
+原因：Python 3.12 的 **OpenSSL 3.6 默认启用后量子混合密钥交换（X25519MLKEM768）**，
+本机代理链对它握手失败；curl（LibreSSL）不受影响。
+
+处置：
+```bash
+# 限制 Groups，关掉 MLKEM 混合
+export OPENSSL_CONF=finetune/base_clean_bootstrap_relay/openssl-legacy.cnf
+# git 另需绕过本机 SOCKS 代理
+git -c http.proxy= push origin master
+```
+配置已入库：`finetune/base_clean_bootstrap_relay/openssl-legacy.cnf`。
+**relay 的所有取数/推送命令都建议带上这两个设置。**
