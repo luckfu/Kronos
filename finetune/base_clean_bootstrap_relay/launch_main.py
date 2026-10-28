@@ -14,15 +14,14 @@ Two modes:
     Main chunk's complete output, copy the whole tree, resume `last_state.pt`
     (optimizer/scheduler/RNG continue).
 
-Validation defaults for Main (Base is ~4x Small, full holdout is expensive):
-  * quick 2048 fixed subset every 5 segments   → best-by-forecast, paired
-  * large 123,836 every 20 segments + chunk end → milestone metric
-  * Best updates ON (unlike Bootstrap), so the stage produces a real `best_model`.
-Override any of these with KRONOS_VALIDATION_* if the review wants full-val.
+Formal training validates on the **full 123,836-window holdout every segment**
+(mirroring Small's Main), selects Best on it, and the ablation runs every 20
+segments.  Measured on Base: training 3m56s + full val+ablation 5m30s ≈
+**9m26s/segment** (dual T4, batch 64, 968 val iterations).
 
-Wall clock: KRONOS_MAIN_RUNTIME_BUDGET_SECONDS (default 36000 = 10h) is passed
-to the trainer as KRONOS_MAX_RUNTIME_SECONDS, measured from process start, so a
-chunk always ends on a complete segment with a resumable `last_state.pt`.
+Chunk length follows the relay convention: measure seconds/segment, budget the
+session, then run a *computed* number of segments (default 69 = (40500 - 900) /
+566).  KRONOS_MAX_RUNTIME_SECONDS stays as a safety net only.
 """
 
 from __future__ import annotations
@@ -49,11 +48,31 @@ TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
 BATCH_SIZE = 32
 ACCUMULATION_STEPS = 8
 NPROC = 2
-# Upper bound; the wall-clock budget normally fires first (~145 segs at 4m/seg).
-MAX_SEGMENTS = int(os.environ.get("KRONOS_MAIN_MAX_SEGMENTS", "150"))
-RUNTIME_BUDGET_SECONDS = int(
-    os.environ.get("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", "36000")
+# Session budget → computed segment count (relay convention: time first, then N).
+SESSION_BUDGET_SECONDS = int(
+    os.environ.get("KRONOS_MAIN_SESSION_BUDGET_SECONDS", "40500")
 )
+SESSION_OVERHEAD_SECONDS = int(
+    os.environ.get("KRONOS_MAIN_SESSION_OVERHEAD_SECONDS", "900")
+)
+SECONDS_PER_SEGMENT = float(
+    os.environ.get("KRONOS_MAIN_SECONDS_PER_SEGMENT", "566")
+)
+MAX_SEGMENTS = int(
+    os.environ.get(
+        "KRONOS_MAIN_MAX_SEGMENTS",
+        str(
+            max(
+                1,
+                int(
+                    (SESSION_BUDGET_SECONDS - SESSION_OVERHEAD_SECONDS)
+                    // SECONDS_PER_SEGMENT
+                ),
+            )
+        ),
+    )
+)
+RUNTIME_BUDGET_SECONDS = SESSION_BUDGET_SECONDS
 # Optional pins for the Bootstrap → Main handoff.
 EXPECTED_BOOTSTRAP_COMPLETED = int(
     os.environ.get("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", "0") or 0
@@ -234,7 +253,8 @@ def main() -> None:
         effective_global_batch=BATCH_SIZE * NPROC,
         updates_per_seg_approx=20000 // (BATCH_SIZE * NPROC),
         max_segments=MAX_SEGMENTS,
-        runtime_budget_seconds=RUNTIME_BUDGET_SECONDS,
+        session_budget_seconds=SESSION_BUDGET_SECONDS,
+        seconds_per_segment=SECONDS_PER_SEGMENT,
         swanlab_board=EXPERIMENT,
         note="Main: fresh optimizer/scheduler, peak LR 1e-5 on every parameter",
     )
@@ -311,10 +331,11 @@ def main() -> None:
         "KRONOS_TORCHRUN_NPROC_PER_NODE": str(NPROC),
         # Main: best updates ON, quick telemetry every 5, full holdout every 20.
         "KRONOS_DISABLE_BEST_UPDATES": os.environ.get("KRONOS_DISABLE_BEST_UPDATES", "0"),
-        "KRONOS_VALIDATION_FULL_ONLY": os.environ.get("KRONOS_VALIDATION_FULL_ONLY", "0"),
-        "KRONOS_VALIDATION_QUICK_SAMPLES": os.environ.get("KRONOS_VALIDATION_QUICK_SAMPLES", "2048"),
+        # Formal stage: full holdout every segment (Small's Main recipe).
+        "KRONOS_VALIDATION_FULL_ONLY": os.environ.get("KRONOS_VALIDATION_FULL_ONLY", "1"),
+        "KRONOS_VALIDATION_QUICK_SAMPLES": os.environ.get("KRONOS_VALIDATION_QUICK_SAMPLES", "123836"),
         "KRONOS_VALIDATION_LARGE_SAMPLES": os.environ.get("KRONOS_VALIDATION_LARGE_SAMPLES", "123836"),
-        "KRONOS_VALIDATION_INTERVAL_SEGMENTS": os.environ.get("KRONOS_VALIDATION_INTERVAL_SEGMENTS", "5"),
+        "KRONOS_VALIDATION_INTERVAL_SEGMENTS": os.environ.get("KRONOS_VALIDATION_INTERVAL_SEGMENTS", "1"),
         "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS": os.environ.get(
             "KRONOS_VALIDATION_LARGE_INTERVAL_SEGMENTS", "20"
         ),

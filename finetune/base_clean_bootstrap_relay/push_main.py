@@ -51,10 +51,30 @@ PARENT_KERNEL = os.environ.get(
 CONTINUE = os.environ.get("KRONOS_MAIN_CONTINUE", "0").strip().lower() in {
     "1", "true", "yes", "on",
 }
-MAX_SEGMENTS = int(os.environ.get("KRONOS_MAIN_MAX_SEGMENTS", "150"))
-RUNTIME_BUDGET_SECONDS = int(
-    os.environ.get("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", "36000")
+SESSION_BUDGET_SECONDS = int(
+    os.environ.get("KRONOS_MAIN_SESSION_BUDGET_SECONDS", "40500")
 )
+SESSION_OVERHEAD_SECONDS = int(
+    os.environ.get("KRONOS_MAIN_SESSION_OVERHEAD_SECONDS", "900")
+)
+SECONDS_PER_SEGMENT = float(
+    os.environ.get("KRONOS_MAIN_SECONDS_PER_SEGMENT", "566")
+)
+MAX_SEGMENTS = int(
+    os.environ.get(
+        "KRONOS_MAIN_MAX_SEGMENTS",
+        str(
+            max(
+                1,
+                int(
+                    (SESSION_BUDGET_SECONDS - SESSION_OVERHEAD_SECONDS)
+                    // SECONDS_PER_SEGMENT
+                ),
+            )
+        ),
+    )
+)
+RUNTIME_BUDGET_SECONDS = SESSION_BUDGET_SECONDS
 EXPECTED_BOOTSTRAP_COMPLETED = int(
     os.environ.get("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", "0") or 0
 )
@@ -91,6 +111,8 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 # Injected at push-time only (not committed). Prefer UserSecrets / env first.
 os.environ.setdefault("SWANLAB_API_KEY", {credential!r})
 os.environ.setdefault("KRONOS_MAIN_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
+os.environ.setdefault("KRONOS_MAIN_SECONDS_PER_SEGMENT", {str(SECONDS_PER_SEGMENT)!r})
+os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_MAIN_CONTINUE", {"1" if CONTINUE else "0"!r})
 os.environ.setdefault("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", {str(EXPECTED_BOOTSTRAP_COMPLETED)!r})
@@ -148,6 +170,12 @@ namespace["main"]()
             else "previous Main Output tree (last_state resume)"
         ),
         "max_segments_per_run": MAX_SEGMENTS,
+        "segment_count_basis": {
+            "session_budget_seconds": SESSION_BUDGET_SECONDS,
+            "overhead_seconds": SESSION_OVERHEAD_SECONDS,
+            "seconds_per_segment": SECONDS_PER_SEGMENT,
+            "formula": "(budget - overhead) // seconds_per_segment",
+        },
         "runtime_budget_seconds": RUNTIME_BUDGET_SECONDS,
         "expected_bootstrap_completed": EXPECTED_BOOTSTRAP_COMPLETED or "unpinned",
         "parent_last_sha256": PARENT_LAST_SHA256 or "unpinned",
@@ -166,17 +194,14 @@ namespace["main"]()
             "restored_from_bootstrap": False,
         },
         "validation": {
-            "quick_samples": 2048,
-            "interval_segments": 5,
-            "large_samples": 123836,
-            "large_interval_segments": 20,
+            "full_only": True,
+            "samples_per_segment": 123836,
             "condition_ablation_interval_segments": 20,
             "val_batch_size": 64,
             "disable_best_updates": False,
             "note": (
-                "Small Main used full 123,836 every segment; Base is ~4x and "
-                "cannot afford that on dual T4, so full holdout runs every 20 "
-                "segments and Best follows the fixed 2048 quick subset."
+                "Formal stage validates the full 123,836 holdout every segment, "
+                "like Small's Main; measured 9m26s/segment on dual T4."
             ),
         },
         "swanlab": {
