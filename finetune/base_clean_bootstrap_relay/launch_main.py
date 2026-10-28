@@ -301,6 +301,11 @@ def main() -> None:
         "KRONOS_BASE_CLEAN_DISABLE_AUTO_CONTINUATION": "0" if continuity else "1",
         "KRONOS_MAX_SEGMENTS_PER_RUN": str(MAX_SEGMENTS),
         "KRONOS_MAX_RUNTIME_SECONDS": str(remaining_budget),
+        # Lets the runner's [PROGRESS] line compute a chunk ETA
+        # (resume_segment + max_segments - 1) instead of only a total ETA.
+        "KRONOS_RESUME_SEGMENT": str(
+            int(parent_info.get("completed_segments", 0)) + 1 if continuity else 1
+        ),
         "KRONOS_BATCH_SIZE": str(BATCH_SIZE),
         "KRONOS_ACCUMULATION_STEPS": str(ACCUMULATION_STEPS),
         "KRONOS_TORCHRUN_NPROC_PER_NODE": str(NPROC),
