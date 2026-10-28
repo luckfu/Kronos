@@ -324,6 +324,9 @@ def main() -> None:
         "KRONOS_ACCUMULATION_STEPS": str(ACCUMULATION_STEPS),
         "KRONOS_TORCHRUN_NPROC_PER_NODE": str(NPROC),
         "KRONOS_SWANLAB_REPLAY_AFTER_SEGMENT": str(replay_after),
+        # Observability: the runner uses this to print "[PROGRESS]" with a
+        # chunk ETA (resume_segment + max_segments - 1).
+        "KRONOS_RESUME_SEGMENT": str(parent_info["resume_segment"]),
         # Hard requirements for this push.
         "KRONOS_VALIDATION_QUICK_SAMPLES": "2048",
         "KRONOS_VALIDATION_LARGE_SAMPLES": "2048",

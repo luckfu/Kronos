@@ -73,6 +73,90 @@ def local_credential() -> str:
     return ""
 
 
+API_ROOT = os.environ.get("KRONOS_KAGGLE_API", "https://api.kaggle.com")
+RPC_ROOT = f"{API_ROOT}/v1/kernels.KernelsApiService"
+
+
+def api_session():
+    """Kaggle REST session, or (None, "") when only the CLI is usable.
+
+    2026-10-28: the 2.2.4 CLI client started dying with ``SSLEOFError`` on
+    api.kaggle.com while plain requests/curl to the same endpoint worked, so
+    push/status prefer REST and fall back to the CLI.
+    """
+    try:
+        import requests
+    except ImportError:
+        return None, ""
+    token = os.environ.get("KAGGLE_API_TOKEN", "").strip()
+    username = os.environ.get("KAGGLE_USERNAME", "").strip()
+    if not token:
+        path = Path(os.environ.get("KAGGLE_CONFIG_DIR", Path.home() / ".kaggle")) / "credentials.json"
+        if not path.is_file():
+            return None, username
+        try:
+            config = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            return None, username
+        token = str(config.get("access_token", "")).strip()
+        username = username or str(config.get("username", "")).strip()
+    if not token:
+        return None, username
+    session = requests.Session()
+    session.headers.update({"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+    return session, username
+
+
+def kernel_status_rest(session, ref: str) -> str:
+    owner, slug = ref.split("/", 1)
+    response = session.post(
+        f"{RPC_ROOT}/GetKernelSessionStatus",
+        json={"userName": owner, "kernelSlug": slug},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return str(response.json().get("status", "UNKNOWN"))
+
+
+def kernel_status(session, ref: str) -> str:
+    if session is not None:
+        try:
+            return kernel_status_rest(session, ref)
+        except Exception:
+            pass
+    completed = subprocess.run(
+        ["kaggle", "kernels", "status", ref], capture_output=True, text=True
+    )
+    return (completed.stdout + completed.stderr).strip()
+
+
+def push_kernel(session, build: Path, metadata: dict, code: str) -> str:
+    """Save (and therefore run) a new kernel version; returns the server message."""
+    if session is None:
+        subprocess.run(["kaggle", "kernels", "push", "-p", str(build)], check=True)
+        return "pushed via kaggle CLI"
+    payload = {
+        "slug": metadata["id"],
+        "newTitle": metadata["title"],
+        "text": code,
+        "language": metadata["language"],
+        "kernelType": metadata["kernel_type"],
+        "isPrivate": bool(metadata.get("is_private", True)),
+        "enableGpu": bool(metadata.get("enable_gpu", False)),
+        "enableInternet": bool(metadata.get("enable_internet", True)),
+        "datasetDataSources": metadata.get("dataset_sources", []),
+        "competitionDataSources": metadata.get("competition_sources", []),
+        "kernelDataSources": metadata.get("kernel_sources", []),
+        "machineShape": metadata.get("machine_shape"),
+    }
+    response = session.post(f"{RPC_ROOT}/SaveKernel", json=payload, timeout=180)
+    response.raise_for_status()
+    body = response.json()
+    if body.get("error"):
+        raise RuntimeError(f"SaveKernel failed: {body['error']}")
+    return json.dumps(body)
+
+
 def _runtime_file(rel: Path) -> Path:
     """Prefer the 2026-10-27 runtime snapshot over HEAD for the files it covers."""
     snapshot = RUNTIME_SNAPSHOT / rel
@@ -117,18 +201,15 @@ def source_bundle() -> bytes:
     return stream.getvalue()
 
 
-def authenticated_owner() -> str:
-    view = subprocess.check_output(["kaggle", "config", "view"], text=True)
-    for line in view.splitlines():
-        if "username:" in line:
-            return line.split(":", 1)[1].strip()
-    listing = subprocess.check_output(
-        ["kaggle", "kernels", "list", "-m", "--page-size", "1", "--csv"],
-        text=True,
-    ).splitlines()
-    if len(listing) >= 2:
-        return listing[1].split(",")[0].split("/")[0]
-    return ""
+def authenticated_owner(session) -> str:
+    if session is None:
+        view = subprocess.check_output(["kaggle", "config", "view"], text=True)
+        for line in view.splitlines():
+            if "username:" in line:
+                return line.split(":", 1)[1].strip()
+        return ""
+    _, username = api_session()
+    return username
 
 
 def main() -> None:
@@ -320,16 +401,12 @@ namespace["main"]()
         return
 
     # ---- push path (only with --push) ----
-    owner = authenticated_owner()
-    listing = subprocess.check_output(
-        ["kaggle", "kernels", "list", "-m", "--page-size", "1"], text=True
-    )
-    if OWNER not in listing and owner and owner != OWNER:
+    session, owner = api_session()
+    if session is not None and owner and owner != OWNER:
         raise RuntimeError(f"Authenticated owner {owner!r} is not {OWNER}")
+    print(json.dumps({"push_transport": "rest" if session is not None else "cli"}), flush=True)
 
-    parent_status = subprocess.check_output(
-        ["kaggle", "kernels", "status", PARENT_KERNEL], text=True
-    )
+    parent_status = kernel_status(session, PARENT_KERNEL)
     # Self-parent: prior COMPLETE output remains the kernel_source input even
     # when the latest attempt ended ERROR (failed resume). Allow COMPLETE or,
     # with --force, ERROR so a guard fix can overwrite the failed version.
@@ -349,32 +426,27 @@ namespace["main"]()
     if not parent_ok:
         raise RuntimeError(f"Parent bootstrap kernel not COMPLETE: {parent_status}")
 
-    status = subprocess.run(
-        ["kaggle", "kernels", "status", metadata["id"]],
-        capture_output=True,
-        text=True,
-    )
-    status_text = status.stdout + status.stderr
-    if status.returncode == 0:
-        if any(s in status_text for s in ("RUNNING", "QUEUED")):
-            raise RuntimeError(f"Target kernel already active: {status_text}")
+    status_text = kernel_status(session, metadata["id"])
+    if any(state in status_text for state in ("RUNNING", "QUEUED")):
+        raise RuntimeError(f"Target kernel already active: {status_text}")
+    if "COMPLETE" in status_text or "ERROR" in status_text or "CANCEL" in status_text:
         if not args.force:
             raise RuntimeError(
                 f"Slug already exists ({status_text.strip()}); pass --force to overwrite"
             )
         print("Slug exists and is idle; pushing update", flush=True)
-    elif not any(s in status_text.lower() for s in ("not found", "404", "permission")):
+    elif status_text and not any(
+        token in status_text.lower() for token in ("not found", "404", "permission", "unknown")
+    ):
         print(f"status probe: {status_text.strip()}", flush=True)
 
-    subprocess.run(
-        ["kaggle", "kernels", "push", "-p", str(build)],
-        check=True,
-    )
+    push_message = push_kernel(session, build, metadata, code)
     print(
         json.dumps(
             {
                 "pushed": metadata["id"],
                 "url": f"https://www.kaggle.com/code/{OWNER}/{SLUG}",
+                "server": push_message[:200],
             }
         ),
         flush=True,

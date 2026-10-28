@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 
@@ -30,6 +31,227 @@ VALIDATION_LOG_RE = re.compile(
 RANK_IC_LOG_RE = re.compile(
     r"Temporal Rank IC selection: daily_rank_ic_mean=([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?\d+)?)"
 )
+# --- observability (2026-10-28): the trainer's summary block is the only place
+# where per-segment timing, ablation deltas and peak memory appear.  Parse it
+# here so a relay chunk is readable while it runs, and so the numbers the
+# handover keeps asking for land on SwanLab instead of only in the log text.
+SEGMENT_SUMMARY_RE = re.compile(r"---\s*Coverage Segment (\d+)/(\d+)\s*Summary\s*---")
+TRAIN_AVERAGE_BEST_RE = re.compile(
+    r"Validation Train Average/Best: ([0-9.]+) / ([0-9.]+|inf)"
+)
+VAL_WEIGHTED_RE = re.compile(r"Validation Weighted Forecast: ([0-9.]+)")
+CONDITION_ABLATION_RE = re.compile(
+    r"Validation Condition Full/None/Shuffled Forecast: "
+    r"([0-9.]+) / ([0-9.]+) / ([0-9.]+); "
+    r"Delta Full-None/Full-Shuffled: ([+-]?[0-9.eE+-]+) / ([+-]?[0-9.eE+-]+)"
+)
+CUDA_PEAK_RE = re.compile(r"CUDA Peak Allocated/Reserved: ([0-9.]+) / ([0-9.]+) GB")
+SEGMENT_SECONDS_RE = re.compile(r"Time This Epoch: (\d+):(\d+):(\d+)")
+RUN_ELAPSED_RE = re.compile(r"Total Time Elapsed: (\d+):(\d+):(\d+)")
+CONDITION_MONITOR_RE = re.compile(r"Condition Monitor JSON: (\{.*\})")
+
+
+def _hms(parts) -> int:
+    hours, minutes, seconds = (int(part) for part in parts)
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def stamp_line(line: str) -> str:
+    """Prefix trainer lines with a UTC clock so stalls and gaps are visible."""
+    if not line.strip():
+        return line
+    return f"[{time.strftime('%H:%M:%SZ', time.gmtime())}] {line}"
+
+
+class SegmentReporter:
+    """Fold the trainer's segment summary into one machine-readable line.
+
+    Observability only: it never touches the model, optimizer, schedule or
+    checkpoint path, and the caller wraps it so a parsing bug cannot stop
+    training.
+    """
+
+    WINDOW = 20  # trailing window for the speed / ETA estimate
+
+    def __init__(self, env):
+        self.env = env
+        self.total_segments = 0
+        self.total_steps = 0
+        self.completed = 0
+        self.pending: dict = {}
+        self.durations: list[float] = []
+        self.max_segments = int(env.get("KRONOS_MAX_SEGMENTS_PER_RUN", "0") or 0)
+        self.resume_segment = int(
+            env.get("KRONOS_BOOTSTRAP_EXPECTED_RESUME", "0")
+            or env.get("KRONOS_RESUME_SEGMENT", "0")
+            or 0
+        )
+
+    # -- helpers ---------------------------------------------------------
+    def _step(self, segment: int):
+        total = self.total_steps or 313
+        try:
+            return swanlab_chart_step(segment, total, total, self.env)
+        except Exception:
+            return None
+
+    @property
+    def average_seconds(self):
+        window = [value for value in self.durations[-self.WINDOW :] if value]
+        if not window:
+            return None
+        return sum(window) / len(window)
+
+    @property
+    def chunk_end_segment(self):
+        if self.max_segments and self.resume_segment:
+            return self.resume_segment + self.max_segments - 1
+        return None
+
+    # -- main ------------------------------------------------------------
+    def feed(self, line: str):
+        """Return (metrics, step, announcement) for one trainer log line."""
+        match = CONDITION_MONITOR_RE.search(line)
+        if match:
+            try:
+                stats = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return {}, None, None
+            metrics = {
+                "condition/output_norm": stats.get("condition_output_norm"),
+                "condition/trunk_norm_ratio": stats.get("condition_trunk_norm_ratio"),
+                "condition/grad_rms": stats.get("condition_grad_rms"),
+                "condition/update_weight_ratio": stats.get("condition_update_weight_ratio"),
+                "condition/sector_emb_norm": stats.get("sector_embedding_weight_norm"),
+                "condition/size_mlp_norm": stats.get("size_mlp_output_weight_norm"),
+            }
+            clean = {key: float(value) for key, value in metrics.items() if value is not None}
+            return clean, None, None
+
+        match = SEGMENT_SUMMARY_RE.search(line)
+        if match:
+            self.pending = {"segment": int(match.group(1))}
+            self.total_segments = int(match.group(2))
+            return {}, None, None
+
+        match = TRAIN_LOG_RE.search(line)
+        if match:
+            self.total_steps = int(match.group(4)) or self.total_steps
+            self.completed = max(self.completed, int(match.group(1)) - 1)
+            return {}, None, None
+
+        if not self.pending:
+            return {}, None, None
+
+        match = VALIDATION_LOG_RE.search(line)
+        if match:
+            self.pending["forecast"] = float(match.group(1))
+            self.pending["history"] = float(match.group(2))
+            self.pending["full"] = float(match.group(3))
+            return {}, None, None
+        match = VAL_WEIGHTED_RE.search(line)
+        if match:
+            self.pending["selection"] = float(match.group(1))
+            return {}, None, None
+        match = TRAIN_AVERAGE_BEST_RE.search(line)
+        if match:
+            self.pending["train_average"] = float(match.group(1))
+            best = match.group(2)
+            self.pending["best"] = float(best) if best != "inf" else None
+            return {}, None, None
+        match = CONDITION_ABLATION_RE.search(line)
+        if match:
+            full, none, shuffled, delta_none, delta_shuffled = match.groups()
+            self.pending.update(
+                condition_full=float(full),
+                condition_none=float(none),
+                condition_shuffled=float(shuffled),
+                delta_full_none=float(delta_none),
+                delta_full_shuffled=float(delta_shuffled),
+            )
+            return {}, None, None
+        match = CUDA_PEAK_RE.search(line)
+        if match:
+            self.pending["cuda_peak_gb"] = float(match.group(1))
+            return {}, None, None
+        match = SEGMENT_SECONDS_RE.search(line)
+        if match:
+            self.pending["segment_seconds"] = _hms(match.groups())
+            return {}, None, None
+        match = RUN_ELAPSED_RE.search(line)
+        if match:
+            self.pending["run_elapsed_seconds"] = _hms(match.groups())
+            return self._finalize()
+
+        return {}, None, None
+
+    def _finalize(self):
+        record = self.pending
+        self.pending = {}
+        segment = int(record.get("segment") or 0)
+        if not segment:
+            return {}, None, None
+        self.completed = max(self.completed, segment)
+        seconds = record.get("segment_seconds")
+        if seconds:
+            self.durations.append(float(seconds))
+        average = self.average_seconds
+        eta_chunk = eta_total = None
+        if average:
+            if self.chunk_end_segment:
+                eta_chunk = max(0, self.chunk_end_segment - segment) * average
+            if self.total_segments:
+                eta_total = max(0, self.total_segments - segment) * average
+
+        payload = {
+            "segment": segment,
+            "total": self.total_segments,
+            "resume_segment": self.resume_segment,
+            "chunk_end_segment": self.chunk_end_segment,
+            "segment_seconds": round(seconds, 1) if seconds else None,
+            "avg_segment_seconds": round(average, 1) if average else None,
+            "run_elapsed_seconds": record.get("run_elapsed_seconds"),
+            "eta_chunk_seconds": round(eta_chunk, 1) if eta_chunk else None,
+            "eta_total_seconds": round(eta_total, 1) if eta_total else None,
+            "forecast": record.get("forecast"),
+            "selection": record.get("selection"),
+            "best": record.get("best"),
+            "delta_full_none": record.get("delta_full_none"),
+            "delta_full_shuffled": record.get("delta_full_shuffled"),
+            "cuda_peak_gb": record.get("cuda_peak_gb"),
+        }
+        announcement = "[PROGRESS] " + json.dumps(
+            {key: value for key, value in payload.items() if value is not None},
+            separators=(",", ":"),
+        )
+
+        metrics = {
+            "progress/completed_segments": segment,
+            "progress/segment_seconds": payload["segment_seconds"],
+            "progress/avg_segment_seconds": payload["avg_segment_seconds"],
+            "progress/eta_chunk_minutes": (
+                round(eta_chunk / 60.0, 1) if eta_chunk else None
+            ),
+            "progress/eta_total_minutes": (
+                round(eta_total / 60.0, 1) if eta_total else None
+            ),
+            "progress/run_elapsed_minutes": (
+                round(record["run_elapsed_seconds"] / 60.0, 1)
+                if record.get("run_elapsed_seconds")
+                else None
+            ),
+            "progress/cuda_peak_gb": record.get("cuda_peak_gb"),
+            "validation/best_selection_loss": record.get("best"),
+            "validation/train_average_loss": record.get("train_average"),
+            "validation/condition_full_loss": record.get("condition_full"),
+            "validation/condition_none_loss": record.get("condition_none"),
+            "validation/condition_shuffled_loss": record.get("condition_shuffled"),
+            "validation/condition_full_minus_none": record.get("delta_full_none"),
+            "validation/condition_full_minus_shuffled": record.get("delta_full_shuffled"),
+        }
+        clean = {key: value for key, value in metrics.items() if value is not None}
+        return clean, self._step(segment), announcement
+
 
 
 def swanlab_chart_segment(local_segment, env=None):
@@ -620,14 +842,27 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     log_handle = log_path.open("a", buffering=1)
     segment = 0
     total_steps = 1
+    reporter = SegmentReporter(env)
     try:
         for line in child.stdout:
             # Parse the trainer's local stage coordinates, but persist and
             # display experiment-wide segment numbers for continued stages.
             forwarded_line = globalize_training_log(line, env)
-            log_handle.write(forwarded_line)
+            stamped_line = stamp_line(forwarded_line)
+            log_handle.write(stamped_line)
             log_handle.flush()
-            print(forwarded_line, end="", flush=True)
+            print(stamped_line, end="", flush=True)
+            try:
+                progress_metrics, progress_step, announcement = reporter.feed(line)
+            except Exception:
+                progress_metrics, progress_step, announcement = {}, None, None
+            if announcement:
+                print(announcement, flush=True)
+            if progress_metrics and run is not None:
+                run.log(
+                    progress_metrics,
+                    step=progress_step if progress_step is not None else latest_step["value"],
+                )
             match = TRAIN_LOG_RE.search(line)
             if match:
                 segment, _, step, total_steps, lr, condition_lr, loss, forecast, history = match.groups()
