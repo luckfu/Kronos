@@ -60,6 +60,7 @@ SESSION_OVERHEAD_SECONDS = int(
 SECONDS_PER_SEGMENT = float(
     os.environ.get("KRONOS_MAIN_SECONDS_PER_SEGMENT", "566")
 )
+VAL_BATCH_SIZE = os.environ.get("KRONOS_VAL_BATCH_SIZE", "128")
 MAX_SEGMENTS = int(
     os.environ.get(
         "KRONOS_MAIN_MAX_SEGMENTS",
@@ -113,6 +114,7 @@ os.environ.setdefault("SWANLAB_API_KEY", {credential!r})
 os.environ.setdefault("KRONOS_MAIN_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
 os.environ.setdefault("KRONOS_MAIN_SECONDS_PER_SEGMENT", {str(SECONDS_PER_SEGMENT)!r})
 os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_SECONDS)!r})
+os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
 os.environ.setdefault("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_MAIN_CONTINUE", {"1" if CONTINUE else "0"!r})
 os.environ.setdefault("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", {str(EXPECTED_BOOTSTRAP_COMPLETED)!r})
@@ -197,7 +199,7 @@ namespace["main"]()
             "full_only": True,
             "samples_per_segment": 123836,
             "condition_ablation_interval_segments": 20,
-            "val_batch_size": 64,
+            "val_batch_size": int(os.environ.get("KRONOS_VAL_BATCH_SIZE", "128")),
             "disable_best_updates": False,
             "note": (
                 "Formal stage validates the full 123,836 holdout every segment, "

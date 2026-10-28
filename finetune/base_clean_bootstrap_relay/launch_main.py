@@ -342,7 +342,9 @@ def main() -> None:
         "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS": os.environ.get(
             "KRONOS_CONDITION_ABLATION_INTERVAL_SEGMENTS", "20"
         ),
-        "KRONOS_VAL_BATCH_SIZE": os.environ.get("KRONOS_VAL_BATCH_SIZE", "64"),
+        # Validation is forward-only, so a larger batch does not change the
+        # sample-averaged loss; 128 halves the 968 val iterations to 484.
+        "KRONOS_VAL_BATCH_SIZE": os.environ.get("KRONOS_VAL_BATCH_SIZE", "128"),
         "SWANLAB_PROJECT": "finance",
         "SWANLAB_WORKSPACE": "roc_fu",
         "SWANLAB_EXPERIMENT_NAME": EXPERIMENT,
