@@ -544,10 +544,10 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
                         print(line, flush=True)
                     if record:
                         held = pending["record"]
+                        # [PROGRESS] records always carry an averaged segment
+                        # time; the legacy summary block never does.
                         is_progress = record.get("type") == "progress" or (
                             "avg_segment_seconds" in record
-                            and "run_elapsed_seconds" in record
-                            and "chunk_end_segment" in record
                         )
                         if is_progress and held and held.get("segment") == record.get("segment"):
                             pending["record"] = None  # superseded, do not print twice
@@ -581,10 +581,17 @@ def follow(ref: str, tail: int, as_json: bool, raw: bool, wait: bool) -> int:
                     flush=True,
                 )
                 beat(force=True)
-            if failures >= 10:
-                print("# giving up on the live stream; re-run with --follow later", flush=True)
+            # Kaggle's SSE endpoint and this network both flap; a 10h run will
+            # see multi-minute outages, so back off for ~20 minutes before
+            # giving up instead of ~30 seconds.
+            if failures >= 40:
+                print(
+                    "# giving up on the live stream after "
+                    f"{failures} consecutive failures; re-run with --follow later",
+                    flush=True,
+                )
                 break
-            time.sleep(3)
+            time.sleep(min(30, 3 * failures))
         if finished_stream:
             status = kernel_status(session, ref)
             if state.finished or state.chunk_limit:
