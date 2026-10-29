@@ -173,6 +173,17 @@ subprocess.run(
 subprocess.run(["pip", "install", "-q", "swanlab"], check=True)
 
 import torch
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 
 if not torch.cuda.is_available():
     raise RuntimeError("CUDA is unavailable; C5 T4 probe requires a GPU")
@@ -194,7 +205,7 @@ print(
 source_root = locate_continuation()
 repaired_root = repair_continuation(source_root, repo)
 parent_model = repaired_root / "checkpoints/last_model"
-os.environ["SWANLAB_API_KEY"] = "fmEPDGk4IItxgqSZKGLi8"
+os.environ["SWANLAB_API_KEY"] = load_swanlab_api_key()
 os.environ.update(
     {
         "KRONOS_SMALL_V21_STAGE": "main",

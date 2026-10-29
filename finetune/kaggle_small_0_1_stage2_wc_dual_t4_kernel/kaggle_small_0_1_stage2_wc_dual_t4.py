@@ -72,6 +72,17 @@ subprocess.run([
 subprocess.run(["pip", "install", "-q", "swanlab"], check=True)
 
 import torch
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 
 gpu_count = torch.cuda.device_count()
 gpu_names = [torch.cuda.get_device_name(i) for i in range(gpu_count)]
@@ -105,7 +116,7 @@ env.update({
     "KRONOS_SCHEDULER": "warmup_constant",
     "KRONOS_USE_AMP": "1",
     "KRONOS_AMP_DTYPE": "float16",
-    "SWANLAB_API_KEY": "fmEPDGk4IItxgqSZKGLi8",
+    "SWANLAB_API_KEY": load_swanlab_api_key(),
     "SWANLAB_PROJECT": "finance",
     "SWANLAB_EXPERIMENT_NAME": OUTPUT_NAME,
     "SWANLAB_RUN_ID": OUTPUT_NAME,
