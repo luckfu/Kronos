@@ -231,7 +231,9 @@ def main_relay_parent(input_root: Path) -> tuple[Path, dict]:
         "optimizer_state_restored": True,
     }
     phase("parent_ready", **info)
-    return source, info
+    # The predictor must be a model directory (config.json + model.safetensors),
+    # not the output root; the full tree is imported via CONTINUATION_ROOT.
+    return source / "checkpoints/last_model", info
 
 
 def main() -> None:

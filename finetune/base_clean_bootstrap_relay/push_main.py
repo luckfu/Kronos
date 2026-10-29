@@ -252,7 +252,21 @@ namespace["main"]()
 
     parent_status = kernel_status(session, PARENT_KERNEL)
     if "COMPLETE" not in parent_status:
-        raise RuntimeError(f"Parent kernel not COMPLETE: {parent_status}")
+        # A failed self-parent attempt still leaves the last COMPLETE output
+        # mounted as kernel_sources; --force re-pushes from that state.
+        if (
+            args.force
+            and CONTINUE
+            and PARENT_KERNEL.endswith("/" + SLUG)
+            and "ERROR" in parent_status
+        ):
+            print(
+                "Self-parent latest status ERROR; --force reuses the previous "
+                "COMPLETE output as kernel_source.",
+                flush=True,
+            )
+        else:
+            raise RuntimeError(f"Parent kernel not COMPLETE: {parent_status}")
     if CONTINUE and not PARENT_KERNEL.endswith("/" + SLUG):
         raise RuntimeError("KRONOS_MAIN_CONTINUE=1 requires a self-parent Main kernel")
 

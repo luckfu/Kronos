@@ -213,3 +213,27 @@ validation 点在同一 x 上有多个值。
 段号 70→137、**68 段**；`SESSION_BUDGET=36000s`（10h），给配额留 ~38 min 余量；
 run id 仍是 `base_clean_0_1_main_r2`（段号连续，x 轴连续）。
 本棒跑完后配额见底，下一次要等 10-31 08:00 SGT 刷新。
+
+## 14. 事故：Main 第 2 棒首次推送 ERROR（2026-10-29 04:47Z）
+
+**报错**：
+```
+Configured model is incomplete:
+/kaggle/input/kronos-base-clean-0-1-main/kronos_base_clean/outputs/models/base_clean_0.1_main
+```
+
+**原因**：同阶段接力时 `launch_main` 把 `KRONOS_BASE_CLEAN_PARENT_MODEL` 指到了 **output 根目录**，
+而 runner 的 `resolve_stage_predictor()` 要求父模型是**模型目录**（含 `config.json` + `model.safetensors`）。
+在 Main 这种"跨阶段也要指定父模型"的阶段，这个路径必须精确到 `checkpoints/last_model`。
+
+**修复**（v7 起生效）：
+1. `main_relay_parent()` 返回 `source/checkpoints/last_model` 作为 predictor；
+   `KRONOS_BASE_CLEAN_CONTINUATION_ROOT` 仍指 output 根目录（整棵树由 runner 复制）。
+2. `push_main.py` 允许 **自父状态 ERROR + `--force`**：Kaggle 的 kernel_sources 挂的是
+   **上一个 COMPLETE 版本**的 output（本例是 v5 的 69 段），所以失败的一版不会污染接力源。
+
+**验证**：v7 在 04:52Z 启动，`parent_ready: same_stage_resume`，训练从 **Segment 70/520** 继续，
+LR 9.62e-6（与第 1 棒末 9.7e-6 连续），loss 衔接正常。
+
+> 教训：Bootstrap 的接力只看 `last_state.pt`（predictor 走 HF 底座），所以这个路径 bug
+> 在 Bootstrap 4 棒里都没暴露；**只有 Main/后续阶段才会踩**。
