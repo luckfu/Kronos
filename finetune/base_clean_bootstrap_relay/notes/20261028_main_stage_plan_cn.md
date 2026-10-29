@@ -193,3 +193,23 @@ validation 点在同一 x 上有多个值。
 
 > 教训：Bootstrap 那几棒没这个问题，是因为 trainer 把段号接续成 354、390…（x 轴连续），
 > 而 Main 每次从零重启都会把 segment 重置回 1。
+
+## 13. Main 第 1 棒（v5，run `_r2`）结果 + 第 2 棒（v6）
+
+| 项 | 值 |
+|---|---|
+| 会话 | v5，2026-10-28 15:43Z → 10-29 01:38Z，`bootstrap_weights_only` |
+| 段数 | **69**（1→69），9h55m，**8m31s/段**（全量验证每段 + 消融每 20 段） |
+| forecast | seg1 **2.59933** → seg69 **2.44359**（−6.0%） |
+| Best | 每段刷新，末值 **2.45063**（全量口径） |
+| 看板 | `base_clean_0_1_main_r2`（干净，1→69 无回跳） |
+| 显存 | 峰值 2.56–2.57 GB |
+
+**配额**（`GetAcceleratorQuotaStatistics`，2026-10-29 04:42Z）：
+`totalTimeAllowed 108000s`、`timeUsed 69604s`、**剩余 38396s（10h40m）**，
+`quotaRefreshTime = 2026-10-31T00:00:00Z`（= 08:00 SGT）。
+
+**第 2 棒（v6）**：同阶段接力（`KRONOS_MAIN_CONTINUE=1`），复制整棵 Output 树 + `last_state`，
+段号 70→137、**68 段**；`SESSION_BUDGET=36000s`（10h），给配额留 ~38 min 余量；
+run id 仍是 `base_clean_0_1_main_r2`（段号连续，x 轴连续）。
+本棒跑完后配额见底，下一次要等 10-31 08:00 SGT 刷新。
