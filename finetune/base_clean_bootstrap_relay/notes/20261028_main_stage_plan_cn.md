@@ -237,3 +237,30 @@ LR 9.62e-6（与第 1 棒末 9.7e-6 连续），loss 衔接正常。
 
 > 教训：Bootstrap 的接力只看 `last_state.pt`（predictor 走 HF 底座），所以这个路径 bug
 > 在 Bootstrap 4 棒里都没暴露；**只有 Main/后续阶段才会踩**。
+
+## 15. Main 第 2 棒结果 + 第 3 棒跨账号接力（smmt315）
+
+**第 2 棒（v7，luckfu）**：70→137，68 段，9h55m，**8m44s/段**，
+forecast seg137 = **2.38444**，best 2.39123（全量口径）。
+
+**Main 累计**：1→137 段，forecast **2.59933 → 2.38444（−8.3%）**，LR 已从峰值 1e-5 降到 ~8.5e-6。
+
+**配额切换**（2026-10-29）：
+- `luckfu`：108,000s 中已用 69,604s，剩 38,396s，`quotaRefreshTime=2026-10-31T00:00:00Z`；
+- `smmt315`：**全新 108,000s（timeUsed=0）**，本次接力改用它。
+
+**第 3 棒（v8）**：owner=`smmt315`，slug=`smmt315/kronos-base-clean-0-1-main`（新建），
+`kernel_sources = luckfu/kronos-base-clean-0-1-main`（**跨账号共享 notebook**，
+实测挂载到 `/kaggle/input/notebooks/luckfu/kronos-base-clean-0-1-main/...`，
+`parent_ready: same_stage_resume`，训练从 **Segment 138/520** 继续）。
+
+| 项 | 值 |
+|---|---|
+| 段数 | 138→214，**77 段**（`(41400-900)//525`） |
+| 会话预算 | 41,400s（11h30m），12h 硬上限留 30 min |
+| run id | `base_clean_0_1_main_r2`（段号连续 → 同一 run，曲线不断） |
+| 预计收尾 | 约 10-30 02:10Z（10:10 SGT） |
+
+**凭据**：`KAGGLE_API_TOKEN` 只通过环境变量传入（`KAGGLE_API_TOKEN=... KAGGLE_USERNAME=smmt315`），
+**不写进仓库、不写进 kernel 源码**。relay_auth 优先取 env token，username 取 env 的 `KAGGLE_USERNAME`。
+后续 smmt315 的棒次：`KRONOS_PARENT_KERNEL=smmt315/kronos-base-clean-0-1-main` + `KRONOS_MAIN_CONTINUE=1`。
