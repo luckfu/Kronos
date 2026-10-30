@@ -264,3 +264,20 @@ forecast seg137 = **2.38444**，best 2.39123（全量口径）。
 **凭据**：`KAGGLE_API_TOKEN` 只通过环境变量传入（`KAGGLE_API_TOKEN=... KAGGLE_USERNAME=smmt315`），
 **不写进仓库、不写进 kernel 源码**。relay_auth 优先取 env token，username 取 env 的 `KAGGLE_USERNAME`。
 后续 smmt315 的棒次：`KRONOS_PARENT_KERNEL=smmt315/kronos-base-clean-0-1-main` + `KRONOS_MAIN_CONTINUE=1`。
+
+## 16. 第 3 棒实际只跑到 212（预算先到）+ 第 4 棒
+
+**第 3 棒（v8，smmt315）**：138→**212**（75 段，不是计划的 77），11h32m，
+**9m18s/段**（比第 2 棒的 8m44s 慢了约 6%），forecast seg212 = **2.35303**，best 2.35983。
+
+**为什么少了 2 段**：我按 525s/段 算的 77 段，实际 558s/段 → 77 段需要 42,966s，
+超过 41,400s 预算，**运行时上限在段边界把这一棒停在 212**（这正是保留 `MAX_RUNTIME_SECONDS`
+兜底的意义：段数可以估错，但不会把会话跑爆、也不会丢 last_state）。
+
+**教训**：段数必须用最近 20 段的实测均值再留 3–5% 余量；本次 9m18s → 下棒按 **560s/段** 算。
+
+**第 4 棒（v9）**：213→284，**72 段**（`(41400-900)//560`），预算 41,400s（11h30m），
+同 run id `base_clean_0_1_main_r2`；03:35Z 启动，训练从 **Segment 213/520** 继续，
+LR **6.54e-6**（cosine 正常推进）。预计 **15:05Z（23:05 SGT）** 收尾。
+
+**配额（smmt315）**：已用 41,864s / 108,000s，剩 **18.37h**；本棒用 11h30m，之后还剩约 6.9h。
