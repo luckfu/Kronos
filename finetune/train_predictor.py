@@ -532,11 +532,15 @@ RESUME_GUARD_GRANDFATHER_MISSING_KEYS = frozenset({
     'validation_interval_segments',
     'val_batch_size',
     'disable_best_updates',
+    'scheduler_decay_start_ratio',
 })
 # Intentional Bootstrap relay ops that may change across chunks (e.g. ablation
 # cadence 10 → 5) without rewriting parent weights.
 RESUME_OPS_ALLOW_CHANGE_KEYS = frozenset({
     'condition_ablation_interval_segments',
+    # Deliberate LR-schedule probes on the same weights/AdamW state
+    # (2026-10-31: hold peak LR to test whether the plateau is LR-starved).
+    'scheduler_type',
 })
 
 
