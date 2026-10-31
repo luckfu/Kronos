@@ -26,7 +26,16 @@ from torch.utils.data import DataLoader, Dataset
 
 QUANTILE_INDEX = 4
 CONTEXT_FEATURES = (0, 1, 2, 4, 5)  # open, high, low, volume, amount
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
+
+def load_kaggle_swanlab_api_key():
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 SWANLAB_RUN_ID = "timesfm3-lora-finetune-v6"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
@@ -462,7 +471,7 @@ def train(args: argparse.Namespace) -> dict:
             swanlab_module = swanlab
             swanlab.login(
                 api_key=os.environ.get("SWANLAB_API_KEY", "").strip()
-                or SWANLAB_API_KEY_FALLBACK
+                or load_kaggle_swanlab_api_key() or SWANLAB_API_KEY_FALLBACK
             )
             swanlab_run = swanlab.init(
                 project=SWANLAB_PROJECT,
