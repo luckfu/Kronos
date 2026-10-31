@@ -43,8 +43,10 @@ from push_bootstrap import (  # noqa: E402 - sibling helper reuse
 
 OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "luckfu")
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
-SLUG = "kronos-base-clean-0-1-main"
-TITLE = "Kronos Base Clean 0.1 Main"
+SLUG = os.environ.get("KRONOS_MAIN_SLUG", "kronos-base-clean-0-1-main")
+TITLE = os.environ.get("KRONOS_MAIN_TITLE", "Kronos Base Clean 0.1 Main")
+OUTPUT_NAME = os.environ.get("KRONOS_MAIN_OUTPUT_NAME", "base_clean_0.1_main")
+PARENT_OUTPUT = os.environ.get("KRONOS_MAIN_PARENT_OUTPUT", "base_clean_0.1_bootstrap")
 PARENT_KERNEL = os.environ.get(
     "KRONOS_PARENT_KERNEL", "luckfu/kronos-base-clean-0-1-bootstrap"
 )
@@ -123,6 +125,8 @@ os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
 os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
 os.environ.setdefault("KRONOS_SCHEDULER", {SCHEDULER!r})
 os.environ.setdefault("KRONOS_SCHEDULER_DECAY_START_RATIO", {SCHEDULER_DECAY_START!r})
+os.environ.setdefault("KRONOS_MAIN_OUTPUT_NAME", {OUTPUT_NAME!r})
+os.environ.setdefault("KRONOS_MAIN_PARENT_OUTPUT", {PARENT_OUTPUT!r})
 os.environ.setdefault("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_MAIN_CONTINUE", {"1" if CONTINUE else "0"!r})
 os.environ.setdefault("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", {str(EXPECTED_BOOTSTRAP_COMPLETED)!r})
@@ -223,6 +227,8 @@ namespace["main"]()
             "note": "NEW board (stage switch), never replay bootstrap metrics.jsonl",
         },
         "swanlab_run_id": RUN_ID,
+        "output_name": OUTPUT_NAME,
+        "parent_output": PARENT_OUTPUT,
         "scheduler": {
             "type": SCHEDULER,
             "decay_start_ratio": SCHEDULER_DECAY_START,
@@ -264,14 +270,12 @@ namespace["main"]()
     if "COMPLETE" not in parent_status:
         # A failed self-parent attempt still leaves the last COMPLETE output
         # mounted as kernel_sources; --force re-pushes from that state.
-        if (
-            args.force
-            and CONTINUE
-            and PARENT_KERNEL.endswith("/" + SLUG)
-            and "ERROR" in parent_status
-        ):
+        # Kaggle mounts the last COMPLETE version's output for kernel_sources,
+        # so a failed newest attempt (probe or relay) still leaves a usable
+        # parent; only an explicitly forced push may ride over it.
+        if args.force and "ERROR" in parent_status:
             print(
-                "Self-parent latest status ERROR; --force reuses the previous "
+                "Parent latest status ERROR; --force reuses its previous "
                 "COMPLETE output as kernel_source.",
                 flush=True,
             )

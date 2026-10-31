@@ -42,8 +42,10 @@ EXPERIMENT = "base_clean_0.1_main"
 # restart MUST get its own run id; same-stage chunk 2+ keeps the id because the
 # segment numbering continues.  Shared ids are what made the board sawtooth.
 RUN_ID = os.environ.get("KRONOS_MAIN_RUN_ID", "base_clean_0_1_main")
-OUTPUT_NAME = "base_clean_0.1_main"
-BOOTSTRAP_OUTPUT_NAME = "base_clean_0.1_bootstrap"
+# Probe runs (LR sweeps) reuse this launcher with a different output name and
+# parent output, so they never disturb the main relay's output tree.
+OUTPUT_NAME = os.environ.get("KRONOS_MAIN_OUTPUT_NAME", "base_clean_0.1_main")
+PARENT_OUTPUT_NAME = os.environ.get("KRONOS_MAIN_PARENT_OUTPUT", "base_clean_0.1_bootstrap")
 DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
 DATA_SHA = "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
 TORCH_VERSION = "2.6.0"
@@ -171,7 +173,7 @@ def find_output_root(input_root: Path, output_name: str, want_state: bool) -> Pa
 
 def bootstrap_parent(input_root: Path) -> tuple[Path, dict]:
     """Weights-only handoff: Bootstrap last_model + a durable progress record."""
-    root = find_output_root(input_root, BOOTSTRAP_OUTPUT_NAME, want_state=False)
+    root = find_output_root(input_root, PARENT_OUTPUT_NAME, want_state=False)
     required = [
         "checkpoints/last_model/model.safetensors",
         "checkpoints/last_model/config.json",
@@ -205,7 +207,7 @@ def bootstrap_parent(input_root: Path) -> tuple[Path, dict]:
     info = {
         "parent_kernel_output": str(root),
         "approach": "weights_only",
-        "bootstrap_completed_segments": completed,
+        "parent_completed_segments": completed,
         "bootstrap_resume_segment": int(progress.get("current_segment", completed)) + 1,
         "bootstrap_best_metric_segment": json.loads(
             (root / "checkpoints/best_model/best_metric.json").read_text()
