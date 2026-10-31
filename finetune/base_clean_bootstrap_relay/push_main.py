@@ -62,6 +62,10 @@ SECONDS_PER_SEGMENT = float(
 )
 VAL_BATCH_SIZE = os.environ.get("KRONOS_VAL_BATCH_SIZE", "64")
 RUN_ID = os.environ.get("KRONOS_MAIN_RUN_ID", "base_clean_0_1_main")
+# LR-schedule probes switch the scheduler on the same weights, so the kernel
+# must receive these explicitly (the wrapper only injects what it is given).
+SCHEDULER = os.environ.get("KRONOS_SCHEDULER", "warmup_cosine")
+SCHEDULER_DECAY_START = os.environ.get("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
 MAX_SEGMENTS = int(
     os.environ.get(
         "KRONOS_MAIN_MAX_SEGMENTS",
@@ -117,6 +121,8 @@ os.environ.setdefault("KRONOS_MAIN_SECONDS_PER_SEGMENT", {str(SECONDS_PER_SEGMEN
 os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
 os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
+os.environ.setdefault("KRONOS_SCHEDULER", {SCHEDULER!r})
+os.environ.setdefault("KRONOS_SCHEDULER_DECAY_START_RATIO", {SCHEDULER_DECAY_START!r})
 os.environ.setdefault("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_MAIN_CONTINUE", {"1" if CONTINUE else "0"!r})
 os.environ.setdefault("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", {str(EXPECTED_BOOTSTRAP_COMPLETED)!r})
@@ -217,6 +223,10 @@ namespace["main"]()
             "note": "NEW board (stage switch), never replay bootstrap metrics.jsonl",
         },
         "swanlab_run_id": RUN_ID,
+        "scheduler": {
+            "type": SCHEDULER,
+            "decay_start_ratio": SCHEDULER_DECAY_START,
+        },
         "source_sha256": digest,
         "source_commit": commit,
         "build_dir": str(build),
