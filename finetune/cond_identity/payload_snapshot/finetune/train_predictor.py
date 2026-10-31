@@ -567,11 +567,15 @@ RESUME_GUARD_GRANDFATHER_MISSING_KEYS = frozenset({
     'condition_last_layer_init',
     'condition_last_layer_init_std',
     'condition_scale_init',
+    # LR-schedule probe (2026-10-31): WSD decay start is new for a cosine run.
+    'scheduler_decay_start_ratio',
 })
 # Intentional Bootstrap relay ops that may change across chunks (e.g. ablation
 # cadence 10 → 5) without rewriting parent weights.
 RESUME_OPS_ALLOW_CHANGE_KEYS = frozenset({
     'condition_ablation_interval_segments',
+    # Deliberate LR-schedule probe on the same weights/AdamW state.
+    'scheduler_type',
 })
 
 
