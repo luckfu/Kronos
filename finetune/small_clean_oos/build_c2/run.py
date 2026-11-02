@@ -1,11 +1,22 @@
 import base64, hashlib, io, json, os, subprocess, sys, time, zipfile
 from pathlib import Path
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 started = time.time()
 print(json.dumps({"phase": "started", "time": started}), flush=True)
 os.environ.update(PYTHONUNBUFFERED="1", SMALL_OOS_STARTED=str(started),
     SMALL_OOS_COMMIT='1629d35a5802377862273d32f8c21e75148c96a3', SMALL_OOS_SOURCE_SHA='72c9e392fdf4551fd3811b42275203d24cfd7e160e95a0494b9551e6fe09403c',
     SMALL_OOS_OUTPUT="/kaggle/working/small_clean_c2_oos",
-    SWANLAB_API_KEY='fmEPDGk4IItxgqSZKGLi8')
+    SWANLAB_API_KEY=load_swanlab_api_key())
 root = Path("/kaggle/working/small_clean_c2_oos")
 root.mkdir(parents=True, exist_ok=True)
 class Tee:

@@ -3,32 +3,36 @@
 Usage:
     python finetune/small_clean_epoch2_relay/probe_swanlab_loss.py [run_slug ...]
 
-The SwanLab credential is read from the same place push_chunk.py uses, so the
-key never has to appear in a shell command or in the transcript.
+The SwanLab credential is read from SWANLAB_API_KEY or Kaggle Secrets, so it
+never has to appear in a shell command or in the transcript.
 """
 import argparse
-import ast
+import os
 import json
 import math
 import statistics
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-KEY_FILE = REPO / "finetune/kaggle_small_0_1_stage2_wc_dual_t4_kernel/kaggle_small_0_1_stage2_wc_dual_t4.py"
 WORKSPACE = "roc_fu"
 PROJECT = "finance"
 DEFAULT_RUNS = ("smce2c3_long", "smce2c3_probe", "smce2c3")
 
 
 def local_credential() -> str:
-    """Read SWANLAB_API_KEY from the existing kernel source without printing it."""
-    for node in ast.walk(ast.parse(KEY_FILE.read_text())):
-        if isinstance(node, ast.Dict):
-            for key, item in zip(node.keys, node.values):
-                if (isinstance(key, ast.Constant) and key.value == "SWANLAB_API_KEY"
-                        and isinstance(item, ast.Constant)):
-                    return item.value
-    raise SystemExit("No SwanLab credential found in " + str(KEY_FILE))
+    """Read SWANLAB_API_KEY from the environment or Kaggle Secrets."""
+    value = os.environ.get("SWANLAB_API_KEY", "").strip()
+    if value:
+        return value
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        value = (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        value = ""
+    if not value:
+        raise SystemExit("SWANLAB_API_KEY is empty")
+    return value
 
 
 def series(exp, key, sample=1500):

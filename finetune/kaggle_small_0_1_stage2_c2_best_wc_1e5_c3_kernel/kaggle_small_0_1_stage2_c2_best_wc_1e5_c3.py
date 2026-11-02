@@ -13,6 +13,17 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+def load_swanlab_api_key():
+    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
+    if key:
+        return key
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 
 
 SOURCE_COMMIT = "6bc164a6758d158b6617e2291ac8611339569ad8"
@@ -223,7 +234,7 @@ def main():
         "KRONOS_CONDITION_MIN_LR": FIXED_LR,
         "KRONOS_USE_AMP": "1",
         "KRONOS_AMP_DTYPE": "float16",
-        "SWANLAB_API_KEY": "fmEPDGk4IItxgqSZKGLi8",
+        "SWANLAB_API_KEY": load_swanlab_api_key(),
         "SWANLAB_PROJECT": "finance",
         "SWANLAB_EXPERIMENT_NAME": SWANLAB_RUN_ID,
         "SWANLAB_RUN_ID": SWANLAB_RUN_ID,

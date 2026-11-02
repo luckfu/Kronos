@@ -37,7 +37,16 @@ SEGMENT_TIME_MARGIN = 1.1
 MAX_SEGMENTS_THIS_RUN = 451
 TOTAL_SEGMENTS = None
 SHUFFLE_SEED = 20260927
-SWANLAB_API_KEY_FALLBACK = "fmEPDGk4IItxgqSZKGLi8"
+SWANLAB_API_KEY_FALLBACK = ""
+
+def load_kaggle_swanlab_api_key():
+    try:
+        from kaggle_secrets import UserSecretsClient
+
+        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
+    except Exception:
+        return ""
+
 SWANLAB_RUN_ID = 'kairos-r2-r1-global-permutation-lr3e5-20261001-v2'
 OUTPUT = Path('/kaggle/working/kairos_r2')
 RUN_PURPOSE = 'r2-restart-clean-cursor-canonical-rope'
@@ -202,7 +211,7 @@ def reliability_bins(probabilities: np.ndarray, labels: np.ndarray, bins: int=10
 def start_swanlab() -> tuple[Any, Any]:
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--progress-bar', 'off', 'swanlab'], check=True)
     import swanlab
-    api_key = os.environ.get('SWANLAB_API_KEY', '').strip() or SWANLAB_API_KEY_FALLBACK
+    api_key = os.environ.get('SWANLAB_API_KEY', '').strip() or load_kaggle_swanlab_api_key() or SWANLAB_API_KEY_FALLBACK
     if not api_key and (not LR_PROBE):
         raise RuntimeError('SWANLAB_API_KEY is empty')
     if api_key:
