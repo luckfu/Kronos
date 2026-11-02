@@ -37,7 +37,8 @@ from pathlib import Path
 
 STARTED = time.monotonic()
 
-EXPERIMENT = "base_clean_0.1_main"
+EXPERIMENT = os.environ.get("KRONOS_MAIN_EXPERIMENT", "base_clean_0.1_main")
+STAGE = os.environ.get("KRONOS_MAIN_STAGE", "main")
 # A fresh (from-Bootstrap) start replays the segment axis from 1, so every
 # restart MUST get its own run id; same-stage chunk 2+ keeps the id because the
 # segment numbering continues.  Shared ids are what made the board sawtooth.
@@ -250,7 +251,7 @@ def main() -> None:
     phase(
         "started",
         experiment=EXPERIMENT,
-        stage="main",
+        stage=STAGE,
         output=OUTPUT_NAME,
         dataset=DATASET,
         mode="same_stage_resume" if continuity else "bootstrap_weights_only",
@@ -319,7 +320,7 @@ def main() -> None:
     remaining_budget = max(300, RUNTIME_BUDGET_SECONDS - int(time.monotonic() - STARTED))
     os.environ.update({
         "PYTHONUNBUFFERED": "1",
-        "KRONOS_BASE_CLEAN_STAGE": "main",
+        "KRONOS_BASE_CLEAN_STAGE": STAGE,
         "KRONOS_BASE_CLEAN_OUTPUT_NAME": OUTPUT_NAME,
         "KRONOS_BASE_CLEAN_DATA_ROOT": str(data_root),
         "KRONOS_BASE_CLEAN_PARENT_MODEL": str(parent_model),

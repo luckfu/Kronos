@@ -319,6 +319,20 @@ STAGES = {
         "best_metric": "forecast",
         "max_segments": "120",
     },
+    # Small's Extend 01: same recipe as Main (unified 1e-5, fresh optimizer),
+    # different coverage seed, own output tree.  Base mirrors that.
+    "extend": {
+        "output": "base_clean_0.1_extend",
+        "parent_env": "KRONOS_BASE_CLEAN_PARENT_MODEL",
+        "predictor_lr": "1e-5",
+        "condition_lr": "1e-5",
+        "warmup_start_lr": "1e-6",
+        "condition_warmup_start_lr": "1e-6",
+        "auxiliary": "0",
+        "validation_full_only": "1",
+        "best_metric": "forecast",
+        "max_segments": "60",
+    },
 }
 
 
@@ -634,7 +648,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
             ),
             "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
         })
-    elif stage == "main":
+    elif stage in {"main", "extend"}:
         # Mirror Small's Main intent (real Best, full-holdout milestone) at a
         # cost Base can pay: quick 2048 every 5 for Best + telemetry, the full
         # 123,836 holdout every 20 segments.  Small could afford full-val every

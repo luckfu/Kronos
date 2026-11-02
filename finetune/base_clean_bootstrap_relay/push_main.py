@@ -66,6 +66,9 @@ VAL_BATCH_SIZE = os.environ.get("KRONOS_VAL_BATCH_SIZE", "64")
 RUN_ID = os.environ.get("KRONOS_MAIN_RUN_ID", "base_clean_0_1_main")
 # LR-schedule probes switch the scheduler on the same weights, so the kernel
 # must receive these explicitly (the wrapper only injects what it is given).
+EXPERIMENT = os.environ.get("KRONOS_MAIN_EXPERIMENT", "base_clean_0.1_main")
+STAGE = os.environ.get("KRONOS_MAIN_STAGE", "main")
+COVERAGE_SEED = os.environ.get("KRONOS_COVERAGE_SEED", "100")
 SCHEDULER = os.environ.get("KRONOS_SCHEDULER", "warmup_cosine")
 SCHEDULER_DECAY_START = os.environ.get("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
 MAX_SEGMENTS = int(
@@ -124,7 +127,10 @@ os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_
 os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
 os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
 os.environ.setdefault("KRONOS_SCHEDULER", {SCHEDULER!r})
+os.environ.setdefault("KRONOS_COVERAGE_SEED", {COVERAGE_SEED!r})
 os.environ.setdefault("KRONOS_SCHEDULER_DECAY_START_RATIO", {SCHEDULER_DECAY_START!r})
+os.environ.setdefault("KRONOS_MAIN_EXPERIMENT", {EXPERIMENT!r})
+os.environ.setdefault("KRONOS_MAIN_STAGE", {STAGE!r})
 os.environ.setdefault("KRONOS_MAIN_OUTPUT_NAME", {OUTPUT_NAME!r})
 os.environ.setdefault("KRONOS_MAIN_PARENT_OUTPUT", {PARENT_OUTPUT!r})
 os.environ.setdefault("KRONOS_MAIN_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
@@ -172,7 +178,8 @@ namespace["main"]()
 
     checklist = {
         "prep_only": not do_push,
-        "stage": "main",
+        "stage": STAGE,
+        "coverage_seed": COVERAGE_SEED,
         "slug": SLUG,
         "id": metadata["id"],
         "url": f"https://www.kaggle.com/code/{OWNER}/{SLUG}",
@@ -221,7 +228,7 @@ namespace["main"]()
         "swanlab": {
             "project": "finance",
             "workspace": "roc_fu",
-            "experiment_name": "base_clean_0.1_main",
+            "experiment_name": EXPERIMENT,
             "run_id": RUN_ID,
             "replay_after_segment": None,
             "note": "NEW board (stage switch), never replay bootstrap metrics.jsonl",
