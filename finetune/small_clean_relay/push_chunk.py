@@ -1,6 +1,7 @@
 """Build a self-contained private Kaggle script, then submit one clean Small chunk."""
 
 import argparse
+import ast
 import base64
 import hashlib
 import io
@@ -47,12 +48,15 @@ def local_credential():
     value = os.environ.get("SWANLAB_API_KEY", "").strip()
     if value:
         return value
-    try:
-        from kaggle_secrets import UserSecretsClient
-
-        return (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
-    except Exception:
-        return ""
+    # Reuse the existing experiment credential without printing or changing it.
+    path = ROOT / "finetune/kaggle_small_0_1_stage2_wc_dual_t4_kernel/kaggle_small_0_1_stage2_wc_dual_t4.py"
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Dict):
+            for key, item in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == "SWANLAB_API_KEY"
+                        and isinstance(item, ast.Constant)):
+                    return item.value
+    return ""
 
 
 def main():

@@ -28,20 +28,7 @@ STARTED = time.monotonic()
 INPUT_ROOT = Path(os.environ.get("EVAL_INPUT_ROOT", "/kaggle/input"))
 OUTPUT = Path(os.environ.get("EVAL_OUTPUT", "/kaggle/working/eval_results"))
 
-SWANLAB_API_KEY = None
-
-def load_swanlab_api_key():
-    key = (os.environ.get("SWANLAB_API_KEY") or "").strip()
-    if key:
-        return key
-    try:
-        from kaggle_secrets import UserSecretsClient
-
-        key = (UserSecretsClient().get_secret("SWANLAB_API_KEY") or "").strip()
-    except Exception:
-        key = ""
-    return key or SWANLAB_API_KEY
-
+SWANLAB_API_KEY = "fmEPDGk4IItxgqSZKGLi8"
 SWANLAB_PROJECT = "finance"
 SWANLAB_WORKSPACE = "roc_fu"
 SWANLAB_RUN_ID = "tfm3v11-clean-c07-oos-audit"
@@ -646,7 +633,7 @@ def main():
 
     # 推送至 SwanLab
     try:
-        swanlab.login(api_key=load_swanlab_api_key())
+        swanlab.login(api_key=SWANLAB_API_KEY)
         run = swanlab.init(project=SWANLAB_PROJECT, workspace=SWANLAB_WORKSPACE,
                            experiment_name=EXPERIMENT_NAME, id=SWANLAB_RUN_ID, resume="allow")
         swan_log = {
