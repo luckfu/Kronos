@@ -19,11 +19,18 @@ sys.path.insert(0, str(ROOT / "finetune" / "base_clean_bootstrap_relay"))
 
 import relay_auth  # noqa: E402
 
-OWNER = os.environ.get("KRONOS_OOS_OWNER", "wynstonliu")
-SLUG = os.environ.get("KRONOS_OOS_SLUG", "kronos-base-clean-sealed-oos")
-TITLE = os.environ.get("KRONOS_OOS_TITLE", "Kronos Base Clean Sealed OOS")
+OWNER = os.environ.get("KRONOS_OOS_OWNER", "user281434")
+OOS_LABEL = os.environ.get("BASE_OOS_LABEL", "extend_best_s175")
+DECODE_SEED = os.environ.get("BASE_OOS_SEED", "20261104")
+SLUG = os.environ.get("KRONOS_OOS_SLUG", "kronos-base-clean-sealed-oos-ext")
+TITLE = os.environ.get("KRONOS_OOS_TITLE", "Kronos Base Clean Sealed OOS Main vs Extend")
 DATASET = "wynstonliu/a-share-120d-oos-20260803-20260930"
-PARENT_KERNEL = os.environ.get("KRONOS_OOS_PARENT", "wynstonliu/kronos-base-clean-0-1-main")
+# Both stages' kernels are mounted: Extend output (best@175) and Main output
+# (best@516).  The evaluator globs disambiguate by output directory name.
+PARENT_KERNELS = os.environ.get(
+    "KRONOS_OOS_PARENTS",
+    "user281434/kronos-base-clean-0-1-extend,wynstonliu/kronos-base-clean-0-1-main",
+).split(",")
 
 HEADER = '''import os, runpy, sys
 from pathlib import Path
@@ -32,6 +39,8 @@ os.environ.setdefault("BASE_OOS_SOURCE", str(src))
 sys.path.insert(0, str(src))
 _here = Path("/kaggle/working/evaluate_base_sealed.py")
 '''
+HEADER += f"os.environ['BASE_OOS_LABEL'] = {OOS_LABEL!r}\n"
+HEADER += f"os.environ['BASE_OOS_SEED'] = {DECODE_SEED!r}\n"
 
 EVALUATOR = HERE / "evaluate_base_sealed.py"
 
@@ -63,7 +72,7 @@ def main() -> None:
         "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4",
         "dataset_sources": [DATASET],
-        "kernel_sources": [PARENT_KERNEL],
+        "kernel_sources": PARENT_KERNELS,
         "competition_sources": [],
     }
     (build / "kernel-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -83,7 +92,7 @@ def main() -> None:
         "enableGpu": True,
         "enableInternet": True,
         "datasetDataSources": [DATASET],
-        "kernelDataSources": [PARENT_KERNEL],
+        "kernelDataSources": PARENT_KERNELS,
         "machineShape": "NvidiaTeslaT4",
     }
     response = session.post(

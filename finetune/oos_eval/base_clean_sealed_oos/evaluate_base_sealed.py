@@ -125,11 +125,15 @@ def score(frame):
     return out
 
 
-LABELS = ("base_best_s516", "base_last_s520")
-WEIGHTS_GLOB = {
-    "base_best_s516": "**/base_clean_0.1_main/checkpoints/best_model/model.safetensors",
-    "base_last_s520": "**/base_clean_0.1_main/checkpoints/last_model/model.safetensors",
+# 2026-11-04 v2: one model per kernel (cross-account kernel mounting is
+# one-directional), dates sharded across the two T4s, fixed decode seed so the
+# Main/Extend comparison is paired on weights, not on sampling noise.
+OOS_LABEL = os.environ.get("BASE_OOS_LABEL", "extend_best_s175")
+WEIGHTS_GLOBS = {
+    "main_best_s516": "**/base_clean_0.1_main/checkpoints/best_model/model.safetensors",
+    "extend_best_s175": "**/base_clean_0.1_extend/checkpoints/best_model/model.safetensors",
 }
+DECODE_SEED = int(os.environ.get("BASE_OOS_SEED", "20261104"))
 
 
 def worker(rank):
@@ -137,13 +141,16 @@ def worker(rank):
         sys.path.insert(0, BASE_SOURCE)
     from model import Kronos, KronosTokenizer
 
-    label = LABELS[rank]
+    label = OOS_LABEL
     device = torch.device("cuda:0")
+    # Fixed seed before any decode so Main and Extend kernels are paired.
+    torch.manual_seed(DECODE_SEED)
+    np.random.seed(DECODE_SEED)
     root = Path("/kaggle/input")
     dataset_root = find_one(root, "combined_raw.csv").parent
     panel, samples = load_dataset(dataset_root)
     store = WindowStore(panel)
-    matches = sorted(root.glob(WEIGHTS_GLOB[label]))
+    matches = sorted(root.glob(WEIGHTS_GLOBS[label]))
     if len(matches) != 1:
         raise RuntimeError(f"Expected one checkpoint for {label}: {matches[:5]}")
     weights = matches[0]
@@ -158,6 +165,9 @@ def worker(rank):
     dates = sorted(samples.asof_date.unique())
     if LIMIT:
         dates = dates[-int(LIMIT):]
+    # Two GPUs share the date list: rank 0 takes even dates, rank 1 odd dates.
+    dates = dates[rank::2]
+    phase("worker_dates", label=label, rank=rank, n_dates=len(dates), seed=DECODE_SEED)
     OUTPUT.joinpath("shards").mkdir(parents=True, exist_ok=True)
     for date in dates:
         selected = samples[samples.asof_date == date].to_dict("records")
@@ -206,7 +216,7 @@ def main():
     if os.environ.get("BASE_OOS_RANK") is not None:
         worker(int(os.environ["BASE_OOS_RANK"]))
         return
-    phase("parent_start")
+    phase("parent_start", label=OOS_LABEL, seed=DECODE_SEED)
     procs = []
     for rank in range(2):
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(rank), BASE_OOS_RANK=str(rank))
@@ -214,28 +224,19 @@ def main():
     for p in procs:
         if p.wait():
             raise RuntimeError("worker failed")
-    frames = {
-        label: pd.concat(
-            [pd.read_csv(p) for p in sorted((OUTPUT / "shards").glob(f"{label}_*.csv.gz"))],
-            ignore_index=True,
-        )
-        for label in LABELS
-    }
-    summary = {label: score(frame) for label, frame in frames.items()}
-    first_use = {label: score(frame[frame.asof_date >= "2026-09-18"]) for label, frame in frames.items()}
-    pair_full = paired(frames[LABELS[0]], frames[LABELS[1]], block=10)
-    pair_first = paired(
-        frames[LABELS[0]][frames[LABELS[0]].asof_date >= "2026-09-18"],
-        frames[LABELS[1]][frames[LABELS[1]].asof_date >= "2026-09-18"],
-        block=5,
+    frame = pd.concat(
+        [pd.read_csv(p) for p in sorted((OUTPUT / "shards").glob(f"{OOS_LABEL}_*.csv.gz"))],
+        ignore_index=True,
     )
+    summary = score(frame)
+    first_use = score(frame[frame.asof_date >= "2026-09-18"])
     (OUTPUT / "summary.json").write_text(json.dumps(dict(
         window="2026-08-03..2026-09-30 (sealed, REFERENCE only)",
+        model=OOS_LABEL, decode_seed=DECODE_SEED,
         full_42d=summary, first_use_9d=first_use,
-        paired_full=pair_full, paired_first_use=pair_first,
+        note="paired comparison vs the other stage is merged locally from the two kernels",
     ), indent=2, ensure_ascii=False))
-    phase("finished", summary=summary, first_use_9d=first_use,
-          paired_full=pair_full, paired_first_use=pair_first)
+    phase("finished", summary=summary, first_use_9d=first_use)
 
 
 if __name__ == "__main__":

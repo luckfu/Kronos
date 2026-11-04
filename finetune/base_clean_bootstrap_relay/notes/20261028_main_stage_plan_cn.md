@@ -301,3 +301,23 @@ LR **6.54e-6**（cosine 正常推进）。预计 **15:05Z（23:05 SGT）** 收�
 
 **行动**：主训练回到原 `warmup_cosine`、原 run id `base_clean_0_1_main_r2`，
 从 **295 段**继续（LR 4.10e-6，衔接正常）；本棒 295→366（72 段，11h30m 预算）。
+
+## 18. Extend 175/520 停棒决策 + Main vs Extend 密封 OOS 对比（2026-11-04）
+
+**Extend 第 3 棒（102→175，user281434）**：11h05m，sel 2.30067（best@175），
+forecast 2.29218。Extend 全程：2.33125 → 2.30067（−0.0307），best 落在末段，曲线未平台。
+条件通道健康（output_norm 15，trunk_ratio 0.018，无爆炸）。
+
+**决定**：Extend 停在 175/520（34%），与 Small Extend 的停点比例一致（190/534=36%）。
+不把 520 段跑完：剩余 345 段 ≈ 52h、预估只再降 −0.01~−0.03；Small 的大收益在 WC 阶段。
+
+**进行中的对照**（本阶段的关键证据）：密封 42 天窗（8/03–9/30，REFERENCE only）上
+**Extend best@175 vs Main best@516**。因为跨账号 kernel 挂载是单向的，拆成两个
+单模型 kernel（日期分片 ×2 GPU），**固定解码 seed=20261104**，保证差值来自权重而非采样噪声：
+
+- `wynstonliu/base-main-best-sealed-oos`（main_best_s516）
+- `user281434/base-extend-best-sealed-oos`（extend_best_s175）
+
+合并与配对 bootstrap 在本地做（identity 对齐、block=10、2000 次）。
+若 Extend 的 −0.03 CE 改善在 OOS 上体现为零或反号 → 不进 WC，先查目标函数/评估口径；
+若体现为正 → 按 Small 路径进 WC（warmup 后恒定 1e-5、fresh optimizer、全量覆盖）。
