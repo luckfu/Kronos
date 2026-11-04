@@ -1,0 +1,53 @@
+{
+  "report": "base_main_vs_extend_sealed_oos_20261104",
+  "window": "2026-08-03..2026-09-30 (sealed, REFERENCE only)",
+  "models": [
+    "main_best_s516",
+    "extend_best_s175"
+  ],
+  "decode": "T=0.65, top_p=0.8, sample_count=1, fixed seed=20261104 (both kernels)",
+  "rows_per_model": 213564,
+  "identity_aligned": true,
+  "full_42d": {
+    "main": {
+      "path_direction": 0.5169,
+      "mae": 0.06294,
+      "rmse": 0.09822,
+      "d10_daily_ic": 0.0284
+    },
+    "extend": {
+      "path_direction": 0.5162,
+      "mae": 0.06713,
+      "rmse": 0.11121,
+      "d10_daily_ic": 0.0247
+    }
+  },
+  "first_use_0918_0930": {
+    "main": {
+      "path_direction": 0.4874,
+      "d10_daily_ic": -0.1298
+    },
+    "extend": {
+      "path_direction": 0.4769,
+      "d10_daily_ic": -0.1491
+    }
+  },
+  "paired_daily_ic": {
+    "delta_extend_minus_main": -0.0037,
+    "ci95": [
+      -0.0196,
+      0.014
+    ],
+    "extend_better_days": "17/42",
+    "block": 10,
+    "replicates": 2000,
+    "seed": 20261104,
+    "reads": "CI contains zero; no significant OOS difference"
+  },
+  "validation_context": {
+    "extend_val_gain_vs_main": -0.0307,
+    "main_best_val": 2.33125,
+    "extend_best_val": 2.30067,
+    "conclusion": "validation CE gain did NOT transfer to the sealed window"
+  }
+}
