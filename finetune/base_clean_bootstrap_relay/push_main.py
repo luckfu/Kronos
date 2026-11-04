@@ -69,7 +69,10 @@ RUN_ID = os.environ.get("KRONOS_MAIN_RUN_ID", "base_clean_0_1_main")
 EXPERIMENT = os.environ.get("KRONOS_MAIN_EXPERIMENT", "base_clean_0.1_main")
 STAGE = os.environ.get("KRONOS_MAIN_STAGE", "main")
 COVERAGE_SEED = os.environ.get("KRONOS_COVERAGE_SEED", "100")
-SCHEDULER = os.environ.get("KRONOS_SCHEDULER", "warmup_cosine")
+# Stage default mirrors the runner: WC is warm-up + constant, others cosine.
+SCHEDULER = os.environ.get(
+    "KRONOS_SCHEDULER", "warmup_constant" if STAGE == "wc" else "warmup_cosine"
+)
 SCHEDULER_DECAY_START = os.environ.get("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
 MAX_SEGMENTS = int(
     os.environ.get(
@@ -211,7 +214,7 @@ namespace["main"]()
             "predictor_lr": "1e-5",
             "condition_lr": "1e-5",
             "warmup_start_lr": "1e-6",
-            "scheduler": "warmup_cosine (1% warmup)",
+            "scheduler": f"{SCHEDULER} (1% warmup)",
             "restored_from_bootstrap": False,
         },
         "validation": {

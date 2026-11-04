@@ -333,6 +333,20 @@ STAGES = {
         "best_metric": "forecast",
         "max_segments": "60",
     },
+    # Small's WC first round: warm-up then CONSTANT peak LR, fresh optimizer,
+    # new coverage seed.  Base mirrors that on clean data.
+    "wc": {
+        "output": "base_clean_0.1_wc",
+        "parent_env": "KRONOS_BASE_CLEAN_PARENT_MODEL",
+        "predictor_lr": "1e-5",
+        "condition_lr": "1e-5",
+        "warmup_start_lr": "1e-6",
+        "condition_warmup_start_lr": "1e-6",
+        "auxiliary": "0",
+        "validation_full_only": "1",
+        "best_metric": "forecast",
+        "max_segments": "120",
+    },
 }
 
 
@@ -564,7 +578,10 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_PREDICTOR_LOSS_MODE": "forecast",
         "KRONOS_HISTORY_LOSS_WEIGHT": "0.02",
         "KRONOS_FORECAST_HORIZON_WEIGHTS": "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
-        "KRONOS_SCHEDULER": os.getenv("KRONOS_SCHEDULER", "warmup_cosine"),
+        "KRONOS_SCHEDULER": os.getenv(
+            "KRONOS_SCHEDULER",
+            "warmup_constant" if stage == "wc" else "warmup_cosine",
+        ),
         "KRONOS_SCHEDULER_WARMUP_RATIO": os.getenv(
             "KRONOS_SCHEDULER_WARMUP_RATIO", "0.01"
         ),
@@ -648,7 +665,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
             ),
             "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
         })
-    elif stage in {"main", "extend"}:
+    elif stage in {"main", "extend", "wc"}:
         # Mirror Small's Main intent (real Best, full-holdout milestone) at a
         # cost Base can pay: quick 2048 every 5 for Best + telemetry, the full
         # 123,836 holdout every 20 segments.  Small could afford full-val every
