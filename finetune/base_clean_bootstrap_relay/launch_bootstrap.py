@@ -31,14 +31,49 @@ import sys
 import time
 from pathlib import Path
 
-EXPERIMENT = "base_clean_0.1_bootstrap"
-OUTPUT_NAME = "base_clean_0.1_bootstrap"
-RUN_ID = "base_clean_0_1_bootstrap"
-DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
-DATA_SHA = "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
+# Dataset lineage switch (2026-11-04): "clean" is the zero-volume-filtered
+# package (whose sealed-OOS cost Small -0.047 IC vs C2); "old" is the raw
+# package C2 was trained on.  Panel-level verification showed the only content
+# difference is the 263,881 removed zero-volume rows.
+DATA_LINEAGE = os.environ.get("KRONOS_DATA_LINEAGE", "clean")
+EXPERIMENT = os.environ.get(
+    "KRONOS_BOOTSTRAP_EXPERIMENT",
+    "base_clean_0.1_bootstrap" if DATA_LINEAGE == "clean" else "base_old_0.1_bootstrap",
+)
+OUTPUT_NAME = os.environ.get(
+    "KRONOS_BOOTSTRAP_OUTPUT_NAME",
+    "base_clean_0.1_bootstrap" if DATA_LINEAGE == "clean" else "base_old_0.1_bootstrap",
+)
+RUN_ID = os.environ.get(
+    "KRONOS_BOOTSTRAP_RUN_ID",
+    "base_clean_0_1_bootstrap" if DATA_LINEAGE == "clean" else "base_old_0_1_bootstrap",
+)
+DATASET = os.environ.get(
+    "KRONOS_BOOTSTRAP_DATASET",
+    "smmt315/a-share-120d-temporal-symbol-holdout" if DATA_LINEAGE == "clean"
+    else "luckfu/a-share-120d-temporal-symbol-holdout",
+)
+# Old package pins (verified 2026-11-04): its data_manifest.json has no
+# per-file list, so the five artifacts are pinned individually.
+OLD_DATASET_FILES = {
+    "data_manifest.json": "32cfcbf606dcee81c9416f9ad399ee7303b6790cf9025bf5888638f552d66598",
+    "asset_metadata.csv": "697cadd672d53b8fa0a990f6c5b7fba2f88cb26aad88c3b91cfcc3865d0a1e3c",
+    "symbol_split.csv": "9c8b275870ea53b3e4587563625d5733198f6376fc7fa3dc9dd4c6b91815a00a",
+    "processed_datasets/train_data.pkl": "034c5315547e35e38e6f3a3279ecc3ce01b625f1139229e6371d3f6c4e927a90",
+    "processed_datasets/val_data.pkl": "4cce31bc3e70eab83d5b7ea05f19fce04aa57a87f3acf00b882ddfbac4219bf7",
+}
+DATA_SHA = (
+    "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
+    if DATA_LINEAGE == "clean"
+    else OLD_DATASET_FILES["data_manifest.json"]
+)
 # Self-parent: previous COMPLETE output of this same slug (chunk 1: segs 2→21).
-PARENT_KERNEL = "user281434/kronos-base-clean-0-1-bootstrap"
-PARENT_OUTPUT_NAME = "base_clean_0.1_bootstrap"
+PARENT_KERNEL = os.environ.get(
+    "KRONOS_PARENT_KERNEL",
+    "user281434/kronos-base-clean-0-1-bootstrap" if DATA_LINEAGE == "clean"
+    else "user281434/kronos-base-old-0-1-bootstrap",
+)
+PARENT_OUTPUT_NAME = OUTPUT_NAME
 # Bootstrap continues from last only (optimizer via last_state). Best is frozen.
 PARENT_WEIGHTS = "last_model"
 # Optional pin for a one-shot chunk; empty = accept any durable parent progress.
@@ -98,6 +133,58 @@ def resolve_swanlab_key() -> str:
 
 
 def prepare_data(input_root: Path, target: Path) -> Path:
+    """Materialize processed_datasets/ from the clean or old package."""
+    if DATA_LINEAGE == "old":
+        return prepare_data_old(input_root, target)
+    return prepare_data_clean(input_root, target)
+
+
+def _link_dataset_files(source: Path, target: Path, files: dict) -> Path:
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True, exist_ok=True)
+    for relative, expected_sha in files.items():
+        path = source / relative
+        if not path.is_file():
+            raise RuntimeError(f"Dataset file missing: {path}")
+        if sha256(path) != expected_sha:
+            raise RuntimeError(f"Dataset hash mismatch: {path}")
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() or destination.is_symlink():
+            destination.unlink()
+        destination.symlink_to(path.resolve())
+    return target
+
+
+def prepare_data_old(input_root: Path, target: Path) -> Path:
+    """Old (C2-era) package: nested layout, manifest without a files list."""
+    candidates = [
+        path for path in input_root.glob("**/data_manifest.json") if sha256(path) == DATA_SHA
+    ]
+    if len(candidates) != 1:
+        raise RuntimeError(
+            f"Expected one old data_manifest.json ({DATA_SHA[:12]}…); "
+            f"found {len(candidates)}: {candidates}"
+        )
+    manifest_path = candidates[0]
+    source = manifest_path.parent
+    manifest = json.loads(manifest_path.read_text())
+    _link_dataset_files(source, target, OLD_DATASET_FILES)
+    phase(
+        "data_ready",
+        dataset=DATASET,
+        data_lineage=DATA_LINEAGE,
+        manifest_sha256=DATA_SHA,
+        stats=manifest.get("stats"),
+        split=manifest.get("split"),
+        window_contract=manifest.get("window_contract"),
+        data_root=str(target),
+    )
+    return target
+
+
+def prepare_data_clean(input_root: Path, target: Path) -> Path:
     """Materialize processed_datasets/ from flat or nested smmt315 mount."""
     candidates = [
         path for path in input_root.glob("**/data_manifest.json")
@@ -353,6 +440,7 @@ def main() -> None:
         "SWANLAB_WORKSPACE": "roc_fu",
         "SWANLAB_EXPERIMENT_NAME": EXPERIMENT,
         "SWANLAB_RUN_ID": RUN_ID,
+        "KRONOS_DATA_LINEAGE": DATA_LINEAGE,
     })
 
     phase(

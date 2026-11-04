@@ -27,7 +27,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OWNER = os.environ.get("KRONOS_KAGGLE_OWNER", "luckfu")
-DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
+DATA_LINEAGE = os.environ.get("KRONOS_DATA_LINEAGE", "clean")
+DATASET = os.environ.get(
+    "KRONOS_BOOTSTRAP_DATASET",
+    "smmt315/a-share-120d-temporal-symbol-holdout" if DATA_LINEAGE == "clean"
+    else "luckfu/a-share-120d-temporal-symbol-holdout",
+)
 # Parent output: chunk 2 lives on user281434's shared notebook. Later luckfu
 # chunks should pass KRONOS_PARENT_KERNEL=luckfu/kronos-base-clean-0-1-bootstrap.
 PARENT_KERNEL = os.environ.get(
@@ -241,6 +246,7 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 os.environ.setdefault("SWANLAB_API_KEY", {credential!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_EXPECTED_RESUME", {str(RESUME_SEGMENT)!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_EXPECTED_COMPLETED", {str(COMPLETED_SEGMENTS)!r})
+os.environ.setdefault("KRONOS_DATA_LINEAGE", {DATA_LINEAGE!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
 os.environ.setdefault("KRONOS_BOOTSTRAP_RUNTIME_BUDGET_SECONDS", {str(RUNTIME_BUDGET_SECONDS)!r})
 payload = base64.b64decode({base64.b64encode(payload).decode()!r})
@@ -334,6 +340,7 @@ namespace["main"]()
         },
         "data": {
             "dataset": DATASET,
+            "data_lineage": DATA_LINEAGE,
             "prepare_data": "flat→processed_datasets via data_manifest SHA",
             "data_manifest_sha256": (
                 "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
