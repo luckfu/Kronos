@@ -1,0 +1,46 @@
+{
+  "report": "c2_fork_old_vs_clean_controlled_20261104",
+  "design": "both arms fork from C2 best (SHA 4ee469d4...), same warmup_constant recipe at LR 1e-5, evaluated on the sealed 42-day window with a FIXED decode seed 20261104",
+  "arms": {
+    "old_wc_c4_best": {
+      "data": "old (luckfu)",
+      "extra_segments": 434,
+      "coverage_seed": 20260918,
+      "direction": 0.5367,
+      "mae": 0.05559,
+      "rmse": 0.08655,
+      "ic": 0.1049
+    },
+    "clean_c03_best": {
+      "data": "clean (smmt315)",
+      "extra_segments": 520,
+      "coverage_seed": 20261011,
+      "direction": 0.5334,
+      "mae": 0.05769,
+      "rmse": 0.09001,
+      "ic": 0.0923
+    }
+  },
+  "paired": {
+    "delta_ic_clean_minus_old": -0.0127,
+    "ci95": [
+      -0.0195,
+      0.0043
+    ],
+    "clean_better_days": "14/42",
+    "delta_direction": -0.0083,
+    "verdict": "point estimates all favour old, but the paired IC CI crosses zero -> not significant"
+  },
+  "reference_not_seed_matched": {
+    "c2_best": {
+      "direction": 0.5356,
+      "ic": 0.1116,
+      "note": "historical decode seed 20260906"
+    }
+  },
+  "conclusions": [
+    "Controlled data-version effect is about -0.013 IC, NOT the -0.047 previously claimed (that comparison was confounded by recipe/parent/budget).",
+    "Both arms land at or below C2 itself: continuing training from C2 best degrades sealed-window OOS on either dataset.",
+    "Data version therefore does NOT explain the C2-vs-Base clean gap (0.1116 vs 0.0284)."
+  ]
+}

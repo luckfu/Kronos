@@ -129,10 +129,13 @@ def score(frame):
 # one-directional), dates sharded across the two T4s, fixed decode seed so the
 # Main/Extend comparison is paired on weights, not on sampling noise.
 OOS_LABEL = os.environ.get("BASE_OOS_LABEL", "extend_best_s175")
-WEIGHTS_GLOBS = {
-    "main_best_s516": "**/base_clean_0.1_main/checkpoints/best_model/model.safetensors",
-    "extend_best_s175": "**/base_clean_0.1_extend/checkpoints/best_model/model.safetensors",
-}
+# 2026-11-04 v3: the weights glob and context_layer come from the caller so the
+# same evaluator covers Small (context_layer=6) and Base (10) checkpoints.
+WEIGHTS_GLOB = os.environ.get(
+    "BASE_OOS_WEIGHTS_GLOB",
+    "**/base_clean_0.1_extend/checkpoints/best_model/model.safetensors",
+)
+CONTEXT_LAYER = int(os.environ.get("BASE_OOS_CONTEXT_LAYER", "10"))
 DECODE_SEED = int(os.environ.get("BASE_OOS_SEED", "20261104"))
 
 
@@ -150,17 +153,23 @@ def worker(rank):
     dataset_root = find_one(root, "combined_raw.csv").parent
     panel, samples = load_dataset(dataset_root)
     store = WindowStore(panel)
-    matches = sorted(root.glob(WEIGHTS_GLOBS[label]))
+    matches = sorted(root.glob(WEIGHTS_GLOB))
     if len(matches) != 1:
         raise RuntimeError(f"Expected one checkpoint for {label}: {matches[:5]}")
     weights = matches[0]
     model = Kronos.from_pretrained(
         str(weights.parent), num_sectors=86, num_size_buckets=0,
-        context_layer=10, use_size_percentile=True, size_mlp_hidden_dim=64,
+        context_layer=CONTEXT_LAYER, use_size_percentile=True, size_mlp_hidden_dim=64,
     ).to(device).eval()
-    tokenizer = KronosTokenizer.from_pretrained(
-        str(find_one(root, "Kronos-Tokenizer-base/model.safetensors").parent)
-    ).to(device).eval()
+    # Parent outputs name this directory differently ("Kronos-Tokenizer-base"
+    # vs the relay's "kronos_tokenizer_base"); accept either.
+    tokenizer_hits = (
+        sorted(root.glob("**/Kronos-Tokenizer-base/model.safetensors"))
+        or sorted(root.glob("**/kronos_tokenizer_base/model.safetensors"))
+    )
+    if len(tokenizer_hits) != 1:
+        raise RuntimeError(f"Expected one tokenizer, found {tokenizer_hits[:5]}")
+    tokenizer = KronosTokenizer.from_pretrained(str(tokenizer_hits[0].parent)).to(device).eval()
     phase("model_loaded", label=label, weights=str(weights))
     dates = sorted(samples.asof_date.unique())
     if LIMIT:
@@ -216,7 +225,8 @@ def main():
     if os.environ.get("BASE_OOS_RANK") is not None:
         worker(int(os.environ["BASE_OOS_RANK"]))
         return
-    phase("parent_start", label=OOS_LABEL, seed=DECODE_SEED)
+    phase("parent_start", label=OOS_LABEL, seed=DECODE_SEED,
+          context_layer=CONTEXT_LAYER, weights_glob=WEIGHTS_GLOB)
     procs = []
     for rank in range(2):
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(rank), BASE_OOS_RANK=str(rank))
