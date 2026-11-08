@@ -93,8 +93,8 @@ EXPECTED_BOOTSTRAP_COMPLETED = int(
     os.environ.get("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", "0") or 0
 )
 PARENT_LAST_SHA256 = os.environ.get("KRONOS_MAIN_PARENT_LAST_SHA256", "").strip()
-BATCH_SIZE = 32
-ACCUMULATION_STEPS = 8
+BATCH_SIZE = int(os.environ.get("KRONOS_BATCH_SIZE", "32"))
+ACCUMULATION_STEPS = int(os.environ.get("KRONOS_ACCUMULATION_STEPS", "8"))
 NPROC = 2
 
 
@@ -128,6 +128,8 @@ os.environ.setdefault("KRONOS_MAIN_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
 os.environ.setdefault("KRONOS_MAIN_SECONDS_PER_SEGMENT", {str(SECONDS_PER_SEGMENT)!r})
 os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
+os.environ.setdefault("KRONOS_BATCH_SIZE", {str(BATCH_SIZE)!r})
+os.environ.setdefault("KRONOS_ACCUMULATION_STEPS", {str(ACCUMULATION_STEPS)!r})
 os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
 os.environ.setdefault("KRONOS_SCHEDULER", {SCHEDULER!r})
 os.environ.setdefault("KRONOS_COVERAGE_SEED", {COVERAGE_SEED!r})
