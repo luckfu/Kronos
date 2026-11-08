@@ -71,7 +71,12 @@ STAGE = os.environ.get("KRONOS_MAIN_STAGE", "main")
 COVERAGE_SEED = os.environ.get("KRONOS_COVERAGE_SEED", "100")
 # Stage default mirrors the runner: WC is warm-up + constant, others cosine.
 SCHEDULER = os.environ.get(
-    "KRONOS_SCHEDULER", "warmup_constant" if STAGE == "wc" else "warmup_cosine"
+    "KRONOS_SCHEDULER",
+    {"wc": "warmup_constant", "cosine": "uniform_cosine"}.get(STAGE, "warmup_cosine"),
+)
+MIN_LR = os.environ.get("KRONOS_PREDICTOR_MIN_LR", "1e-6" if STAGE == "cosine" else "1e-7")
+WARMUP_RATIO = os.environ.get(
+    "KRONOS_SCHEDULER_WARMUP_RATIO", "0" if STAGE == "cosine" else "0.01"
 )
 SCHEDULER_DECAY_START = os.environ.get("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
 MAX_SEGMENTS = int(
@@ -130,6 +135,9 @@ os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_
 os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
 os.environ.setdefault("KRONOS_BATCH_SIZE", {str(BATCH_SIZE)!r})
 os.environ.setdefault("KRONOS_ACCUMULATION_STEPS", {str(ACCUMULATION_STEPS)!r})
+os.environ.setdefault("KRONOS_PREDICTOR_MIN_LR", {MIN_LR!r})
+os.environ.setdefault("KRONOS_CONDITION_MIN_LR", {MIN_LR!r})
+os.environ.setdefault("KRONOS_SCHEDULER_WARMUP_RATIO", {WARMUP_RATIO!r})
 os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
 os.environ.setdefault("KRONOS_SCHEDULER", {SCHEDULER!r})
 os.environ.setdefault("KRONOS_COVERAGE_SEED", {COVERAGE_SEED!r})

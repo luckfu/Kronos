@@ -347,6 +347,21 @@ STAGES = {
         "best_metric": "forecast",
         "max_segments": "120",
     },
+    # Small's Cosine refinement: uniform cosine with NO warm-up, annealing the
+    # unified LR from the peak down to the floor.  This is the stage that
+    # produced C2's candidate checkpoint.
+    "cosine": {
+        "output": "base_clean_0.1_cosine",
+        "parent_env": "KRONOS_BASE_CLEAN_PARENT_MODEL",
+        "predictor_lr": "1e-5",
+        "condition_lr": "1e-5",
+        "warmup_start_lr": "1e-5",
+        "condition_warmup_start_lr": "1e-5",
+        "auxiliary": "0",
+        "validation_full_only": "1",
+        "best_metric": "forecast",
+        "max_segments": "90",
+    },
 }
 
 
@@ -580,7 +595,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_FORECAST_HORIZON_WEIGHTS": "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
         "KRONOS_SCHEDULER": os.getenv(
             "KRONOS_SCHEDULER",
-            "warmup_constant" if stage == "wc" else "warmup_cosine",
+            {"wc": "warmup_constant", "cosine": "uniform_cosine"}.get(stage, "warmup_cosine"),
         ),
         "KRONOS_SCHEDULER_WARMUP_RATIO": os.getenv(
             "KRONOS_SCHEDULER_WARMUP_RATIO", "0.01"
@@ -665,7 +680,7 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
             ),
             "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
         })
-    elif stage in {"main", "extend", "wc"}:
+    elif stage in {"main", "extend", "wc", "cosine"}:
         # Mirror Small's Main intent (real Best, full-holdout milestone) at a
         # cost Base can pay: quick 2048 every 5 for Best + telemetry, the full
         # 123,836 holdout every 20 segments.  Small could afford full-val every
@@ -692,6 +707,14 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
             ),
             "KRONOS_VAL_BATCH_SIZE": os.getenv("KRONOS_VAL_BATCH_SIZE", "64"),
         })
+        if stage == "cosine":
+            env.update({
+                "KRONOS_SCHEDULER_WARMUP_RATIO": os.getenv("KRONOS_SCHEDULER_WARMUP_RATIO", "0"),
+                "KRONOS_PREDICTOR_MIN_LR": os.getenv("KRONOS_PREDICTOR_MIN_LR", "1e-6"),
+                "KRONOS_CONDITION_MIN_LR": os.getenv("KRONOS_CONDITION_MIN_LR", "1e-6"),
+                "KRONOS_PREDICTOR_WARMUP_START_LR": os.getenv("KRONOS_PREDICTOR_WARMUP_START_LR", "1e-5"),
+                "KRONOS_CONDITION_WARMUP_START_LR": os.getenv("KRONOS_CONDITION_WARMUP_START_LR", "1e-5"),
+            })
     return env
 
 
