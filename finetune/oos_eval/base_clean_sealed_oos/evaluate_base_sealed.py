@@ -10,6 +10,13 @@ LOOKBACK, PREDICT, WINDOW = 120, 10, 130
 FEATURES = ["open", "high", "low", "close", "volume", "amount"]
 OUTPUT = Path("/kaggle/working/base_clean_sealed_oos")
 LIMIT = os.environ.get("BASE_OOS_LIMIT", "").strip()
+# Strided date subset for cheap checkpoint scans: BASE_OOS_STRIDE=3 keeps every
+# 3rd signal date (65 -> 22 days).  Full-size runs leave it unset.
+STRIDE = os.environ.get("BASE_OOS_STRIDE", "").strip()
+# Diagnostic: freeze the per-stock conditioning (sector -> unknown, size -> 0.5)
+# so the added sector/size branch cannot vary cross-sectionally.  If IC is
+# unchanged, that branch contributes nothing to ranking.
+CONDITION_OFF = os.environ.get("BASE_OOS_CONDITION", "").strip().lower() in {"off", "none", "0"}
 BASE_SOURCE = os.environ.get("BASE_OOS_SOURCE", "").strip()
 SECTOR_LABELS = ['A01农业','A02林业','A03畜牧业','A04渔业','A05农、林、牧、渔专业及辅助性活动','B06煤炭开采和洗选业','B07石油和天然气开采业','B08黑色金属矿采选业','B09有色金属矿采选业','B10非金属矿采选业','B11开采专业及辅助性活动','C13农副食品加工业','C14食品制造业','C15酒、饮料和精制茶制造业','C17纺织业','C18纺织服装、服饰业','C19皮革、毛皮、羽毛及其制品和制鞋业','C20木材加工和木、竹、藤、棕、草制品业','C21家具制造业','C22造纸和纸制品业','C23印刷和记录媒介复制业','C24文教、工美、体育和娱乐用品制造业','C25石油、煤炭及其他燃料加工业','C26化学原料和化学制品制造业','C27医药制造业','C28化学纤维制造业','C29橡胶和塑料制品业','C30非金属矿物制品业','C31黑色金属冶炼和压延加工业','C32有色金属冶炼和压延加工业','C33金属制品业','C34通用设备制造业','C35专用设备制造业','C36汽车制造业','C37铁路、船舶、航空航天和其他运输设备制造业','C38电气机械和器材制造业','C39计算机、通信和其他电子设备制造业','C40仪器仪表制造业','C41其他制造业','C42废弃资源综合利用业','C43金属制品、机械和设备修理业','D44电力、热力生产和供应业','D45燃气生产和供应业','D46水的生产和供应业','E47房屋建筑业','E48土木工程建筑业','E49建筑安装业','E50建筑装饰、装修和其他建筑业','F51批发业','F52零售业','G53铁路运输业','G54道路运输业','G55水上运输业','G56航空运输业','G57管道运输业','G58多式联运和运输代理业','G59装卸搬运和仓储业','G60邮政业','H61住宿业','H62餐饮业','I63电信、广播电视和卫星传输服务','I64互联网和相关服务','I65软件和信息技术服务业','J66货币金融服务','J67资本市场服务','J68保险业','J69其他金融业','K70房地产业','L71租赁业','L72商务服务业','M73研究和试验发展','M74专业技术服务业','M75科技推广和应用服务业','N76水利管理业','N77生态保护和环境治理业','N78公共设施管理业','N79土地管理业','O81机动车、电子产品和日用产品修理业','P83教育','Q84卫生','R86新闻和出版业','R87广播、电视、电影和录音制作业','R88文化艺术业','R89体育','S91综合','unknown']
 SECTOR_MAP = {label: i for i, label in enumerate(SECTOR_LABELS)}
@@ -24,6 +31,15 @@ def find_one(root, name):
     return paths[0]
 
 def load_dataset(root):
+    # Window guards.  Defaults are the sealed 2026-08-03..09-30 package, so the
+    # historical call sites behave exactly as before; a different package (for
+    # example the temporal holdout built by build_temporal_holdout_package.py)
+    # must state its own contract through BASE_OOS_EXPECT_*.
+    expect_samples = int(os.environ.get("BASE_OOS_EXPECT_SAMPLES", "213564"))
+    expect_dates = int(os.environ.get("BASE_OOS_EXPECT_DATES", "42"))
+    expect_first = os.environ.get("BASE_OOS_EXPECT_FIRST", "2026-08-03")
+    expect_last = os.environ.get("BASE_OOS_EXPECT_LAST", "2026-09-30")
+    expect_target_end = os.environ.get("BASE_OOS_EXPECT_TARGET_END", "2026-10-21")
     raw_path = find_one(root, "combined_raw.csv")
     samples_path = find_one(root, "evaluation_samples.jsonl")
     raw = pd.read_csv(raw_path)
@@ -32,11 +48,11 @@ def load_dataset(root):
     samples = pd.read_json(samples_path, lines=True)
     samples["asof_date"] = samples["asof_date"].astype(str)
     samples["target_date"] = samples["target_date"].astype(str)
-    if len(samples) != 213564 or samples.asof_date.nunique() != 42:
+    if len(samples) != expect_samples or samples.asof_date.nunique() != expect_dates:
         raise RuntimeError(f"Unexpected samples: {len(samples)} / {samples.asof_date.nunique()}")
-    if (samples.asof_date.min(), samples.asof_date.max()) != ("2026-08-03", "2026-09-30"):
+    if (samples.asof_date.min(), samples.asof_date.max()) != (expect_first, expect_last):
         raise RuntimeError("Date drift")
-    if samples.target_date.max() != "2026-10-21":
+    if samples.target_date.max() != expect_target_end:
         raise RuntimeError("Target drift")
     raw["size_percentile"] = raw.groupby("date")["market_cap"].rank(pct=True, method="average")
     sector_by_key = {(r.symbol, r.asof_date): r.sector for r in samples.itertuples()}
@@ -74,6 +90,9 @@ class WindowStore:
         actual = raw_close[120:130] / raw_close[119] - 1
         sector = str(window.sector.iloc[119])
         percentile = float(window.size_percentile.iloc[119])
+        if CONDITION_OFF:
+            sector = "unknown"
+            percentile = 0.5
         return dict(identity="|".join(str(record[k]) for k in ("symbol","start_index","asof_date","target_date")),
                     symbol=record["symbol"], asof_date=record["asof_date"], target_date=record["target_date"],
                     sector=sector, size_decile=int(record["size_decile"]), future_dates=[str(d.date()) for d in dates[120:130]],
@@ -153,25 +172,80 @@ def worker(rank):
     dataset_root = find_one(root, "combined_raw.csv").parent
     panel, samples = load_dataset(dataset_root)
     store = WindowStore(panel)
-    matches = sorted(root.glob(WEIGHTS_GLOB))
-    if len(matches) != 1:
-        raise RuntimeError(f"Expected one checkpoint for {label}: {matches[:5]}")
-    weights = matches[0]
-    model = Kronos.from_pretrained(
-        str(weights.parent), num_sectors=86, num_size_buckets=0,
-        context_layer=CONTEXT_LAYER, use_size_percentile=True, size_mlp_hidden_dim=64,
-    ).to(device).eval()
+    hf_repo = os.environ.get("BASE_OOS_HF_REPO", "").strip()
+    if hf_repo:
+        # Straight-from-HF evaluation (kernels have internet).  The upstream
+        # checkpoint has no sector_emb/size_mlp tensors, so it cannot go through
+        # from_pretrained's strict load: build the module with our extra heads
+        # and load with strict=False, leaving the zero-init heads at zero.
+        from huggingface_hub import snapshot_download
+        from safetensors.torch import load_file as load_safetensors
+        # Both CUDA ranks run this worker; a shared local_dir makes one rank
+        # read model.safetensors while the other is still writing it
+        # (FileNotFoundError -> "worker failed").  Isolate per rank.
+        _rank_tag = f"_r{os.environ.get('BASE_OOS_RANK', '0')}"
+        hf_dir = Path(snapshot_download(repo_id=hf_repo, local_dir=f"/kaggle/working/hf_model{_rank_tag}"))
+        weights = hf_dir / "model.safetensors"
+        if not weights.is_file():
+            raise RuntimeError(f"HF repo {hf_repo} has no model.safetensors at {hf_dir}")
+        build_config = json.loads((hf_dir / "config.json").read_text())
+        build_config.update(
+            num_sectors=86, num_size_buckets=0, context_layer=CONTEXT_LAYER,
+            use_size_percentile=True, size_mlp_hidden_dim=64,
+        )
+        phase("hf_model", repo=hf_repo, dir=str(hf_dir))
+        model = Kronos(**build_config)
+        loaded = model.load_state_dict(load_safetensors(str(weights)), strict=False)
+        phase("hf_loaded", missing=list(loaded.missing_keys)[:10],
+              unexpected=list(loaded.unexpected_keys)[:10])
+        model = model.to(device).eval()
+    else:
+        matches = sorted(root.glob(WEIGHTS_GLOB))
+        if len(matches) != 1:
+            raise RuntimeError(f"Expected one checkpoint for {label}: {matches[:5]}")
+        weights = matches[0]
+        model = Kronos.from_pretrained(
+            str(weights.parent), num_sectors=86, num_size_buckets=0,
+            context_layer=CONTEXT_LAYER, use_size_percentile=True, size_mlp_hidden_dim=64,
+        ).to(device).eval()
     # Parent outputs name this directory differently ("Kronos-Tokenizer-base"
-    # vs the relay's "kronos_tokenizer_base"); accept either.
-    tokenizer_hits = (
-        sorted(root.glob("**/Kronos-Tokenizer-base/model.safetensors"))
-        or sorted(root.glob("**/kronos_tokenizer_base/model.safetensors"))
-    )
+    # vs the relay's "kronos_tokenizer_base"); accept either.  Set
+    # BASE_OOS_TOKENIZER to a mounted directory to bypass the glob entirely
+    # (needed when the tokenizer ships as its own flat dataset).
+    hf_tokenizer = os.environ.get("BASE_OOS_HF_TOKENIZER", "").strip()
+    explicit_tokenizer = os.environ.get("BASE_OOS_TOKENIZER", "").strip()
+    if hf_tokenizer:
+        from huggingface_hub import snapshot_download
+        tok_dir = Path(snapshot_download(repo_id=hf_tokenizer, local_dir=f"/kaggle/working/hf_tokenizer{_rank_tag}"))
+        tokenizer_hits = [tok_dir / "model.safetensors"]
+        phase("hf_tokenizer", repo=hf_tokenizer, dir=str(tok_dir))
+    elif explicit_tokenizer:
+        tokenizer_hits = [Path(explicit_tokenizer) / "model.safetensors"]
+        if not tokenizer_hits[0].is_file():
+            # Mount layout can differ from the slug; fall back to the smallest
+            # weights file that sits next to a config.json (tokenizer ~16 MB,
+            # predictor ~205-410 MB).
+            candidates = []
+            for cfg in root.glob("**/config.json"):
+                weights = cfg.parent / "model.safetensors"
+                if weights.is_file() and weights.stat().st_size < 60 * 1024 * 1024:
+                    candidates.append(weights)
+            candidates.sort(key=lambda w: w.stat().st_size)
+            tokenizer_hits = candidates
+            phase("tokenizer_fallback", explicit=explicit_tokenizer,
+                  found=[str(c) for c in candidates[:3]])
+    else:
+        tokenizer_hits = (
+            sorted(root.glob("**/Kronos-Tokenizer-base/model.safetensors"))
+            or sorted(root.glob("**/kronos_tokenizer_base/model.safetensors"))
+        )
     if len(tokenizer_hits) != 1:
         raise RuntimeError(f"Expected one tokenizer, found {tokenizer_hits[:5]}")
     tokenizer = KronosTokenizer.from_pretrained(str(tokenizer_hits[0].parent)).to(device).eval()
     phase("model_loaded", label=label, weights=str(weights))
     dates = sorted(samples.asof_date.unique())
+    if STRIDE:
+        dates = dates[::int(STRIDE)]
     if LIMIT:
         dates = dates[-int(LIMIT):]
     # Two GPUs share the date list: rank 0 takes even dates, rank 1 odd dates.
