@@ -591,8 +591,11 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_RESET_SECTOR_EMBEDDING": "1" if stage == "bootstrap" else "0",
         "KRONOS_RESET_SIZE_EMBEDDING": "1" if stage == "bootstrap" else "0",
         "KRONOS_PREDICTOR_LOSS_MODE": "forecast",
-        "KRONOS_HISTORY_LOSS_WEIGHT": "0.02",
-        "KRONOS_FORECAST_HORIZON_WEIGHTS": "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
+        "KRONOS_HISTORY_LOSS_WEIGHT": os.getenv("KRONOS_HISTORY_LOSS_WEIGHT", "0.02"),
+        "KRONOS_FORECAST_HORIZON_WEIGHTS": os.getenv(
+            "KRONOS_FORECAST_HORIZON_WEIGHTS",
+            "1.364,1.364,1.364,1.136,1.136,0.909,0.909,0.682,0.682,0.455",
+        ),
         "KRONOS_SCHEDULER": os.getenv(
             "KRONOS_SCHEDULER",
             {"wc": "warmup_constant", "cosine": "uniform_cosine"}.get(stage, "warmup_cosine"),
@@ -785,6 +788,11 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     os.environ.pop("SWANLAB_EXPERIMENT_NAME", None)
     swanlab = None
     run = None
+    # These two must exist even when SwanLab is absent; the finally block below
+    # touches them unconditionally (probe kernels crashed at shutdown with
+    # UnboundLocalError otherwise).
+    stop_gpu = threading.Event()
+    gpu_thread = None
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab==0.10.1", "psutil", "pynvml"], check=True)
         import swanlab
