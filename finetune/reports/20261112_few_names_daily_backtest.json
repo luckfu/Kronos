@@ -1,0 +1,3084 @@
+{
+  "constraint": "hand-traded book: few names, few orders",
+  "rules": {
+    "ks": [
+      5,
+      10,
+      20
+    ],
+    "steps_in_sessions": [
+      5,
+      10
+    ],
+    "primary": {
+      "k": 10,
+      "step": 10,
+      "buffer": true
+    },
+    "buffer_keep_fraction": 0.3,
+    "random_books": 500,
+    "random_seed": 20261112,
+    "bootstrap": {
+      "block": 10,
+      "replicates": 2000,
+      "seed": 20261112
+    },
+    "sealed_after": "2026-10-23",
+    "nav_end": "2026-11-06",
+    "primary_dataset": "PROD"
+  },
+  "datasets": {
+    "PROD": {
+      "source": "production:scratch/prod_c2",
+      "signal_days": 17,
+      "signal_start": "2026-09-23",
+      "signal_end": "2026-10-23",
+      "books": {
+        "k5_step5_nobuffer": {
+          "k": 5,
+          "step_signal_dates": 5,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 4,
+              "net": -0.3106467722012922,
+              "gross": -0.301729761790294,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.20643570217844798,
+              "gross_excess": -0.20009805161405914,
+              "max_drawdown": -0.3054129078991876,
+              "orders_per_rebalance_after_first": 7.333333333333333,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 4,
+              "net": -0.17583215512556505,
+              "gross": -0.16526525441239837,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.0814993596997936,
+              "gross_excess": -0.07354117242249691,
+              "max_drawdown": -0.22033253229810368,
+              "orders_per_rebalance_after_first": 6.666666666666667,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 3,
+              "net": -0.11884342225452382,
+              "gross": -0.10969273742981878,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.046320027923483775,
+              "gross_excess": -0.0398424851265754,
+              "max_drawdown": -0.2055775225594888,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 3,
+              "net": 0.025770956227322506,
+              "gross": 0.038539376374621126,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.10983545192203381,
+              "gross_excess": 0.11995942757678402,
+              "max_drawdown": -0.09262613164624067,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 3,
+              "net": -0.16361013862975582,
+              "gross": -0.15338178524459378,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.0807597527821623,
+              "gross_excess": -0.07317719323290206,
+              "max_drawdown": -0.1646623096206571,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.1486323063967629,
+          "mean_net_excess": -0.06103587813237077,
+          "mean_gross_excess": -0.0533398949638499,
+          "net_excess_range": [
+            -0.20643570217844798,
+            0.10983545192203381
+          ],
+          "mean_max_drawdown": -0.19772228080473558,
+          "mean_orders_per_rebalance": 8.0,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.003958285223556642,
+            "ci95": [
+              -0.008659606415954936,
+              0.002049281136475543
+            ],
+            "verdict": "inconclusive"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.0024705417336421194,
+            "std": 0.027025385773851256,
+            "q025": -0.05402234213079317,
+            "q975": 0.05203882703171797,
+            "single_phase_q025": -0.13148349903040402,
+            "single_phase_q975": 0.12006222502847658,
+            "c2_percentile": 0.028
+          }
+        },
+        "k5_step5_buffer": {
+          "k": 5,
+          "step_signal_dates": 5,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 4,
+              "net": -0.3154513268684881,
+              "gross": -0.31156360241803205,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.21124025684564385,
+              "gross_excess": -0.2099318922417972,
+              "max_drawdown": -0.33321594281025635,
+              "orders_per_rebalance_after_first": 2.6666666666666665,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 4,
+              "net": -0.20149330864223824,
+              "gross": -0.19431781490421562,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.1071605132164668,
+              "gross_excess": -0.10259373291431417,
+              "max_drawdown": -0.20957294871282472,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 3,
+              "net": -0.13348157577085495,
+              "gross": -0.12758736823079964,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.06095818143981491,
+              "gross_excess": -0.05773711592755626,
+              "max_drawdown": -0.2269277241287634,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 3,
+              "net": 0.03230593756538358,
+              "gross": 0.043117006232509025,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.11637043326009489,
+              "gross_excess": 0.12453705743467192,
+              "max_drawdown": -0.09552397182462813,
+              "orders_per_rebalance_after_first": 7.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 3,
+              "net": -0.11957515783196426,
+              "gross": -0.11220433847910383,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.03672477198437074,
+              "gross_excess": -0.031999746467412105,
+              "max_drawdown": -0.16663259510192174,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.1475390863096324,
+          "mean_net_excess": -0.05994265804524028,
+          "mean_gross_excess": -0.055545086023281565,
+          "net_excess_range": [
+            -0.21124025684564385,
+            0.11637043326009489
+          ],
+          "mean_max_drawdown": -0.20637463651567883,
+          "mean_orders_per_rebalance": 4.7333333333333325,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.003951547549429765,
+            "ci95": [
+              -0.008815724211833631,
+              0.0007320288048362836
+            ],
+            "verdict": "inconclusive"
+          }
+        },
+        "k10_step5_nobuffer": {
+          "k": 10,
+          "step_signal_dates": 5,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 4,
+              "net": -0.1976015666841534,
+              "gross": -0.18594222389978865,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.09339049666130916,
+              "gross_excess": -0.0843105137235538,
+              "max_drawdown": -0.2338312396003288,
+              "orders_per_rebalance_after_first": 16.666666666666668,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 4,
+              "net": -0.16421320269158712,
+              "gross": -0.15253489821096844,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.06988040726581568,
+              "gross_excess": -0.06081081622106699,
+              "max_drawdown": -0.17949969769365748,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 3,
+              "net": -0.11135954902620748,
+              "gross": -0.10140763856519452,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.038836154695167435,
+              "gross_excess": -0.03155738626195115,
+              "max_drawdown": -0.19894419533733199,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 3,
+              "net": -0.008876125445448135,
+              "gross": 0.0027454029569258243,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.07518837024926317,
+              "gross_excess": 0.08416545415908872,
+              "max_drawdown": -0.09858354088907373,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 3,
+              "net": -0.15606889673669444,
+              "gross": -0.1465161876209793,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.07321851088910092,
+              "gross_excess": -0.06631159560928757,
+              "max_drawdown": -0.17984293465309154,
+              "orders_per_rebalance_after_first": 17.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.1276238681168181,
+          "mean_net_excess": -0.040027439852426,
+          "mean_gross_excess": -0.03176497153135416,
+          "net_excess_range": [
+            -0.09339049666130916,
+            0.07518837024926317
+          ],
+          "mean_max_drawdown": -0.1781403216346967,
+          "mean_orders_per_rebalance": 16.733333333333334,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0022662571334572694,
+            "ci95": [
+              -0.006445203973657009,
+              0.001298565918087499
+            ],
+            "verdict": "inconclusive"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.003642629163832431,
+            "std": 0.019764997416741988,
+            "q025": -0.04568217857812296,
+            "q975": 0.03394583506844148,
+            "single_phase_q025": -0.08057044039857156,
+            "single_phase_q975": 0.08709623449072287,
+            "c2_percentile": 0.074
+          }
+        },
+        "k10_step5_buffer": {
+          "k": 10,
+          "step_signal_dates": 5,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 4,
+              "net": -0.2486260334995014,
+              "gross": -0.24241698161704517,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.14441496347665717,
+              "gross_excess": -0.14078527144081032,
+              "max_drawdown": -0.26859026219140314,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 4,
+              "net": -0.1445417263222568,
+              "gross": -0.13737235993007246,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.05020893089648537,
+              "gross_excess": -0.04564827794017101,
+              "max_drawdown": -0.15254352763042522,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 3,
+              "net": -0.05442485028115074,
+              "gross": -0.049285317966968334,
+              "universe_net": -0.07252339433104005,
+              "net_excess": 0.01809854404988931,
+              "gross_excess": 0.020564934336275043,
+              "max_drawdown": -0.13260724677545832,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 3,
+              "net": -0.06958197405825395,
+              "gross": -0.06138968541210332,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.014482521636457357,
+              "gross_excess": 0.020030365790059568,
+              "max_drawdown": -0.12010970183390501,
+              "orders_per_rebalance_after_first": 11.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 3,
+              "net": -0.14077939764181535,
+              "gross": -0.13499763205929438,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.05792901179422183,
+              "gross_excess": -0.05479304004760266,
+              "max_drawdown": -0.1729237926937922,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.13159079636059565,
+          "mean_net_excess": -0.04399436809620354,
+          "mean_gross_excess": -0.040126257860449877,
+          "net_excess_range": [
+            -0.14441496347665717,
+            0.01809854404988931
+          ],
+          "mean_max_drawdown": -0.16935490622499677,
+          "mean_orders_per_rebalance": 8.4,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0024903886348664776,
+            "ci95": [
+              -0.005346205467686572,
+              2.338250451151344e-05
+            ],
+            "verdict": "inconclusive"
+          }
+        },
+        "k20_step5_nobuffer": {
+          "k": 20,
+          "step_signal_dates": 5,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 4,
+              "net": -0.22854879349960655,
+              "gross": -0.21659147213214514,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.12433772347676231,
+              "gross_excess": -0.11495976195591029,
+              "max_drawdown": -0.250732409572444,
+              "orders_per_rebalance_after_first": 34.666666666666664,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 4,
+              "net": -0.18917939745533707,
+              "gross": -0.17743798583862103,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.09484660202956563,
+              "gross_excess": -0.08571390384871957,
+              "max_drawdown": -0.17699318130580666,
+              "orders_per_rebalance_after_first": 32.666666666666664,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 3,
+              "net": -0.13805045924461312,
+              "gross": -0.12830555754695527,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.06552706491357307,
+              "gross_excess": -0.0584553052437119,
+              "max_drawdown": -0.20476387470334412,
+              "orders_per_rebalance_after_first": 35.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 3,
+              "net": -0.07806305353716825,
+              "gross": -0.06686295739880832,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.006001442157543058,
+              "gross_excess": 0.01455709380335457,
+              "max_drawdown": -0.09794067667977024,
+              "orders_per_rebalance_after_first": 35.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 3,
+              "net": -0.14723378797066655,
+              "gross": -0.13739889446610953,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.06438340212307303,
+              "gross_excess": -0.05719430245441781,
+              "max_drawdown": -0.18374171551057128,
+              "orders_per_rebalance_after_first": 34.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.15621509834147831,
+          "mean_net_excess": -0.06861867007708619,
+          "mean_gross_excess": -0.060353235939881,
+          "net_excess_range": [
+            -0.12433772347676231,
+            0.006001442157543058
+          ],
+          "mean_max_drawdown": -0.18283437155438725,
+          "mean_orders_per_rebalance": 34.266666666666666,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0035636399525246316,
+            "ci95": [
+              -0.008126782501189422,
+              0.00043878971546024343
+            ],
+            "verdict": "inconclusive"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.0027121990656232605,
+            "std": 0.013675419744474398,
+            "q025": -0.028813144537352457,
+            "q975": 0.024642586827926624,
+            "single_phase_q025": -0.06370121417516861,
+            "single_phase_q975": 0.06007745807268454,
+            "c2_percentile": 0.0
+          }
+        },
+        "k20_step5_buffer": {
+          "k": 20,
+          "step_signal_dates": 5,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 4,
+              "net": -0.1998766414395724,
+              "gross": -0.19306345843389927,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.09566557141672816,
+              "gross_excess": -0.09143174825766442,
+              "max_drawdown": -0.2275576155317227,
+              "orders_per_rebalance_after_first": 16.666666666666668,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 4,
+              "net": -0.1915988964973827,
+              "gross": -0.18399893501570508,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.09726610107161127,
+              "gross_excess": -0.09227485302580363,
+              "max_drawdown": -0.189682378284032,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 3,
+              "net": -0.1410284680717453,
+              "gross": -0.13559543418964726,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.06850507374070525,
+              "gross_excess": -0.06574518188640388,
+              "max_drawdown": -0.20430603594457353,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 3,
+              "net": -0.0644173403910987,
+              "gross": -0.05582013607402192,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.019647155303612607,
+              "gross_excess": 0.02559991512814097,
+              "max_drawdown": -0.09555132993431825,
+              "orders_per_rebalance_after_first": 24.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 3,
+              "net": -0.13999529817946865,
+              "gross": -0.13330622542881687,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.05714491233187513,
+              "gross_excess": -0.05310163341712515,
+              "max_drawdown": -0.17494689548183295,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.14738332891585354,
+          "mean_net_excess": -0.05978690065146144,
+          "mean_gross_excess": -0.05539070029177122,
+          "net_excess_range": [
+            -0.09726610107161127,
+            0.019647155303612607
+          ],
+          "mean_max_drawdown": -0.17840885103529588,
+          "mean_orders_per_rebalance": 18.933333333333334,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0031639362506182744,
+            "ci95": [
+              -0.006876778052320278,
+              -5.566202075016885e-05
+            ],
+            "verdict": "worse"
+          }
+        },
+        "k5_step10_nobuffer": {
+          "k": 5,
+          "step_signal_dates": 10,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.23785240677094088,
+              "gross": -0.2330301133182937,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.13364133674809664,
+              "gross_excess": -0.13139840314205886,
+              "max_drawdown": -0.2724182537259656,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.2270876481908498,
+              "gross": -0.2218174492547511,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.13275485276507837,
+              "gross_excess": -0.13009336726484966,
+              "max_drawdown": -0.2521310960454741,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.09453578921927841,
+              "gross": -0.08811677009824737,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.022012394888238362,
+              "gross_excess": -0.01826651779500399,
+              "max_drawdown": -0.183912174110906,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.008698876175810777,
+              "gross": -0.0005973651530144508,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.07536561951890053,
+              "gross_excess": 0.08082268604914844,
+              "max_drawdown": -0.0933767493823775,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 2,
+              "net": -0.14339662657041785,
+              "gross": -0.13641085436911948,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.06054624072282433,
+              "gross_excess": -0.05620626235742776,
+              "max_drawdown": -0.1446069465249129,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-09",
+              "rebalances": 2,
+              "net": -0.1760984565660101,
+              "gross": -0.1703798812495686,
+              "universe_net": -0.07070864912323704,
+              "net_excess": -0.10538980744277304,
+              "gross_excess": -0.10234713031966525,
+              "max_drawdown": -0.18796558516216555,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-12",
+              "rebalances": 2,
+              "net": 0.04443091153848289,
+              "gross": 0.052352465873479526,
+              "universe_net": -0.07809290507433142,
+              "net_excess": 0.1225238166128143,
+              "gross_excess": 0.12779263661392992,
+              "max_drawdown": -0.06396105283477727,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-13",
+              "rebalances": 1,
+              "net": -0.1353727494025696,
+              "gross": -0.1335484977976561,
+              "universe_net": -0.05294607119713035,
+              "net_excess": -0.08242667820543925,
+              "gross_excess": -0.08332374676721699,
+              "max_drawdown": -0.19624170954975373,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-14",
+              "rebalances": 1,
+              "net": -0.024266290670656332,
+              "gross": -0.021908826944031068,
+              "universe_net": -0.0664670422445296,
+              "net_excess": 0.04220075157387326,
+              "gross_excess": 0.04186917854432681,
+              "max_drawdown": -0.1305270849262241,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-15",
+              "rebalances": 1,
+              "net": -0.03524937857714272,
+              "gross": -0.03281961809916889,
+              "universe_net": -0.03312621226197299,
+              "net_excess": -0.0021231663151697333,
+              "gross_excess": -0.0024784563982973573,
+              "max_drawdown": -0.10872328266431952,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.10381273106051939,
+          "mean_net_excess": -0.02988042893820316,
+          "mean_gross_excess": -0.027362938283711467,
+          "net_excess_range": [
+            -0.13364133674809664,
+            0.1225238166128143
+          ],
+          "mean_max_drawdown": -0.16338639349268763,
+          "mean_orders_per_rebalance": 9.142857142857142,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0035433781255406966,
+            "ci95": [
+              -0.008157580421482038,
+              0.001308931501115465
+            ],
+            "verdict": "inconclusive"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.0016586993526594826,
+            "std": 0.019549484263073052,
+            "q025": -0.03834512913438373,
+            "q975": 0.04125101291975134,
+            "single_phase_q025": -0.1305741842375786,
+            "single_phase_q975": 0.1460014842782633,
+            "c2_percentile": 0.09
+          }
+        },
+        "k5_step10_buffer": {
+          "k": 5,
+          "step_signal_dates": 10,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.2856780837997459,
+              "gross": -0.2833756459565554,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.18146701377690166,
+              "gross_excess": -0.18174393578032055,
+              "max_drawdown": -0.3258235723327827,
+              "orders_per_rebalance_after_first": 2.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.19267801144847618,
+              "gross": -0.18889781684862306,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.09834521602270474,
+              "gross_excess": -0.0971737348587216,
+              "max_drawdown": -0.2515474069936313,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.10478953884351039,
+              "gross": -0.0992957513628715,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.03226614451247034,
+              "gross_excess": -0.029445499059628122,
+              "max_drawdown": -0.19920325882065992,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.07125684141928124,
+              "gross": -0.06457711344021744,
+              "universe_net": -0.0840644956947113,
+              "net_excess": 0.01280765427543007,
+              "gross_excess": 0.016842937761945453,
+              "max_drawdown": -0.1321182858794958,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 2,
+              "net": -0.07995782040766009,
+              "gross": -0.0736024813047661,
+              "universe_net": -0.08285038584759352,
+              "net_excess": 0.0028925654399334366,
+              "gross_excess": 0.0066021107069256235,
+              "max_drawdown": -0.14211807643966767,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-09",
+              "rebalances": 2,
+              "net": -0.16073692445271326,
+              "gross": -0.1568778818367902,
+              "universe_net": -0.07070864912323704,
+              "net_excess": -0.09002827532947622,
+              "gross_excess": -0.08884513090688684,
+              "max_drawdown": -0.1800326345015998,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-12",
+              "rebalances": 2,
+              "net": -0.027668816425375997,
+              "gross": -0.02297138961998757,
+              "universe_net": -0.07809290507433142,
+              "net_excess": 0.05042408864895542,
+              "gross_excess": 0.052468781120462826,
+              "max_drawdown": -0.06578742534209792,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-13",
+              "rebalances": 1,
+              "net": -0.1353727494025696,
+              "gross": -0.1335484977976561,
+              "universe_net": -0.05294607119713035,
+              "net_excess": -0.08242667820543925,
+              "gross_excess": -0.08332374676721699,
+              "max_drawdown": -0.19624170954975373,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-14",
+              "rebalances": 1,
+              "net": -0.024266290670656332,
+              "gross": -0.021908826944031068,
+              "universe_net": -0.0664670422445296,
+              "net_excess": 0.04220075157387326,
+              "gross_excess": 0.04186917854432681,
+              "max_drawdown": -0.1305270849262241,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-15",
+              "rebalances": 1,
+              "net": -0.03524937857714272,
+              "gross": -0.03281961809916889,
+              "universe_net": -0.03312621226197299,
+              "net_excess": -0.0021231663151697333,
+              "gross_excess": -0.0024784563982973573,
+              "max_drawdown": -0.10872328266431952,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.1117654455447132,
+          "mean_net_excess": -0.03783314342239698,
+          "mean_gross_excess": -0.036522749563741075,
+          "net_excess_range": [
+            -0.18146701377690166,
+            0.05042408864895542
+          ],
+          "mean_max_drawdown": -0.17321227374502324,
+          "mean_orders_per_rebalance": 5.428571428571429,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0038204873235757717,
+            "ci95": [
+              -0.00853297370085155,
+              0.0007558698353179756
+            ],
+            "verdict": "inconclusive"
+          }
+        },
+        "k10_step10_nobuffer": {
+          "k": 10,
+          "step_signal_dates": 10,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.18754636641684008,
+              "gross": -0.18255176166331788,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.08333529639399584,
+              "gross_excess": -0.08092005148708303,
+              "max_drawdown": -0.2117000871794571,
+              "orders_per_rebalance_after_first": 14.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.19563434327753482,
+              "gross": -0.19042047424977393,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.10130154785176337,
+              "gross_excess": -0.09869639225987248,
+              "max_drawdown": -0.20708774127787744,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.0848976967659063,
+              "gross": -0.07860388991784695,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.012374302434866258,
+              "gross_excess": -0.008753637614603571,
+              "max_drawdown": -0.17324333551033377,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.0975727497531027,
+              "gross": -0.09070089209947885,
+              "universe_net": -0.0840644956947113,
+              "net_excess": -0.0135082540583914,
+              "gross_excess": -0.009280840897315956,
+              "max_drawdown": -0.1402040531375066,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 2,
+              "net": -0.1346183036910904,
+              "gross": -0.1289748627326035,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.05176791784349688,
+              "gross_excess": -0.04877027072091178,
+              "max_drawdown": -0.16126330415831414,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-09",
+              "rebalances": 2,
+              "net": -0.12527385722971085,
+              "gross": -0.11927219214730467,
+              "universe_net": -0.07070864912323704,
+              "net_excess": -0.054565208106473806,
+              "gross_excess": -0.051239441217401316,
+              "max_drawdown": -0.14625035264616137,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-12",
+              "rebalances": 2,
+              "net": -0.06192198698098039,
+              "gross": -0.055507360182008636,
+              "universe_net": -0.07809290507433142,
+              "net_excess": 0.016170918093351028,
+              "gross_excess": 0.01993281055844176,
+              "max_drawdown": -0.09840860853507072,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-13",
+              "rebalances": 1,
+              "net": -0.15094404002128403,
+              "gross": -0.1491967592395087,
+              "universe_net": -0.05294607119713035,
+              "net_excess": -0.09799796882415368,
+              "gross_excess": -0.0989720082090696,
+              "max_drawdown": -0.21487515386195144,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-14",
+              "rebalances": 1,
+              "net": 0.056334030109136846,
+              "gross": 0.0590943222560425,
+              "universe_net": -0.0664670422445296,
+              "net_excess": 0.12280107235366644,
+              "gross_excess": 0.12287232774440038,
+              "max_drawdown": -0.09189180398082175,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-15",
+              "rebalances": 1,
+              "net": -0.05649828434182347,
+              "gross": -0.054075189478400176,
+              "universe_net": -0.03312621226197299,
+              "net_excess": -0.02337207207985048,
+              "gross_excess": -0.023734027777528643,
+              "max_drawdown": -0.11330933872240323,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.10385735983691365,
+          "mean_net_excess": -0.029925057714597424,
+          "mean_gross_excess": -0.027756153188094424,
+          "net_excess_range": [
+            -0.10130154785176337,
+            0.12280107235366644
+          ],
+          "mean_max_drawdown": -0.15582337790098974,
+          "mean_orders_per_rebalance": 16.857142857142858,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0024221051926110212,
+            "ci95": [
+              -0.00569641993130064,
+              0.0002967378092952723
+            ],
+            "verdict": "inconclusive"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.0007826704480314875,
+            "std": 0.014142722463321846,
+            "q025": -0.026556348279737012,
+            "q975": 0.029535438407598806,
+            "single_phase_q025": -0.08397652983461072,
+            "single_phase_q975": 0.10642629047654516,
+            "c2_percentile": 0.022
+          }
+        },
+        "k10_step10_buffer": {
+          "k": 10,
+          "step_signal_dates": 10,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.22790789557664748,
+              "gross": -0.22432605854936605,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.12369682555380324,
+              "gross_excess": -0.1226943483731312,
+              "max_drawdown": -0.2536435703769313,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.15497642589047023,
+              "gross": -0.1512433817429526,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.06064363046469878,
+              "gross_excess": -0.05951929975305115,
+              "max_drawdown": -0.19569510179749916,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.03405013604713625,
+              "gross": -0.029009408323722785,
+              "universe_net": -0.07252339433104005,
+              "net_excess": 0.0384732582839038,
+              "gross_excess": 0.04084084397952059,
+              "max_drawdown": -0.11677442283984585,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.14226972733822718,
+              "gross": -0.13658246779338812,
+              "universe_net": -0.0840644956947113,
+              "net_excess": -0.058205231643515876,
+              "gross_excess": -0.05516241659122523,
+              "max_drawdown": -0.1814176360648162,
+              "orders_per_rebalance_after_first": 14.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 2,
+              "net": -0.12748380595862496,
+              "gross": -0.12320056970041549,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.04463342011103144,
+              "gross_excess": -0.04299597768872376,
+              "max_drawdown": -0.15926262584294593,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-09",
+              "rebalances": 2,
+              "net": -0.11108667674068828,
+              "gross": -0.10677884309304309,
+              "universe_net": -0.07070864912323704,
+              "net_excess": -0.04037802761745124,
+              "gross_excess": -0.038746092163139734,
+              "max_drawdown": -0.13981747806214995,
+              "orders_per_rebalance_after_first": 12.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-12",
+              "rebalances": 2,
+              "net": -0.06824390576444317,
+              "gross": -0.06269098724307243,
+              "universe_net": -0.07809290507433142,
+              "net_excess": 0.009848999309888251,
+              "gross_excess": 0.01274918349737797,
+              "max_drawdown": -0.10037038401560439,
+              "orders_per_rebalance_after_first": 14.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-13",
+              "rebalances": 1,
+              "net": -0.15094404002128403,
+              "gross": -0.1491967592395087,
+              "universe_net": -0.05294607119713035,
+              "net_excess": -0.09799796882415368,
+              "gross_excess": -0.0989720082090696,
+              "max_drawdown": -0.21487515386195144,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-14",
+              "rebalances": 1,
+              "net": 0.056334030109136846,
+              "gross": 0.0590943222560425,
+              "universe_net": -0.0664670422445296,
+              "net_excess": 0.12280107235366644,
+              "gross_excess": 0.12287232774440038,
+              "max_drawdown": -0.09189180398082175,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-15",
+              "rebalances": 1,
+              "net": -0.05649828434182347,
+              "gross": -0.054075189478400176,
+              "universe_net": -0.03312621226197299,
+              "net_excess": -0.02337207207985048,
+              "gross_excess": -0.023734027777528643,
+              "max_drawdown": -0.11330933872240323,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.10171268675702083,
+          "mean_net_excess": -0.027780384634704624,
+          "mean_gross_excess": -0.026536181533457038,
+          "net_excess_range": [
+            -0.12369682555380324,
+            0.12280107235366644
+          ],
+          "mean_max_drawdown": -0.1567057515564969,
+          "mean_orders_per_rebalance": 10.857142857142858,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0023470415536782766,
+            "ci95": [
+              -0.0058446698675047645,
+              0.0004119864494805398
+            ],
+            "verdict": "inconclusive"
+          }
+        },
+        "k20_step10_nobuffer": {
+          "k": 20,
+          "step_signal_dates": 10,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.17298737596487002,
+              "gross": -0.16733879064773483,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.06877630594202577,
+              "gross_excess": -0.06570708047149998,
+              "max_drawdown": -0.21412491817053803,
+              "orders_per_rebalance_after_first": 32.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.1767978716170776,
+              "gross": -0.17099854185208074,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.08246507619130616,
+              "gross_excess": -0.07927445986217929,
+              "max_drawdown": -0.17750127128471738,
+              "orders_per_rebalance_after_first": 36.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.1302555422916024,
+              "gross": -0.12429336983305272,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.05773214796056236,
+              "gross_excess": -0.05444311752980935,
+              "max_drawdown": -0.1971925991261544,
+              "orders_per_rebalance_after_first": 34.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.13586757919993075,
+              "gross": -0.12948808543234858,
+              "universe_net": -0.0840644956947113,
+              "net_excess": -0.05180308350521945,
+              "gross_excess": -0.048068034230185686,
+              "max_drawdown": -0.1550727755360457,
+              "orders_per_rebalance_after_first": 38.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 2,
+              "net": -0.1407094155835683,
+              "gross": -0.13493947974539355,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.05785902973597479,
+              "gross_excess": -0.05473488773370183,
+              "max_drawdown": -0.17868153044250912,
+              "orders_per_rebalance_after_first": 34.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-09",
+              "rebalances": 2,
+              "net": -0.15155769223500193,
+              "gross": -0.1453795939962319,
+              "universe_net": -0.07070864912323704,
+              "net_excess": -0.08084904311176488,
+              "gross_excess": -0.07734684306632855,
+              "max_drawdown": -0.17546792619442597,
+              "orders_per_rebalance_after_first": 40.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-12",
+              "rebalances": 2,
+              "net": -0.11248429408400273,
+              "gross": -0.10650204529117602,
+              "universe_net": -0.07809290507433142,
+              "net_excess": -0.034391389009671314,
+              "gross_excess": -0.03106187455072562,
+              "max_drawdown": -0.13014648152766317,
+              "orders_per_rebalance_after_first": 36.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-13",
+              "rebalances": 1,
+              "net": -0.11829273817783492,
+              "gross": -0.1162360530456994,
+              "universe_net": -0.05294607119713035,
+              "net_excess": -0.06534666698070457,
+              "gross_excess": -0.06601130201526029,
+              "max_drawdown": -0.18446665939402163,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-14",
+              "rebalances": 1,
+              "net": 0.017815791024120786,
+              "gross": 0.020610873471241353,
+              "universe_net": -0.0664670422445296,
+              "net_excess": 0.08428283326865038,
+              "gross_excess": 0.08438887895959923,
+              "max_drawdown": -0.07095910015150564,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-15",
+              "rebalances": 1,
+              "net": -0.02101536104943258,
+              "gross": -0.018346582906937248,
+              "universe_net": -0.03312621226197299,
+              "net_excess": 0.012110851212540408,
+              "gross_excess": 0.011994578793934285,
+              "max_drawdown": -0.08133290179852204,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.11421520791792003,
+          "mean_net_excess": -0.040282905795603854,
+          "mean_gross_excess": -0.03802641417061571,
+          "net_excess_range": [
+            -0.08246507619130616,
+            0.08428283326865038
+          ],
+          "mean_max_drawdown": -0.1564946163626103,
+          "mean_orders_per_rebalance": 35.714285714285715,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0031508629047256173,
+            "ci95": [
+              -0.007226501077252594,
+              0.0002667469963662286
+            ],
+            "verdict": "inconclusive"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.0011031619314972449,
+            "std": 0.0095753310085352,
+            "q025": -0.01987235115014728,
+            "q975": 0.016924106194446193,
+            "single_phase_q025": -0.06813674386642296,
+            "single_phase_q975": 0.07453945884955361,
+            "c2_percentile": 0.0
+          }
+        },
+        "k20_step10_buffer": {
+          "k": 20,
+          "step_signal_dates": 10,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.20236918520456038,
+              "gross": -0.1979811514009162,
+              "universe_net": -0.10421107002284424,
+              "net_excess": -0.09815811518171613,
+              "gross_excess": -0.09634944122468136,
+              "max_drawdown": -0.2302451391408924,
+              "orders_per_rebalance_after_first": 22.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.1616197239063767,
+              "gross": -0.15691189843528153,
+              "universe_net": -0.09433279542577144,
+              "net_excess": -0.06728692848060525,
+              "gross_excess": -0.06518781644538008,
+              "max_drawdown": -0.17986398360761857,
+              "orders_per_rebalance_after_first": 24.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.1444500257679403,
+              "gross": -0.14012140937156714,
+              "universe_net": -0.07252339433104005,
+              "net_excess": -0.07192663143690026,
+              "gross_excess": -0.07027115706832376,
+              "max_drawdown": -0.21163212335395065,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.12107589125870044,
+              "gross": -0.1152906019284029,
+              "universe_net": -0.0840644956947113,
+              "net_excess": -0.037011395563989136,
+              "gross_excess": -0.03387055072624001,
+              "max_drawdown": -0.14761694880975051,
+              "orders_per_rebalance_after_first": 32.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-08",
+              "rebalances": 2,
+              "net": -0.1290991733822231,
+              "gross": -0.12460431177039899,
+              "universe_net": -0.08285038584759352,
+              "net_excess": -0.046248787534629576,
+              "gross_excess": -0.04439971975870727,
+              "max_drawdown": -0.1704086700666554,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-09",
+              "rebalances": 2,
+              "net": -0.11819399336179104,
+              "gross": -0.11395659990651719,
+              "universe_net": -0.07070864912323704,
+              "net_excess": -0.047485344238553995,
+              "gross_excess": -0.045923848976613835,
+              "max_drawdown": -0.15085513430487496,
+              "orders_per_rebalance_after_first": 22.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-12",
+              "rebalances": 2,
+              "net": -0.13295001677876717,
+              "gross": -0.12868546305254125,
+              "universe_net": -0.07809290507433142,
+              "net_excess": -0.054857111704435746,
+              "gross_excess": -0.05324529231209085,
+              "max_drawdown": -0.15935551368524048,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-13",
+              "rebalances": 1,
+              "net": -0.11829273817783492,
+              "gross": -0.1162360530456994,
+              "universe_net": -0.05294607119713035,
+              "net_excess": -0.06534666698070457,
+              "gross_excess": -0.06601130201526029,
+              "max_drawdown": -0.18446665939402163,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-14",
+              "rebalances": 1,
+              "net": 0.017815791024120786,
+              "gross": 0.020610873471241353,
+              "universe_net": -0.0664670422445296,
+              "net_excess": 0.08428283326865038,
+              "gross_excess": 0.08438887895959923,
+              "max_drawdown": -0.07095910015150564,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-10-15",
+              "rebalances": 1,
+              "net": -0.02101536104943258,
+              "gross": -0.018346582906937248,
+              "universe_net": -0.03312621226197299,
+              "net_excess": 0.012110851212540408,
+              "gross_excess": 0.011994578793934285,
+              "max_drawdown": -0.08133290179852204,
+              "orders_per_rebalance_after_first": null,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.11312503178635058,
+          "mean_net_excess": -0.039192729664034386,
+          "mean_gross_excess": -0.037887567077376394,
+          "net_excess_range": [
+            -0.09815811518171613,
+            0.08428283326865038
+          ],
+          "mean_max_drawdown": -0.15867361743130323,
+          "mean_orders_per_rebalance": 22.857142857142858,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.003093143750851064,
+            "ci95": [
+              -0.007303564430294648,
+              0.000164611322270549
+            ],
+            "verdict": "inconclusive"
+          }
+        }
+      }
+    },
+    "EVAL": {
+      "source": "shards:scratch/c2_roll/eval/c2",
+      "signal_days": 23,
+      "signal_start": "2026-09-15",
+      "signal_end": "2026-10-23",
+      "books": {
+        "k5_step5_nobuffer": {
+          "k": 5,
+          "step_signal_dates": 5,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 5,
+              "net": -0.23977247558576964,
+              "gross": -0.2222761728863647,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.15981360724415117,
+              "gross_excess": -0.14496715809000515,
+              "max_drawdown": -0.3044646629635416,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 5,
+              "net": -0.05091627364211293,
+              "gross": -0.03277055820780217,
+              "universe_net": -0.09056075350457982,
+              "net_excess": 0.039644479862466886,
+              "gross_excess": 0.0551679045432536,
+              "max_drawdown": -0.17674520884874856,
+              "orders_per_rebalance_after_first": 8.5,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 5,
+              "net": -0.1520054218249568,
+              "gross": -0.13215272889213014,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.05297513540825438,
+              "gross_excess": -0.03571616343893236,
+              "max_drawdown": -0.26285092048679737,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 4,
+              "net": -0.22734620413290252,
+              "gross": -0.21428256067673768,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.11709134518273878,
+              "gross_excess": -0.10658379350557534,
+              "max_drawdown": -0.30253019892854593,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 4,
+              "net": -0.22663897881060946,
+              "gross": -0.21392552124883557,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.10014472548581299,
+              "gross_excess": -0.08993653856440209,
+              "max_drawdown": -0.25618660554805783,
+              "orders_per_rebalance_after_first": 7.333333333333333,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.17933587079927027,
+          "mean_net_excess": -0.07807606669169809,
+          "mean_gross_excess": -0.06440714981113227,
+          "net_excess_range": [
+            -0.15981360724415117,
+            0.039644479862466886
+          ],
+          "mean_max_drawdown": -0.26055551935513827,
+          "mean_orders_per_rebalance": 8.366666666666667,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.002498744034307044,
+            "ci95": [
+              -0.00698105262591026,
+              -0.00020788915415763195
+            ],
+            "verdict": "worse"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.005445303596615955,
+            "std": 0.03186034822194376,
+            "q025": -0.06474896189121797,
+            "q975": 0.05709493455890278,
+            "single_phase_q025": -0.13246899175965693,
+            "single_phase_q975": 0.14804667894477774,
+            "c2_percentile": 0.028
+          }
+        },
+        "k5_step5_buffer": {
+          "k": 5,
+          "step_signal_dates": 5,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 5,
+              "net": -0.23435171251218734,
+              "gross": -0.22568337246619263,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.15439284417056887,
+              "gross_excess": -0.1483743576698331,
+              "max_drawdown": -0.2674644504384477,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 5,
+              "net": -0.17532550727921103,
+              "gross": -0.16563590650248616,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.08476475377463122,
+              "gross_excess": -0.0776974437514304,
+              "max_drawdown": -0.28422686762658433,
+              "orders_per_rebalance_after_first": 4.5,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 5,
+              "net": -0.04459351177574944,
+              "gross": -0.03377991392310742,
+              "universe_net": -0.09903028641670242,
+              "net_excess": 0.05443677464095298,
+              "gross_excess": 0.06265665153009037,
+              "max_drawdown": -0.14526206567763655,
+              "orders_per_rebalance_after_first": 3.5,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 4,
+              "net": -0.2691867413719422,
+              "gross": -0.26332714843720906,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.15893188242177847,
+              "gross_excess": -0.15562838126604672,
+              "max_drawdown": -0.31732808044627303,
+              "orders_per_rebalance_after_first": 3.3333333333333335,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 4,
+              "net": -0.17714817321388965,
+              "gross": -0.16884778276228463,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.05065391988909318,
+              "gross_excess": -0.044858800077851146,
+              "max_drawdown": -0.2036215673921492,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.18012112923059592,
+          "mean_net_excess": -0.07886132512302375,
+          "mean_gross_excess": -0.0727804662470142,
+          "net_excess_range": [
+            -0.15893188242177847,
+            0.05443677464095298
+          ],
+          "mean_max_drawdown": -0.24358060631621817,
+          "mean_orders_per_rebalance": 3.866666666666667,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.002583464463235874,
+            "ci95": [
+              -0.006354786520584974,
+              -6.835657409892636e-05
+            ],
+            "verdict": "worse"
+          }
+        },
+        "k10_step5_nobuffer": {
+          "k": 10,
+          "step_signal_dates": 5,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 5,
+              "net": -0.16771300353551255,
+              "gross": -0.1502356188258318,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.08775413519389408,
+              "gross_excess": -0.07292660402947226,
+              "max_drawdown": -0.25099148055192855,
+              "orders_per_rebalance_after_first": 17.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 5,
+              "net": -0.16112395146225222,
+              "gross": -0.1444502238723957,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.07056319795767241,
+              "gross_excess": -0.05651176112133993,
+              "max_drawdown": -0.23550980158187262,
+              "orders_per_rebalance_after_first": 17.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 5,
+              "net": -0.14293940858468734,
+              "gross": -0.1250515873064051,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.043909122167984926,
+              "gross_excess": -0.0286150218532073,
+              "max_drawdown": -0.2247861427483444,
+              "orders_per_rebalance_after_first": 17.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 4,
+              "net": -0.18143057379367555,
+              "gross": -0.16757290950742698,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.07117571484351182,
+              "gross_excess": -0.059874142336264646,
+              "max_drawdown": -0.25125855849861267,
+              "orders_per_rebalance_after_first": 17.333333333333332,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 4,
+              "net": -0.2743729707138456,
+              "gross": -0.2618455947626501,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.14787871738904912,
+              "gross_excess": -0.13785661207821664,
+              "max_drawdown": -0.28088539498864173,
+              "orders_per_rebalance_after_first": 16.666666666666668,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.18551598161799465,
+          "mean_net_excess": -0.08425617751042247,
+          "mean_gross_excess": -0.07115682828370015,
+          "net_excess_range": [
+            -0.14787871738904912,
+            -0.043909122167984926
+          ],
+          "mean_max_drawdown": -0.24868627567388,
+          "mean_orders_per_rebalance": 17.0,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0026138129204612654,
+            "ci95": [
+              -0.005857425975256221,
+              -0.0018563010946980396
+            ],
+            "verdict": "worse"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.004515264142014081,
+            "std": 0.022285286522268268,
+            "q025": -0.044160194364214714,
+            "q975": 0.03825237415288062,
+            "single_phase_q025": -0.09554396389725175,
+            "single_phase_q975": 0.11129583297041941,
+            "c2_percentile": 0.0
+          }
+        },
+        "k10_step5_buffer": {
+          "k": 10,
+          "step_signal_dates": 5,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 5,
+              "net": -0.16370461297447592,
+              "gross": -0.15101959027293888,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.08374574463285744,
+              "gross_excess": -0.07371057547657933,
+              "max_drawdown": -0.23594928788970815,
+              "orders_per_rebalance_after_first": 11.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 5,
+              "net": -0.19640907250203476,
+              "gross": -0.18629157515054195,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.10584831899745495,
+              "gross_excess": -0.09835311239948619,
+              "max_drawdown": -0.265603988963638,
+              "orders_per_rebalance_after_first": 9.5,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 5,
+              "net": -0.11208112612639032,
+              "gross": -0.10217777927553218,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.0130508397096879,
+              "gross_excess": -0.00574121382233439,
+              "max_drawdown": -0.21093185689504634,
+              "orders_per_rebalance_after_first": 7.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 4,
+              "net": -0.22432764051174714,
+              "gross": -0.21715043950912294,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.1140727815615834,
+              "gross_excess": -0.1094516723379606,
+              "max_drawdown": -0.27872839924728576,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 4,
+              "net": -0.2365041651979547,
+              "gross": -0.22796979301905174,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.11000991187315823,
+              "gross_excess": -0.10398081033461826,
+              "max_drawdown": -0.2557898976625611,
+              "orders_per_rebalance_after_first": 9.333333333333334,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.18660532346252057,
+          "mean_net_excess": -0.08534551935494838,
+          "mean_gross_excess": -0.07824747687419575,
+          "net_excess_range": [
+            -0.1140727815615834,
+            -0.0130508397096879
+          ],
+          "mean_max_drawdown": -0.24940068613164787,
+          "mean_orders_per_rebalance": 8.966666666666667,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.002652927238589453,
+            "ci95": [
+              -0.006313523688394301,
+              -0.0010186662501250796
+            ],
+            "verdict": "worse"
+          }
+        },
+        "k20_step5_nobuffer": {
+          "k": 20,
+          "step_signal_dates": 5,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 5,
+              "net": -0.14668318488008947,
+              "gross": -0.12947848998771738,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.066724316538471,
+              "gross_excess": -0.05216947519135784,
+              "max_drawdown": -0.23587821465476,
+              "orders_per_rebalance_after_first": 33.5,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 5,
+              "net": -0.19262014295105812,
+              "gross": -0.17633495278915134,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.1020593894464783,
+              "gross_excess": -0.08839649003809558,
+              "max_drawdown": -0.2572986479084418,
+              "orders_per_rebalance_after_first": 33.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 5,
+              "net": -0.14940632113989094,
+              "gross": -0.13216501919692136,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.05037603472318852,
+              "gross_excess": -0.035728453743723576,
+              "max_drawdown": -0.23013235149283617,
+              "orders_per_rebalance_after_first": 33.5,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 4,
+              "net": -0.1695035646487536,
+              "gross": -0.15546932674670977,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.059248705698589865,
+              "gross_excess": -0.04777055957554743,
+              "max_drawdown": -0.24455300966281324,
+              "orders_per_rebalance_after_first": 35.333333333333336,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 4,
+              "net": -0.20492709656169494,
+              "gross": -0.19162855100899656,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.07843284323689848,
+              "gross_excess": -0.06763956832456308,
+              "max_drawdown": -0.22855247830100833,
+              "orders_per_rebalance_after_first": 33.333333333333336,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.1726280620362974,
+          "mean_net_excess": -0.07136825792872523,
+          "mean_gross_excess": -0.0583409093746575,
+          "net_excess_range": [
+            -0.1020593894464783,
+            -0.05037603472318852
+          ],
+          "mean_max_drawdown": -0.23928294040397188,
+          "mean_orders_per_rebalance": 33.733333333333334,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.00232883295195864,
+            "ci95": [
+              -0.006065721884244212,
+              -0.0007435542559397
+            ],
+            "verdict": "worse"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.0031867450092737297,
+            "std": 0.015160259443584293,
+            "q025": -0.03286002769551398,
+            "q975": 0.025000190958087632,
+            "single_phase_q025": -0.06456747730304353,
+            "single_phase_q975": 0.07778968846737093,
+            "c2_percentile": 0.0
+          }
+        },
+        "k20_step5_buffer": {
+          "k": 20,
+          "step_signal_dates": 5,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 5,
+              "net": -0.15930348487180723,
+              "gross": -0.14903852887592706,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.07934461653018876,
+              "gross_excess": -0.07172951407956751,
+              "max_drawdown": -0.2410153330145205,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 5,
+              "net": -0.17410379529913023,
+              "gross": -0.1642653586311047,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.08354304179455041,
+              "gross_excess": -0.07632689588004893,
+              "max_drawdown": -0.23737698350475267,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 5,
+              "net": -0.1372149734819954,
+              "gross": -0.12833016564106647,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.03818468706529299,
+              "gross_excess": -0.03189360018786869,
+              "max_drawdown": -0.21574773756607568,
+              "orders_per_rebalance_after_first": 13.5,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 4,
+              "net": -0.15835090233034943,
+              "gross": -0.15097619287160768,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.048096043380185693,
+              "gross_excess": -0.04327742570044535,
+              "max_drawdown": -0.22315756303405787,
+              "orders_per_rebalance_after_first": 15.333333333333334,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 4,
+              "net": -0.1933258296618413,
+              "gross": -0.18509147398847592,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.06683157633704484,
+              "gross_excess": -0.06110249130404244,
+              "max_drawdown": -0.2111070139940987,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.16445979712902473,
+          "mean_net_excess": -0.06319999302145254,
+          "mean_gross_excess": -0.05686598543039458,
+          "net_excess_range": [
+            -0.08354304179455041,
+            -0.03818468706529299
+          ],
+          "mean_max_drawdown": -0.22568092622270108,
+          "mean_orders_per_rebalance": 16.566666666666666,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0020365329595441067,
+            "ci95": [
+              -0.004980774616964653,
+              -0.0006238535830777759
+            ],
+            "verdict": "worse"
+          }
+        },
+        "k5_step10_nobuffer": {
+          "k": 5,
+          "step_signal_dates": 10,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 3,
+              "net": -0.18697520680151491,
+              "gross": -0.1771483614313123,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.10701633845989644,
+              "gross_excess": -0.09983934663495275,
+              "max_drawdown": -0.256160221254783,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 3,
+              "net": -0.06767523041541124,
+              "gross": -0.057077762504921026,
+              "universe_net": -0.09056075350457982,
+              "net_excess": 0.02288552308916858,
+              "gross_excess": 0.030860700246134742,
+              "max_drawdown": -0.19124158445870088,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 3,
+              "net": -0.08154093921765371,
+              "gross": -0.06901609400601183,
+              "universe_net": -0.09903028641670242,
+              "net_excess": 0.01748934719904871,
+              "gross_excess": 0.027420471447185957,
+              "max_drawdown": -0.20159719336494109,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 2,
+              "net": -0.2534247822198237,
+              "gross": -0.24887918442666923,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.14316992326965994,
+              "gross_excess": -0.1411804172555069,
+              "max_drawdown": -0.3101045229508236,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 2,
+              "net": -0.22129063060458487,
+              "gross": -0.21521014106263703,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.0947963772797884,
+              "gross_excess": -0.09122115837820355,
+              "max_drawdown": -0.2456580774557463,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-23",
+              "rebalances": 2,
+              "net": -0.30104223139902475,
+              "gross": -0.2952582278894126,
+              "universe_net": -0.12403113636842156,
+              "net_excess": -0.1770110950306032,
+              "gross_excess": -0.173747202390782,
+              "max_drawdown": -0.33905430742923115,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.15892490504107504,
+              "gross": -0.152692842208195,
+              "universe_net": -0.1168777390958925,
+              "net_excess": -0.04204716594518254,
+              "gross_excess": -0.03835686591470566,
+              "max_drawdown": -0.1791576681351078,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.18359629101340214,
+              "gross": -0.1770049829074246,
+              "universe_net": -0.10633621145457439,
+              "net_excess": -0.07726007955882774,
+              "gross_excess": -0.07324125374461521,
+              "max_drawdown": -0.21922276791700424,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.055495210435439035,
+              "gross": -0.04845253378175962,
+              "universe_net": -0.08296280781820331,
+              "net_excess": 0.027467597382764275,
+              "gross_excess": 0.03187066695431051,
+              "max_drawdown": -0.15886705172591198,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.18916571578858188,
+              "gross": -0.18234986981108048,
+              "universe_net": -0.09492444356964658,
+              "net_excess": -0.0942412722189353,
+              "gross_excess": -0.09003492674094338,
+              "max_drawdown": -0.24251929777997372,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.1699131142936511,
+          "mean_net_excess": -0.0667699784091912,
+          "mean_gross_excess": -0.06174693324120782,
+          "net_excess_range": [
+            -0.1770110950306032,
+            0.027467597382764275
+          ],
+          "mean_max_drawdown": -0.23435826924722236,
+          "mean_orders_per_rebalance": 8.8,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.002269795445756083,
+            "ci95": [
+              -0.005341465586883293,
+              -0.0007946848366261848
+            ],
+            "verdict": "worse"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.002955542554063557,
+            "std": 0.02139380349240483,
+            "q025": -0.04816900655014335,
+            "q975": 0.04021928277148215,
+            "single_phase_q025": -0.13040571255084218,
+            "single_phase_q975": 0.1567335287866444,
+            "c2_percentile": 0.002
+          }
+        },
+        "k5_step10_buffer": {
+          "k": 5,
+          "step_signal_dates": 10,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 3,
+              "net": -0.23654554544671802,
+              "gross": -0.23099780805279746,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.15658667710509955,
+              "gross_excess": -0.15368879325643792,
+              "max_drawdown": -0.2735166047834763,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 3,
+              "net": -0.10515566839788837,
+              "gross": -0.09753117544126821,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.014594914893308553,
+              "gross_excess": -0.009592712690212446,
+              "max_drawdown": -0.22453732969661955,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 3,
+              "net": -0.054652755303872036,
+              "gross": -0.04630085639825898,
+              "universe_net": -0.09903028641670242,
+              "net_excess": 0.04437753111283038,
+              "gross_excess": 0.050135709054938804,
+              "max_drawdown": -0.16439067106153604,
+              "orders_per_rebalance_after_first": 5.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 2,
+              "net": -0.2534247822198237,
+              "gross": -0.24887918442666923,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.14316992326965994,
+              "gross_excess": -0.1411804172555069,
+              "max_drawdown": -0.3101045229508236,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 2,
+              "net": -0.18377429599336892,
+              "gross": -0.17948549000570257,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.05728004266857245,
+              "gross_excess": -0.055496507321269095,
+              "max_drawdown": -0.2400083038796379,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-23",
+              "rebalances": 2,
+              "net": -0.31387105681100924,
+              "gross": -0.30895848356063915,
+              "universe_net": -0.12403113636842156,
+              "net_excess": -0.18983992044258768,
+              "gross_excess": -0.18744745806200858,
+              "max_drawdown": -0.3403982105776684,
+              "orders_per_rebalance_after_first": 8.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.18510791186287112,
+              "gross": -0.18064812101424044,
+              "universe_net": -0.1168777390958925,
+              "net_excess": -0.06823017276697863,
+              "gross_excess": -0.06631214472075109,
+              "max_drawdown": -0.20842492217357833,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.11077463550682642,
+              "gross": -0.10688455377348127,
+              "universe_net": -0.10633621145457439,
+              "net_excess": -0.004438424052252032,
+              "gross_excess": -0.0031208246106718684,
+              "max_drawdown": -0.20289770649920558,
+              "orders_per_rebalance_after_first": 4.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.05109427276757783,
+              "gross": -0.04503329576672055,
+              "universe_net": -0.08296280781820331,
+              "net_excess": 0.03186853505062548,
+              "gross_excess": 0.035289904969349584,
+              "max_drawdown": -0.1645286432259202,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.15820291632366557,
+              "gross": -0.1531379688236586,
+              "universe_net": -0.09492444356964658,
+              "net_excess": -0.06327847275401899,
+              "gross_excess": -0.0608230257535215,
+              "max_drawdown": -0.22648854188930423,
+              "orders_per_rebalance_after_first": 6.0,
+              "mean_names": 5.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.16526038406336213,
+          "mean_net_excess": -0.0621172481789022,
+          "mean_gross_excess": -0.0592236269646091,
+          "net_excess_range": [
+            -0.18983992044258768,
+            0.04437753111283038
+          ],
+          "mean_max_drawdown": -0.235529545673777,
+          "mean_orders_per_rebalance": 5.5,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0020858421367738727,
+            "ci95": [
+              -0.00478927153513277,
+              -0.0007300952762964007
+            ],
+            "verdict": "worse"
+          }
+        },
+        "k10_step10_nobuffer": {
+          "k": 10,
+          "step_signal_dates": 10,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 3,
+              "net": -0.13014021171535195,
+              "gross": -0.11886589124116542,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.05018134337373348,
+              "gross_excess": -0.04155687644480588,
+              "max_drawdown": -0.21719838443463824,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 3,
+              "net": -0.10697804985870563,
+              "gross": -0.0964503229544933,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.01641729635412581,
+              "gross_excess": -0.008511860203437527,
+              "max_drawdown": -0.18281739152410337,
+              "orders_per_rebalance_after_first": 17.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 3,
+              "net": -0.12056660076480297,
+              "gross": -0.10925159921913652,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.02153631434810055,
+              "gross_excess": -0.012815033765938733,
+              "max_drawdown": -0.20454987144929693,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 2,
+              "net": -0.2630680521012667,
+              "gross": -0.2580383628686679,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.15281319315110298,
+              "gross_excess": -0.15033959569750555,
+              "max_drawdown": -0.3009663851858341,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 2,
+              "net": -0.21539946312956626,
+              "gross": -0.20889895251045465,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.08890520980476979,
+              "gross_excess": -0.08490996982602117,
+              "max_drawdown": -0.23339239250188737,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-23",
+              "rebalances": 2,
+              "net": -0.24581368017513316,
+              "gross": -0.2402519670054093,
+              "universe_net": -0.12403113636842156,
+              "net_excess": -0.12178254380671161,
+              "gross_excess": -0.11874094150677872,
+              "max_drawdown": -0.2836468680657921,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.20599098002303406,
+              "gross": -0.20008314551524153,
+              "universe_net": -0.1168777390958925,
+              "net_excess": -0.08911324092714157,
+              "gross_excess": -0.08574716922175218,
+              "max_drawdown": -0.22149166716338498,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.13648741639156925,
+              "gross": -0.13100222131041883,
+              "universe_net": -0.10633621145457439,
+              "net_excess": -0.030151204936994858,
+              "gross_excess": -0.027238492147609428,
+              "max_drawdown": -0.18654171468890968,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.044330770405493825,
+              "gross": -0.03707500371036043,
+              "universe_net": -0.08296280781820331,
+              "net_excess": 0.038632037412709486,
+              "gross_excess": 0.0432481970257097,
+              "max_drawdown": -0.14081186789176514,
+              "orders_per_rebalance_after_first": 18.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.19073312845508983,
+              "gross": -0.1841230773400283,
+              "universe_net": -0.09492444356964658,
+              "net_excess": -0.09580868488544325,
+              "gross_excess": -0.0918081342698912,
+              "max_drawdown": -0.21862434608152548,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.16595083530200133,
+          "mean_net_excess": -0.06280769941754144,
+          "mean_gross_excess": -0.05784198760580307,
+          "net_excess_range": [
+            -0.15281319315110298,
+            0.038632037412709486
+          ],
+          "mean_max_drawdown": -0.21900408889871376,
+          "mean_orders_per_rebalance": 17.9,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0020074093214543457,
+            "ci95": [
+              -0.004706066903409829,
+              -0.0014099610248779156
+            ],
+            "verdict": "worse"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.004183362846121893,
+            "std": 0.015620437662735562,
+            "q025": -0.03472503634885126,
+            "q975": 0.029057681627156152,
+            "single_phase_q025": -0.09230806532223546,
+            "single_phase_q975": 0.09875054430131583,
+            "c2_percentile": 0.002
+          }
+        },
+        "k10_step10_buffer": {
+          "k": 10,
+          "step_signal_dates": 10,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 3,
+              "net": -0.1325030742709561,
+              "gross": -0.1240985025334791,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.05254420592933762,
+              "gross_excess": -0.04678948773711955,
+              "max_drawdown": -0.21897102799428259,
+              "orders_per_rebalance_after_first": 12.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 3,
+              "net": -0.13036384745070195,
+              "gross": -0.12349908743764215,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.03980309394612214,
+              "gross_excess": -0.035560624686586384,
+              "max_drawdown": -0.20630071676038475,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 3,
+              "net": -0.13452588147680955,
+              "gross": -0.12749006535141716,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.03549559506010713,
+              "gross_excess": -0.031053499898219372,
+              "max_drawdown": -0.20456316753237502,
+              "orders_per_rebalance_after_first": 9.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 2,
+              "net": -0.25300423488165047,
+              "gross": -0.24903161289123243,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.14274937593148673,
+              "gross_excess": -0.1413328457200701,
+              "max_drawdown": -0.3087841591939554,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 2,
+              "net": -0.21406007743485933,
+              "gross": -0.2084985356263055,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.08756582411006286,
+              "gross_excess": -0.08450955294187201,
+              "max_drawdown": -0.2580934319350401,
+              "orders_per_rebalance_after_first": 14.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-23",
+              "rebalances": 2,
+              "net": -0.2771614406552232,
+              "gross": -0.27267960516755496,
+              "universe_net": -0.12403113636842156,
+              "net_excess": -0.15313030428680163,
+              "gross_excess": -0.15116857966892439,
+              "max_drawdown": -0.3109361986521816,
+              "orders_per_rebalance_after_first": 12.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.19665700179705958,
+              "gross": -0.19201110156814505,
+              "universe_net": -0.1168777390958925,
+              "net_excess": -0.07977926270116709,
+              "gross_excess": -0.0776751252746557,
+              "max_drawdown": -0.22166466287029662,
+              "orders_per_rebalance_after_first": 14.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.12317258728726943,
+              "gross": -0.11887778074530975,
+              "universe_net": -0.10633621145457439,
+              "net_excess": -0.01683637583269504,
+              "gross_excess": -0.015114051582500343,
+              "max_drawdown": -0.18910476802415033,
+              "orders_per_rebalance_after_first": 10.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.025474632644278072,
+              "gross": -0.01948948124972738,
+              "universe_net": -0.08296280781820331,
+              "net_excess": 0.05748817517392524,
+              "gross_excess": 0.06083371948634275,
+              "max_drawdown": -0.15183065868766132,
+              "orders_per_rebalance_after_first": 12.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.1574107042114229,
+              "gross": -0.1518007172369189,
+              "universe_net": -0.09492444356964658,
+              "net_excess": -0.062486260641776314,
+              "gross_excess": -0.0594857741667818,
+              "max_drawdown": -0.21209893156103232,
+              "orders_per_rebalance_after_first": 14.0,
+              "mean_names": 10.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.16443334821102304,
+          "mean_net_excess": -0.061290212326563134,
+          "mean_gross_excess": -0.05818558221903869,
+          "net_excess_range": [
+            -0.15313030428680163,
+            0.05748817517392524
+          ],
+          "mean_max_drawdown": -0.22823477232113604,
+          "mean_orders_per_rebalance": 11.7,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0019588085036273753,
+            "ci95": [
+              -0.0049526898044647,
+              -0.0011510442971528958
+            ],
+            "verdict": "worse"
+          }
+        },
+        "k20_step10_nobuffer": {
+          "k": 20,
+          "step_signal_dates": 10,
+          "buffer": false,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 3,
+              "net": -0.11954594380473882,
+              "gross": -0.1091429267762396,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.03958707546312035,
+              "gross_excess": -0.03183391197988006,
+              "max_drawdown": -0.21287514030560784,
+              "orders_per_rebalance_after_first": 33.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 3,
+              "net": -0.15124261886029,
+              "gross": -0.1404348030252872,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.060681865355710185,
+              "gross_excess": -0.052496340274231446,
+              "max_drawdown": -0.21721862251782553,
+              "orders_per_rebalance_after_first": 37.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 3,
+              "net": -0.118629574745721,
+              "gross": -0.10793714830017176,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.019599288329018583,
+              "gross_excess": -0.011500582846973972,
+              "max_drawdown": -0.20221460969260552,
+              "orders_per_rebalance_after_first": 34.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 2,
+              "net": -0.21928257772562743,
+              "gross": -0.21349540579587656,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.10902771877546369,
+              "gross_excess": -0.10579663862471422,
+              "max_drawdown": -0.2619430986667296,
+              "orders_per_rebalance_after_first": 34.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 2,
+              "net": -0.20618918380627638,
+              "gross": -0.19977209255667916,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.07969493048147991,
+              "gross_excess": -0.07578310987224568,
+              "max_drawdown": -0.23036955034742213,
+              "orders_per_rebalance_after_first": 38.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-23",
+              "rebalances": 2,
+              "net": -0.21635834235985718,
+              "gross": -0.21056687161965804,
+              "universe_net": -0.12403113636842156,
+              "net_excess": -0.09232720599143562,
+              "gross_excess": -0.08905584612102746,
+              "max_drawdown": -0.2526041317038221,
+              "orders_per_rebalance_after_first": 38.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.19815566531840945,
+              "gross": -0.19205638254294943,
+              "universe_net": -0.1168777390958925,
+              "net_excess": -0.08127792622251695,
+              "gross_excess": -0.07772040624946008,
+              "max_drawdown": -0.2154879572860936,
+              "orders_per_rebalance_after_first": 38.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.1770619946105888,
+              "gross": -0.17169992373433485,
+              "universe_net": -0.10633621145457439,
+              "net_excess": -0.07072578315601441,
+              "gross_excess": -0.06793619457152544,
+              "max_drawdown": -0.19296675111700612,
+              "orders_per_rebalance_after_first": 34.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.06289836190801257,
+              "gross": -0.056044165621930486,
+              "universe_net": -0.08296280781820331,
+              "net_excess": 0.020064445910190742,
+              "gross_excess": 0.024279035114139647,
+              "max_drawdown": -0.15186008998834255,
+              "orders_per_rebalance_after_first": 36.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.1349413099748018,
+              "gross": -0.12816795294067873,
+              "universe_net": -0.09492444356964658,
+              "net_excess": -0.04001686640515523,
+              "gross_excess": -0.03585300987054163,
+              "max_drawdown": -0.16474465453113052,
+              "orders_per_rebalance_after_first": 38.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.16043055731143235,
+          "mean_net_excess": -0.05728742142697242,
+          "mean_gross_excess": -0.052369700529646034,
+          "net_excess_range": [
+            -0.10902771877546369,
+            0.020064445910190742
+          ],
+          "mean_max_drawdown": -0.21022846061565853,
+          "mean_orders_per_rebalance": 36.0,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.001976271905339959,
+            "ci95": [
+              -0.0047306993926471445,
+              -0.0009250239772663413
+            ],
+            "verdict": "worse"
+          },
+          "random_books_gross_excess": {
+            "books": 500,
+            "mean": -0.005023371806813132,
+            "std": 0.010646681443696659,
+            "q025": -0.025313288710336196,
+            "q975": 0.01677979614610442,
+            "single_phase_q025": -0.06943336476137048,
+            "single_phase_q975": 0.06107429725287853,
+            "c2_percentile": 0.0
+          }
+        },
+        "k20_step10_buffer": {
+          "k": 20,
+          "step_signal_dates": 10,
+          "buffer": true,
+          "phases": [
+            {
+              "first_trade": "2026-09-16",
+              "rebalances": 3,
+              "net": -0.1401320946601512,
+              "gross": -0.13317629920306884,
+              "universe_net": -0.07995886834161847,
+              "net_excess": -0.060173226318532724,
+              "gross_excess": -0.055867284406709294,
+              "max_drawdown": -0.2234664167843583,
+              "orders_per_rebalance_after_first": 19.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-17",
+              "rebalances": 3,
+              "net": -0.11615088165244347,
+              "gross": -0.10997104479765962,
+              "universe_net": -0.09056075350457982,
+              "net_excess": -0.025590128147863656,
+              "gross_excess": -0.022032582046603855,
+              "max_drawdown": -0.19985442681985943,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-18",
+              "rebalances": 3,
+              "net": -0.14085931346739844,
+              "gross": -0.13443422531765326,
+              "universe_net": -0.09903028641670242,
+              "net_excess": -0.04182902705069602,
+              "gross_excess": -0.03799765986445547,
+              "max_drawdown": -0.21246415019070286,
+              "orders_per_rebalance_after_first": 16.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-21",
+              "rebalances": 2,
+              "net": -0.18821847545185189,
+              "gross": -0.18374879283986445,
+              "universe_net": -0.11025485895016374,
+              "net_excess": -0.07796361650168815,
+              "gross_excess": -0.07605002566870211,
+              "max_drawdown": -0.24354139388399632,
+              "orders_per_rebalance_after_first": 22.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-22",
+              "rebalances": 2,
+              "net": -0.16015722925880005,
+              "gross": -0.15509241314030953,
+              "universe_net": -0.12649425332479647,
+              "net_excess": -0.03366297593400358,
+              "gross_excess": -0.031103430455876047,
+              "max_drawdown": -0.20881653835382974,
+              "orders_per_rebalance_after_first": 24.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-23",
+              "rebalances": 2,
+              "net": -0.24538117417382577,
+              "gross": -0.24073961907053565,
+              "universe_net": -0.12403113636842156,
+              "net_excess": -0.12135003780540421,
+              "gross_excess": -0.11922859357190507,
+              "max_drawdown": -0.28873835570295214,
+              "orders_per_rebalance_after_first": 28.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-24",
+              "rebalances": 2,
+              "net": -0.20450008491106597,
+              "gross": -0.19959073478735823,
+              "universe_net": -0.1168777390958925,
+              "net_excess": -0.08762234581517347,
+              "gross_excess": -0.08525475849386888,
+              "max_drawdown": -0.23009098403595685,
+              "orders_per_rebalance_after_first": 28.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-28",
+              "rebalances": 2,
+              "net": -0.16659938319473,
+              "gross": -0.16261338897594813,
+              "universe_net": -0.10633621145457439,
+              "net_excess": -0.06026317174015561,
+              "gross_excess": -0.05884965981313872,
+              "max_drawdown": -0.19246825209198493,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-29",
+              "rebalances": 2,
+              "net": -0.038356698629587016,
+              "gross": -0.03337227423193756,
+              "universe_net": -0.08296280781820331,
+              "net_excess": 0.044606109188616294,
+              "gross_excess": 0.04695092650413257,
+              "max_drawdown": -0.12848144933790284,
+              "orders_per_rebalance_after_first": 20.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            },
+            {
+              "first_trade": "2026-09-30",
+              "rebalances": 2,
+              "net": -0.13078600202467838,
+              "gross": -0.12562089905824403,
+              "universe_net": -0.09492444356964658,
+              "net_excess": -0.035861558455031806,
+              "gross_excess": -0.03330595598810693,
+              "max_drawdown": -0.17534273842606696,
+              "orders_per_rebalance_after_first": 24.0,
+              "mean_names": 20.0,
+              "blocked_sells": 0
+            }
+          ],
+          "mean_net": -0.15311413374245322,
+          "mean_net_excess": -0.04997099785799329,
+          "mean_gross_excess": -0.04727390238052338,
+          "net_excess_range": [
+            -0.12135003780540421,
+            0.044606109188616294
+          ],
+          "mean_max_drawdown": -0.21032647056276105,
+          "mean_orders_per_rebalance": 21.7,
+          "daily_net_diff_vs_universe": {
+            "mean": -0.0017161491802691641,
+            "ci95": [
+              -0.004495988781670144,
+              -0.0007480748127467616
+            ],
+            "verdict": "worse"
+          }
+        }
+      }
+    }
+  }
+}
