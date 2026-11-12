@@ -18,6 +18,29 @@ STRIDE = os.environ.get("BASE_OOS_STRIDE", "").strip()
 # unchanged, that branch contributes nothing to ranking.
 CONDITION_OFF = os.environ.get("BASE_OOS_CONDITION", "").strip().lower() in {"off", "none", "0"}
 BASE_SOURCE = os.environ.get("BASE_OOS_SOURCE", "").strip()
+# 2026-11-11: production-parity multi-path decode.  BASE_OOS_PATHS=16 samples 16
+# paths per window; predicted_return_d* is then the path-wise aggregate
+# (BASE_OOS_PATH_AGG, default median = production / temporal_rank_ic_v1).  The
+# shard also keeps the path mean, the share of paths that end up, and every
+# path's D10 return, so mean-vs-median and "how many paths are enough" can be
+# answered offline from one run.  PATHS=1 (default) is byte-identical to before.
+N_PATHS = int(os.environ.get("BASE_OOS_PATHS", "1") or "1")
+PATH_AGG = (os.environ.get("BASE_OOS_PATH_AGG", "").strip().lower() or "median")
+if N_PATHS < 1 or PATH_AGG not in {"median", "mean"}:
+    raise RuntimeError(f"Bad path config: paths={N_PATHS} agg={PATH_AGG}")
+BATCH_SIZE = int(os.environ.get("BASE_OOS_BATCH", "24") or "24")
+# Timing probes only: decode just the first N windows of each date so the kernel
+# ends by itself.  Never set this for a run whose metrics are reported.
+MAX_WINDOWS = int(os.environ.get("BASE_OOS_MAX_WINDOWS", "0") or "0")
+
+
+def aggregate_paths(path_returns):
+    """[paths, horizon] returns of one window -> (primary, mean, median, share_up)."""
+    mean = path_returns.mean(0)
+    median = np.median(path_returns, axis=0)
+    share_up = (path_returns > 0).mean(0)
+    primary = mean if (PATH_AGG == "mean" or len(path_returns) == 1) else median
+    return primary, mean, median, share_up
 SECTOR_LABELS = ['A01农业','A02林业','A03畜牧业','A04渔业','A05农、林、牧、渔专业及辅助性活动','B06煤炭开采和洗选业','B07石油和天然气开采业','B08黑色金属矿采选业','B09有色金属矿采选业','B10非金属矿采选业','B11开采专业及辅助性活动','C13农副食品加工业','C14食品制造业','C15酒、饮料和精制茶制造业','C17纺织业','C18纺织服装、服饰业','C19皮革、毛皮、羽毛及其制品和制鞋业','C20木材加工和木、竹、藤、棕、草制品业','C21家具制造业','C22造纸和纸制品业','C23印刷和记录媒介复制业','C24文教、工美、体育和娱乐用品制造业','C25石油、煤炭及其他燃料加工业','C26化学原料和化学制品制造业','C27医药制造业','C28化学纤维制造业','C29橡胶和塑料制品业','C30非金属矿物制品业','C31黑色金属冶炼和压延加工业','C32有色金属冶炼和压延加工业','C33金属制品业','C34通用设备制造业','C35专用设备制造业','C36汽车制造业','C37铁路、船舶、航空航天和其他运输设备制造业','C38电气机械和器材制造业','C39计算机、通信和其他电子设备制造业','C40仪器仪表制造业','C41其他制造业','C42废弃资源综合利用业','C43金属制品、机械和设备修理业','D44电力、热力生产和供应业','D45燃气生产和供应业','D46水的生产和供应业','E47房屋建筑业','E48土木工程建筑业','E49建筑安装业','E50建筑装饰、装修和其他建筑业','F51批发业','F52零售业','G53铁路运输业','G54道路运输业','G55水上运输业','G56航空运输业','G57管道运输业','G58多式联运和运输代理业','G59装卸搬运和仓储业','G60邮政业','H61住宿业','H62餐饮业','I63电信、广播电视和卫星传输服务','I64互联网和相关服务','I65软件和信息技术服务业','J66货币金融服务','J67资本市场服务','J68保险业','J69其他金融业','K70房地产业','L71租赁业','L72商务服务业','M73研究和试验发展','M74专业技术服务业','M75科技推广和应用服务业','N76水利管理业','N77生态保护和环境治理业','N78公共设施管理业','N79土地管理业','O81机动车、电子产品和日用产品修理业','P83教育','Q84卫生','R86新闻和出版业','R87广播、电视、电影和录音制作业','R88文化艺术业','R89体育','S91综合','unknown']
 SECTOR_MAP = {label: i for i, label in enumerate(SECTOR_LABELS)}
 
@@ -104,7 +127,7 @@ class WindowStore:
 def decode(records, store, model, tokenizer, device):
     from model.kronos import auto_regressive_inference
     rows = []
-    batch_size = 24
+    batch_size = BATCH_SIZE
     for offset in range(0, len(records), batch_size):
         items = [store.prepare(r) for r in records[offset:offset + batch_size]]
         x = torch.as_tensor(np.stack([i["x"] for i in items]), device=device)
@@ -115,18 +138,26 @@ def decode(records, store, model, tokenizer, device):
             forecasts = auto_regressive_inference(
                 tokenizer, model, x, stamp[:, :120], stamp[:, 120:130],
                 max_context=512, pred_len=10, clip=5, T=0.65, top_k=0, top_p=0.8,
-                sample_count=1, verbose=False, sector_id=sectors, size_percentile=sizes,
+                sample_count=N_PATHS, verbose=False, sector_id=sectors, size_percentile=sizes,
                 return_samples=True)
         for i, item in enumerate(items):
-            predicted_close = (forecasts[i, :, -10:, 3].astype(np.float64) * (float(item["std"][3]) + 1e-5) + float(item["mean"][3])).mean(0)
-            predicted = predicted_close / item["last_close"] - 1
-            if not np.isfinite(predicted).all():
+            path_close = forecasts[i, :, -10:, 3].astype(np.float64) * (float(item["std"][3]) + 1e-5) + float(item["mean"][3])
+            path_returns = path_close / item["last_close"] - 1
+            if path_returns.shape != (N_PATHS, 10) or not np.isfinite(path_returns).all():
                 raise RuntimeError("Nonfinite prediction")
+            predicted, mean, median, share_up = aggregate_paths(path_returns)
             row = {k: item[k] for k in ("identity","symbol","asof_date","target_date","sector","size_decile","last_close")}
             for h in range(10):
                 row[f"predicted_return_d{h+1}"] = predicted[h]
                 row[f"actual_return_d{h+1}"] = item["actual"][h]
                 row[f"label_date_d{h+1}"] = item["future_dates"][h]
+            if N_PATHS > 1:
+                for h in range(10):
+                    row[f"path_mean_d{h+1}"] = mean[h]
+                    row[f"path_median_d{h+1}"] = median[h]
+                    row[f"path_share_up_d{h+1}"] = share_up[h]
+                for j in range(N_PATHS):
+                    row[f"path{j:02d}_d10"] = path_returns[j, 9]
             rows.append(row)
         if offset % (batch_size * 20) == 0:
             phase("prediction", date=records[0]["asof_date"], done=min(offset + batch_size, len(records)), total=len(records))
@@ -141,6 +172,8 @@ def score(frame):
     for h in range(10):
         out["horizons"][str(h+1)] = dict(direction=float(d[:,h].mean()), return_mae=float(np.abs(e[:,h]).mean()), return_rmse=float(np.sqrt(np.square(e[:,h]).mean())))
     out["d10_daily_rank_ic"] = float(frame.groupby("asof_date").apply(lambda day: day.predicted_return_d10.corr(day.actual_return_d10, method="spearman"), include_groups=False).mean())
+    # "Predict nothing" reference: is the forecast closer to the truth than 0?
+    out["d10_zero_forecast"] = dict(return_mae=float(np.abs(a[:, 9]).mean()), return_rmse=float(np.sqrt(np.square(a[:, 9]).mean())))
     return out
 
 
@@ -173,6 +206,10 @@ def worker(rank):
     panel, samples = load_dataset(dataset_root)
     store = WindowStore(panel)
     hf_repo = os.environ.get("BASE_OOS_HF_REPO", "").strip()
+    # Both CUDA ranks run this worker; a shared HF local_dir makes one rank read
+    # a file the other is still writing.  Defined here, not inside the hf_repo
+    # branch: the tokenizer can come from HF while the weights come from a mount.
+    _rank_tag = f"_r{os.environ.get('BASE_OOS_RANK', '0')}"
     if hf_repo:
         # Straight-from-HF evaluation (kernels have internet).  The upstream
         # checkpoint has no sector_emb/size_mlp tensors, so it cannot go through
@@ -180,10 +217,6 @@ def worker(rank):
         # and load with strict=False, leaving the zero-init heads at zero.
         from huggingface_hub import snapshot_download
         from safetensors.torch import load_file as load_safetensors
-        # Both CUDA ranks run this worker; a shared local_dir makes one rank
-        # read model.safetensors while the other is still writing it
-        # (FileNotFoundError -> "worker failed").  Isolate per rank.
-        _rank_tag = f"_r{os.environ.get('BASE_OOS_RANK', '0')}"
         hf_dir = Path(snapshot_download(repo_id=hf_repo, local_dir=f"/kaggle/working/hf_model{_rank_tag}"))
         weights = hf_dir / "model.safetensors"
         if not weights.is_file():
@@ -244,19 +277,34 @@ def worker(rank):
     tokenizer = KronosTokenizer.from_pretrained(str(tokenizer_hits[0].parent)).to(device).eval()
     phase("model_loaded", label=label, weights=str(weights))
     dates = sorted(samples.asof_date.unique())
+    # Sub-window of the mounted package (inclusive signal dates).  The package
+    # guards above still check the whole package; this only narrows what is decoded.
+    date_from = os.environ.get("BASE_OOS_DATE_FROM", "").strip()
+    date_to = os.environ.get("BASE_OOS_DATE_TO", "").strip()
+    if date_from:
+        dates = [d for d in dates if d >= date_from]
+    if date_to:
+        dates = [d for d in dates if d <= date_to]
+    if not dates:
+        raise RuntimeError(f"No signal dates in [{date_from}, {date_to}]")
     if STRIDE:
         dates = dates[::int(STRIDE)]
     if LIMIT:
         dates = dates[-int(LIMIT):]
     # Two GPUs share the date list: rank 0 takes even dates, rank 1 odd dates.
     dates = dates[rank::2]
-    phase("worker_dates", label=label, rank=rank, n_dates=len(dates), seed=DECODE_SEED)
+    phase("worker_dates", label=label, rank=rank, n_dates=len(dates), seed=DECODE_SEED,
+          paths=N_PATHS, path_agg=PATH_AGG if N_PATHS > 1 else "single", batch=BATCH_SIZE)
     OUTPUT.joinpath("shards").mkdir(parents=True, exist_ok=True)
     for date in dates:
         selected = samples[samples.asof_date == date].to_dict("records")
+        if MAX_WINDOWS:
+            selected = selected[:MAX_WINDOWS]
+        started = time.time()
         frame = decode(selected, store, model, tokenizer, device)
         frame.to_csv(OUTPUT / "shards" / f"{label}_{date}.csv.gz", index=False, compression="gzip")
-        phase("date_done", label=label, date=date, windows=len(frame), metrics=score(frame))
+        phase("date_done", label=label, date=date, windows=len(frame),
+              decode_seconds=round(time.time() - started, 1), metrics=score(frame))
     phase("worker_done", label=label)
 
 
@@ -317,6 +365,8 @@ def main():
     (OUTPUT / "summary.json").write_text(json.dumps(dict(
         window="2026-08-03..2026-09-30 (sealed, REFERENCE only)",
         model=OOS_LABEL, decode_seed=DECODE_SEED,
+        paths=N_PATHS, path_agg=PATH_AGG if N_PATHS > 1 else "single",
+        max_windows_per_date=MAX_WINDOWS or None,
         full_42d=summary, first_use_9d=first_use,
         note="paired comparison vs the other stage is merged locally from the two kernels",
     ), indent=2, ensure_ascii=False))
