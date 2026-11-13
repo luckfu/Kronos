@@ -121,6 +121,7 @@ class Market:
         self.close = pd.DataFrame(close).ffill().to_numpy()
         previous_close = np.vstack([np.full((1, close.shape[1]), np.nan), self.close[:-1]])
         self.open = np.where(self.traded, open_, previous_close)
+        self.high = np.where(self.traded, wide("high"), previous_close)
         median = wide("median_amount")
         self.liquid = self.traded & (median >= ec.MIN_TRAILING_MEDIAN_AMOUNT)
         slip = np.full(median.shape, np.nan)
