@@ -1,0 +1,2339 @@
+{
+  "rules": {
+    "nominal": 0.8,
+    "quantiles": [
+      0.1,
+      0.9
+    ],
+    "buckets": 5,
+    "min_bucket_rows": 500,
+    "min_history_dates": 5,
+    "volatility_window": 20,
+    "bootstrap": {
+      "block": 3,
+      "replicates": 2000,
+      "seed": 20261112
+    },
+    "sealed_after": "2026-10-23",
+    "primary": {
+      "dataset": "PROD",
+      "method": "G",
+      "horizon": 10
+    }
+  },
+  "datasets": {
+    "PROD": {
+      "source": "production:scratch/prod_c2_bands/bands_all.csv.gz",
+      "signal_days": 17,
+      "signal_start": "2026-09-23",
+      "signal_end": "2026-10-23",
+      "rows": 695719,
+      "dropped": {
+        "no_bar_on_signal_day": 0,
+        "price_basis_mismatch": 24340,
+        "label_not_available": 111
+      },
+      "walk_forward": {
+        "evaluated_rows": 310965,
+        "d1": {
+          "first_signal": "2026-10-08",
+          "last_signal": "2026-10-23",
+          "history_dates_range": [
+            5,
+            16
+          ],
+          "mean_forecast": -0.005177930753504887,
+          "mean_actual": -0.004349301262119712,
+          "methods": {
+            "RAW": {
+              "rows": 49491,
+              "signal_days": 12,
+              "coverage": 0.29413428704208844,
+              "coverage_ci95": [
+                0.27325824323580156,
+                0.31432588040535625
+              ],
+              "below": 0.3536602614616799,
+              "above": 0.3522054514962316,
+              "mean_width": 0.023670645818381603,
+              "interval_score": 0.17004767732625067,
+              "daily_coverage_min": 0.13253600195264828,
+              "daily_coverage_max": 0.3888888888888889
+            },
+            "G": {
+              "rows": 49491,
+              "signal_days": 12,
+              "coverage": 0.7731304681659291,
+              "coverage_ci95": [
+                0.7638864804766498,
+                0.8002072183260512
+              ],
+              "below": 0.08290396233658645,
+              "above": 0.1439655694974844,
+              "mean_width": 0.0710532308001805,
+              "interval_score": 0.1250293513741185,
+              "daily_coverage_min": 0.6983158408591652,
+              "daily_coverage_max": 0.8790993636808615
+            },
+            "V": {
+              "rows": 49491,
+              "signal_days": 12,
+              "coverage": 0.7751914489503142,
+              "coverage_ci95": [
+                0.7621299529065149,
+                0.8027394016732248
+              ],
+              "below": 0.08387383564688529,
+              "above": 0.1409347154028005,
+              "mean_width": 0.0735441789172976,
+              "interval_score": 0.11816707604374901,
+              "daily_coverage_min": 0.6409567976568221,
+              "daily_coverage_max": 0.8702887909936368
+            },
+            "S": {
+              "rows": 49491,
+              "signal_days": 12,
+              "coverage": 0.7614111656664848,
+              "coverage_ci95": [
+                0.729940756359947,
+                0.7981250835341004
+              ],
+              "below": 0.11044432321028065,
+              "above": 0.12814451112323452,
+              "mean_width": 0.06391219309763625,
+              "interval_score": 0.11427371555023211,
+              "daily_coverage_min": 0.5794483768611179,
+              "daily_coverage_max": 0.8869920654003366
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "RAW": {
+                "rows": 120,
+                "signal_days": 12,
+                "coverage": 0.2,
+                "coverage_ci95": [
+                  0.09999999999999999,
+                  0.26666666666666666
+                ],
+                "below": 0.7333333333333333,
+                "above": 0.06666666666666667,
+                "mean_width": 0.058570205981327866,
+                "interval_score": 0.48693908240657763,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.5
+              },
+              "G": {
+                "rows": 120,
+                "signal_days": 12,
+                "coverage": 0.15833333333333333,
+                "coverage_ci95": [
+                  0.09166666666666666,
+                  0.225
+                ],
+                "below": 0.7333333333333333,
+                "above": 0.10833333333333334,
+                "mean_width": 0.07104645531442118,
+                "interval_score": 0.4570806132542241,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.5
+              },
+              "V": {
+                "rows": 120,
+                "signal_days": 12,
+                "coverage": 0.3,
+                "coverage_ci95": [
+                  0.225,
+                  0.3666666666666667
+                ],
+                "below": 0.625,
+                "above": 0.075,
+                "mean_width": 0.0989424485633028,
+                "interval_score": 0.3739405735069982,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.7
+              },
+              "S": {
+                "rows": 120,
+                "signal_days": 12,
+                "coverage": 0.36666666666666664,
+                "coverage_ci95": [
+                  0.3083333333333333,
+                  0.45
+                ],
+                "below": 0.5,
+                "above": 0.13333333333333333,
+                "mean_width": 0.08036525996468677,
+                "interval_score": 0.3094841820165977,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.9
+              }
+            },
+            "rank11_100": {
+              "RAW": {
+                "rows": 1080,
+                "signal_days": 12,
+                "coverage": 0.24259259259259258,
+                "coverage_ci95": [
+                  0.14629629629629629,
+                  0.3361342592592591
+                ],
+                "below": 0.649074074074074,
+                "above": 0.10833333333333334,
+                "mean_width": 0.03441839273531035,
+                "interval_score": 0.29219246485928363,
+                "daily_coverage_min": 0.022222222222222223,
+                "daily_coverage_max": 0.5333333333333333
+              },
+              "G": {
+                "rows": 1080,
+                "signal_days": 12,
+                "coverage": 0.5453703703703704,
+                "coverage_ci95": [
+                  0.449074074074074,
+                  0.6574074074074073
+                ],
+                "below": 0.41388888888888886,
+                "above": 0.040740740740740744,
+                "mean_width": 0.07104645531442116,
+                "interval_score": 0.20941929432414827,
+                "daily_coverage_min": 0.03333333333333333,
+                "daily_coverage_max": 0.8777777777777778
+              },
+              "V": {
+                "rows": 1080,
+                "signal_days": 12,
+                "coverage": 0.6101851851851852,
+                "coverage_ci95": [
+                  0.5222222222222221,
+                  0.725925925925926
+                ],
+                "below": 0.35462962962962963,
+                "above": 0.03518518518518519,
+                "mean_width": 0.0888258802248394,
+                "interval_score": 0.18430152870793426,
+                "daily_coverage_min": 0.08888888888888889,
+                "daily_coverage_max": 0.9111111111111111
+              },
+              "S": {
+                "rows": 1080,
+                "signal_days": 12,
+                "coverage": 0.7157407407407408,
+                "coverage_ci95": [
+                  0.6620138888888887,
+                  0.7861111111111111
+                ],
+                "below": 0.20092592592592592,
+                "above": 0.08333333333333333,
+                "mean_width": 0.07752149664696922,
+                "interval_score": 0.141073595081584,
+                "daily_coverage_min": 0.2777777777777778,
+                "daily_coverage_max": 0.9
+              }
+            },
+            "rest": {
+              "RAW": {
+                "rows": 48291,
+                "signal_days": 12,
+                "coverage": 0.29552090451636953,
+                "coverage_ci95": [
+                  0.27365572717295694,
+                  0.3162298514361187
+                ],
+                "below": 0.34611004120850675,
+                "above": 0.3583690542751237,
+                "mean_width": 0.02334355559681161,
+                "interval_score": 0.16652852594927947,
+                "daily_coverage_min": 0.13535151363522643,
+                "daily_coverage_max": 0.3941294530858003
+              },
+              "G": {
+                "rows": 48291,
+                "signal_days": 12,
+                "coverage": 0.7797519206477398,
+                "coverage_ci95": [
+                  0.7682784775621245,
+                  0.8078301186416511
+                ],
+                "below": 0.07388540307717795,
+                "above": 0.14636267627508232,
+                "mean_width": 0.07105339916660305,
+                "interval_score": 0.12231689377722371,
+                "daily_coverage_min": 0.7097323600973237,
+                "daily_coverage_max": 0.8843452082288008
+              },
+              "V": {
+                "rows": 48291,
+                "signal_days": 12,
+                "coverage": 0.7800625375328736,
+                "coverage_ci95": [
+                  0.7669681056022047,
+                  0.8072369623396244
+                ],
+                "below": 0.07647387711996025,
+                "above": 0.14346358534716613,
+                "mean_width": 0.07313929954495771,
+                "interval_score": 0.11605243711366041,
+                "daily_coverage_min": 0.6539904928696523,
+                "daily_coverage_max": 0.8760662318113397
+              },
+              "S": {
+                "rows": 48291,
+                "signal_days": 12,
+                "coverage": 0.7634134724896978,
+                "coverage_ci95": [
+                  0.7302070437810104,
+                  0.7995451030130125
+                ],
+                "below": 0.1074527344639788,
+                "above": 0.12913379304632333,
+                "mean_width": 0.06356694417221898,
+                "interval_score": 0.1131892665665742,
+                "daily_coverage_min": 0.5819364523392544,
+                "daily_coverage_max": 0.8881497905888149
+              }
+            }
+          }
+        },
+        "d5": {
+          "first_signal": "2026-10-14",
+          "last_signal": "2026-10-23",
+          "history_dates_range": [
+            5,
+            12
+          ],
+          "mean_forecast": -0.026606905935665927,
+          "mean_actual": -0.02496868319883679,
+          "methods": {
+            "RAW": {
+              "rows": 33202,
+              "signal_days": 8,
+              "coverage": 0.295102704656346,
+              "coverage_ci95": [
+                0.2713891415201273,
+                0.33005562160423807
+              ],
+              "below": 0.38039877115836396,
+              "above": 0.32449852418529,
+              "mean_width": 0.03997603174851288,
+              "interval_score": 0.3384085065107524,
+              "daily_coverage_min": 0.25396825396825395,
+              "daily_coverage_max": 0.34014598540145985
+            },
+            "G": {
+              "rows": 33202,
+              "signal_days": 8,
+              "coverage": 0.7712186012890789,
+              "coverage_ci95": [
+                0.7218876167852653,
+                0.7964919552660124
+              ],
+              "below": 0.033220890307812785,
+              "above": 0.19556050840310824,
+              "mean_width": 0.15623140785466208,
+              "interval_score": 0.28364433034177905,
+              "daily_coverage_min": 0.6496861419604056,
+              "daily_coverage_max": 0.8381742738589212
+            },
+            "V": {
+              "rows": 33202,
+              "signal_days": 8,
+              "coverage": 0.7741401120414433,
+              "coverage_ci95": [
+                0.7269893472132336,
+                0.7993762613571701
+              ],
+              "below": 0.03186555026805614,
+              "above": 0.19399433769050056,
+              "mean_width": 0.15430446974831816,
+              "interval_score": 0.2750332715509036,
+              "daily_coverage_min": 0.6506518590053114,
+              "daily_coverage_max": 0.8408591652428606
+            },
+            "S": {
+              "rows": 33202,
+              "signal_days": 8,
+              "coverage": 0.8053430516233961,
+              "coverage_ci95": [
+                0.7847403181052959,
+                0.8380596478462743
+              ],
+              "below": 0.06770676465273176,
+              "above": 0.12695018372387207,
+              "mean_width": 0.1479642880018051,
+              "interval_score": 0.2531567205211663,
+              "daily_coverage_min": 0.7052256532066509,
+              "daily_coverage_max": 0.880888454967049
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "RAW": {
+                "rows": 80,
+                "signal_days": 8,
+                "coverage": 0.225,
+                "coverage_ci95": [
+                  0.1375,
+                  0.275
+                ],
+                "below": 0.675,
+                "above": 0.1,
+                "mean_width": 0.09728612821900533,
+                "interval_score": 0.7683264067516348,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.5
+              },
+              "G": {
+                "rows": 80,
+                "signal_days": 8,
+                "coverage": 0.5,
+                "coverage_ci95": [
+                  0.4125,
+                  0.6375
+                ],
+                "below": 0.4125,
+                "above": 0.0875,
+                "mean_width": 0.15628689242390575,
+                "interval_score": 0.4491673917249236,
+                "daily_coverage_min": 0.2,
+                "daily_coverage_max": 0.7
+              },
+              "V": {
+                "rows": 80,
+                "signal_days": 8,
+                "coverage": 0.6375,
+                "coverage_ci95": [
+                  0.45,
+                  0.8125
+                ],
+                "below": 0.275,
+                "above": 0.0875,
+                "mean_width": 0.19138302946079838,
+                "interval_score": 0.3796104433256203,
+                "daily_coverage_min": 0.3,
+                "daily_coverage_max": 0.9
+              },
+              "S": {
+                "rows": 80,
+                "signal_days": 8,
+                "coverage": 0.8,
+                "coverage_ci95": [
+                  0.725,
+                  0.8753124999999983
+                ],
+                "below": 0.075,
+                "above": 0.125,
+                "mean_width": 0.18337094488638256,
+                "interval_score": 0.3759654466106512,
+                "daily_coverage_min": 0.7,
+                "daily_coverage_max": 1.0
+              }
+            },
+            "rank11_100": {
+              "RAW": {
+                "rows": 720,
+                "signal_days": 8,
+                "coverage": 0.2388888888888889,
+                "coverage_ci95": [
+                  0.19027777777777777,
+                  0.3236111111111111
+                ],
+                "below": 0.6,
+                "above": 0.16111111111111112,
+                "mean_width": 0.05143436761378685,
+                "interval_score": 0.4867351461227456,
+                "daily_coverage_min": 0.13333333333333333,
+                "daily_coverage_max": 0.37777777777777777
+              },
+              "G": {
+                "rows": 720,
+                "signal_days": 8,
+                "coverage": 0.7722222222222223,
+                "coverage_ci95": [
+                  0.7097222222222221,
+                  0.85
+                ],
+                "below": 0.13472222222222222,
+                "above": 0.09305555555555556,
+                "mean_width": 0.15628689242390573,
+                "interval_score": 0.29198849538122573,
+                "daily_coverage_min": 0.6,
+                "daily_coverage_max": 0.9111111111111111
+              },
+              "V": {
+                "rows": 720,
+                "signal_days": 8,
+                "coverage": 0.8027777777777778,
+                "coverage_ci95": [
+                  0.7625,
+                  0.8652777777777778
+                ],
+                "below": 0.10555555555555556,
+                "above": 0.09166666666666666,
+                "mean_width": 0.1709988458299923,
+                "interval_score": 0.2752665494993067,
+                "daily_coverage_min": 0.5333333333333333,
+                "daily_coverage_max": 0.9
+              },
+              "S": {
+                "rows": 720,
+                "signal_days": 8,
+                "coverage": 0.7597222222222222,
+                "coverage_ci95": [
+                  0.7388888888888889,
+                  0.8111111111111111
+                ],
+                "below": 0.11388888888888889,
+                "above": 0.12638888888888888,
+                "mean_width": 0.14632685057973996,
+                "interval_score": 0.2919209747920722,
+                "daily_coverage_min": 0.4777777777777778,
+                "daily_coverage_max": 0.8777777777777778
+              }
+            },
+            "rest": {
+              "RAW": {
+                "rows": 32402,
+                "signal_days": 8,
+                "coverage": 0.296524905870008,
+                "coverage_ci95": [
+                  0.27307607952296686,
+                  0.3312769873179344
+                ],
+                "below": 0.3747916795259552,
+                "above": 0.32868341460403677,
+                "mean_width": 0.03957992010291579,
+                "interval_score": 0.3340511022597831,
+                "daily_coverage_min": 0.2548053228191227,
+                "daily_coverage_max": 0.34139650872817956
+              },
+              "G": {
+                "rows": 32402,
+                "signal_days": 8,
+                "coverage": 0.7718659342015924,
+                "coverage_ci95": [
+                  0.7195503456207655,
+                  0.7976449359594106
+                ],
+                "below": 0.030029010554904017,
+                "above": 0.1981050552435035,
+                "mean_width": 0.15623003794986007,
+                "interval_score": 0.28305024220712527,
+                "daily_coverage_min": 0.644235526966848,
+                "daily_coverage_max": 0.8376282211658744
+              },
+              "V": {
+                "rows": 32402,
+                "signal_days": 8,
+                "coverage": 0.7738411209184618,
+                "coverage_ci95": [
+                  0.724005150922691,
+                  0.800422128325277
+                ],
+                "below": 0.029627800753039935,
+                "above": 0.19653107832849825,
+                "mean_width": 0.15384196016385412,
+                "interval_score": 0.2747698886157506,
+                "daily_coverage_min": 0.6449777337951509,
+                "daily_coverage_max": 0.8393795346509882
+              },
+              "S": {
+                "rows": 32402,
+                "signal_days": 8,
+                "coverage": 0.8063699771619036,
+                "coverage_ci95": [
+                  0.7855902777991426,
+                  0.838786380104791
+                ],
+                "below": 0.06666255169433985,
+                "above": 0.12696747114375656,
+                "mean_width": 0.14791325480611106,
+                "interval_score": 0.2519921331141478,
+                "daily_coverage_min": 0.7102189781021898,
+                "daily_coverage_max": 0.8806604953715287
+              }
+            }
+          }
+        },
+        "d10": {
+          "first_signal": "2026-10-21",
+          "last_signal": "2026-10-23",
+          "history_dates_range": [
+            5,
+            7
+          ],
+          "mean_forecast": -0.02984067378551087,
+          "mean_actual": -0.017803223774050365,
+          "methods": {
+            "RAW": {
+              "rows": 12547,
+              "signal_days": 3,
+              "coverage": 0.3137004861719933,
+              "coverage_ci95": null,
+              "below": 0.30429584761297523,
+              "above": 0.38200366621503146,
+              "mean_width": 0.06322237236725428,
+              "interval_score": 0.4595917467162446,
+              "daily_coverage_min": 0.2725306416726748,
+              "daily_coverage_max": 0.35632730732635587
+            },
+            "G": {
+              "rows": 12547,
+              "signal_days": 3,
+              "coverage": 0.6746632661193911,
+              "coverage_ci95": null,
+              "below": 0.021359687574719056,
+              "above": 0.30397704630588984,
+              "mean_width": 0.2044091863987194,
+              "interval_score": 0.4226479272639827,
+              "daily_coverage_min": 0.6114299378287901,
+              "daily_coverage_max": 0.7082432107666427
+            },
+            "V": {
+              "rows": 12547,
+              "signal_days": 3,
+              "coverage": 0.6797640870327568,
+              "coverage_ci95": null,
+              "below": 0.015461863393639913,
+              "above": 0.30477404957360327,
+              "mean_width": 0.19997669273669877,
+              "interval_score": 0.41340782292054307,
+              "daily_coverage_min": 0.6152558584409373,
+              "daily_coverage_max": 0.7128924833491912
+            },
+            "S": {
+              "rows": 12547,
+              "signal_days": 3,
+              "coverage": 0.7450386546584841,
+              "coverage_ci95": null,
+              "below": 0.025025902606200686,
+              "above": 0.22993544273531522,
+              "mean_width": 0.20794134418286483,
+              "interval_score": 0.37708997197003413,
+              "daily_coverage_min": 0.6685796269727403,
+              "daily_coverage_max": 0.7993270848353761
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "RAW": {
+                "rows": 30,
+                "signal_days": 3,
+                "coverage": 0.26666666666666666,
+                "coverage_ci95": null,
+                "below": 0.5666666666666667,
+                "above": 0.16666666666666666,
+                "mean_width": 0.1464524479895464,
+                "interval_score": 0.9495153957906113,
+                "daily_coverage_min": 0.1,
+                "daily_coverage_max": 0.4
+              },
+              "G": {
+                "rows": 30,
+                "signal_days": 3,
+                "coverage": 0.5333333333333333,
+                "coverage_ci95": null,
+                "below": 0.3,
+                "above": 0.16666666666666666,
+                "mean_width": 0.20442196976899402,
+                "interval_score": 0.5770436153870094,
+                "daily_coverage_min": 0.4,
+                "daily_coverage_max": 0.6
+              },
+              "V": {
+                "rows": 30,
+                "signal_days": 3,
+                "coverage": 0.7,
+                "coverage_ci95": null,
+                "below": 0.13333333333333333,
+                "above": 0.16666666666666666,
+                "mean_width": 0.2581707393297418,
+                "interval_score": 0.5159009601541349,
+                "daily_coverage_min": 0.6,
+                "daily_coverage_max": 0.8
+              },
+              "S": {
+                "rows": 30,
+                "signal_days": 3,
+                "coverage": 0.6333333333333333,
+                "coverage_ci95": null,
+                "below": 0.1,
+                "above": 0.26666666666666666,
+                "mean_width": 0.21266162582510997,
+                "interval_score": 0.5810349820658985,
+                "daily_coverage_min": 0.6,
+                "daily_coverage_max": 0.7
+              }
+            },
+            "rank11_100": {
+              "RAW": {
+                "rows": 270,
+                "signal_days": 3,
+                "coverage": 0.29259259259259257,
+                "coverage_ci95": null,
+                "below": 0.5444444444444444,
+                "above": 0.16296296296296298,
+                "mean_width": 0.08707006552036989,
+                "interval_score": 0.6130825272545476,
+                "daily_coverage_min": 0.2222222222222222,
+                "daily_coverage_max": 0.3888888888888889
+              },
+              "G": {
+                "rows": 270,
+                "signal_days": 3,
+                "coverage": 0.7333333333333333,
+                "coverage_ci95": null,
+                "below": 0.13703703703703704,
+                "above": 0.12962962962962962,
+                "mean_width": 0.20442196976899396,
+                "interval_score": 0.39568326418949357,
+                "daily_coverage_min": 0.7111111111111111,
+                "daily_coverage_max": 0.7666666666666667
+              },
+              "V": {
+                "rows": 270,
+                "signal_days": 3,
+                "coverage": 0.7925925925925926,
+                "coverage_ci95": null,
+                "below": 0.07407407407407407,
+                "above": 0.13333333333333333,
+                "mean_width": 0.22572654929068303,
+                "interval_score": 0.3630954095160444,
+                "daily_coverage_min": 0.7777777777777778,
+                "daily_coverage_max": 0.8111111111111111
+              },
+              "S": {
+                "rows": 270,
+                "signal_days": 3,
+                "coverage": 0.6777777777777778,
+                "coverage_ci95": null,
+                "below": 0.07037037037037037,
+                "above": 0.2518518518518518,
+                "mean_width": 0.20712345830209672,
+                "interval_score": 0.4336843960339998,
+                "daily_coverage_min": 0.5777777777777777,
+                "daily_coverage_max": 0.7444444444444445
+              }
+            },
+            "rest": {
+              "RAW": {
+                "rows": 12247,
+                "signal_days": 3,
+                "coverage": 0.31428104842002125,
+                "coverage_ci95": null,
+                "below": 0.29835878174246755,
+                "above": 0.3873601698375112,
+                "mean_width": 0.06249274230111482,
+                "interval_score": 0.4550077489847533,
+                "daily_coverage_min": 0.27333169170155136,
+                "daily_coverage_max": 0.3557504873294347
+              },
+              "G": {
+                "rows": 12247,
+                "signal_days": 3,
+                "coverage": 0.6737160120845922,
+                "coverage_ci95": null,
+                "below": 0.01812688821752266,
+                "above": 0.3081570996978852,
+                "mean_width": 0.20440887325990317,
+                "interval_score": 0.4228641915235092,
+                "daily_coverage_min": 0.6092601665850074,
+                "daily_coverage_max": 0.7072149716818518
+              },
+              "V": {
+                "rows": 12247,
+                "signal_days": 3,
+                "coverage": 0.6772270760186168,
+                "coverage_ci95": null,
+                "below": 0.013880950436841675,
+                "above": 0.3088919735445415,
+                "mean_width": 0.1992664549096908,
+                "interval_score": 0.4142659561370211,
+                "daily_coverage_min": 0.6109750122488976,
+                "daily_coverage_max": 0.7117446393762183
+              },
+              "S": {
+                "rows": 12247,
+                "signal_days": 3,
+                "coverage": 0.7467951335020822,
+                "coverage_ci95": null,
+                "below": 0.02384257369151629,
+                "above": 0.22936229280640158,
+                "mean_width": 0.2079478127660722,
+                "interval_score": 0.3753426995931135,
+                "daily_coverage_min": 0.6678098971092602,
+                "daily_coverage_max": 0.8007879832553558
+              }
+            }
+          }
+        }
+      },
+      "offsets_from_all_matured": {
+        "1": {
+          "low": -0.03877006760703272,
+          "high": 0.034797092064902675,
+          "median_error": -0.00066450567260945,
+          "rows": 69583,
+          "signal_days": 17
+        },
+        "2": {
+          "low": -0.05188205292531167,
+          "high": 0.04112831615234726,
+          "median_error": -0.005216972034715606,
+          "rows": 69583,
+          "signal_days": 17
+        },
+        "3": {
+          "low": -0.0644198631834683,
+          "high": 0.04800515119677879,
+          "median_error": -0.006351575456053027,
+          "rows": 69583,
+          "signal_days": 17
+        },
+        "4": {
+          "low": -0.07921402820784103,
+          "high": 0.0544950559908412,
+          "median_error": -0.010202723778051315,
+          "rows": 69582,
+          "signal_days": 17
+        },
+        "5": {
+          "low": -0.09340645161290317,
+          "high": 0.057122641509433913,
+          "median_error": -0.014710698689956114,
+          "rows": 69581,
+          "signal_days": 17
+        },
+        "6": {
+          "low": -0.10331015231800084,
+          "high": 0.06466157862353078,
+          "median_error": -0.016684647012180864,
+          "rows": 69576,
+          "signal_days": 17
+        },
+        "7": {
+          "low": -0.11196738816738816,
+          "high": 0.06911706275461495,
+          "median_error": -0.020217162872154137,
+          "rows": 69569,
+          "signal_days": 17
+        },
+        "8": {
+          "low": -0.11504413819487999,
+          "high": 0.07323126433111768,
+          "median_error": -0.02134736828799677,
+          "rows": 69562,
+          "signal_days": 17
+        },
+        "9": {
+          "low": -0.11924003253393552,
+          "high": 0.08018967512526266,
+          "median_error": -0.022706937020559315,
+          "rows": 69554,
+          "signal_days": 17
+        },
+        "10": {
+          "low": -0.12166508855736485,
+          "high": 0.08447644901710671,
+          "median_error": -0.02385864408645605,
+          "rows": 69546,
+          "signal_days": 17
+        }
+      }
+    },
+    "EVAL": {
+      "source": "shards:scratch/c2_roll/eval/c2",
+      "signal_days": 23,
+      "signal_start": "2026-09-15",
+      "signal_end": "2026-10-23",
+      "rows": 1187640,
+      "dropped": {
+        "no_bar_on_signal_day": 0,
+        "price_basis_mismatch": 0,
+        "label_not_available": 0
+      },
+      "walk_forward": {
+        "evaluated_rows": 697287,
+        "d1": {
+          "first_signal": "2026-09-22",
+          "last_signal": "2026-10-23",
+          "history_dates_range": [
+            5,
+            22
+          ],
+          "mean_forecast": -0.00493283433208785,
+          "mean_actual": -0.005505979335206129,
+          "methods": {
+            "G": {
+              "rows": 92962,
+              "signal_days": 18,
+              "coverage": 0.7368602224564876,
+              "coverage_ci95": [
+                0.6956824736819122,
+                0.7734087372512933
+              ],
+              "below": 0.17338267248983455,
+              "above": 0.08975710505367784,
+              "mean_width": 0.06917082041816824,
+              "interval_score": 0.1381838283338039,
+              "daily_coverage_min": 0.4990317583268784,
+              "daily_coverage_max": 0.8688746852605075
+            },
+            "V": {
+              "rows": 92962,
+              "signal_days": 18,
+              "coverage": 0.7347303199156645,
+              "coverage_ci95": [
+                0.6895270100473391,
+                0.7814105704515627
+              ],
+              "below": 0.16975753533701943,
+              "above": 0.0955121447473161,
+              "mean_width": 0.071229931369524,
+              "interval_score": 0.1303067194267191,
+              "daily_coverage_min": 0.47443841982958945,
+              "daily_coverage_max": 0.8679318357862122
+            },
+            "S": {
+              "rows": 92962,
+              "signal_days": 18,
+              "coverage": 0.7289752802220262,
+              "coverage_ci95": [
+                0.6847069182064827,
+                0.7760026614695505
+              ],
+              "below": 0.18956132613325874,
+              "above": 0.08146339364471504,
+              "mean_width": 0.06346191882790692,
+              "interval_score": 0.12574940253158698,
+              "daily_coverage_min": 0.4802555168408827,
+              "daily_coverage_max": 0.9005225469324559
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "G": {
+                "rows": 180,
+                "signal_days": 18,
+                "coverage": 0.07222222222222222,
+                "coverage_ci95": [
+                  0.044444444444444446,
+                  0.1
+                ],
+                "below": 0.8944444444444445,
+                "above": 0.03333333333333333,
+                "mean_width": 0.06916980310013371,
+                "interval_score": 1.4026905221698591,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.2
+              },
+              "V": {
+                "rows": 180,
+                "signal_days": 18,
+                "coverage": 0.09444444444444444,
+                "coverage_ci95": [
+                  0.061111111111111116,
+                  0.12222222222222223
+                ],
+                "below": 0.8888888888888888,
+                "above": 0.016666666666666666,
+                "mean_width": 0.09138854030071156,
+                "interval_score": 1.3476109927014452,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.3
+              },
+              "S": {
+                "rows": 180,
+                "signal_days": 18,
+                "coverage": 0.08888888888888889,
+                "coverage_ci95": [
+                  0.05,
+                  0.1388888888888889
+                ],
+                "below": 0.8611111111111112,
+                "above": 0.05,
+                "mean_width": 0.07264840506393844,
+                "interval_score": 1.2113974024621132,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.4
+              }
+            },
+            "rank11_100": {
+              "G": {
+                "rows": 1620,
+                "signal_days": 18,
+                "coverage": 0.2962962962962963,
+                "coverage_ci95": [
+                  0.16973765432098764,
+                  0.41975308641975306
+                ],
+                "below": 0.6777777777777778,
+                "above": 0.025925925925925925,
+                "mean_width": 0.06916980310013371,
+                "interval_score": 0.3285351180630754,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.7555555555555555
+              },
+              "V": {
+                "rows": 1620,
+                "signal_days": 18,
+                "coverage": 0.3790123456790123,
+                "coverage_ci95": [
+                  0.23145061728395058,
+                  0.5123611111111109
+                ],
+                "below": 0.6030864197530864,
+                "above": 0.017901234567901235,
+                "mean_width": 0.08860579716027565,
+                "interval_score": 0.29682421960921035,
+                "daily_coverage_min": 0.022222222222222223,
+                "daily_coverage_max": 0.8333333333333334
+              },
+              "S": {
+                "rows": 1620,
+                "signal_days": 18,
+                "coverage": 0.5185185185185185,
+                "coverage_ci95": [
+                  0.3567746913580247,
+                  0.6734722222222221
+                ],
+                "below": 0.43703703703703706,
+                "above": 0.044444444444444446,
+                "mean_width": 0.0721491216526205,
+                "interval_score": 0.21973925297499652,
+                "daily_coverage_min": 0.022222222222222223,
+                "daily_coverage_max": 0.8666666666666667
+              }
+            },
+            "rest": {
+              "G": {
+                "rows": 91162,
+                "signal_days": 18,
+                "coverage": 0.746001623483469,
+                "coverage_ci95": [
+                  0.7056337658280407,
+                  0.7813032557500059
+                ],
+                "below": 0.16299554638994318,
+                "above": 0.09100283012658783,
+                "mean_width": 0.06917084050518325,
+                "interval_score": 0.13230440166203375,
+                "daily_coverage_min": 0.5086887835703001,
+                "daily_coverage_max": 0.8785305155046416
+              },
+              "V": {
+                "rows": 91162,
+                "signal_days": 18,
+                "coverage": 0.7423158772295474,
+                "coverage_ci95": [
+                  0.6984307891285976,
+                  0.787377059477217
+                ],
+                "below": 0.16063710756674932,
+                "above": 0.09704701520370329,
+                "mean_width": 0.07088134915118048,
+                "interval_score": 0.12494403410295388,
+                "daily_coverage_min": 0.48321484992101105,
+                "daily_coverage_max": 0.874382777009678
+              },
+              "S": {
+                "rows": 91162,
+                "signal_days": 18,
+                "coverage": 0.7339790702266296,
+                "coverage_ci95": [
+                  0.6910168101885437,
+                  0.780266091689135
+                ],
+                "below": 0.18383756389723788,
+                "above": 0.0821833658761326,
+                "mean_width": 0.06328940356827545,
+                "interval_score": 0.12193553054867942,
+                "daily_coverage_min": 0.4851954204500592,
+                "daily_coverage_max": 0.9023090586145648
+              }
+            }
+          }
+        },
+        "d5": {
+          "first_signal": "2026-09-29",
+          "last_signal": "2026-10-23",
+          "history_dates_range": [
+            5,
+            18
+          ],
+          "mean_forecast": -0.01702041197180937,
+          "mean_actual": -0.031064899706233155,
+          "methods": {
+            "G": {
+              "rows": 72311,
+              "signal_days": 14,
+              "coverage": 0.7296261979505193,
+              "coverage_ci95": [
+                0.5791896526723092,
+                0.8556573184172154
+              ],
+              "below": 0.1963463373483979,
+              "above": 0.07402746470108282,
+              "mean_width": 0.15933785557655405,
+              "interval_score": 0.31700692831001936,
+              "daily_coverage_min": 0.3838109992254067,
+              "daily_coverage_max": 0.905093937633159
+            },
+            "V": {
+              "rows": 72311,
+              "signal_days": 14,
+              "coverage": 0.72435729003886,
+              "coverage_ci95": [
+                0.5651673897526324,
+                0.8558260442553285
+              ],
+              "below": 0.1972867198628148,
+              "above": 0.07835599009832529,
+              "mean_width": 0.16374886070526176,
+              "interval_score": 0.3066744963606351,
+              "daily_coverage_min": 0.36115414407436097,
+              "daily_coverage_max": 0.9006968641114983
+            },
+            "S": {
+              "rows": 72311,
+              "signal_days": 14,
+              "coverage": 0.7059783435438591,
+              "coverage_ci95": [
+                0.5617352585696989,
+                0.8396499849760912
+              ],
+              "below": 0.236492373221225,
+              "above": 0.05752928323491585,
+              "mean_width": 0.14597448806983362,
+              "interval_score": 0.305946226248059,
+              "daily_coverage_min": 0.36076684740511233,
+              "daily_coverage_max": 0.8763066202090593
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "G": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.10714285714285714,
+                "coverage_ci95": [
+                  0.06428571428571428,
+                  0.1785714285714286
+                ],
+                "below": 0.8642857142857143,
+                "above": 0.02857142857142857,
+                "mean_width": 0.15933496066420327,
+                "interval_score": 1.4585694476801323,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.4
+              },
+              "V": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.21428571428571427,
+                "coverage_ci95": [
+                  0.1285714285714286,
+                  0.33571428571428574
+                ],
+                "below": 0.7714285714285715,
+                "above": 0.014285714285714285,
+                "mean_width": 0.2104160793088557,
+                "interval_score": 1.3223794321810218,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.6
+              },
+              "S": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.3357142857142857,
+                "coverage_ci95": [
+                  0.18571428571428572,
+                  0.507142857142857
+                ],
+                "below": 0.6214285714285714,
+                "above": 0.04285714285714286,
+                "mean_width": 0.1763221231415992,
+                "interval_score": 1.1344828801852658,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.8
+              }
+            },
+            "rank11_100": {
+              "G": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.4595238095238095,
+                "coverage_ci95": [
+                  0.2119047619047619,
+                  0.7222222222222221
+                ],
+                "below": 0.5174603174603175,
+                "above": 0.023015873015873017,
+                "mean_width": 0.1593349606642033,
+                "interval_score": 0.6939443650127574,
+                "daily_coverage_min": 0.022222222222222223,
+                "daily_coverage_max": 0.8666666666666667
+              },
+              "V": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.5166666666666667,
+                "coverage_ci95": [
+                  0.25710317460317456,
+                  0.7873214285714285
+                ],
+                "below": 0.45714285714285713,
+                "above": 0.02619047619047619,
+                "mean_width": 0.1981650445878001,
+                "interval_score": 0.6376309416297796,
+                "daily_coverage_min": 0.03333333333333333,
+                "daily_coverage_max": 0.9
+              },
+              "S": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.5857142857142857,
+                "coverage_ci95": [
+                  0.3079166666666666,
+                  0.8500198412698413
+                ],
+                "below": 0.36507936507936506,
+                "above": 0.049206349206349205,
+                "mean_width": 0.16959352814100256,
+                "interval_score": 0.6235764434586769,
+                "daily_coverage_min": 0.011111111111111112,
+                "daily_coverage_max": 0.9333333333333333
+              }
+            },
+            "rest": {
+              "G": {
+                "rows": 70911,
+                "signal_days": 14,
+                "coverage": 0.7356545528902427,
+                "coverage_ci95": [
+                  0.5865534736513798,
+                  0.8607718178995637
+                ],
+                "below": 0.1893218259508398,
+                "above": 0.07502362115891752,
+                "mean_width": 0.1593379127309771,
+                "interval_score": 0.30805542680873926,
+                "daily_coverage_min": 0.3909952606635071,
+                "daily_coverage_max": 0.910527355322931
+              },
+              "V": {
+                "rows": 70911,
+                "signal_days": 14,
+                "coverage": 0.7290547305777665,
+                "coverage_ci95": [
+                  0.571467749128567,
+                  0.8590027766899336
+                ],
+                "below": 0.19153586890609356,
+                "above": 0.07940940051613996,
+                "mean_width": 0.16304519269470624,
+                "interval_score": 0.29878850107000354,
+                "daily_coverage_min": 0.3674960505529226,
+                "daily_coverage_max": 0.9030793525463877
+              },
+              "S": {
+                "rows": 70911,
+                "signal_days": 14,
+                "coverage": 0.7088463002919152,
+                "coverage_ci95": [
+                  0.5668810151209189,
+                  0.840109534419983
+                ],
+                "below": 0.23344756102720313,
+                "above": 0.05770613868088167,
+                "mean_width": 0.1454948916828172,
+                "interval_score": 0.2986665488321914,
+                "daily_coverage_min": 0.367693522906793,
+                "daily_coverage_max": 0.8754441373864982
+              }
+            }
+          }
+        },
+        "d10": {
+          "first_signal": "2026-10-13",
+          "last_signal": "2026-10-23",
+          "history_dates_range": [
+            5,
+            13
+          ],
+          "mean_forecast": -0.04496780862859526,
+          "mean_actual": -0.04481719876823445,
+          "methods": {
+            "RAW": {
+              "rows": 46494,
+              "signal_days": 9,
+              "coverage": 0.2637114466382759,
+              "coverage_ci95": [
+                0.23986668512852413,
+                0.28865400522818724
+              ],
+              "below": 0.40097647008216114,
+              "above": 0.33531208327956297,
+              "mean_width": 0.05513438344319499,
+              "interval_score": 0.5084791128897713,
+              "daily_coverage_min": 0.20143327522758087,
+              "daily_coverage_max": 0.3424312814556717
+            },
+            "G": {
+              "rows": 46494,
+              "signal_days": 9,
+              "coverage": 0.8018238912547856,
+              "coverage_ci95": [
+                0.7870993394634518,
+                0.8216108170644323
+              ],
+              "below": 0.05559857185873446,
+              "above": 0.14257753688647998,
+              "mean_width": 0.221058219223948,
+              "interval_score": 0.366424663233628,
+              "daily_coverage_min": 0.7387770897832817,
+              "daily_coverage_max": 0.8343012001548586
+            },
+            "V": {
+              "rows": 46494,
+              "signal_days": 9,
+              "coverage": 0.7997160923990192,
+              "coverage_ci95": [
+                0.7910417726795678,
+                0.8169412808657492
+              ],
+              "below": 0.054544672430851295,
+              "above": 0.1457392351701295,
+              "mean_width": 0.22374226748252302,
+              "interval_score": 0.3562901525967589,
+              "daily_coverage_min": 0.7463235294117647,
+              "daily_coverage_max": 0.8283336558931682
+            },
+            "S": {
+              "rows": 46494,
+              "signal_days": 9,
+              "coverage": 0.8425173140620295,
+              "coverage_ci95": [
+                0.8271765948279555,
+                0.8626262940093785
+              ],
+              "below": 0.0600077429345722,
+              "above": 0.09747494300339829,
+              "mean_width": 0.24131124661952658,
+              "interval_score": 0.35324266259654263,
+              "daily_coverage_min": 0.760061919504644,
+              "daily_coverage_max": 0.8723857474825717
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "RAW": {
+                "rows": 90,
+                "signal_days": 9,
+                "coverage": 0.2,
+                "coverage_ci95": [
+                  0.12222222222222223,
+                  0.2888888888888889
+                ],
+                "below": 0.7888888888888889,
+                "above": 0.011111111111111112,
+                "mean_width": 0.1761117878645776,
+                "interval_score": 1.6891334444978354,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.4
+              },
+              "G": {
+                "rows": 90,
+                "signal_days": 9,
+                "coverage": 0.24444444444444444,
+                "coverage_ci95": [
+                  0.1222222222222222,
+                  0.36666666666666664
+                ],
+                "below": 0.7222222222222222,
+                "above": 0.03333333333333333,
+                "mean_width": 0.22105661911570595,
+                "interval_score": 1.3825920876845912,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.6
+              },
+              "V": {
+                "rows": 90,
+                "signal_days": 9,
+                "coverage": 0.3111111111111111,
+                "coverage_ci95": [
+                  0.16666666666666666,
+                  0.4555555555555555
+                ],
+                "below": 0.6666666666666666,
+                "above": 0.022222222222222223,
+                "mean_width": 0.2658792037336902,
+                "interval_score": 1.2385586278473608,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.6
+              },
+              "S": {
+                "rows": 90,
+                "signal_days": 9,
+                "coverage": 0.4222222222222222,
+                "coverage_ci95": [
+                  0.23333333333333328,
+                  0.611111111111111
+                ],
+                "below": 0.5444444444444444,
+                "above": 0.03333333333333333,
+                "mean_width": 0.2238719312459659,
+                "interval_score": 1.1059247601482236,
+                "daily_coverage_min": 0.1,
+                "daily_coverage_max": 0.7
+              }
+            },
+            "rank11_100": {
+              "RAW": {
+                "rows": 810,
+                "signal_days": 9,
+                "coverage": 0.20123456790123456,
+                "coverage_ci95": [
+                  0.15308641975308643,
+                  0.2506172839506173
+                ],
+                "below": 0.6395061728395062,
+                "above": 0.15925925925925927,
+                "mean_width": 0.07531244132042686,
+                "interval_score": 0.7955790885756814,
+                "daily_coverage_min": 0.05555555555555555,
+                "daily_coverage_max": 0.32222222222222224
+              },
+              "G": {
+                "rows": 810,
+                "signal_days": 9,
+                "coverage": 0.6172839506172839,
+                "coverage_ci95": [
+                  0.5074074074074074,
+                  0.7333333333333334
+                ],
+                "below": 0.30617283950617286,
+                "above": 0.07654320987654321,
+                "mean_width": 0.22105661911570593,
+                "interval_score": 0.4853804650203731,
+                "daily_coverage_min": 0.4444444444444444,
+                "daily_coverage_max": 0.8
+              },
+              "V": {
+                "rows": 810,
+                "signal_days": 9,
+                "coverage": 0.6802469135802469,
+                "coverage_ci95": [
+                  0.574074074074074,
+                  0.7962962962962963
+                ],
+                "below": 0.24938271604938272,
+                "above": 0.07037037037037037,
+                "mean_width": 0.24398235393016118,
+                "interval_score": 0.438598661950705,
+                "daily_coverage_min": 0.4222222222222222,
+                "daily_coverage_max": 0.8222222222222222
+              },
+              "S": {
+                "rows": 810,
+                "signal_days": 9,
+                "coverage": 0.7037037037037037,
+                "coverage_ci95": [
+                  0.6469135802469136,
+                  0.7666666666666666
+                ],
+                "below": 0.17160493827160495,
+                "above": 0.12469135802469136,
+                "mean_width": 0.22177106909265587,
+                "interval_score": 0.434769820749948,
+                "daily_coverage_min": 0.6,
+                "daily_coverage_max": 0.8444444444444444
+              }
+            },
+            "rest": {
+              "RAW": {
+                "rows": 45594,
+                "signal_days": 9,
+                "coverage": 0.2649471421678291,
+                "coverage_ci95": [
+                  0.2416187967948156,
+                  0.2893950762798326
+                ],
+                "below": 0.3959731543624161,
+                "above": 0.3390797034697548,
+                "mean_width": 0.05453710763325328,
+                "interval_score": 0.5010480941120744,
+                "daily_coverage_min": 0.20284416353940352,
+                "daily_coverage_max": 0.344255823134623
+              },
+              "G": {
+                "rows": 45594,
+                "signal_days": 9,
+                "coverage": 0.8062025705136641,
+                "coverage_ci95": [
+                  0.7888402383095767,
+                  0.8289706490421473
+                ],
+                "below": 0.04983111812957845,
+                "above": 0.14396631135675747,
+                "mean_width": 0.22105825080918762,
+                "interval_score": 0.36230549694754105,
+                "daily_coverage_min": 0.7417127071823204,
+                "daily_coverage_max": 0.8416896960126332
+              },
+              "V": {
+                "rows": 45594,
+                "signal_days": 9,
+                "coverage": 0.8028030003947888,
+                "coverage_ci95": [
+                  0.7924368090534926,
+                  0.8215696405895028
+                ],
+                "below": 0.04987498355046717,
+                "above": 0.14732201605474404,
+                "mean_width": 0.2232995163686661,
+                "interval_score": 0.3530863526373507,
+                "daily_coverage_min": 0.7464483030781374,
+                "daily_coverage_max": 0.834418788237616
+              },
+              "S": {
+                "rows": 45594,
+                "signal_days": 9,
+                "coverage": 0.8458130455761723,
+                "coverage_ci95": [
+                  0.8299065110927883,
+                  0.8660334580966045
+                ],
+                "below": 0.05706891257621617,
+                "above": 0.09711804184761152,
+                "mean_width": 0.24169281178556565,
+                "interval_score": 0.35030853997330474,
+                "daily_coverage_min": 0.761049723756906,
+                "daily_coverage_max": 0.8732227488151659
+              }
+            }
+          }
+        }
+      },
+      "offsets_from_all_matured": {
+        "1": {
+          "low": -0.03502993698472111,
+          "high": 0.03918948508318228,
+          "median_error": 0.0018332007985525658,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "2": {
+          "low": -0.0472860313548927,
+          "high": 0.05017888734451417,
+          "median_error": -0.00022716753440152598,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "3": {
+          "low": -0.059846333603172874,
+          "high": 0.06021963363428325,
+          "median_error": -0.00032602645110107445,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "4": {
+          "low": -0.07351057811003625,
+          "high": 0.06903279959274751,
+          "median_error": -0.0019251929320892756,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "5": {
+          "low": -0.08695728703724691,
+          "high": 0.07356132427299922,
+          "median_error": -0.005352791599103801,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "6": {
+          "low": -0.09797797501651437,
+          "high": 0.07873941957437076,
+          "median_error": -0.0076481041829382455,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "7": {
+          "low": -0.10817202860942021,
+          "high": 0.08153520251446411,
+          "median_error": -0.010952401539625182,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "8": {
+          "low": -0.11466349558207574,
+          "high": 0.0826920923966952,
+          "median_error": -0.013782122945648071,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "9": {
+          "low": -0.12151298470524574,
+          "high": 0.08749935853825781,
+          "median_error": -0.015330213373760275,
+          "rows": 118764,
+          "signal_days": 23
+        },
+        "10": {
+          "low": -0.12694873902805784,
+          "high": 0.08870156072328886,
+          "median_error": -0.018080643766852363,
+          "rows": 118764,
+          "signal_days": 23
+        }
+      }
+    },
+    "SPARSE": {
+      "source": "shards:scratch/oos65/c2_p16_s3",
+      "signal_days": 22,
+      "signal_start": "2026-07-17",
+      "signal_end": "2026-10-22",
+      "rows": 1134800,
+      "dropped": {
+        "no_bar_on_signal_day": 0,
+        "price_basis_mismatch": 0,
+        "label_not_available": 0
+      },
+      "walk_forward": {
+        "evaluated_rows": 815434,
+        "d1": {
+          "first_signal": "2026-08-07",
+          "last_signal": "2026-10-22",
+          "history_dates_range": [
+            5,
+            21
+          ],
+          "mean_forecast": -0.005462357146825234,
+          "mean_actual": 7.09119078533617e-05,
+          "methods": {
+            "G": {
+              "rows": 87732,
+              "signal_days": 17,
+              "coverage": 0.8272238179911549,
+              "coverage_ci95": [
+                0.7559811006732571,
+                0.8780664904622566
+              ],
+              "below": 0.09468608945424703,
+              "above": 0.07809009255459809,
+              "mean_width": 0.08441324758470786,
+              "interval_score": 0.13015836715251938,
+              "daily_coverage_min": 0.5528455284552846,
+              "daily_coverage_max": 0.9319635588292304
+            },
+            "V": {
+              "rows": 87732,
+              "signal_days": 17,
+              "coverage": 0.7673824830164592,
+              "coverage_ci95": [
+                0.6898166261913394,
+                0.8168105178239026
+              ],
+              "below": 0.13341768111977387,
+              "above": 0.09919983586376693,
+              "mean_width": 0.07523788327581776,
+              "interval_score": 0.12443474740835243,
+              "daily_coverage_min": 0.4562524196670538,
+              "daily_coverage_max": 0.8962373933281613
+            },
+            "S": {
+              "rows": 87732,
+              "signal_days": 17,
+              "coverage": 0.8044157206036566,
+              "coverage_ci95": [
+                0.7447380518288171,
+                0.8517499232743636
+              ],
+              "below": 0.11810969771577076,
+              "above": 0.07747458168057265,
+              "mean_width": 0.07461243999271668,
+              "interval_score": 0.11728555910144378,
+              "daily_coverage_min": 0.4916763453348819,
+              "daily_coverage_max": 0.9267441860465117
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "G": {
+                "rows": 170,
+                "signal_days": 17,
+                "coverage": 0.18823529411764706,
+                "coverage_ci95": [
+                  0.1411764705882353,
+                  0.25882352941176473
+                ],
+                "below": 0.7470588235294118,
+                "above": 0.06470588235294118,
+                "mean_width": 0.08441634775450414,
+                "interval_score": 0.8176918547095163,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.4
+              },
+              "V": {
+                "rows": 170,
+                "signal_days": 17,
+                "coverage": 0.24705882352941178,
+                "coverage_ci95": [
+                  0.18823529411764706,
+                  0.32367647058823457
+                ],
+                "below": 0.6941176470588235,
+                "above": 0.058823529411764705,
+                "mean_width": 0.09982103319261877,
+                "interval_score": 0.7860768142385628,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.5
+              },
+              "S": {
+                "rows": 170,
+                "signal_days": 17,
+                "coverage": 0.38823529411764707,
+                "coverage_ci95": [
+                  0.27647058823529413,
+                  0.5411764705882353
+                ],
+                "below": 0.5117647058823529,
+                "above": 0.1,
+                "mean_width": 0.10650630821711489,
+                "interval_score": 0.6089397936272842,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.7
+              }
+            },
+            "rank11_100": {
+              "G": {
+                "rows": 1530,
+                "signal_days": 17,
+                "coverage": 0.49084967320261436,
+                "coverage_ci95": [
+                  0.3424673202614379,
+                  0.6124183006535947
+                ],
+                "below": 0.4764705882352941,
+                "above": 0.032679738562091505,
+                "mean_width": 0.08441634775450413,
+                "interval_score": 0.23485228599138697,
+                "daily_coverage_min": 0.05555555555555555,
+                "daily_coverage_max": 0.7777777777777778
+              },
+              "V": {
+                "rows": 1530,
+                "signal_days": 17,
+                "coverage": 0.5,
+                "coverage_ci95": [
+                  0.33137254901960783,
+                  0.5875980392156863
+                ],
+                "below": 0.4666666666666667,
+                "above": 0.03333333333333333,
+                "mean_width": 0.09404708420461269,
+                "interval_score": 0.22914245510745426,
+                "daily_coverage_min": 0.05555555555555555,
+                "daily_coverage_max": 0.8222222222222222
+              },
+              "S": {
+                "rows": 1530,
+                "signal_days": 17,
+                "coverage": 0.8117647058823529,
+                "coverage_ci95": [
+                  0.6398692810457516,
+                  0.90718954248366
+                ],
+                "below": 0.13660130718954247,
+                "above": 0.05163398692810457,
+                "mean_width": 0.10593280150464204,
+                "interval_score": 0.15815391076648305,
+                "daily_coverage_min": 0.17777777777777778,
+                "daily_coverage_max": 0.9777777777777777
+              }
+            },
+            "rest": {
+              "G": {
+                "rows": 86032,
+                "signal_days": 17,
+                "coverage": 0.8344685698344801,
+                "coverage_ci95": [
+                  0.7638667351181914,
+                  0.8850542315146224
+                ],
+                "below": 0.08660730890831318,
+                "above": 0.07892412125720662,
+                "mean_width": 0.08441318632507594,
+                "interval_score": 0.12693790977958652,
+                "daily_coverage_min": 0.5625740228977497,
+                "daily_coverage_max": 0.9408974105554457
+              },
+              "V": {
+                "rows": 86032,
+                "signal_days": 17,
+                "coverage": 0.7731657987725498,
+                "coverage_ci95": [
+                  0.6966999787404097,
+                  0.8223759129429902
+                ],
+                "below": 0.12638320624883764,
+                "above": 0.10045099497861261,
+                "mean_width": 0.07485480241164034,
+                "interval_score": 0.12126520649170792,
+                "daily_coverage_min": 0.46308724832214765,
+                "daily_coverage_max": 0.8989319620253164
+              },
+              "S": {
+                "rows": 86032,
+                "signal_days": 17,
+                "coverage": 0.8051074018969686,
+                "coverage_ci95": [
+                  0.7461155114019371,
+                  0.8520330272907969
+                ],
+                "below": 0.11700297563697229,
+                "above": 0.07788962246605914,
+                "mean_width": 0.07399241359891677,
+                "interval_score": 0.11558723989560285,
+                "daily_coverage_min": 0.4966442953020134,
+                "daily_coverage_max": 0.9276679841897233
+              }
+            }
+          }
+        },
+        "d5": {
+          "first_signal": "2026-08-12",
+          "last_signal": "2026-10-22",
+          "history_dates_range": [
+            5,
+            20
+          ],
+          "mean_forecast": -0.023380701297960146,
+          "mean_actual": -0.011422948796754644,
+          "methods": {
+            "G": {
+              "rows": 82576,
+              "signal_days": 16,
+              "coverage": 0.8076923076923077,
+              "coverage_ci95": [
+                0.7272610801759846,
+                0.868789680377744
+              ],
+              "below": 0.1280275140476652,
+              "above": 0.06428017826002713,
+              "mean_width": 0.17268939790839177,
+              "interval_score": 0.27635460957916647,
+              "daily_coverage_min": 0.5700174317257408,
+              "daily_coverage_max": 0.9124031007751938
+            },
+            "V": {
+              "rows": 82576,
+              "signal_days": 16,
+              "coverage": 0.743896531679907,
+              "coverage_ci95": [
+                0.6617460637322451,
+                0.8127933302160554
+              ],
+              "below": 0.16789381902732028,
+              "above": 0.08820964929277272,
+              "mean_width": 0.14895538705382383,
+              "interval_score": 0.2625894078177677,
+              "daily_coverage_min": 0.4925430950997482,
+              "daily_coverage_max": 0.8653100775193798
+            },
+            "S": {
+              "rows": 82576,
+              "signal_days": 16,
+              "coverage": 0.8004868242588645,
+              "coverage_ci95": [
+                0.7398416528933973,
+                0.8637880681252696
+              ],
+              "below": 0.1445819608602984,
+              "above": 0.05493121488083705,
+              "mean_width": 0.167972039695294,
+              "interval_score": 0.26053653008510663,
+              "daily_coverage_min": 0.5731164051907806,
+              "daily_coverage_max": 0.9186046511627907
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "G": {
+                "rows": 160,
+                "signal_days": 16,
+                "coverage": 0.25,
+                "coverage_ci95": [
+                  0.15,
+                  0.36875
+                ],
+                "below": 0.71875,
+                "above": 0.03125,
+                "mean_width": 0.17269294843865013,
+                "interval_score": 1.0823215851623984,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.8
+              },
+              "V": {
+                "rows": 160,
+                "signal_days": 16,
+                "coverage": 0.2625,
+                "coverage_ci95": [
+                  0.15625,
+                  0.4
+                ],
+                "below": 0.7125,
+                "above": 0.025,
+                "mean_width": 0.18768784236267821,
+                "interval_score": 1.0551538538582983,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 1.0
+              },
+              "S": {
+                "rows": 160,
+                "signal_days": 16,
+                "coverage": 0.45625,
+                "coverage_ci95": [
+                  0.3125,
+                  0.6437499999999999
+                ],
+                "below": 0.5125,
+                "above": 0.03125,
+                "mean_width": 0.21370163792575264,
+                "interval_score": 0.7808883911763932,
+                "daily_coverage_min": 0.1,
+                "daily_coverage_max": 1.0
+              }
+            },
+            "rank11_100": {
+              "G": {
+                "rows": 1440,
+                "signal_days": 16,
+                "coverage": 0.5208333333333334,
+                "coverage_ci95": [
+                  0.3583159722222223,
+                  0.7229513888888888
+                ],
+                "below": 0.4548611111111111,
+                "above": 0.024305555555555556,
+                "mean_width": 0.17269294843865016,
+                "interval_score": 0.4905375299769735,
+                "daily_coverage_min": 0.044444444444444446,
+                "daily_coverage_max": 0.8888888888888888
+              },
+              "V": {
+                "rows": 1440,
+                "signal_days": 16,
+                "coverage": 0.47291666666666665,
+                "coverage_ci95": [
+                  0.3263715277777778,
+                  0.6271354166666664
+                ],
+                "below": 0.4986111111111111,
+                "above": 0.02847222222222222,
+                "mean_width": 0.16209397549393745,
+                "interval_score": 0.48181420894868804,
+                "daily_coverage_min": 0.05555555555555555,
+                "daily_coverage_max": 0.8333333333333334
+              },
+              "S": {
+                "rows": 1440,
+                "signal_days": 16,
+                "coverage": 0.7548611111111111,
+                "coverage_ci95": [
+                  0.5610937500000001,
+                  0.9006944444444445
+                ],
+                "below": 0.2125,
+                "above": 0.03263888888888889,
+                "mean_width": 0.21068308612804004,
+                "interval_score": 0.37269220131968783,
+                "daily_coverage_min": 0.05555555555555555,
+                "daily_coverage_max": 0.9555555555555556
+              }
+            },
+            "rest": {
+              "G": {
+                "rows": 80976,
+                "signal_days": 16,
+                "coverage": 0.8138954752025291,
+                "coverage_ci95": [
+                  0.7353497566169622,
+                  0.8722086221578813
+                ],
+                "below": 0.12104821181584667,
+                "above": 0.06505631298162419,
+                "mean_width": 0.17268932775367418,
+                "interval_score": 0.2709532792903629,
+                "daily_coverage_min": 0.5798933438672723,
+                "daily_coverage_max": 0.9148221343873518
+              },
+              "V": {
+                "rows": 80976,
+                "signal_days": 16,
+                "coverage": 0.7496665678719621,
+                "coverage_ci95": [
+                  0.6691841188928608,
+                  0.8175041003812711
+                ],
+                "below": 0.16093657379964435,
+                "above": 0.0893968583283936,
+                "mean_width": 0.14864521169071404,
+                "interval_score": 0.25712489950672474,
+                "daily_coverage_min": 0.5010863124629666,
+                "daily_coverage_max": 0.8685770750988142
+              },
+              "S": {
+                "rows": 80976,
+                "signal_days": 16,
+                "coverage": 0.8019783639596918,
+                "coverage_ci95": [
+                  0.7432323382292823,
+                  0.8640051957659111
+                ],
+                "below": 0.1426472041098597,
+                "above": 0.055374431930448526,
+                "mean_width": 0.1671221503135015,
+                "interval_score": 0.25751390036330757,
+                "daily_coverage_min": 0.5802883665810784,
+                "daily_coverage_max": 0.9181818181818182
+              }
+            }
+          }
+        },
+        "d10": {
+          "first_signal": "2026-08-20",
+          "last_signal": "2026-10-22",
+          "history_dates_range": [
+            5,
+            18
+          ],
+          "mean_forecast": -0.03771942181392307,
+          "mean_actual": -0.018679730279792316,
+          "methods": {
+            "RAW": {
+              "rows": 72259,
+              "signal_days": 14,
+              "coverage": 0.25147040507064866,
+              "coverage_ci95": [
+                0.21272363519371634,
+                0.2883518400552769
+              ],
+              "below": 0.31222408281321357,
+              "above": 0.4363055121161378,
+              "mean_width": 0.05211018206590541,
+              "interval_score": 0.5468069132701657,
+              "daily_coverage_min": 0.14371489444121635,
+              "daily_coverage_max": 0.3333333333333333
+            },
+            "G": {
+              "rows": 72259,
+              "signal_days": 14,
+              "coverage": 0.7193290801145878,
+              "coverage_ci95": [
+                0.548298899778348,
+                0.835497327594334
+              ],
+              "below": 0.22822070607121603,
+              "above": 0.05245021381419616,
+              "mean_width": 0.22416787356940132,
+              "interval_score": 0.4178881927612986,
+              "daily_coverage_min": 0.3381754793724579,
+              "daily_coverage_max": 0.8972868217054264
+            },
+            "V": {
+              "rows": 72259,
+              "signal_days": 14,
+              "coverage": 0.6663668193581422,
+              "coverage_ci95": [
+                0.5028303376301024,
+                0.7773186512394619
+              ],
+              "below": 0.2529096721515659,
+              "above": 0.08072350849029186,
+              "mean_width": 0.18449110000024216,
+              "interval_score": 0.39365453940823236,
+              "daily_coverage_min": 0.29556459422816195,
+              "daily_coverage_max": 0.8333333333333334
+            },
+            "S": {
+              "rows": 72259,
+              "signal_days": 14,
+              "coverage": 0.708562255220803,
+              "coverage_ci95": [
+                0.5695183607093781,
+                0.8105743167829979
+              ],
+              "below": 0.2500864944159205,
+              "above": 0.04135125036327655,
+              "mean_width": 0.2194195062089495,
+              "interval_score": 0.39969198092789127,
+              "daily_coverage_min": 0.3740073600619795,
+              "daily_coverage_max": 0.8984496124031007
+            }
+          },
+          "by_rank": {
+            "top10": {
+              "RAW": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.22857142857142856,
+                "coverage_ci95": [
+                  0.15714285714285717,
+                  0.2928571428571428
+                ],
+                "below": 0.6357142857142857,
+                "above": 0.1357142857142857,
+                "mean_width": 0.17140387867485743,
+                "interval_score": 1.1597091447550079,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.4
+              },
+              "G": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.2571428571428571,
+                "coverage_ci95": [
+                  0.14285714285714285,
+                  0.37857142857142867
+                ],
+                "below": 0.7071428571428572,
+                "above": 0.03571428571428571,
+                "mean_width": 0.22417046800538598,
+                "interval_score": 1.4412765122554576,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.5
+              },
+              "V": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.2571428571428571,
+                "coverage_ci95": [
+                  0.13571428571428573,
+                  0.37160714285714197
+                ],
+                "below": 0.7142857142857143,
+                "above": 0.02857142857142857,
+                "mean_width": 0.22208168053278543,
+                "interval_score": 1.4142342654488564,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.5
+              },
+              "S": {
+                "rows": 140,
+                "signal_days": 14,
+                "coverage": 0.4357142857142857,
+                "coverage_ci95": [
+                  0.2428571428571429,
+                  0.6285714285714287
+                ],
+                "below": 0.5285714285714286,
+                "above": 0.03571428571428571,
+                "mean_width": 0.2494278667308248,
+                "interval_score": 1.1531691420540198,
+                "daily_coverage_min": 0.0,
+                "daily_coverage_max": 0.9
+              }
+            },
+            "rank11_100": {
+              "RAW": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.20317460317460317,
+                "coverage_ci95": [
+                  0.12460317460317462,
+                  0.2500198412698412
+                ],
+                "below": 0.5912698412698413,
+                "above": 0.20555555555555555,
+                "mean_width": 0.06370387906246106,
+                "interval_score": 0.7104776203843772,
+                "daily_coverage_min": 0.06666666666666667,
+                "daily_coverage_max": 0.3333333333333333
+              },
+              "G": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.4373015873015873,
+                "coverage_ci95": [
+                  0.21269841269841266,
+                  0.5968253968253967
+                ],
+                "below": 0.5404761904761904,
+                "above": 0.022222222222222223,
+                "mean_width": 0.22417046800538595,
+                "interval_score": 0.7531238366511799,
+                "daily_coverage_min": 0.03333333333333333,
+                "daily_coverage_max": 0.7333333333333333
+              },
+              "V": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.37936507936507935,
+                "coverage_ci95": [
+                  0.1904761904761905,
+                  0.48732142857142857
+                ],
+                "below": 0.5888888888888889,
+                "above": 0.031746031746031744,
+                "mean_width": 0.18867611653321748,
+                "interval_score": 0.7375194202710622,
+                "daily_coverage_min": 0.03333333333333333,
+                "daily_coverage_max": 0.6444444444444445
+              },
+              "S": {
+                "rows": 1260,
+                "signal_days": 14,
+                "coverage": 0.596031746031746,
+                "coverage_ci95": [
+                  0.34918650793650796,
+                  0.776984126984127
+                ],
+                "below": 0.37142857142857144,
+                "above": 0.03253968253968254,
+                "mean_width": 0.23552820466701427,
+                "interval_score": 0.5827334300371529,
+                "daily_coverage_min": 0.1,
+                "daily_coverage_max": 0.9111111111111111
+              }
+            },
+            "rest": {
+              "RAW": {
+                "rows": 70859,
+                "signal_days": 14,
+                "coverage": 0.2523744337345997,
+                "coverage_ci95": [
+                  0.21433773818043217,
+                  0.2894892819679022
+                ],
+                "below": 0.3066230118968656,
+                "above": 0.4410025543685347,
+                "mean_width": 0.05166833027938693,
+                "interval_score": 0.5426856103535033,
+                "daily_coverage_min": 0.14517084732372112,
+                "daily_coverage_max": 0.3355731225296443
+              },
+              "G": {
+                "rows": 70859,
+                "signal_days": 14,
+                "coverage": 0.7252572009201371,
+                "coverage_ci95": [
+                  0.5553460927909732,
+                  0.8406729214822104
+                ],
+                "below": 0.22172201131825173,
+                "above": 0.053020787761611086,
+                "mean_width": 0.22416782230971122,
+                "interval_score": 0.4099051380183523,
+                "daily_coverage_min": 0.3430772269405491,
+                "daily_coverage_max": 0.9015810276679842
+              },
+              "V": {
+                "rows": 70859,
+                "signal_days": 14,
+                "coverage": 0.6722787507585487,
+                "coverage_ci95": [
+                  0.5092094390940428,
+                  0.7829530885629239
+                ],
+                "below": 0.2460237937312127,
+                "above": 0.08169745551023865,
+                "mean_width": 0.1843424131417471,
+                "interval_score": 0.3855235904598582,
+                "daily_coverage_min": 0.29962472842188426,
+                "daily_coverage_max": 0.8377470355731226
+              },
+              "S": {
+                "rows": 70859,
+                "signal_days": 14,
+                "coverage": 0.7111023299792546,
+                "coverage_ci95": [
+                  0.574032270700702,
+                  0.8113747442186925
+                ],
+                "below": 0.24737859693193526,
+                "above": 0.04151907308881017,
+                "mean_width": 0.21907377552505297,
+                "interval_score": 0.3949484899326002,
+                "daily_coverage_min": 0.37843175982619,
+                "daily_coverage_max": 0.899802371541502
+              }
+            }
+          }
+        }
+      },
+      "offsets_from_all_matured": {
+        "1": {
+          "low": -0.0340807483255281,
+          "high": 0.0462246941725164,
+          "median_error": 0.0043734135307906055,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "2": {
+          "low": -0.045082032877891955,
+          "high": 0.06322866694628304,
+          "median_error": 0.006290253127295246,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "3": {
+          "low": -0.05049623747373432,
+          "high": 0.0783864342789168,
+          "median_error": 0.007754737820399491,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "4": {
+          "low": -0.05407270243613044,
+          "high": 0.09319909888263017,
+          "median_error": 0.011696914089481302,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "5": {
+          "low": -0.06186626972103605,
+          "high": 0.1041593842884288,
+          "median_error": 0.011925529404512886,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "6": {
+          "low": -0.06727106655733173,
+          "high": 0.11490424656352288,
+          "median_error": 0.01356159301868736,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "7": {
+          "low": -0.06603998464051551,
+          "high": 0.12639679124819955,
+          "median_error": 0.017925365126650654,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "8": {
+          "low": -0.07234001900760748,
+          "high": 0.13469035567729284,
+          "median_error": 0.01717525956136688,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "9": {
+          "low": -0.07949837752421658,
+          "high": 0.14753606657944954,
+          "median_error": 0.01933880587165505,
+          "rows": 113480,
+          "signal_days": 22
+        },
+        "10": {
+          "low": -0.0730141221260422,
+          "high": 0.1565770070562727,
+          "median_error": 0.024186738850094244,
+          "rows": 113480,
+          "signal_days": 22
+        }
+      }
+    }
+  }
+}
