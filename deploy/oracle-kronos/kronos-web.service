@@ -20,8 +20,7 @@ Environment=KRONOS_SESSION_DAYS=30
 Environment=KRONOS_COOKIE_PATH=/kronos
 Environment=KRONOS_COOKIE_SECURE=1
 Environment=FLASK_DEBUG=0
-EnvironmentFile=-/opt/kronos-web/data/kronos-web.env
-ExecStart=/opt/kronos-web/.venv/bin/gunicorn --workers 2 --threads 4 --timeout 240 --bind 127.0.0.1:7072 app:app
+ExecStart=/bin/bash -c 'set -a; source /home/opc/.kronos.env; set +a; exec /opt/kronos-web/.venv/bin/gunicorn --workers 2 --threads 4 --timeout 240 --bind 127.0.0.1:7072 app:app'
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

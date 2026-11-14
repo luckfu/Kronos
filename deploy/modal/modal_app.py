@@ -16,7 +16,10 @@ REMOTE_REPO_PATH = "/opt/kronos/models/small_0_1_cosine_c2_best"
 REMOTE_MODEL_PATH = REMOTE_REPO_PATH
 REMOTE_TOKENIZER_PATH = "/opt/kronos/models/kronos_tokenizer_base"
 TOKENIZER_ID = os.getenv("KRONOS_TOKENIZER_ID", REMOTE_TOKENIZER_PATH)
-SECRET_NAME = os.getenv("MODAL_KRONOS_SECRET_NAME", "")
+SECRET_NAME = os.getenv("MODAL_KRONOS_SECRET_NAME", "kronos-inference-secret")
+FORCE_IMAGE_BUILD = os.getenv("MODAL_FORCE_IMAGE_BUILD", "1").lower() in {
+    "1", "true", "yes",
+}
 
 
 app = modal.App("kronos-beta-v1-2-inference")
@@ -32,7 +35,7 @@ image = (
         f"local_dir='{REMOTE_TOKENIZER_PATH}', allow_patterns=['config.json', 'model.safetensors'])\"",
         # Re-read the release snapshot on every deployment so a replaced remote
         # artifact cannot remain hidden in a cached Modal image layer.
-        force_build=True,
+        force_build=FORCE_IMAGE_BUILD,
     )
     .env({
         "KRONOS_MODEL_ID": REMOTE_MODEL_PATH,
@@ -41,7 +44,7 @@ image = (
     })
     .add_local_python_source("model", "serverless")
 )
-secrets = [modal.Secret.from_name(SECRET_NAME)] if SECRET_NAME else []
+secrets = [modal.Secret.from_name(SECRET_NAME)]
 
 
 def _check_api_key(authorization: str | None) -> None:

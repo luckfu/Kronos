@@ -28,8 +28,8 @@ exec >>"$log_file" 2>&1
 
 echo "[$(date '+%F %T')] scheduler started"
 set -a
-# The environment contains credentials for the health check and Modal request.
-. /home/opc/.openclaw/.env
+# Shared production credentials for the health check and Modal request.
+. /home/opc/.kronos.env
 set +a
 
 health_ready() {

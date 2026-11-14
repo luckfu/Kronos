@@ -11,7 +11,9 @@ def test_modal_app_uses_small_checkpoint_and_model_only_boundary():
     assert "REMOTE_MODEL_PATH = REMOTE_REPO_PATH" in text
     assert 'REMOTE_TOKENIZER_PATH = "/opt/kronos/models/kronos_tokenizer_base"' in text
     assert 'modal.App("kronos-beta-v1-2-inference")' in text
-    assert "force_build=True" in text
+    assert 'MODAL_FORCE_IMAGE_BUILD' in text
+    assert "force_build=FORCE_IMAGE_BUILD" in text
+    assert '"kronos-inference-secret"' in text
     assert "allow_patterns=['config.json', 'model.safetensors']" in text
     assert "huggingface_hub import snapshot_download" in text
     assert "serverless.service" in text
