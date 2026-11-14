@@ -39,6 +39,15 @@ DATASET = os.environ.get(
 )
 PARENTS = os.environ.get("KRONOS_OOS_PARENTS", "").split(",")
 PARENTS = [p.strip() for p in PARENTS if p.strip()]
+# Extra dataset mounts (for example C2 weights published as a dataset rather
+# than a kernel output).  The evaluator globs /kaggle/input/**, so any mount
+# works as long as the weights glob resolves to exactly one file.
+EXTRA_DATASETS = [
+    entry.strip()
+    for entry in os.environ.get("KRONOS_OOS_EXTRA_DATASETS", "").split(",")
+    if entry.strip()
+]
+DATASETS = [DATASET, *EXTRA_DATASETS]
 
 LABEL = os.environ.get("BASE_OOS_LABEL", "candidate")
 WEIGHTS_GLOB = os.environ.get(
@@ -46,6 +55,32 @@ WEIGHTS_GLOB = os.environ.get(
 )
 CONTEXT_LAYER = os.environ.get("BASE_OOS_CONTEXT_LAYER", "10")
 SEED = os.environ.get("BASE_OOS_SEED", "20261104")
+# Window contract of the mounted package.  The evaluator defaults to the sealed
+# 2026-08-03..09-30 numbers, so any other package must restate its own guards.
+EXPECT_KEYS = (
+    "BASE_OOS_LIMIT",
+    "BASE_OOS_STRIDE",
+    "BASE_OOS_CONDITION",
+    "BASE_OOS_PATHS",
+    "BASE_OOS_PATH_AGG",
+    "BASE_OOS_BATCH",
+    "BASE_OOS_MAX_WINDOWS",
+    "BASE_OOS_DATE_FROM",
+    "BASE_OOS_DATE_TO",
+    "BASE_OOS_HF_REPO",
+    "BASE_OOS_HF_TOKENIZER",
+    "BASE_OOS_TOKENIZER",
+    "BASE_OOS_EXPECT_SAMPLES",
+    "BASE_OOS_EXPECT_DATES",
+    "BASE_OOS_EXPECT_FIRST",
+    "BASE_OOS_EXPECT_LAST",
+    "BASE_OOS_EXPECT_TARGET_END",
+)
+EXPECT_LINES = "".join(
+    f'os.environ.setdefault("{key}", {os.environ[key]!r})\n'
+    for key in EXPECT_KEYS
+    if os.environ.get(key, "").strip()
+)
 
 
 def source_bundle() -> bytes:
@@ -80,7 +115,7 @@ os.environ.setdefault("BASE_OOS_LABEL", {LABEL!r})
 os.environ.setdefault("BASE_OOS_WEIGHTS_GLOB", {WEIGHTS_GLOB!r})
 os.environ.setdefault("BASE_OOS_CONTEXT_LAYER", {CONTEXT_LAYER!r})
 os.environ.setdefault("BASE_OOS_SEED", {SEED!r})
-payload = base64.b64decode({base64.b64encode(payload).decode()!r})
+{EXPECT_LINES}payload = base64.b64decode({base64.b64encode(payload).decode()!r})
 assert hashlib.sha256(payload).hexdigest() == {digest!r}
 repo = Path("/kaggle/working/oos_src")
 if repo.exists():
@@ -105,14 +140,14 @@ runpy.run_path(str(repo / "evaluate_base_sealed.py"), run_name="__main__")
         "enable_gpu": True,
         "enable_internet": True,
         "machine_shape": "NvidiaTeslaT4",
-        "dataset_sources": [DATASET],
+        "dataset_sources": DATASETS,
         "kernel_sources": PARENTS,
         "competition_sources": [],
     }
     (build / "kernel-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     summary = {
         "id": metadata["id"], "label": LABEL, "context_layer": CONTEXT_LAYER,
-        "weights_glob": WEIGHTS_GLOB, "parents": PARENTS, "seed": SEED,
+        "weights_glob": WEIGHTS_GLOB, "parents": PARENTS, "datasets": DATASETS, "seed": SEED,
         "source_sha256": digest,
     }
     print(json.dumps(summary, indent=2))
@@ -132,7 +167,7 @@ runpy.run_path(str(repo / "evaluate_base_sealed.py"), run_name="__main__")
             "isPrivate": True,
             "enableGpu": True,
             "enableInternet": True,
-            "datasetDataSources": [DATASET],
+            "datasetDataSources": DATASETS,
             "kernelDataSources": PARENTS,
             "machineShape": "NvidiaTeslaT4",
         },

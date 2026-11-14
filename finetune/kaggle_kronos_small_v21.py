@@ -363,7 +363,9 @@ def build_environment(stage: str, data_root: Path, predictor: Path, tokenizer: P
         "KRONOS_BETA_V21_AUXILIARY_WARMUP_STEPS": "1000",
         "KRONOS_BETA_V21_EMA_DECAY": "0.99",
         "KRONOS_BETA_V21_CONSISTENCY_SAMPLES": "2048",
-        "KRONOS_TRAIN_SAMPLES_PER_SEGMENT": "20000",
+        "KRONOS_TRAIN_SAMPLES_PER_SEGMENT": os.getenv(
+            "KRONOS_TRAIN_SAMPLES_PER_SEGMENT", "20000"
+        ),
         "KRONOS_COVERAGE_SEED": os.getenv("KRONOS_COVERAGE_SEED", "100"),
         "KRONOS_COVERAGE_PASSES": os.getenv("KRONOS_COVERAGE_PASSES", "1"),
         "KRONOS_EPOCHS": os.getenv("KRONOS_EPOCHS", "1"),
@@ -477,6 +479,11 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
     os.environ.pop("SWANLAB_EXPERIMENT_NAME", None)
     swanlab = None
     run = None
+    # These must exist even when SwanLab is absent; the finally block below
+    # touches them unconditionally (same fix as kaggle_kronos_base_clean.py).
+    stop_gpu = threading.Event()
+    gpu_thread = None
+    latest_step = {"value": 0}
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "swanlab==0.10.1", "psutil", "pynvml"], check=True)
         import swanlab
@@ -495,9 +502,6 @@ def run_training_with_swanlab(repo_root: Path, env: dict[str, str]) -> None:
                 "KRONOS_PREDICTOR_LEARNING_RATE", "KRONOS_CONDITION_LEARNING_RATE",
             )},
         )
-        latest_step = {"value": 0}
-        stop_gpu = threading.Event()
-        gpu_thread = None
 
         def _gpu_monitor() -> None:
             query = ["nvidia-smi", "--query-gpu=index,memory.used,memory.total,utilization.gpu",

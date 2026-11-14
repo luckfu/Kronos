@@ -71,7 +71,12 @@ STAGE = os.environ.get("KRONOS_MAIN_STAGE", "main")
 COVERAGE_SEED = os.environ.get("KRONOS_COVERAGE_SEED", "100")
 # Stage default mirrors the runner: WC is warm-up + constant, others cosine.
 SCHEDULER = os.environ.get(
-    "KRONOS_SCHEDULER", "warmup_constant" if STAGE == "wc" else "warmup_cosine"
+    "KRONOS_SCHEDULER",
+    {"wc": "warmup_constant", "cosine": "uniform_cosine"}.get(STAGE, "warmup_cosine"),
+)
+MIN_LR = os.environ.get("KRONOS_PREDICTOR_MIN_LR", "1e-6" if STAGE == "cosine" else "1e-7")
+WARMUP_RATIO = os.environ.get(
+    "KRONOS_SCHEDULER_WARMUP_RATIO", "0" if STAGE == "cosine" else "0.01"
 )
 SCHEDULER_DECAY_START = os.environ.get("KRONOS_SCHEDULER_DECAY_START_RATIO", "0.8")
 MAX_SEGMENTS = int(
@@ -93,8 +98,22 @@ EXPECTED_BOOTSTRAP_COMPLETED = int(
     os.environ.get("KRONOS_MAIN_EXPECTED_BOOTSTRAP_COMPLETED", "0") or 0
 )
 PARENT_LAST_SHA256 = os.environ.get("KRONOS_MAIN_PARENT_LAST_SHA256", "").strip()
-BATCH_SIZE = 32
-ACCUMULATION_STEPS = 8
+BATCH_SIZE = int(os.environ.get("KRONOS_BATCH_SIZE", "32"))
+ACCUMULATION_STEPS = int(os.environ.get("KRONOS_ACCUMULATION_STEPS", "8"))
+# The LR schedule length is `max(epochs, segments_per_pass * passes)`.  With
+# require_full_coverage=1 that is the whole 520-segment coverage plan, so a
+# short invocation limit (max_segments) truncates the cosine *without* shortening
+# it: LR crawls 1e-5 -> 9.38e-6 over 88 segments.  An annealing stage has to
+# declare its own horizon, so both knobs are forwarded when set.
+EPOCHS = os.environ.get("KRONOS_EPOCHS", "").strip()
+REQUIRE_FULL_COVERAGE = os.environ.get("KRONOS_REQUIRE_FULL_COVERAGE", "").strip()
+SCHEDULE_ENV_LINES = ""
+if EPOCHS:
+    SCHEDULE_ENV_LINES += f'os.environ.setdefault("KRONOS_EPOCHS", {EPOCHS!r})\n'
+if REQUIRE_FULL_COVERAGE:
+    SCHEDULE_ENV_LINES += (
+        f'os.environ.setdefault("KRONOS_REQUIRE_FULL_COVERAGE", {REQUIRE_FULL_COVERAGE!r})\n'
+    )
 NPROC = 2
 
 
@@ -128,6 +147,12 @@ os.environ.setdefault("KRONOS_MAIN_MAX_SEGMENTS", {str(MAX_SEGMENTS)!r})
 os.environ.setdefault("KRONOS_MAIN_SECONDS_PER_SEGMENT", {str(SECONDS_PER_SEGMENT)!r})
 os.environ.setdefault("KRONOS_MAIN_SESSION_BUDGET_SECONDS", {str(SESSION_BUDGET_SECONDS)!r})
 os.environ.setdefault("KRONOS_VAL_BATCH_SIZE", {VAL_BATCH_SIZE!r})
+os.environ.setdefault("KRONOS_BATCH_SIZE", {str(BATCH_SIZE)!r})
+os.environ.setdefault("KRONOS_ACCUMULATION_STEPS", {str(ACCUMULATION_STEPS)!r})
+{SCHEDULE_ENV_LINES}
+os.environ.setdefault("KRONOS_PREDICTOR_MIN_LR", {MIN_LR!r})
+os.environ.setdefault("KRONOS_CONDITION_MIN_LR", {MIN_LR!r})
+os.environ.setdefault("KRONOS_SCHEDULER_WARMUP_RATIO", {WARMUP_RATIO!r})
 os.environ.setdefault("KRONOS_MAIN_RUN_ID", {RUN_ID!r})
 os.environ.setdefault("KRONOS_SCHEDULER", {SCHEDULER!r})
 os.environ.setdefault("KRONOS_COVERAGE_SEED", {COVERAGE_SEED!r})

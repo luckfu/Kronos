@@ -1,0 +1,2349 @@
+{
+  "constraint": "hand-traded book: few names, few orders",
+  "rules": {
+    "ks": [
+      5,
+      10,
+      20
+    ],
+    "steps_in_signal_dates": [
+      1,
+      2,
+      3
+    ],
+    "signal_date_spacing_sessions": 3,
+    "buffer_keep_fraction": 0.3,
+    "primary": {
+      "k": 10,
+      "step": 3,
+      "buffer": true
+    },
+    "random_books": 500,
+    "random_seed": 20261112,
+    "bootstrap": {
+      "block": 10,
+      "replicates": 2000,
+      "seed": 20261112
+    },
+    "sealed_after": "2026-10-23",
+    "fee_per_side": 0.0015
+  },
+  "window": {
+    "signal_days": 22,
+    "signal_start": "2026-07-17",
+    "signal_end": "2026-10-22",
+    "nav_end": "2026-10-23"
+  },
+  "P16": {
+    "k5_step1_nobuffer": {
+      "k": 5,
+      "step_signal_dates": 1,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": 0.205101736454389,
+          "gross": 0.33120136411387735,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.2130199466585323,
+          "gross_excess": 0.33633409936967007,
+          "max_drawdown": -0.13724277533707352,
+          "orders_per_rebalance_after_first": 8.476190476190476,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.205101736454389,
+      "mean_net_excess": 0.2130199466585323,
+      "mean_gross_excess": 0.33633409936967007,
+      "net_excess_range": [
+        0.2130199466585323,
+        0.2130199466585323
+      ],
+      "mean_max_drawdown": -0.13724277533707352,
+      "mean_orders_per_rebalance": 8.476190476190476,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0034451350672472514,
+        "ci95": [
+          -0.0018612565589285303,
+          0.011155160213612101
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": -0.004982360344523721,
+        "std": 0.10869682580662927,
+        "q025": -0.19621504196984715,
+        "q975": 0.2214077758975306,
+        "single_phase_q025": -0.19621504196984715,
+        "single_phase_q975": 0.2214077758975306,
+        "c2_percentile": 0.998
+      }
+    },
+    "k5_step1_buffer": {
+      "k": 5,
+      "step_signal_dates": 1,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": 0.11366662770900904,
+          "gross": 0.153890108698294,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.12158483791315233,
+          "gross_excess": 0.15902284395408672,
+          "max_drawdown": -0.21097044525194486,
+          "orders_per_rebalance_after_first": 2.9523809523809526,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.11366662770900904,
+      "mean_net_excess": 0.12158483791315233,
+      "mean_gross_excess": 0.15902284395408672,
+      "net_excess_range": [
+        0.12158483791315233,
+        0.12158483791315233
+      ],
+      "mean_max_drawdown": -0.21097044525194486,
+      "mean_orders_per_rebalance": 2.9523809523809526,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0021005728900933916,
+        "ci95": [
+          -0.003121608853348342,
+          0.010545812048580797
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step1_nobuffer": {
+      "k": 10,
+      "step_signal_dates": 1,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": 0.05013387095026367,
+          "gross": 0.153230703144986,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.058052081154406965,
+          "gross_excess": 0.1583634384007787,
+          "max_drawdown": -0.16491261756795905,
+          "orders_per_rebalance_after_first": 16.285714285714285,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.05013387095026367,
+      "mean_net_excess": 0.058052081154406965,
+      "mean_gross_excess": 0.1583634384007787,
+      "net_excess_range": [
+        0.058052081154406965,
+        0.058052081154406965
+      ],
+      "mean_max_drawdown": -0.16491261756795905,
+      "mean_orders_per_rebalance": 16.285714285714285,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0011332384488921647,
+        "ci95": [
+          -0.0026392429742089275,
+          0.006959618537158045
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": 0.0031791794350180644,
+        "std": 0.07856510147596071,
+        "q025": -0.14100910079159584,
+        "q975": 0.15779926338111006,
+        "single_phase_q025": -0.14100910079159584,
+        "single_phase_q975": 0.15779926338111006,
+        "c2_percentile": 0.974
+      }
+    },
+    "k10_step1_buffer": {
+      "k": 10,
+      "step_signal_dates": 1,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": 0.05717103585460093,
+          "gross": 0.10305521146052898,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.06508924605874422,
+          "gross_excess": 0.1081879467163217,
+          "max_drawdown": -0.18024764077779343,
+          "orders_per_rebalance_after_first": 6.9523809523809526,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.05717103585460093,
+      "mean_net_excess": 0.06508924605874422,
+      "mean_gross_excess": 0.1081879467163217,
+      "net_excess_range": [
+        0.06508924605874422,
+        0.06508924605874422
+      ],
+      "mean_max_drawdown": -0.18024764077779343,
+      "mean_orders_per_rebalance": 6.9523809523809526,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0011707245005047589,
+        "ci95": [
+          -0.0024141534780693255,
+          0.007861612580963233
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step1_nobuffer": {
+      "k": 20,
+      "step_signal_dates": 1,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.020253448693041243,
+          "gross": 0.07331630886418528,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.012335238488897948,
+          "gross_excess": 0.078449044119978,
+          "max_drawdown": -0.20443810942543517,
+          "orders_per_rebalance_after_first": 31.80952380952381,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.020253448693041243,
+      "mean_net_excess": -0.012335238488897948,
+      "mean_gross_excess": 0.078449044119978,
+      "net_excess_range": [
+        -0.012335238488897948,
+        -0.012335238488897948
+      ],
+      "mean_max_drawdown": -0.20443810942543517,
+      "mean_orders_per_rebalance": 31.80952380952381,
+      "daily_net_diff_vs_universe": {
+        "mean": 9.242515045783384e-06,
+        "ci95": [
+          -0.0034136991509374766,
+          0.005216644264161753
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": -0.0011379239366495766,
+        "std": 0.05690009847869557,
+        "q025": -0.09886805337216863,
+        "q975": 0.12743671844580678,
+        "single_phase_q025": -0.09886805337216863,
+        "single_phase_q975": 0.12743671844580678,
+        "c2_percentile": 0.906
+      }
+    },
+    "k20_step1_buffer": {
+      "k": 20,
+      "step_signal_dates": 1,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": 0.07282070840145805,
+          "gross": 0.12346021903821436,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.08073891860560134,
+          "gross_excess": 0.12859295429400708,
+          "max_drawdown": -0.16415934079918093,
+          "orders_per_rebalance_after_first": 15.523809523809524,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.07282070840145805,
+      "mean_net_excess": 0.08073891860560134,
+      "mean_gross_excess": 0.12859295429400708,
+      "net_excess_range": [
+        0.08073891860560134,
+        0.08073891860560134
+      ],
+      "mean_max_drawdown": -0.16415934079918093,
+      "mean_orders_per_rebalance": 15.523809523809524,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0013795603903195511,
+        "ci95": [
+          -0.002129657795868119,
+          0.007057083241543099
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step2_nobuffer": {
+      "k": 5,
+      "step_signal_dates": 2,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": 0.20025523288125946,
+          "gross": 0.2637714976973824,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.20817344308540275,
+          "gross_excess": 0.2689042329531751,
+          "max_drawdown": -0.19790643594455137,
+          "orders_per_rebalance_after_first": 9.0,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": -0.03506561507444461,
+          "gross": 0.012785144912311974,
+          "universe_net": 0.015274111492683762,
+          "net_excess": -0.05033972656712837,
+          "gross_excess": -0.005352178783847528,
+          "max_drawdown": -0.2719747122961492,
+          "orders_per_rebalance_after_first": 8.6,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.08259480890340742,
+      "mean_net_excess": 0.07891685825913719,
+      "mean_gross_excess": 0.1317760270846638,
+      "net_excess_range": [
+        -0.05033972656712837,
+        0.20817344308540275
+      ],
+      "mean_max_drawdown": -0.2349405741203503,
+      "mean_orders_per_rebalance": 8.8,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.000824782268334579,
+        "ci95": [
+          -0.003292565316817502,
+          0.00858556338910612
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": 0.009368269938189969,
+        "std": 0.08351553613618533,
+        "q025": -0.13156992807603388,
+        "q975": 0.18827373848161683,
+        "single_phase_q025": -0.18744088295803796,
+        "single_phase_q975": 0.23527744873033862,
+        "c2_percentile": 0.936
+      }
+    },
+    "k5_step2_buffer": {
+      "k": 5,
+      "step_signal_dates": 2,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": 0.062482750079658755,
+          "gross": 0.0937165685832948,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.07040096028380205,
+          "gross_excess": 0.09884930383908752,
+          "max_drawdown": -0.24971510450767154,
+          "orders_per_rebalance_after_first": 5.0,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.06006564686440141,
+          "gross": 0.0927913886973657,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.04479153537171765,
+          "gross_excess": 0.0746540650012062,
+          "max_drawdown": -0.18349961210738286,
+          "orders_per_rebalance_after_first": 5.2,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.061274198472030084,
+      "mean_net_excess": 0.05759624782775985,
+      "mean_gross_excess": 0.08675168442014686,
+      "net_excess_range": [
+        0.04479153537171765,
+        0.07040096028380205
+      ],
+      "mean_max_drawdown": -0.2166073583075272,
+      "mean_orders_per_rebalance": 5.1,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0005000932619078037,
+        "ci95": [
+          -0.0027303596573934326,
+          0.007392840149015447
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step2_nobuffer": {
+      "k": 10,
+      "step_signal_dates": 2,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": 0.18451807077918758,
+          "gross": 0.24743482960979257,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.19243628098333088,
+          "gross_excess": 0.2525675648655853,
+          "max_drawdown": -0.1374735095845575,
+          "orders_per_rebalance_after_first": 18.4,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": -0.0073157440571156584,
+          "gross": 0.04184152033635846,
+          "universe_net": 0.015274111492683762,
+          "net_excess": -0.02258985554979942,
+          "gross_excess": 0.02370419664019896,
+          "max_drawdown": -0.23367284184491466,
+          "orders_per_rebalance_after_first": 17.4,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.08860116336103596,
+      "mean_net_excess": 0.08492321271676573,
+      "mean_gross_excess": 0.13813588075289213,
+      "net_excess_range": [
+        -0.02258985554979942,
+        0.19243628098333088
+      ],
+      "mean_max_drawdown": -0.18557317571473608,
+      "mean_orders_per_rebalance": 17.9,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0009838127836309203,
+        "ci95": [
+          -0.0026675450440582717,
+          0.007241936776563527
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": -0.0011952857433720249,
+        "std": 0.051938801830842984,
+        "q025": -0.10616135841223415,
+        "q975": 0.09887385565622464,
+        "single_phase_q025": -0.129214251858195,
+        "single_phase_q975": 0.15351104101936264,
+        "c2_percentile": 0.994
+      }
+    },
+    "k10_step2_buffer": {
+      "k": 10,
+      "step_signal_dates": 2,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": 0.06694190051773341,
+          "gross": 0.09714382638601249,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.0748601107218767,
+          "gross_excess": 0.10227656164180521,
+          "max_drawdown": -0.1531672550774663,
+          "orders_per_rebalance_after_first": 9.4,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.16316263627163696,
+          "gross": 0.20180628341574147,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.1478885247789532,
+          "gross_excess": 0.18366895971958197,
+          "max_drawdown": -0.156826432767039,
+          "orders_per_rebalance_after_first": 11.4,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.11505226839468519,
+      "mean_net_excess": 0.11137431775041495,
+      "mean_gross_excess": 0.1429727606806936,
+      "net_excess_range": [
+        0.0748601107218767,
+        0.1478885247789532
+      ],
+      "mean_max_drawdown": -0.15499684392225266,
+      "mean_orders_per_rebalance": 10.4,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.001344587952848533,
+        "ci95": [
+          -0.0012854973474050954,
+          0.006653289659981162
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step2_nobuffer": {
+      "k": 20,
+      "step_signal_dates": 2,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": 0.07027268243200901,
+          "gross": 0.12466079274018549,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.07819089263615231,
+          "gross_excess": 0.1297935279959782,
+          "max_drawdown": -0.16400080455977706,
+          "orders_per_rebalance_after_first": 35.4,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.12111164671528907,
+          "gross": 0.17864583814633583,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.1058375352226053,
+          "gross_excess": 0.16050851445017633,
+          "max_drawdown": -0.17577442017005918,
+          "orders_per_rebalance_after_first": 35.8,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.09569216457364904,
+      "mean_net_excess": 0.09201421392937881,
+      "mean_gross_excess": 0.14515102122307727,
+      "net_excess_range": [
+        0.07819089263615231,
+        0.1058375352226053
+      ],
+      "mean_max_drawdown": -0.16988761236491812,
+      "mean_orders_per_rebalance": 35.599999999999994,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0012611430522587027,
+        "ci95": [
+          -0.002227549914530773,
+          0.006792980546501202
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": 0.0011421615975664373,
+        "std": 0.03819870422418701,
+        "q025": -0.06805417777519518,
+        "q975": 0.08443688527351931,
+        "single_phase_q025": -0.10757857754273523,
+        "single_phase_q975": 0.09982564833325594,
+        "c2_percentile": 1.0
+      }
+    },
+    "k20_step2_buffer": {
+      "k": 20,
+      "step_signal_dates": 2,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": 0.0995502880922674,
+          "gross": 0.13265095621610512,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.1074684982964107,
+          "gross_excess": 0.13778369147189784,
+          "max_drawdown": -0.13057524321525893,
+          "orders_per_rebalance_after_first": 20.0,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.1633944464408592,
+          "gross": 0.2013799052719163,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.14812033494817545,
+          "gross_excess": 0.1832425815757568,
+          "max_drawdown": -0.16225902843490225,
+          "orders_per_rebalance_after_first": 22.2,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.1314723672665633,
+      "mean_net_excess": 0.12779441662229307,
+      "mean_gross_excess": 0.16051313652382732,
+      "net_excess_range": [
+        0.1074684982964107,
+        0.14812033494817545
+      ],
+      "mean_max_drawdown": -0.1464171358250806,
+      "mean_orders_per_rebalance": 21.1,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0017156740242752853,
+        "ci95": [
+          -0.0008783637198114551,
+          0.006781544982705085
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step3_nobuffer": {
+      "k": 5,
+      "step_signal_dates": 3,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.1386640616537953,
+          "gross": -0.10584536350497264,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.130745851449652,
+          "gross_excess": -0.10071262824917993,
+          "max_drawdown": -0.27612116683716625,
+          "orders_per_rebalance_after_first": 9.142857142857142,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.34851456506064715,
+          "gross": 0.391125589881804,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.3332404535679634,
+          "gross_excess": 0.3729882661856445,
+          "max_drawdown": -0.19652308270967356,
+          "orders_per_rebalance_after_first": 9.333333333333334,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.04360474399105907,
+          "gross": -0.010781319940749268,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.04425915485989196,
+          "gross_excess": -0.014258860892697345,
+          "max_drawdown": -0.19170456222259213,
+          "orders_per_rebalance_after_first": 9.0,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.055415253138597596,
+      "mean_net_excess": 0.05274514908613981,
+      "mean_gross_excess": 0.08600559234792242,
+      "net_excess_range": [
+        -0.130745851449652,
+        0.3332404535679634
+      ],
+      "mean_max_drawdown": -0.22144960392314397,
+      "mean_orders_per_rebalance": 9.158730158730158,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.00025699111504243113,
+        "ci95": [
+          -0.0023769735686867423,
+          0.006427975709916473
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": 0.006822289214705129,
+        "std": 0.06200833896772675,
+        "q025": -0.11132231035221948,
+        "q975": 0.12063710544936021,
+        "single_phase_q025": -0.17023965152907858,
+        "single_phase_q975": 0.25567476397842614,
+        "c2_percentile": 0.902
+      }
+    },
+    "k5_step3_buffer": {
+      "k": 5,
+      "step_signal_dates": 3,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.12339149300724195,
+          "gross": -0.09906036319368317,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.11547328280309865,
+          "gross_excess": -0.09392762793789045,
+          "max_drawdown": -0.2940969292733412,
+          "orders_per_rebalance_after_first": 6.857142857142857,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.34012832599039156,
+          "gross": 0.37376838560728487,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.3248542144977078,
+          "gross_excess": 0.35563106191112537,
+          "max_drawdown": -0.21262114676649968,
+          "orders_per_rebalance_after_first": 7.333333333333333,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.041355353168119224,
+          "gross": -0.02083771984089755,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.04200976403695211,
+          "gross_excess": -0.024315260792845628,
+          "max_drawdown": -0.2147025089473915,
+          "orders_per_rebalance_after_first": 5.333333333333333,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.058460493271676794,
+      "mean_net_excess": 0.05579038921921901,
+      "mean_gross_excess": 0.07912939106012977,
+      "net_excess_range": [
+        -0.11547328280309865,
+        0.3248542144977078
+      ],
+      "mean_max_drawdown": -0.24047352832907745,
+      "mean_orders_per_rebalance": 6.507936507936507,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0003021445146078705,
+        "ci95": [
+          -0.002671484266581689,
+          0.006699455876504758
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step3_nobuffer": {
+      "k": 10,
+      "step_signal_dates": 3,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.10419936290506127,
+          "gross": -0.06979452056648383,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.09628115270091797,
+          "gross_excess": -0.06466178531069111,
+          "max_drawdown": -0.21864048808707937,
+          "orders_per_rebalance_after_first": 19.142857142857142,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.30165862395256227,
+          "gross": 0.34433981972534333,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.2863845124598785,
+          "gross_excess": 0.32620249602918383,
+          "max_drawdown": -0.1842046409018212,
+          "orders_per_rebalance_after_first": 18.666666666666668,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": 0.0005532807537587114,
+          "gross": 0.035011844688978666,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.00010113011507417724,
+          "gross_excess": 0.03153430373703059,
+          "max_drawdown": -0.161037791003941,
+          "orders_per_rebalance_after_first": 18.666666666666668,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.0660041806004199,
+      "mean_net_excess": 0.06333407654796212,
+      "mean_gross_excess": 0.09769167148517444,
+      "net_excess_range": [
+        -0.09628115270091797,
+        0.2863845124598785
+      ],
+      "mean_max_drawdown": -0.1879609733309472,
+      "mean_orders_per_rebalance": 18.825396825396826,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0005248538664479644,
+        "ci95": [
+          -0.0019525872001132905,
+          0.005318110386523982
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": 0.0013766162018469215,
+        "std": 0.04373787186116899,
+        "q025": -0.07837741186893117,
+        "q975": 0.09675244753062578,
+        "single_phase_q025": -0.14274463987909128,
+        "single_phase_q975": 0.16274557522436195,
+        "c2_percentile": 0.976
+      }
+    },
+    "k10_step3_buffer": {
+      "k": 10,
+      "step_signal_dates": 3,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.05379660457799085,
+          "gross": -0.02884664871206566,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.04587839437384755,
+          "gross_excess": -0.02371391345627294,
+          "max_drawdown": -0.1892630326890017,
+          "orders_per_rebalance_after_first": 13.142857142857142,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.30059613872854984,
+          "gross": 0.33149481326948727,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.2853220272358661,
+          "gross_excess": 0.31335748957332776,
+          "max_drawdown": -0.16183494359127237,
+          "orders_per_rebalance_after_first": 13.0,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.019211743612407406,
+          "gross": -0.00047991413424364193,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.019866154481240295,
+          "gross_excess": -0.003957455086191719,
+          "max_drawdown": -0.1827848920300621,
+          "orders_per_rebalance_after_first": 9.333333333333334,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.07586259684605053,
+      "mean_net_excess": 0.07319249279359274,
+      "mean_gross_excess": 0.0952287070102877,
+      "net_excess_range": [
+        -0.04587839437384755,
+        0.2853220272358661
+      ],
+      "mean_max_drawdown": -0.1779609561034454,
+      "mean_orders_per_rebalance": 11.825396825396824,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0006531563905010484,
+        "ci95": [
+          -0.0012402915525220766,
+          0.005428847549126303
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step3_nobuffer": {
+      "k": 20,
+      "step_signal_dates": 3,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": 0.00034105834873354723,
+          "gross": 0.039758029694895614,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.008259268552876842,
+          "gross_excess": 0.04489076495068833,
+          "max_drawdown": -0.18468538310644678,
+          "orders_per_rebalance_after_first": 38.57142857142857,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.22420770600335627,
+          "gross": 0.26479489904697684,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.2089335945106725,
+          "gross_excess": 0.24665757535081734,
+          "max_drawdown": -0.17930045820900053,
+          "orders_per_rebalance_after_first": 37.666666666666664,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.005005826036836081,
+          "gross": 0.027398687685282308,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.005660236905668969,
+          "gross_excess": 0.02392114673333423,
+          "max_drawdown": -0.1857447452106169,
+          "orders_per_rebalance_after_first": 36.333333333333336,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.0731809794384179,
+      "mean_net_excess": 0.07051087538596013,
+      "mean_gross_excess": 0.10515649567827996,
+      "net_excess_range": [
+        -0.005660236905668969,
+        0.2089335945106725
+      ],
+      "mean_max_drawdown": -0.1832435288420214,
+      "mean_orders_per_rebalance": 37.523809523809526,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0008897099599301474,
+        "ci95": [
+          -0.002164289295179805,
+          0.005632684233037626
+        ],
+        "verdict": "inconclusive"
+      },
+      "random_books_gross_excess": {
+        "books": 500,
+        "mean": 0.005727387140206635,
+        "std": 0.029994442766175432,
+        "q025": -0.05622789037859323,
+        "q975": 0.06720620571208324,
+        "single_phase_q025": -0.10012221570111907,
+        "single_phase_q975": 0.11561872346606175,
+        "c2_percentile": 1.0
+      }
+    },
+    "k20_step3_buffer": {
+      "k": 20,
+      "step_signal_dates": 3,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": 0.07960454278539553,
+          "gross": 0.10799620072347049,
+          "universe_net": -0.007918210204143294,
+          "net_excess": 0.08752275298953882,
+          "gross_excess": 0.11312893597926321,
+          "max_drawdown": -0.14187367099287163,
+          "orders_per_rebalance_after_first": 24.857142857142858,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.22737330951224255,
+          "gross": 0.2535244237463423,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.2120991980195588,
+          "gross_excess": 0.23538710005018282,
+          "max_drawdown": -0.15140406153581276,
+          "orders_per_rebalance_after_first": 22.666666666666668,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": 0.06999322272601782,
+          "gross": 0.09078443779442869,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": 0.06933881185718493,
+          "gross_excess": 0.08730689684248061,
+          "max_drawdown": -0.1308115273764504,
+          "orders_per_rebalance_after_first": 20.666666666666668,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.1256570250078853,
+      "mean_net_excess": 0.12298692095542751,
+      "mean_gross_excess": 0.1452743109573089,
+      "net_excess_range": [
+        0.06933881185718493,
+        0.2120991980195588
+      ],
+      "mean_max_drawdown": -0.14136308663504493,
+      "mean_orders_per_rebalance": 22.73015873015873,
+      "daily_net_diff_vs_universe": {
+        "mean": 0.0016310270718514308,
+        "ci95": [
+          -0.00048527755287898434,
+          0.005843120547695288
+        ],
+        "verdict": "inconclusive"
+      }
+    }
+  },
+  "S1": {
+    "k5_step1_nobuffer": {
+      "k": 5,
+      "step_signal_dates": 1,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.17977990419170142,
+          "gross": -0.08984500075956325,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.17186169398755813,
+          "gross_excess": -0.08471226550377053,
+          "max_drawdown": -0.2947940314213283,
+          "orders_per_rebalance_after_first": 9.428571428571429,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.17977990419170142,
+      "mean_net_excess": -0.17186169398755813,
+      "mean_gross_excess": -0.08471226550377053,
+      "net_excess_range": [
+        -0.17186169398755813,
+        -0.17186169398755813
+      ],
+      "mean_max_drawdown": -0.2947940314213283,
+      "mean_orders_per_rebalance": 9.428571428571429,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.00264649978519183,
+        "ci95": [
+          -0.01002115652541831,
+          0.004141542430586028
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step1_buffer": {
+      "k": 5,
+      "step_signal_dates": 1,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.1621325012053504,
+          "gross": -0.11064636294844044,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.1542142910012071,
+          "gross_excess": -0.10551362769264772,
+          "max_drawdown": -0.2875277781525638,
+          "orders_per_rebalance_after_first": 5.428571428571429,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.1621325012053504,
+      "mean_net_excess": -0.1542142910012071,
+      "mean_gross_excess": -0.10551362769264772,
+      "net_excess_range": [
+        -0.1542142910012071,
+        -0.1542142910012071
+      ],
+      "mean_max_drawdown": -0.2875277781525638,
+      "mean_orders_per_rebalance": 5.428571428571429,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0023402710542493096,
+        "ci95": [
+          -0.007421453291801208,
+          0.005662499910007425
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step1_nobuffer": {
+      "k": 10,
+      "step_signal_dates": 1,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.07179936229463058,
+          "gross": 0.02925018848640848,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.06388115209048728,
+          "gross_excess": 0.0343829237422012,
+          "max_drawdown": -0.2472095047946401,
+          "orders_per_rebalance_after_first": 18.285714285714285,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.07179936229463058,
+      "mean_net_excess": -0.06388115209048728,
+      "mean_gross_excess": 0.0343829237422012,
+      "net_excess_range": [
+        -0.06388115209048728,
+        -0.06388115209048728
+      ],
+      "mean_max_drawdown": -0.2472095047946401,
+      "mean_orders_per_rebalance": 18.285714285714285,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0008321584395654218,
+        "ci95": [
+          -0.0057602695902655475,
+          0.004136050421857074
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step1_buffer": {
+      "k": 10,
+      "step_signal_dates": 1,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.13923259204533178,
+          "gross": -0.08603582066518911,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.1313143818411885,
+          "gross_excess": -0.08090308540939639,
+          "max_drawdown": -0.25834121534827004,
+          "orders_per_rebalance_after_first": 10.571428571428571,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.13923259204533178,
+      "mean_net_excess": -0.1313143818411885,
+      "mean_gross_excess": -0.08090308540939639,
+      "net_excess_range": [
+        -0.1313143818411885,
+        -0.1313143818411885
+      ],
+      "mean_max_drawdown": -0.25834121534827004,
+      "mean_orders_per_rebalance": 10.571428571428571,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0019967276143061288,
+        "ci95": [
+          -0.006457336571190513,
+          0.004646315302404356
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step1_nobuffer": {
+      "k": 20,
+      "step_signal_dates": 1,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.09458698081210437,
+          "gross": 0.005682257794661583,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.08666877060796108,
+          "gross_excess": 0.010814993050454302,
+          "max_drawdown": -0.24742659302464554,
+          "orders_per_rebalance_after_first": 36.857142857142854,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.09458698081210437,
+      "mean_net_excess": -0.08666877060796108,
+      "mean_gross_excess": 0.010814993050454302,
+      "net_excess_range": [
+        -0.08666877060796108,
+        -0.08666877060796108
+      ],
+      "mean_max_drawdown": -0.24742659302464554,
+      "mean_orders_per_rebalance": 36.857142857142854,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.001215901191570003,
+        "ci95": [
+          -0.005393439011405947,
+          0.003772589509225501
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step1_buffer": {
+      "k": 20,
+      "step_signal_dates": 1,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 22,
+          "net": -0.03945570671788856,
+          "gross": 0.023344089182160577,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.03153749651374527,
+          "gross_excess": 0.028476824437953296,
+          "max_drawdown": -0.21951384783060712,
+          "orders_per_rebalance_after_first": 21.61904761904762,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.03945570671788856,
+      "mean_net_excess": -0.03153749651374527,
+      "mean_gross_excess": 0.028476824437953296,
+      "net_excess_range": [
+        -0.03153749651374527,
+        -0.03153749651374527
+      ],
+      "mean_max_drawdown": -0.21951384783060712,
+      "mean_orders_per_rebalance": 21.61904761904762,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0002918147302502488,
+        "ci95": [
+          -0.004466162164864796,
+          0.005276809314278387
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step2_nobuffer": {
+      "k": 5,
+      "step_signal_dates": 2,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": -0.29639304011449463,
+          "gross": -0.2597884154480655,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.28847482991035134,
+          "gross_excess": -0.2546556801922728,
+          "max_drawdown": -0.3249332148206314,
+          "orders_per_rebalance_after_first": 9.4,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.046290390874398124,
+          "gross": 0.09847748894761521,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.031016279381714362,
+          "gross_excess": 0.08034016525145571,
+          "max_drawdown": -0.25522002080694517,
+          "orders_per_rebalance_after_first": 9.2,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.12505132462004825,
+      "mean_net_excess": -0.1287292752643185,
+      "mean_gross_excess": -0.08715775747040855,
+      "net_excess_range": [
+        -0.28847482991035134,
+        0.031016279381714362
+      ],
+      "mean_max_drawdown": -0.2900766178137883,
+      "mean_orders_per_rebalance": 9.3,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0029542512932576905,
+        "ci95": [
+          -0.007418165323454523,
+          0.004093416117446298
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step2_buffer": {
+      "k": 5,
+      "step_signal_dates": 2,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": -0.0964542572264685,
+          "gross": -0.06272603284817213,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.0885360470223252,
+          "gross_excess": -0.05759329759237941,
+          "max_drawdown": -0.2598328374790686,
+          "orders_per_rebalance_after_first": 6.8,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": -0.09071462757885218,
+          "gross": -0.061811642769653785,
+          "universe_net": 0.015274111492683762,
+          "net_excess": -0.10598873907153594,
+          "gross_excess": -0.07994896646581329,
+          "max_drawdown": -0.2951896351254839,
+          "orders_per_rebalance_after_first": 5.6,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.09358444240266034,
+      "mean_net_excess": -0.09726239304693057,
+      "mean_gross_excess": -0.06877113202909635,
+      "net_excess_range": [
+        -0.10598873907153594,
+        -0.0885360470223252
+      ],
+      "mean_max_drawdown": -0.27751123630227625,
+      "mean_orders_per_rebalance": 6.199999999999999,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.002161214550020085,
+        "ci95": [
+          -0.005426590443954702,
+          0.004336207241652839
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step2_nobuffer": {
+      "k": 10,
+      "step_signal_dates": 2,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": -0.13482535155920317,
+          "gross": -0.09019520025239425,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.12690714135505987,
+          "gross_excess": -0.08506246499660153,
+          "max_drawdown": -0.22716986332436162,
+          "orders_per_rebalance_after_first": 18.2,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.10332444980729116,
+          "gross": 0.1598008054931883,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.0880503383146074,
+          "gross_excess": 0.1416634817970288,
+          "max_drawdown": -0.19858148779723406,
+          "orders_per_rebalance_after_first": 18.4,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.015750450875956,
+      "mean_net_excess": -0.019428401520226235,
+      "mean_gross_excess": 0.028300508400213642,
+      "net_excess_range": [
+        -0.12690714135505987,
+        0.0880503383146074
+      ],
+      "mean_max_drawdown": -0.21287567556079784,
+      "mean_orders_per_rebalance": 18.299999999999997,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0007507043775304648,
+        "ci95": [
+          -0.003925341467714982,
+          0.004943509241425449
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step2_buffer": {
+      "k": 10,
+      "step_signal_dates": 2,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": -0.13991183332336743,
+          "gross": -0.10831289431642388,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.13199362311922413,
+          "gross_excess": -0.10318015906063116,
+          "max_drawdown": -0.24565145329733618,
+          "orders_per_rebalance_after_first": 13.0,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.05816972638008355,
+          "gross": 0.0938833699773658,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.04289561488739979,
+          "gross_excess": 0.07574604628120629,
+          "max_drawdown": -0.21787309340842842,
+          "orders_per_rebalance_after_first": 11.8,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.04087105347164194,
+      "mean_net_excess": -0.04454900411591217,
+      "mean_gross_excess": -0.013717056389712434,
+      "net_excess_range": [
+        -0.13199362311922413,
+        0.04289561488739979
+      ],
+      "mean_max_drawdown": -0.2317622733528823,
+      "mean_orders_per_rebalance": 12.4,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.001141660352215263,
+        "ci95": [
+          -0.003775678235077546,
+          0.0045946313893918695
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step2_nobuffer": {
+      "k": 20,
+      "step_signal_dates": 2,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": -0.09818351853523977,
+          "gross": -0.04947328794272332,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.09026530833109647,
+          "gross_excess": -0.0443405526869306,
+          "max_drawdown": -0.22605524021929424,
+          "orders_per_rebalance_after_first": 37.6,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.06027439077373087,
+          "gross": 0.11422717598855159,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.045000279281047106,
+          "gross_excess": 0.09608985229239209,
+          "max_drawdown": -0.21276376243035966,
+          "orders_per_rebalance_after_first": 36.2,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.01895456388075445,
+      "mean_net_excess": -0.022632514525024683,
+      "mean_gross_excess": 0.025874649802730743,
+      "net_excess_range": [
+        -0.09026530833109647,
+        0.045000279281047106
+      ],
+      "mean_max_drawdown": -0.21940950132482695,
+      "mean_orders_per_rebalance": 36.900000000000006,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0005153180430415528,
+        "ci95": [
+          -0.004311386526693326,
+          0.005027947716119006
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step2_buffer": {
+      "k": 20,
+      "step_signal_dates": 2,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 11,
+          "net": -0.0688231550024061,
+          "gross": -0.036273401181400655,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.060904944798262806,
+          "gross_excess": -0.031140665925607935,
+          "max_drawdown": -0.19224270017280587,
+          "orders_per_rebalance_after_first": 23.8,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 11,
+          "net": 0.07196038107837532,
+          "gross": 0.10997072402636277,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.05668626958569156,
+          "gross_excess": 0.09183340033020326,
+          "max_drawdown": -0.19015606171336408,
+          "orders_per_rebalance_after_first": 24.0,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": 0.001568613037984612,
+      "mean_net_excess": -0.0021093376062856217,
+      "mean_gross_excess": 0.030346367202297664,
+      "net_excess_range": [
+        -0.060904944798262806,
+        0.05668626958569156
+      ],
+      "mean_max_drawdown": -0.19119938094308497,
+      "mean_orders_per_rebalance": 23.9,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0002479212440903251,
+        "ci95": [
+          -0.002639922953346412,
+          0.004181065484846078
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step3_nobuffer": {
+      "k": 5,
+      "step_signal_dates": 3,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.10966057456606726,
+          "gross": -0.07696704813240707,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.10174236436192396,
+          "gross_excess": -0.07183431287661435,
+          "max_drawdown": -0.2915861537256329,
+          "orders_per_rebalance_after_first": 9.714285714285714,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": -0.17444254518826652,
+          "gross": -0.14750033590615486,
+          "universe_net": 0.015274111492683762,
+          "net_excess": -0.18971665668095028,
+          "gross_excess": -0.16563765960231436,
+          "max_drawdown": -0.34052489958851173,
+          "orders_per_rebalance_after_first": 9.666666666666666,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.13632081713313948,
+          "gross": -0.10771391951375364,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.13697522800197237,
+          "gross_excess": -0.11119146046570172,
+          "max_drawdown": -0.260424693998233,
+          "orders_per_rebalance_after_first": 9.333333333333334,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.1401413122958244,
+      "mean_net_excess": -0.1428114163482822,
+      "mean_gross_excess": -0.1162211443148768,
+      "net_excess_range": [
+        -0.18971665668095028,
+        -0.10174236436192396
+      ],
+      "mean_max_drawdown": -0.29751191577079256,
+      "mean_orders_per_rebalance": 9.571428571428571,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0029030834981171004,
+        "ci95": [
+          -0.007528760101287116,
+          0.0038659407152913643
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k5_step3_buffer": {
+      "k": 5,
+      "step_signal_dates": 3,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.19096491237196245,
+          "gross": -0.17159323378159852,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.18304670216781915,
+          "gross_excess": -0.1664604985258058,
+          "max_drawdown": -0.28377223059118273,
+          "orders_per_rebalance_after_first": 6.0,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": -0.18494058425362914,
+          "gross": -0.17013381599186594,
+          "universe_net": 0.015274111492683762,
+          "net_excess": -0.2002146957463129,
+          "gross_excess": -0.18827113968802545,
+          "max_drawdown": -0.3522706092160728,
+          "orders_per_rebalance_after_first": 5.333333333333333,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.04022388400837529,
+          "gross": -0.01621865122306687,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.04087829487720818,
+          "gross_excess": -0.019696192175014948,
+          "max_drawdown": -0.2368018424456675,
+          "orders_per_rebalance_after_first": 6.666666666666667,
+          "mean_names": 5.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.13870979354465562,
+      "mean_net_excess": -0.14137989759711342,
+      "mean_gross_excess": -0.12480927679628206,
+      "net_excess_range": [
+        -0.2002146957463129,
+        -0.04087829487720818
+      ],
+      "mean_max_drawdown": -0.290948227417641,
+      "mean_orders_per_rebalance": 6.0,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0029995426995386987,
+        "ci95": [
+          -0.006227133223817616,
+          0.0029924203427380966
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step3_nobuffer": {
+      "k": 10,
+      "step_signal_dates": 3,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.14193555042986838,
+          "gross": -0.10901429879045221,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.1340173402257251,
+          "gross_excess": -0.1038815635346595,
+          "max_drawdown": -0.28878635460736524,
+          "orders_per_rebalance_after_first": 19.428571428571427,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.036097387237200795,
+          "gross": 0.0698729982338464,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.020823275744517034,
+          "gross_excess": 0.051735674537686904,
+          "max_drawdown": -0.2328627892643983,
+          "orders_per_rebalance_after_first": 19.0,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.04408854010962682,
+          "gross": -0.011572804621040045,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.044742950978459706,
+          "gross_excess": -0.015050345572988122,
+          "max_drawdown": -0.19543406923662,
+          "orders_per_rebalance_after_first": 19.333333333333332,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.04997556776743147,
+      "mean_net_excess": -0.05264567181988925,
+      "mean_gross_excess": -0.02239874485665357,
+      "net_excess_range": [
+        -0.1340173402257251,
+        0.020823275744517034
+      ],
+      "mean_max_drawdown": -0.2390277377027945,
+      "mean_orders_per_rebalance": 19.253968253968253,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0012537892333404797,
+        "ci95": [
+          -0.004026365138403627,
+          0.004181676531811293
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k10_step3_buffer": {
+      "k": 10,
+      "step_signal_dates": 3,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.14997099312014928,
+          "gross": -0.12888312358699872,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.14205278291600598,
+          "gross_excess": -0.123750388331206,
+          "max_drawdown": -0.2668137270558226,
+          "orders_per_rebalance_after_first": 12.285714285714286,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": -0.09152360734368314,
+          "gross": -0.07332995681200816,
+          "universe_net": 0.015274111492683762,
+          "net_excess": -0.1067977188363669,
+          "gross_excess": -0.09146728050816766,
+          "max_drawdown": -0.2651021178549474,
+          "orders_per_rebalance_after_first": 11.0,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.06686824752855947,
+          "gross": -0.0427908416718259,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.06752265839739235,
+          "gross_excess": -0.046268382623773974,
+          "max_drawdown": -0.21932575746025906,
+          "orders_per_rebalance_after_first": 14.666666666666666,
+          "mean_names": 10.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.10278761599746396,
+      "mean_net_excess": -0.10545772004992175,
+      "mean_gross_excess": -0.08716201715438254,
+      "net_excess_range": [
+        -0.14205278291600598,
+        -0.06752265839739235
+      ],
+      "mean_max_drawdown": -0.2504138674570097,
+      "mean_orders_per_rebalance": 12.65079365079365,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.002145885106259871,
+        "ci95": [
+          -0.004764899314015483,
+          0.0027562941600716494
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step3_nobuffer": {
+      "k": 20,
+      "step_signal_dates": 3,
+      "buffer": false,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.09334915746247396,
+          "gross": -0.057800093275446884,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.08543094725833067,
+          "gross_excess": -0.052667358019654165,
+          "max_drawdown": -0.27649728416714525,
+          "orders_per_rebalance_after_first": 39.42857142857143,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.0638855661867006,
+          "gross": 0.09955273933622455,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.04861145469401684,
+          "gross_excess": 0.08141541564006505,
+          "max_drawdown": -0.22638341476598423,
+          "orders_per_rebalance_after_first": 38.0,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": -0.024365639453650223,
+          "gross": 0.007819743215015773,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": -0.02502005032248311,
+          "gross_excess": 0.004342202263067696,
+          "max_drawdown": -0.17724225828363283,
+          "orders_per_rebalance_after_first": 37.666666666666664,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.01794307690980786,
+      "mean_net_excess": -0.020613180962265647,
+      "mean_gross_excess": 0.011030086627826194,
+      "net_excess_range": [
+        -0.08543094725833067,
+        0.04861145469401684
+      ],
+      "mean_max_drawdown": -0.22670765240558743,
+      "mean_orders_per_rebalance": 38.36507936507937,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0005017910444023261,
+        "ci95": [
+          -0.0039901530502654305,
+          0.004709823683964696
+        ],
+        "verdict": "inconclusive"
+      }
+    },
+    "k20_step3_buffer": {
+      "k": 20,
+      "step_signal_dates": 3,
+      "buffer": true,
+      "phases": [
+        {
+          "first_trade": "2026-07-20",
+          "rebalances": 8,
+          "net": -0.11081083114598789,
+          "gross": -0.08718684507013597,
+          "universe_net": -0.007918210204143294,
+          "net_excess": -0.10289262094184459,
+          "gross_excess": -0.08205410981434325,
+          "max_drawdown": -0.26484724687158256,
+          "orders_per_rebalance_after_first": 26.285714285714285,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-23",
+          "rebalances": 7,
+          "net": 0.06700277544649569,
+          "gross": 0.09224054862484099,
+          "universe_net": 0.015274111492683762,
+          "net_excess": 0.051728663953811926,
+          "gross_excess": 0.07410322492868149,
+          "max_drawdown": -0.20577954274905708,
+          "orders_per_rebalance_after_first": 25.333333333333332,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        },
+        {
+          "first_trade": "2026-07-28",
+          "rebalances": 7,
+          "net": 0.009152456937319808,
+          "gross": 0.0345243481735773,
+          "universe_net": 0.0006544108688328887,
+          "net_excess": 0.00849804606848692,
+          "gross_excess": 0.031046807221629225,
+          "max_drawdown": -0.15333970336988578,
+          "orders_per_rebalance_after_first": 27.666666666666668,
+          "mean_names": 20.0,
+          "blocked_sells": 0
+        }
+      ],
+      "mean_net": -0.011551866254057463,
+      "mean_net_excess": -0.01422197030651525,
+      "mean_gross_excess": 0.007698640778655823,
+      "net_excess_range": [
+        -0.10289262094184459,
+        0.051728663953811926
+      ],
+      "mean_max_drawdown": -0.20798883099684182,
+      "mean_orders_per_rebalance": 26.42857142857143,
+      "daily_net_diff_vs_universe": {
+        "mean": -0.0004599479199826477,
+        "ci95": [
+          -0.0028757038098159316,
+          0.003833050034962867
+        ],
+        "verdict": "inconclusive"
+      }
+    }
+  },
+  "label_profile": {
+    "p16_sparse": {
+      "source": "scratch/oos65/c2_p16_s3",
+      "signal_days": 22,
+      "pool_rows": 86286,
+      "bootstrap_block": 4,
+      "buckets": {
+        "top5": {
+          "mean": 0.02005386714372923,
+          "ci95": [
+            -0.017512819086991184,
+            0.07907777584861647
+          ],
+          "positive_days": 0.45454545454545453
+        },
+        "top10": {
+          "mean": 0.01980801162622429,
+          "ci95": [
+            -0.007759893860552942,
+            0.06050786596459954
+          ],
+          "positive_days": 0.6363636363636364
+        },
+        "top20": {
+          "mean": 0.019307687901835274,
+          "ci95": [
+            -0.014405976819434726,
+            0.06680828069364836
+          ],
+          "positive_days": 0.5
+        },
+        "top50": {
+          "mean": 0.017899685062120186,
+          "ci95": [
+            -0.014900293529606657,
+            0.06494776140036804
+          ],
+          "positive_days": 0.6363636363636364
+        },
+        "top100": {
+          "mean": 0.01610701319285683,
+          "ci95": [
+            -0.013154413650434505,
+            0.05938460071309828
+          ],
+          "positive_days": 0.5
+        },
+        "top_decile": {
+          "mean": 0.013645031189480324,
+          "ci95": [
+            -0.005178192070673491,
+            0.0447587355428014
+          ],
+          "positive_days": 0.6363636363636364
+        },
+        "bottom5": {
+          "mean": -0.018642725848742683,
+          "ci95": [
+            -0.05567375567852542,
+            0.029320030480753406
+          ],
+          "positive_days": 0.36363636363636365
+        },
+        "bottom10": {
+          "mean": -0.021197363316812115,
+          "ci95": [
+            -0.03378181500108706,
+            0.015005756231044597
+          ],
+          "positive_days": 0.4090909090909091
+        },
+        "bottom20": {
+          "mean": -0.026412657791094685,
+          "ci95": [
+            -0.040316014141749304,
+            0.013319510545753394
+          ],
+          "positive_days": 0.18181818181818182
+        },
+        "bottom50": {
+          "mean": -0.02809417225152757,
+          "ci95": [
+            -0.04196790958690828,
+            -0.0007167916442801546
+          ],
+          "positive_days": 0.22727272727272727
+        },
+        "bottom100": {
+          "mean": -0.02894584467732909,
+          "ci95": [
+            -0.046192632780249494,
+            -0.0010041749987146913
+          ],
+          "positive_days": 0.22727272727272727
+        },
+        "bottom_decile": {
+          "mean": -0.02204652789326138,
+          "ci95": [
+            -0.036982180699974665,
+            -0.0022197940856012333
+          ],
+          "positive_days": 0.18181818181818182
+        }
+      }
+    },
+    "p16_dense": {
+      "source": "scratch/c2_roll/eval/c2",
+      "signal_days": 23,
+      "pool_rows": 88449,
+      "bootstrap_block": 10,
+      "buckets": {
+        "top5": {
+          "mean": -0.03382741504248173,
+          "ci95": [
+            -0.05286726969358522,
+            -0.032883871621399455
+          ],
+          "positive_days": 0.21739130434782608
+        },
+        "top10": {
+          "mean": -0.025328992822063506,
+          "ci95": [
+            -0.03845362892813119,
+            -0.023180783949441067
+          ],
+          "positive_days": 0.2608695652173913
+        },
+        "top20": {
+          "mean": -0.023020434153934816,
+          "ci95": [
+            -0.035489759007610984,
+            -0.019714608939932002
+          ],
+          "positive_days": 0.2608695652173913
+        },
+        "top50": {
+          "mean": -0.02340189831962653,
+          "ci95": [
+            -0.044981033681521405,
+            -0.010560788442471556
+          ],
+          "positive_days": 0.17391304347826086
+        },
+        "top100": {
+          "mean": -0.018243004307382002,
+          "ci95": [
+            -0.04365641529820009,
+            -0.0021223995063947496
+          ],
+          "positive_days": 0.2608695652173913
+        },
+        "top_decile": {
+          "mean": -0.003714684925581666,
+          "ci95": [
+            -0.02320768312499596,
+            0.009395909515347783
+          ],
+          "positive_days": 0.4782608695652174
+        },
+        "bottom5": {
+          "mean": -0.015609548764553473,
+          "ci95": [
+            -0.02804963078917368,
+            0.008430855417245711
+          ],
+          "positive_days": 0.43478260869565216
+        },
+        "bottom10": {
+          "mean": -0.04493096456947386,
+          "ci95": [
+            -0.06525801687154005,
+            -0.015539072020116021
+          ],
+          "positive_days": 0.17391304347826086
+        },
+        "bottom20": {
+          "mean": -0.05945329743446886,
+          "ci95": [
+            -0.08165625414349274,
+            -0.031822912405659015
+          ],
+          "positive_days": 0.08695652173913043
+        },
+        "bottom50": {
+          "mean": -0.06826986907935144,
+          "ci95": [
+            -0.08536546408646921,
+            -0.04743151069450705
+          ],
+          "positive_days": 0.0
+        },
+        "bottom100": {
+          "mean": -0.06906992670765284,
+          "ci95": [
+            -0.07920952315379633,
+            -0.05656693040012767
+          ],
+          "positive_days": 0.0
+        },
+        "bottom_decile": {
+          "mean": -0.04812615498347024,
+          "ci95": [
+            -0.05209599944139565,
+            -0.04563159272751399
+          ],
+          "positive_days": 0.0
+        }
+      }
+    },
+    "single_65d": {
+      "source": "scratch/oos65/c2",
+      "signal_days": 65,
+      "pool_rows": 254889,
+      "bootstrap_block": 10,
+      "buckets": {
+        "top5": {
+          "mean": 0.005548766146699917,
+          "ci95": [
+            -0.03162552591526169,
+            0.05004873082183644
+          ],
+          "positive_days": 0.5230769230769231
+        },
+        "top10": {
+          "mean": 0.006657083272672476,
+          "ci95": [
+            -0.027660265008484612,
+            0.04852840748364616
+          ],
+          "positive_days": 0.5076923076923077
+        },
+        "top20": {
+          "mean": 0.007292057341709296,
+          "ci95": [
+            -0.028621008828639913,
+            0.05061729009206102
+          ],
+          "positive_days": 0.5230769230769231
+        },
+        "top50": {
+          "mean": 0.00594710976609072,
+          "ci95": [
+            -0.025997197865951262,
+            0.04289814513257405
+          ],
+          "positive_days": 0.5076923076923077
+        },
+        "top100": {
+          "mean": 0.007173480649652203,
+          "ci95": [
+            -0.022863061938224672,
+            0.04391316502883145
+          ],
+          "positive_days": 0.5076923076923077
+        },
+        "top_decile": {
+          "mean": 0.009772313732007494,
+          "ci95": [
+            -0.009180039339579763,
+            0.03604978040758574
+          ],
+          "positive_days": 0.6153846153846154
+        },
+        "bottom5": {
+          "mean": -0.007688620110404754,
+          "ci95": [
+            -0.030856720031387636,
+            0.035559392761111065
+          ],
+          "positive_days": 0.46153846153846156
+        },
+        "bottom10": {
+          "mean": -0.01462919248293442,
+          "ci95": [
+            -0.03345213888282382,
+            0.026283585160081186
+          ],
+          "positive_days": 0.4153846153846154
+        },
+        "bottom20": {
+          "mean": -0.01726175651093336,
+          "ci95": [
+            -0.036546189219036074,
+            0.017265263288686918
+          ],
+          "positive_days": 0.3384615384615385
+        },
+        "bottom50": {
+          "mean": -0.021142813004879864,
+          "ci95": [
+            -0.04269270041601365,
+            0.010455184088449056
+          ],
+          "positive_days": 0.3384615384615385
+        },
+        "bottom100": {
+          "mean": -0.023185085644127797,
+          "ci95": [
+            -0.04193269978145676,
+            0.003080187621251579
+          ],
+          "positive_days": 0.2923076923076923
+        },
+        "bottom_decile": {
+          "mean": -0.018486117139841007,
+          "ci95": [
+            -0.03184335688371851,
+            -0.0010811985706261332
+          ],
+          "positive_days": 0.24615384615384617
+        }
+      }
+    },
+    "single_on_p16_dates": {
+      "source": "scratch/oos65/c2",
+      "signal_days": 22,
+      "pool_rows": 86286,
+      "bootstrap_block": 4,
+      "buckets": {
+        "top5": {
+          "mean": -0.015828287178096177,
+          "ci95": [
+            -0.062115601781486375,
+            0.03877729149456434
+          ],
+          "positive_days": 0.36363636363636365
+        },
+        "top10": {
+          "mean": 0.0034574197162151404,
+          "ci95": [
+            -0.033319664213422265,
+            0.05009318771728824
+          ],
+          "positive_days": 0.45454545454545453
+        },
+        "top20": {
+          "mean": 0.008001649908417178,
+          "ci95": [
+            -0.025193067645961666,
+            0.05516111585289812
+          ],
+          "positive_days": 0.45454545454545453
+        },
+        "top50": {
+          "mean": 0.0038638099442646606,
+          "ci95": [
+            -0.02629804417129833,
+            0.04372168773973825
+          ],
+          "positive_days": 0.4090909090909091
+        },
+        "top100": {
+          "mean": 0.005578541836880378,
+          "ci95": [
+            -0.022113190062793678,
+            0.04563427825180148
+          ],
+          "positive_days": 0.36363636363636365
+        },
+        "top_decile": {
+          "mean": 0.009286864049348082,
+          "ci95": [
+            -0.008659030055942065,
+            0.03766152632448993
+          ],
+          "positive_days": 0.5909090909090909
+        },
+        "bottom5": {
+          "mean": 0.0019192565388536926,
+          "ci95": [
+            -0.035894318694392954,
+            0.05346205397572632
+          ],
+          "positive_days": 0.45454545454545453
+        },
+        "bottom10": {
+          "mean": -0.01800387030169698,
+          "ci95": [
+            -0.036687626674467275,
+            0.0241357484658669
+          ],
+          "positive_days": 0.4090909090909091
+        },
+        "bottom20": {
+          "mean": -0.018538384699061605,
+          "ci95": [
+            -0.0377271722620678,
+            0.020582437938099336
+          ],
+          "positive_days": 0.36363636363636365
+        },
+        "bottom50": {
+          "mean": -0.020554289377058416,
+          "ci95": [
+            -0.04511014929417269,
+            0.01479224821858902
+          ],
+          "positive_days": 0.36363636363636365
+        },
+        "bottom100": {
+          "mean": -0.02171554293348826,
+          "ci95": [
+            -0.041938988616447875,
+            0.006462141726055737
+          ],
+          "positive_days": 0.2727272727272727
+        },
+        "bottom_decile": {
+          "mean": -0.016444159727799765,
+          "ci95": [
+            -0.030251101662398732,
+            0.0011969995452097387
+          ],
+          "positive_days": 0.2727272727272727
+        }
+      }
+    }
+  }
+}

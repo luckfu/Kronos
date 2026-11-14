@@ -51,8 +51,12 @@ DATASET = "smmt315/a-share-120d-temporal-symbol-holdout"
 DATA_SHA = "b85ccc45f7cd0e895e607e6e75c7a603427bd62a353a016742a52b2943d652cd"
 TORCH_VERSION = "2.6.0"
 TORCH_INDEX_URL = "https://download.pytorch.org/whl/cu124"
-BATCH_SIZE = 32
-ACCUMULATION_STEPS = 8
+# Per-GPU effective batch is kept at 32 (Small's setting) while the micro batch
+# can be widened: micro = BATCH_SIZE // ACCUMULATION_STEPS.  Peak memory at
+# micro=4 is only 2.56 GB of a 15 GB T4, so micro=16 (accum=2) trades the same
+# effective batch for 4x larger kernels and far fewer launch/stepping overheads.
+BATCH_SIZE = int(os.environ.get("KRONOS_BATCH_SIZE", "32"))
+ACCUMULATION_STEPS = int(os.environ.get("KRONOS_ACCUMULATION_STEPS", "8"))
 NPROC = 2
 # Session budget → computed segment count (relay convention: time first, then N).
 SESSION_BUDGET_SECONDS = int(

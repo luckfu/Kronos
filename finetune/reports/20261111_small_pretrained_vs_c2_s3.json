@@ -1,0 +1,155 @@
+{
+  "models": {
+    "small_pre": "scratch/oos65/small_pretrained_s3",
+    "c2": "scratch/oos65/c2"
+  },
+  "rows": {
+    "small_pre": 113480,
+    "c2": 335312
+  },
+  "aligned_rows": 113480,
+  "aligned_dates": 22,
+  "first_date": "2026-07-17",
+  "last_date": "2026-10-22",
+  "single": {
+    "small_pre": {
+      "dates": 22,
+      "ic": 0.058898402328158045,
+      "ic_std": 0.10714591531967828,
+      "icir": 0.5497027315733878,
+      "positive_ratio": 0.7272727272727273,
+      "top_bottom_10pct": 0.011614634589133298
+    },
+    "c2": {
+      "dates": 22,
+      "ic": 0.10958696390532084,
+      "ic_std": 0.08350073063092767,
+      "icir": 1.312407245748472,
+      "positive_ratio": 0.9090909090909091,
+      "top_bottom_10pct": 0.027364832132985618
+    }
+  },
+  "paired_single": {
+    "c2-small_pre": {
+      "dates": 22,
+      "delta_ic": 0.05068856157716282,
+      "ci95": [
+        0.020077478766779733,
+        0.12658571660087495
+      ],
+      "block": 5,
+      "replicates": 2000,
+      "seed": 20261101
+    }
+  },
+  "prediction_corr": {
+    "small_pre~c2": {
+      "mean_daily_rank_corr": 0.05141093444360787,
+      "min": -0.0668312049083955,
+      "max": 0.13970640103262683,
+      "daily_ic_series_corr": 0.060318677325926655
+    }
+  },
+  "fusion_equal_weight": {
+    "dates": 22,
+    "ic": 0.1162862723038147,
+    "ic_std": 0.09782170895478574,
+    "icir": 1.1887573172286683,
+    "positive_ratio": 0.9090909090909091,
+    "top_bottom_10pct": 0.02854741880536411,
+    "paired_vs": {
+      "small_pre": {
+        "dates": 22,
+        "delta_ic": 0.05738786997565664,
+        "ci95": [
+          0.0427883373637005,
+          0.0937655010714838
+        ],
+        "block": 5,
+        "replicates": 2000,
+        "seed": 20261101
+      },
+      "c2": {
+        "dates": 22,
+        "delta_ic": 0.006699308398493825,
+        "ci95": [
+          -0.03670543721547528,
+          0.02615694258907187
+        ],
+        "block": 5,
+        "replicates": 2000,
+        "seed": 20261101
+      }
+    }
+  },
+  "fusion_weight_grid_DIAGNOSTIC_ONLY": {
+    "note": "weights selected on the OOS window; do not report as a result",
+    "ic": {
+      "small_pre=0.0": 0.10958696390532084,
+      "small_pre=0.1": 0.11468793723042907,
+      "small_pre=0.2": 0.11890228064865861,
+      "small_pre=0.3": 0.1214672961888176,
+      "small_pre=0.4": 0.1212569725137267,
+      "small_pre=0.5": 0.1162862723038147,
+      "small_pre=0.6": 0.10563256837077488,
+      "small_pre=0.7": 0.09285728500173143,
+      "small_pre=0.8": 0.08033205378394308,
+      "small_pre=0.9": 0.06885991200137466,
+      "small_pre=1.0": 0.058898402328158045
+    }
+  },
+  "reversal_factor": {
+    "ic_of_minus_ret10": {
+      "dates": 22,
+      "ic": 0.1293178789051827,
+      "ic_std": 0.22272224010565508,
+      "icir": 0.5806240043375858,
+      "positive_ratio": 0.7272727272727273
+    },
+    "missing": 0
+  },
+  "neutralized": {
+    "controls": [
+      "r_size",
+      "r_rev",
+      "sector_dummies"
+    ],
+    "small_pre": {
+      "dates": 22,
+      "ic": 0.03762261840892068,
+      "ic_std": 0.06625782647217912,
+      "icir": 0.5678214999207373,
+      "positive_ratio": 0.6818181818181818
+    },
+    "c2": {
+      "dates": 22,
+      "ic": 0.05447060693146874,
+      "ic_std": 0.06395011635259507,
+      "icir": 0.8517671278522756,
+      "positive_ratio": 0.8636363636363636
+    },
+    "fused": {
+      "dates": 22,
+      "ic": 0.056299195695298836,
+      "ic_std": 0.06370895275114132,
+      "icir": 0.8836936296098552,
+      "positive_ratio": 0.7727272727272727
+    }
+  },
+  "incremental": {
+    "small_pre|c2": {
+      "dates": 22,
+      "ic": 0.054514529472129876,
+      "ic_std": 0.10744722045476314,
+      "icir": 0.5073610023730795,
+      "positive_ratio": 0.6818181818181818
+    },
+    "c2|small_pre": {
+      "dates": 22,
+      "ic": 0.10885058698049604,
+      "ic_std": 0.08171161540500176,
+      "icir": 1.332131135102159,
+      "positive_ratio": 0.9090909090909091
+    }
+  }
+}

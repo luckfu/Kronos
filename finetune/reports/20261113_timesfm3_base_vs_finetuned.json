@@ -1,0 +1,484 @@
+{
+  "rows": 335312,
+  "signal_days": 65,
+  "bootstrap": {
+    "block": 5,
+    "replicates": 2000,
+    "seed": 20261112
+  },
+  "segments": {
+    "A_selection_window": {
+      "signal_start": "2026-08-03",
+      "signal_end": "2026-09-17",
+      "samples": 175378,
+      "signal_days": 34,
+      "finetuned": {
+        "samples": 175378,
+        "signal_days": 34,
+        "direction": 0.5861282486971,
+        "majority_direction": 0.5233039491840482,
+        "direction_minus_majority": 0.0628242995130518,
+        "excess_direction": 0.5387847962686312,
+        "daily_ic": 0.09771762584765561,
+        "daily_ic_ci95": [
+          -0.00476419118956208,
+          0.1618740533332562
+        ],
+        "daily_rank_ic": 0.1235985616831185,
+        "positive_ic_days": 0.7058823529411765,
+        "pooled_ic": 0.17644712925513828,
+        "mae": 0.08412186053444178,
+        "mae_zero": 0.06001519217306699,
+        "rmse": 0.1137826475263477,
+        "mean_pred": -0.0044833343286965295,
+        "mean_actual": 0.006789846216655253,
+        "predicted_up_share": 0.4905575385738234,
+        "pred_cross_section_std": 0.0670645369590337,
+        "actual_cross_section_std": 0.08610361963063129,
+        "by_rank": {
+          "top10": {
+            "rows": 340,
+            "mean_pred": 0.20743692131603467,
+            "mean_actual": 0.034992760244537804,
+            "excess_vs_market": 0.028195444130672816,
+            "share_up": 0.4764705882352941,
+            "share_reaching_forecast": 0.09705882352941177
+          },
+          "rank11_100": {
+            "rows": 3060,
+            "mean_pred": 0.14473390520787707,
+            "mean_actual": 0.025706078121864716,
+            "excess_vs_market": 0.018908762007999735,
+            "share_up": 0.4715686274509804,
+            "share_reaching_forecast": 0.12908496732026145
+          },
+          "rest": {
+            "rows": 171978,
+            "mean_pred": -0.007557318442368765,
+            "mean_actual": 0.006397513125216691,
+            "excess_vs_market": -0.00039218541179050895,
+            "share_up": 0.4681296444894114,
+            "share_reaching_forecast": 0.5258637732733257
+          }
+        }
+      },
+      "base": {
+        "samples": 175378,
+        "signal_days": 34,
+        "direction": 0.5160396400916877,
+        "majority_direction": 0.5233039491840482,
+        "direction_minus_majority": -0.0072643090923605325,
+        "excess_direction": 0.5279339483857725,
+        "daily_ic": 0.057174959828467264,
+        "daily_ic_ci95": [
+          0.012335710595308556,
+          0.12173571320547875
+        ],
+        "daily_rank_ic": 0.08713177879532696,
+        "positive_ic_days": 0.7647058823529411,
+        "pooled_ic": 0.0859013292858124,
+        "mae": 0.09338689926581759,
+        "mae_zero": 0.06001519217306699,
+        "rmse": 0.12581112751165066,
+        "mean_pred": 0.048772989973555184,
+        "mean_actual": 0.006789846216655253,
+        "predicted_up_share": 0.7692127860963177,
+        "pred_cross_section_std": 0.08347389424214309,
+        "actual_cross_section_std": 0.08610361963063129,
+        "by_rank": {
+          "top10": {
+            "rows": 340,
+            "mean_pred": 0.44636282640344954,
+            "mean_actual": -0.008895635604858398,
+            "excess_vs_market": -0.015692951718723383,
+            "share_up": 0.39705882352941174,
+            "share_reaching_forecast": 0.0029411764705882353
+          },
+          "rank11_100": {
+            "rows": 3060,
+            "mean_pred": 0.25404031023480533,
+            "mean_actual": 0.003028680763992609,
+            "excess_vs_market": -0.003768635349872375,
+            "share_up": 0.41862745098039217,
+            "share_reaching_forecast": 0.018300653594771243
+          },
+          "rest": {
+            "rows": 171978,
+            "mean_pred": 0.04433464004283387,
+            "mean_actual": 0.0068877786853690556,
+            "excess_vs_market": 9.808014836185573e-05,
+            "share_up": 0.4692286222656386,
+            "share_reaching_forecast": 0.28511786391282606
+          }
+        }
+      },
+      "d_ic_finetuned_minus_base": {
+        "mean": 0.040542666019188364,
+        "ci95": [
+          -0.06897765135371375,
+          0.11692378570902706
+        ],
+        "verdict": "inconclusive",
+        "wins": 20,
+        "days": 34
+      }
+    },
+    "B_new_window": {
+      "signal_start": "2026-09-18",
+      "signal_end": "2026-10-23",
+      "samples": 103285,
+      "signal_days": 20,
+      "finetuned": {
+        "samples": 103285,
+        "signal_days": 20,
+        "direction": 0.5100547030062449,
+        "majority_direction": 0.7564893256523213,
+        "direction_minus_majority": -0.2464346226460764,
+        "excess_direction": 0.5257007309870746,
+        "daily_ic": 0.06905046354243956,
+        "daily_ic_ci95": [
+          0.01846007129960622,
+          0.11246411665791171
+        ],
+        "daily_rank_ic": 0.06716469135274133,
+        "positive_ic_days": 0.85,
+        "pooled_ic": 0.03827019800692027,
+        "mae": 0.09874724370613676,
+        "mae_zero": 0.0823880551681633,
+        "rmse": 0.12891587285819514,
+        "mean_pred": -0.008974642988937997,
+        "mean_actual": -0.05127086911097832,
+        "predicted_up_share": 0.47163673331074213,
+        "pred_cross_section_std": 0.07270525950927659,
+        "actual_cross_section_std": 0.09511870408647491,
+        "by_rank": {
+          "top10": {
+            "rows": 200,
+            "mean_pred": 0.20324269950389862,
+            "mean_actual": -0.10481642127037048,
+            "excess_vs_market": -0.05354242241951493,
+            "share_up": 0.125,
+            "share_reaching_forecast": 0.025
+          },
+          "rank11_100": {
+            "rows": 1800,
+            "mean_pred": 0.13760608341958788,
+            "mean_actual": -0.09012708044714397,
+            "excess_vs_market": -0.038853081596288426,
+            "share_up": 0.15666666666666668,
+            "share_reaching_forecast": 0.025
+          },
+          "rest": {
+            "rows": 101285,
+            "mean_pred": -0.011998671976783325,
+            "mean_actual": -0.05047459828275127,
+            "excess_vs_market": 0.0007962090275679726,
+            "share_up": 0.24007503579009726,
+            "share_reaching_forecast": 0.34030705435158215
+          }
+        }
+      },
+      "base": {
+        "samples": 103285,
+        "signal_days": 20,
+        "direction": 0.37607590647238226,
+        "majority_direction": 0.7564893256523213,
+        "direction_minus_majority": -0.38041341917993904,
+        "excess_direction": 0.5034032047247906,
+        "daily_ic": 0.024795155545392494,
+        "daily_ic_ci95": [
+          -0.008171373123863847,
+          0.06303171070714862
+        ],
+        "daily_rank_ic": 0.012296359094015379,
+        "positive_ic_days": 0.65,
+        "pooled_ic": 0.045205492196352406,
+        "mae": 0.12632615473919412,
+        "mae_zero": 0.0823880551681633,
+        "rmse": 0.16462833003841898,
+        "mean_pred": 0.04840619270202641,
+        "mean_actual": -0.05127086911097832,
+        "predicted_up_share": 0.7475238417969695,
+        "pred_cross_section_std": 0.08911085726412675,
+        "actual_cross_section_std": 0.09511870408647491,
+        "by_rank": {
+          "top10": {
+            "rows": 200,
+            "mean_pred": 0.5015130323171616,
+            "mean_actual": -0.13030529499053956,
+            "excess_vs_market": -0.079031296139684,
+            "share_up": 0.14,
+            "share_reaching_forecast": 0.0
+          },
+          "rank11_100": {
+            "rows": 1800,
+            "mean_pred": 0.2756017682287428,
+            "mean_actual": -0.08614715672201581,
+            "excess_vs_market": -0.034873157871160264,
+            "share_up": 0.15555555555555556,
+            "share_reaching_forecast": 0.008333333333333333
+          },
+          "rest": {
+            "rows": 101285,
+            "mean_pred": 0.0434738394032051,
+            "mean_actual": -0.05049499703835375,
+            "excess_vs_market": 0.0007758102719654958,
+            "share_up": 0.2400651626598213,
+            "share_reaching_forecast": 0.17370785407513453
+          }
+        }
+      },
+      "d_ic_finetuned_minus_base": {
+        "mean": 0.044255307997047064,
+        "ci95": [
+          -0.02979949531087232,
+          0.0755265335515061
+        ],
+        "verdict": "inconclusive",
+        "wins": 14,
+        "days": 20
+      }
+    },
+    "C_early": {
+      "signal_start": "2026-07-17",
+      "signal_end": "2026-07-31",
+      "samples": 56649,
+      "signal_days": 11,
+      "finetuned": {
+        "samples": 56649,
+        "signal_days": 11,
+        "direction": 0.7259792758918957,
+        "majority_direction": 0.8287524934244206,
+        "direction_minus_majority": -0.10277321753252489,
+        "excess_direction": 0.6079895496831365,
+        "daily_ic": 0.23447067870709165,
+        "daily_ic_ci95": [
+          0.11024256814898546,
+          0.33809795191504005
+        ],
+        "daily_rank_ic": 0.30686007292461565,
+        "positive_ic_days": 0.9090909090909091,
+        "pooled_ic": 0.24553674629497266,
+        "mae": 0.08457204019022307,
+        "mae_zero": 0.09706662222723306,
+        "rmse": 0.12170469045235494,
+        "mean_pred": 0.06523269327571234,
+        "mean_actual": 0.07811792104750834,
+        "predicted_up_share": 0.7594308813924341,
+        "pred_cross_section_std": 0.08450548109845174,
+        "actual_cross_section_std": 0.10306568734187013,
+        "by_rank": {
+          "top10": {
+            "rows": 110,
+            "mean_pred": 0.29852376092563976,
+            "mean_actual": 0.16908553351055491,
+            "excess_vs_market": 0.09096659471408958,
+            "share_up": 0.8272727272727273,
+            "share_reaching_forecast": 0.24545454545454545
+          },
+          "rank11_100": {
+            "rows": 990,
+            "mean_pred": 0.2351890939654726,
+            "mean_actual": 0.1417751194250704,
+            "excess_vs_market": 0.06365618062860504,
+            "share_up": 0.8191919191919191,
+            "share_reaching_forecast": 0.23434343434343435
+          },
+          "rest": {
+            "rows": 55549,
+            "mean_pred": 0.06174174196921978,
+            "mean_actual": 0.07680327877195482,
+            "excess_vs_market": -0.0013146221217460057,
+            "share_up": 0.828925813245963,
+            "share_reaching_forecast": 0.5381194981007759
+          }
+        }
+      },
+      "base": {
+        "samples": 56649,
+        "signal_days": 11,
+        "direction": 0.8170488446397994,
+        "majority_direction": 0.8287524934244206,
+        "direction_minus_majority": -0.011703648784621157,
+        "excess_direction": 0.6463838726191107,
+        "daily_ic": 0.28931622784293604,
+        "daily_ic_ci95": [
+          0.2215766670502821,
+          0.3806358338511288
+        ],
+        "daily_rank_ic": 0.39394498255792604,
+        "positive_ic_days": 1.0,
+        "pooled_ic": 0.2739000033884143,
+        "mae": 0.09718383323290011,
+        "mae_zero": 0.09706662222723306,
+        "rmse": 0.1345687271005985,
+        "mean_pred": 0.11611631341084822,
+        "mean_actual": 0.07811792104750834,
+        "predicted_up_share": 0.8763438013027591,
+        "pred_cross_section_std": 0.10649514635330376,
+        "actual_cross_section_std": 0.10306568734187013,
+        "by_rank": {
+          "top10": {
+            "rows": 110,
+            "mean_pred": 0.6752343297004699,
+            "mean_actual": 0.18148704225366766,
+            "excess_vs_market": 0.1033681034572023,
+            "share_up": 0.9090909090909091,
+            "share_reaching_forecast": 0.00909090909090909
+          },
+          "rank11_100": {
+            "rows": 990,
+            "mean_pred": 0.3836576904913392,
+            "mean_actual": 0.12526519196202057,
+            "excess_vs_market": 0.047146253165555214,
+            "share_up": 0.9141414141414141,
+            "share_reaching_forecast": 0.024242424242424242
+          },
+          "rest": {
+            "rows": 55549,
+            "mean_pred": 0.11024097910957287,
+            "mean_actual": 0.07707296251471665,
+            "excess_vs_market": -0.0010449383789841748,
+            "share_up": 0.8270715944481449,
+            "share_reaching_forecast": 0.29084231939368843
+          }
+        }
+      },
+      "d_ic_finetuned_minus_base": {
+        "mean": -0.05484554913584432,
+        "ci95": [
+          -0.265263100670759,
+          0.11491581891296546
+        ],
+        "verdict": "inconclusive",
+        "wins": 4,
+        "days": 11
+      }
+    },
+    "all": {
+      "signal_start": "2026-07-17",
+      "signal_end": "2026-10-23",
+      "samples": 335312,
+      "signal_days": 65,
+      "finetuned": {
+        "samples": 335312,
+        "signal_days": 65,
+        "direction": 0.5863225891110369,
+        "majority_direction": 0.5349346280479076,
+        "direction_minus_majority": 0.05138796106312926,
+        "excess_direction": 0.5464462947941022,
+        "daily_ic": 0.11203978485303216,
+        "daily_ic_ci95": [
+          0.05288579458388107,
+          0.19242977454503982
+        ],
+        "daily_rank_ic": 0.13724778040694813,
+        "positive_ic_days": 0.7846153846153846,
+        "pooled_ic": 0.23640987822727666,
+        "mae": 0.08870292213739327,
+        "mae_zero": 0.07316625033855757,
+        "rmse": 0.11997077359776424,
+        "mean_pred": 0.005911338193578598,
+        "mean_actual": 0.000956064927820862,
+        "predicted_up_share": 0.5301540058214439,
+        "pred_cross_section_std": 0.07175168829039456,
+        "actual_cross_section_std": 0.09174799553740823,
+        "by_rank": {
+          "top10": {
+            "rows": 650,
+            "mean_pred": 0.2215610874616183,
+            "mean_actual": 0.01466717371573815,
+            "excess_vs_market": 0.013668141444731729,
+            "share_up": 0.4276923076923077,
+            "share_reaching_forecast": 0.1
+          },
+          "rank11_100": {
+            "rows": 5850,
+            "mean_pred": 0.15784853044738117,
+            "mean_actual": 0.009707559398096852,
+            "excess_vs_market": 0.008708527127090427,
+            "share_up": 0.4335042735042735,
+            "share_reaching_forecast": 0.11487179487179487
+          },
+          "rest": {
+            "rows": 328812,
+            "mean_pred": 0.0027818754254649923,
+            "mean_actual": 0.0007732599713008422,
+            "excess_vs_market": -0.0001819555722800712,
+            "share_up": 0.4588336192109777,
+            "share_reaching_forecast": 0.47077661399219006
+          }
+        }
+      },
+      "base": {
+        "samples": 335312,
+        "signal_days": 65,
+        "direction": 0.5237808369518538,
+        "majority_direction": 0.5349346280479076,
+        "direction_minus_majority": -0.011153791096053745,
+        "excess_direction": 0.5403892494154697,
+        "daily_ic": 0.08649738848227743,
+        "daily_ic_ci95": [
+          0.032811532149253066,
+          0.13839864518476763
+        ],
+        "daily_rank_ic": 0.1160277302932094,
+        "positive_ic_days": 0.7692307692307693,
+        "pooled_ic": 0.18979167966653437,
+        "mae": 0.10417453440523684,
+        "mae_zero": 0.07316625033855757,
+        "rmse": 0.1403081946855632,
+        "mean_pred": 0.0600372670444902,
+        "mean_actual": 0.000956064927820862,
+        "predicted_up_share": 0.7806311733549649,
+        "pred_cross_section_std": 0.08910424860618064,
+        "actual_cross_section_std": 0.09174799553740823,
+        "by_rank": {
+          "top10": {
+            "rows": 650,
+            "mean_pred": 0.5020642210887029,
+            "mean_actual": -0.014033846855163574,
+            "excess_vs_market": -0.015032879126169995,
+            "share_up": 0.4046153846153846,
+            "share_reaching_forecast": 0.003076923076923077
+          },
+          "rank11_100": {
+            "rows": 5850,
+            "mean_pred": 0.28260985396866106,
+            "mean_actual": -0.0037238596443437103,
+            "excess_vs_market": -0.004722891915350132,
+            "share_up": 0.42153846153846153,
+            "share_reaching_forecast": 0.01623931623931624
+          },
+          "rest": {
+            "rows": 328812,
+            "mean_pred": 0.05520360174749637,
+            "mean_actual": 0.0010689592303587943,
+            "excess_vs_market": 0.00011374368677788068,
+            "share_up": 0.4590921255915234,
+            "share_reaching_forecast": 0.2517669671423184
+          }
+        }
+      },
+      "d_ic_finetuned_minus_base": {
+        "mean": 0.02554239637075473,
+        "ci95": [
+          -0.03408541376942823,
+          0.11260727450332715
+        ],
+        "verdict": "inconclusive",
+        "wins": 38,
+        "days": 65
+      }
+    }
+  },
+  "prediction_rank_corr": 0.1831834077866243,
+  "verdict_B": {
+    "mean": 0.044255307997047064,
+    "ci95": [
+      -0.02979949531087232,
+      0.0755265335515061
+    ],
+    "passed": false
+  }
+}

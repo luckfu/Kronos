@@ -1,0 +1,45 @@
+{
+  "report": "base_clean_stagewise_sealed_oos_20261108",
+  "protocol": "sealed 42d window, decode seed 20261104, identity-aligned, bundled evaluator",
+  "stages": [
+    {
+      "stage": "Main best@516",
+      "val_forecast": 2.33125,
+      "direction": 0.5169,
+      "mae": 0.06294,
+      "rmse": 0.09822,
+      "ic": 0.0284,
+      "pred_std": 0.0851
+    },
+    {
+      "stage": "Extend best@175",
+      "val_forecast": 2.30067,
+      "direction": 0.5162,
+      "mae": 0.06713,
+      "rmse": 0.11121,
+      "ic": 0.0247,
+      "pred_std": 0.1118
+    },
+    {
+      "stage": "WC best@438",
+      "val_forecast": 2.25532,
+      "direction": 0.5118,
+      "mae": 0.09292,
+      "rmse": 0.17334,
+      "ic": 0.0184,
+      "pred_std": 0.2043
+    }
+  ],
+  "actual_return_std": 0.0943,
+  "paired": {
+    "WC_minus_Extend_ic": -0.0063,
+    "ci95": [
+      -0.0338,
+      0.011
+    ],
+    "significant": true,
+    "WC_minus_Main_ic": -0.01
+  },
+  "finding": "validation CE improves monotonically (2.3313 -> 2.3007 -> 2.2553) while every OOS metric degrades. Prediction dispersion inflates from 0.085 to 0.204 against an actual 0.094, i.e. WC is 2.2x over-dispersed and emits 10-day return forecasts up to +/-300-430%.",
+  "verdict": "on this line, validation forecast loss is anti-correlated with out-of-sample quality; WC training is harmful, not merely neutral."
+}

@@ -1,0 +1,1552 @@
+{
+  "constraint": "hand-traded book: few names, few orders",
+  "rules": {
+    "variants": [
+      "NONE",
+      "LV50",
+      "LV70",
+      "STRAT"
+    ],
+    "volatility_window": 20,
+    "keep_quantile": {
+      "LV50": 0.5,
+      "LV70": 0.7
+    },
+    "strata": 5,
+    "ks": [
+      5,
+      10,
+      20
+    ],
+    "buffer_keep_fraction": 0.3,
+    "primary": {
+      "variant": "LV50",
+      "k": 10
+    },
+    "random_books": 200,
+    "random_seed": 20261112,
+    "bootstrap": {
+      "block": 10,
+      "replicates": 2000,
+      "seed": 20261112
+    },
+    "sealed_after": "2026-10-23"
+  },
+  "datasets": {
+    "FULL": {
+      "source": "shards:scratch/oos65/c2_p16_s3",
+      "signal_days": 22,
+      "signal_start": "2026-07-17",
+      "signal_end": "2026-10-22",
+      "nav_end": "2026-10-23",
+      "rebalance_every_sessions": 9,
+      "books": {
+        "NONE_k5": {
+          "variant": "NONE",
+          "k": 5,
+          "mean_net": 0.058460493271676794,
+          "mean_net_excess": 0.05579038921921901,
+          "net_excess_range": [
+            -0.11547328280309865,
+            0.3248542144977078
+          ],
+          "start_days_beating_pool": 1,
+          "start_days": 3,
+          "mean_max_drawdown": -0.24047352832907745,
+          "mean_orders_per_rebalance": 6.507936507936507,
+          "vs_universe": {
+            "mean_daily_diff": 0.0003021445146078705,
+            "ci95": [
+              -0.002671484266581689,
+              0.006699455876504758
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.05579038921921901
+          },
+          "no_buffer_gross_excess": 0.08600559234792242,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": -0.0009623908894652248,
+            "q025": -0.10671394046115507,
+            "q975": 0.12627033931959455,
+            "c2_percentile": 0.915
+          }
+        },
+        "LV50_k5": {
+          "variant": "LV50",
+          "k": 5,
+          "mean_net": 0.12234849749900145,
+          "mean_net_excess": 0.11967839344654367,
+          "net_excess_range": [
+            0.01710967740060676,
+            0.21591545804367795
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.11231272981090357,
+          "mean_orders_per_rebalance": 5.158730158730158,
+          "vs_universe": {
+            "mean_daily_diff": 0.0017348758632625316,
+            "ci95": [
+              -0.0005019169400095618,
+              0.003838183021119762
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.11967839344654367
+          },
+          "no_buffer_gross_excess": 0.13911113883353765,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.036173652073533555,
+            "q025": -0.05184185681881491,
+            "q975": 0.15614179159618286,
+            "c2_percentile": 0.965
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0014327313486546607,
+            "ci95": [
+              -0.006165302953534472,
+              0.005056703558076163
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.06388800422732466
+          }
+        },
+        "LV70_k5": {
+          "variant": "LV70",
+          "k": 5,
+          "mean_net": 0.04994960551200226,
+          "mean_net_excess": 0.04727950145954448,
+          "net_excess_range": [
+            0.002343979258072837,
+            0.1186554706694456
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.1546300837163922,
+          "mean_orders_per_rebalance": 6.031746031746032,
+          "vs_universe": {
+            "mean_daily_diff": 0.0005904772456747826,
+            "ci95": [
+              -0.002186276974175663,
+              0.002937448620331822
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.04727950145954448
+          },
+          "no_buffer_gross_excess": 0.034848340303147395,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.02915664265842632,
+            "q025": -0.06567078975555737,
+            "q975": 0.14288826863946816,
+            "c2_percentile": 0.565
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0002883327310669124,
+            "ci95": [
+              -0.0060398533649401506,
+              0.003151201205194477
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.008510887759674532
+          }
+        },
+        "STRAT_k5": {
+          "variant": "STRAT",
+          "k": 5,
+          "mean_net": 0.059295644352253395,
+          "mean_net_excess": 0.05662554029979561,
+          "net_excess_range": [
+            -0.20771430786964806,
+            0.3488672320506252
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 3,
+          "mean_max_drawdown": -0.21378629690112105,
+          "mean_orders_per_rebalance": 4.650793650793651,
+          "vs_universe": {
+            "mean_daily_diff": 0.00018925508679743907,
+            "ci95": [
+              -0.0018943164566990012,
+              0.00422673373322719
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.05662554029979561
+          },
+          "no_buffer_gross_excess": 0.037728446869293476,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.0034742725208783258,
+            "q025": -0.08847623960467069,
+            "q975": 0.11952523863673731,
+            "c2_percentile": 0.76
+          },
+          "vs_NONE": {
+            "mean_daily_diff": -0.00011288942781043174,
+            "ci95": [
+              -0.004335922213037938,
+              0.001997229064499844
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.0008351510805765979
+          }
+        },
+        "NONE_k10": {
+          "variant": "NONE",
+          "k": 10,
+          "mean_net": 0.07586259684605053,
+          "mean_net_excess": 0.07319249279359274,
+          "net_excess_range": [
+            -0.04587839437384755,
+            0.2853220272358661
+          ],
+          "start_days_beating_pool": 1,
+          "start_days": 3,
+          "mean_max_drawdown": -0.1779609561034454,
+          "mean_orders_per_rebalance": 11.825396825396824,
+          "vs_universe": {
+            "mean_daily_diff": 0.0006531563905010484,
+            "ci95": [
+              -0.0012402915525220766,
+              0.005428847549126303
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.07319249279359274
+          },
+          "no_buffer_gross_excess": 0.09769167148517444,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.005250843909567654,
+            "q025": -0.07562265880520457,
+            "q975": 0.08996622615405636,
+            "c2_percentile": 0.99
+          }
+        },
+        "LV50_k10": {
+          "variant": "LV50",
+          "k": 10,
+          "mean_net": 0.12176339938323329,
+          "mean_net_excess": 0.1190932953307755,
+          "net_excess_range": [
+            0.04312630739388168,
+            0.20305095667690987
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.10111385482296513,
+          "mean_orders_per_rebalance": 9.714285714285715,
+          "vs_universe": {
+            "mean_daily_diff": 0.0017669180994348906,
+            "ci95": [
+              -0.00043862022716394117,
+              0.0028857689833335113
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.1190932953307755
+          },
+          "no_buffer_gross_excess": 0.06892358260971132,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.03403100271921327,
+            "q025": -0.0332261081681802,
+            "q975": 0.10462649581516573,
+            "c2_percentile": 0.835
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0011137617089338422,
+            "ci95": [
+              -0.0052792296212484284,
+              0.0033498092910272826
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.04590080253718276
+          }
+        },
+        "LV70_k10": {
+          "variant": "LV70",
+          "k": 10,
+          "mean_net": 0.07191310334092933,
+          "mean_net_excess": 0.06924299928847155,
+          "net_excess_range": [
+            0.06510376813286167,
+            0.07316011173652548
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.14440923410717355,
+          "mean_orders_per_rebalance": 11.317460317460316,
+          "vs_universe": {
+            "mean_daily_diff": 0.0008481627793227712,
+            "ci95": [
+              -0.0012889213875562683,
+              0.0033000202672694733
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.06924299928847155
+          },
+          "no_buffer_gross_excess": 0.061261052740516374,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.02878296503023602,
+            "q025": -0.0388730630788945,
+            "q975": 0.09953572439974498,
+            "c2_percentile": 0.835
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0001950063888217237,
+            "ci95": [
+              -0.003560280631885602,
+              0.0018493957990816379
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.003949493505121193
+          }
+        },
+        "STRAT_k10": {
+          "variant": "STRAT",
+          "k": 10,
+          "mean_net": 0.025402284569939575,
+          "mean_net_excess": 0.022732180517481788,
+          "net_excess_range": [
+            -0.13150170368961478,
+            0.18096014606186994
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 3,
+          "mean_max_drawdown": -0.17076845328463883,
+          "mean_orders_per_rebalance": 8.793650793650793,
+          "vs_universe": {
+            "mean_daily_diff": -0.0001166504480038482,
+            "ci95": [
+              -0.001097416035669229,
+              0.0023579653081154807
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.022732180517481788
+          },
+          "no_buffer_gross_excess": 0.1039439465525674,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.004427404734617368,
+            "q025": -0.07775678481450962,
+            "q975": 0.08002429897181382,
+            "c2_percentile": 0.995
+          },
+          "vs_NONE": {
+            "mean_daily_diff": -0.000769806838504896,
+            "ci95": [
+              -0.004672393897670778,
+              0.0012543599826469883
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.050460312276110954
+          }
+        },
+        "NONE_k20": {
+          "variant": "NONE",
+          "k": 20,
+          "mean_net": 0.1256570250078853,
+          "mean_net_excess": 0.12298692095542751,
+          "net_excess_range": [
+            0.06933881185718493,
+            0.2120991980195588
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.14136308663504493,
+          "mean_orders_per_rebalance": 22.73015873015873,
+          "vs_universe": {
+            "mean_daily_diff": 0.0016310270718514308,
+            "ci95": [
+              -0.00048527755287898434,
+              0.005843120547695288
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.12298692095542751
+          },
+          "no_buffer_gross_excess": 0.10515649567827996,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.009648258791109586,
+            "q025": -0.0539532159013532,
+            "q975": 0.08563296487638526,
+            "c2_percentile": 0.99
+          }
+        },
+        "LV50_k20": {
+          "variant": "LV50",
+          "k": 20,
+          "mean_net": 0.08517458569075435,
+          "mean_net_excess": 0.08250448163829656,
+          "net_excess_range": [
+            0.04053233669527101,
+            0.1406312237101559
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.09391219119832683,
+          "mean_orders_per_rebalance": 21.492063492063494,
+          "vs_universe": {
+            "mean_daily_diff": 0.001342984558059191,
+            "ci95": [
+              -0.0006144227398867321,
+              0.002452647083845155
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.08250448163829656
+          },
+          "no_buffer_gross_excess": 0.06418765190943743,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.034664602719821476,
+            "q025": -0.005182536011121387,
+            "q975": 0.08082622292704664,
+            "c2_percentile": 0.895
+          },
+          "vs_NONE": {
+            "mean_daily_diff": -0.0002880425137922396,
+            "ci95": [
+              -0.005897525226717964,
+              0.002396161370211293
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.04048243931713095
+          }
+        },
+        "LV70_k20": {
+          "variant": "LV70",
+          "k": 20,
+          "mean_net": 0.07299051475352318,
+          "mean_net_excess": 0.07032041070106539,
+          "net_excess_range": [
+            0.040625453728375005,
+            0.09552192522219793
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 3,
+          "mean_max_drawdown": -0.13611066618297193,
+          "mean_orders_per_rebalance": 22.396825396825395,
+          "vs_universe": {
+            "mean_daily_diff": 0.0009259691659612761,
+            "ci95": [
+              -0.0006173346615170478,
+              0.0029113467346161956
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.07032041070106539
+          },
+          "no_buffer_gross_excess": 0.07038734815247145,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.02732514570095822,
+            "q025": -0.02125598639652906,
+            "q975": 0.08419825860013698,
+            "c2_percentile": 0.925
+          },
+          "vs_NONE": {
+            "mean_daily_diff": -0.0007050579058901548,
+            "ci95": [
+              -0.0033406024548168272,
+              0.0005523573380922092
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.05266651025436212
+          }
+        },
+        "STRAT_k20": {
+          "variant": "STRAT",
+          "k": 20,
+          "mean_net": 0.07099155214047921,
+          "mean_net_excess": 0.06832144808802143,
+          "net_excess_range": [
+            -0.0027771069064710385,
+            0.14688597767823142
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 3,
+          "mean_max_drawdown": -0.12228237025927609,
+          "mean_orders_per_rebalance": 20.253968253968253,
+          "vs_universe": {
+            "mean_daily_diff": 0.000745199116155098,
+            "ci95": [
+              -0.0004039029057963699,
+              0.0027165098499196414
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.06832144808802143
+          },
+          "no_buffer_gross_excess": 0.07282532201018166,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.0048290840555684925,
+            "q025": -0.05740355839585078,
+            "q975": 0.058034679885616315,
+            "c2_percentile": 0.975
+          },
+          "vs_NONE": {
+            "mean_daily_diff": -0.0008858279556963331,
+            "ci95": [
+              -0.004233547809651176,
+              0.001071819932450626
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.054665472867406084
+          }
+        }
+      },
+      "label_regime_top10": {
+        "signal_days": 22,
+        "up_days": 11,
+        "down_days": 11,
+        "NONE": {
+          "all": 0.020300709818951015,
+          "all_ci95": [
+            -0.00710542175942322,
+            0.061007978805294294
+          ],
+          "up": 0.051319211704291795,
+          "down": -0.010717792066389781,
+          "corr_with_pool_return": 0.6452619830432762,
+          "picks_volatility_percentile": 0.683209138971473
+        },
+        "LV50": {
+          "all": 0.009975622874981651,
+          "all_ci95": [
+            -0.004090411761344003,
+            0.019005401220519975
+          ],
+          "up": 0.009802286777889267,
+          "down": 0.010148958972074034,
+          "corr_with_pool_return": -0.10698470120091128,
+          "picks_volatility_percentile": 0.33631558600795414,
+          "minus_NONE": {
+            "mean": -0.010325086943969365,
+            "ci95": [
+              -0.059671469217666764,
+              0.022348992651946172
+            ]
+          }
+        },
+        "LV70": {
+          "all": 0.010072407231994858,
+          "all_ci95": [
+            -0.005974430415938478,
+            0.030221136225335683
+          ],
+          "up": 0.02731935674109559,
+          "down": -0.007174542277105882,
+          "corr_with_pool_return": 0.5969849512609027,
+          "picks_volatility_percentile": 0.5084148751296793,
+          "minus_NONE": {
+            "mean": -0.010228302586956154,
+            "ci95": [
+              -0.03654633133795782,
+              0.009548369570101268
+            ]
+          }
+        },
+        "STRAT": {
+          "all": 0.014708452927781468,
+          "all_ci95": [
+            0.004222811611661128,
+            0.02982755312507658
+          ],
+          "up": 0.023803808169477973,
+          "down": 0.005613097686084964,
+          "corr_with_pool_return": 0.45161934494780775,
+          "picks_volatility_percentile": 0.5093452801122506,
+          "minus_NONE": {
+            "mean": -0.005592256891169544,
+            "ci95": [
+              -0.03488664779355312,
+              0.017286700968889724
+            ]
+          }
+        }
+      }
+    },
+    "DOWN": {
+      "source": "production:scratch/prod_c2",
+      "signal_days": 17,
+      "signal_start": "2026-09-23",
+      "signal_end": "2026-10-23",
+      "nav_end": "2026-11-06",
+      "rebalance_every_sessions": 10,
+      "books": {
+        "NONE_k5": {
+          "variant": "NONE",
+          "k": 5,
+          "mean_net": -0.1117654455447132,
+          "mean_net_excess": -0.03783314342239698,
+          "net_excess_range": [
+            -0.18146701377690166,
+            0.05042408864895542
+          ],
+          "start_days_beating_pool": 4,
+          "start_days": 10,
+          "mean_max_drawdown": -0.17321227374502324,
+          "mean_orders_per_rebalance": 5.428571428571429,
+          "vs_universe": {
+            "mean_daily_diff": -0.0038204873235757717,
+            "ci95": [
+              -0.00853297370085155,
+              0.0007558698353179756
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.03783314342239698
+          },
+          "no_buffer_gross_excess": -0.027362938283711467,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": -0.00026025015190837104,
+            "q025": -0.03568263433662181,
+            "q975": 0.04237908948874375,
+            "c2_percentile": 0.085
+          }
+        },
+        "LV50_k5": {
+          "variant": "LV50",
+          "k": 5,
+          "mean_net": -0.05697038256848976,
+          "mean_net_excess": 0.01696191955382643,
+          "net_excess_range": [
+            -0.06838721761733979,
+            0.14422937231594501
+          ],
+          "start_days_beating_pool": 5,
+          "start_days": 10,
+          "mean_max_drawdown": -0.13526706878143954,
+          "mean_orders_per_rebalance": 6.0,
+          "vs_universe": {
+            "mean_daily_diff": 0.00015904857258762126,
+            "ci95": [
+              -0.003341625905989451,
+              0.00228253326793451
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.01696191955382643
+          },
+          "no_buffer_gross_excess": 0.009273814026885884,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.044961568660942086,
+            "q025": 0.017974735883040584,
+            "q975": 0.06927014568713451,
+            "c2_percentile": 0.01
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.003979535896163394,
+            "ci95": [
+              0.0008109922674299348,
+              0.005676931222717928
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.054795062976223406
+          }
+        },
+        "LV70_k5": {
+          "variant": "LV70",
+          "k": 5,
+          "mean_net": -0.08738575754785541,
+          "mean_net_excess": -0.013453455425539218,
+          "net_excess_range": [
+            -0.09280378511835208,
+            0.049427158728209575
+          ],
+          "start_days_beating_pool": 4,
+          "start_days": 10,
+          "mean_max_drawdown": -0.150508490599062,
+          "mean_orders_per_rebalance": 5.142857142857143,
+          "vs_universe": {
+            "mean_daily_diff": -0.0014799746613047829,
+            "ci95": [
+              -0.006479702800032207,
+              0.0017298494544972808
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.013453455425539218
+          },
+          "no_buffer_gross_excess": -0.0349401655903358,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.029237039773527238,
+            "q025": 0.00037736913228319683,
+            "q975": 0.06189217160585787,
+            "c2_percentile": 0.0
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0023405126622709892,
+            "ci95": [
+              -0.0011652547226917466,
+              0.0032736235715538913
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.024379687996857757
+          }
+        },
+        "STRAT_k5": {
+          "variant": "STRAT",
+          "k": 5,
+          "mean_net": -0.10860241242108042,
+          "mean_net_excess": -0.034670110298764226,
+          "net_excess_range": [
+            -0.13073005656287717,
+            0.023637352274939794
+          ],
+          "start_days_beating_pool": 5,
+          "start_days": 10,
+          "mean_max_drawdown": -0.16982768498038117,
+          "mean_orders_per_rebalance": 5.714285714285714,
+          "vs_universe": {
+            "mean_daily_diff": -0.0027086002882242095,
+            "ci95": [
+              -0.00610238001176497,
+              -0.0007237553157238386
+            ],
+            "verdict": "worse",
+            "mean_total_diff": -0.034670110298764226
+          },
+          "no_buffer_gross_excess": -0.03384675654172568,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.00010494702067395458,
+            "q025": -0.02976890633549485,
+            "q975": 0.038719060329174416,
+            "c2_percentile": 0.015
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0011118870353515628,
+            "ci95": [
+              -0.0024423163320241325,
+              0.0027206371984944094
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.0031630331236327525
+          }
+        },
+        "NONE_k10": {
+          "variant": "NONE",
+          "k": 10,
+          "mean_net": -0.10171268675702083,
+          "mean_net_excess": -0.027780384634704624,
+          "net_excess_range": [
+            -0.12369682555380324,
+            0.12280107235366644
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1567057515564969,
+          "mean_orders_per_rebalance": 10.857142857142858,
+          "vs_universe": {
+            "mean_daily_diff": -0.0023470415536782766,
+            "ci95": [
+              -0.0058446698675047645,
+              0.0004119864494805398
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.027780384634704624
+          },
+          "no_buffer_gross_excess": -0.027756153188094424,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": -0.0007149716566693839,
+            "q025": -0.023577542394765526,
+            "q975": 0.024770712547890837,
+            "c2_percentile": 0.015
+          }
+        },
+        "LV50_k10": {
+          "variant": "LV50",
+          "k": 10,
+          "mean_net": -0.040599901524580116,
+          "mean_net_excess": 0.03333240059773608,
+          "net_excess_range": [
+            -0.032229935964843914,
+            0.093149251991132
+          ],
+          "start_days_beating_pool": 8,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1034390358853293,
+          "mean_orders_per_rebalance": 12.857142857142858,
+          "vs_universe": {
+            "mean_daily_diff": 0.0012656218407038522,
+            "ci95": [
+              -0.0015999297488879858,
+              0.003143972208758953
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.03333240059773608
+          },
+          "no_buffer_gross_excess": 0.027200074254860797,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.04656747507083356,
+            "q025": 0.028340828640654014,
+            "q975": 0.0656134200477056,
+            "c2_percentile": 0.025
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0036126633943821284,
+            "ci95": [
+              0.0019967312315218554,
+              0.0047033793905767365
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.0611127852324407
+          }
+        },
+        "LV70_k10": {
+          "variant": "LV70",
+          "k": 10,
+          "mean_net": -0.0999458262813246,
+          "mean_net_excess": -0.026013524159008407,
+          "net_excess_range": [
+            -0.11544976400240492,
+            0.02249765092025291
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 10,
+          "mean_max_drawdown": -0.14705456459574787,
+          "mean_orders_per_rebalance": 11.428571428571429,
+          "vs_universe": {
+            "mean_daily_diff": -0.002384003582932422,
+            "ci95": [
+              -0.006908863291038048,
+              0.001141928617462136
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.026013524159008407
+          },
+          "no_buffer_gross_excess": -0.02844888865693007,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.02876066844893802,
+            "q025": 0.009186910493619797,
+            "q975": 0.0497323173553862,
+            "c2_percentile": 0.0
+          },
+          "vs_NONE": {
+            "mean_daily_diff": -3.696202925414564e-05,
+            "ci95": [
+              -0.0014622386983466028,
+              0.001071146400215663
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.0017668604756962193
+          }
+        },
+        "STRAT_k10": {
+          "variant": "STRAT",
+          "k": 10,
+          "mean_net": -0.09589044832172783,
+          "mean_net_excess": -0.02195814619941163,
+          "net_excess_range": [
+            -0.09449897282105169,
+            0.01553993445043933
+          ],
+          "start_days_beating_pool": 5,
+          "start_days": 10,
+          "mean_max_drawdown": -0.14503789846190196,
+          "mean_orders_per_rebalance": 11.142857142857142,
+          "vs_universe": {
+            "mean_daily_diff": -0.002110466847770286,
+            "ci95": [
+              -0.0054841575837971,
+              4.8487845526128454e-05
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.02195814619941163
+          },
+          "no_buffer_gross_excess": -0.026122279047105634,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": -0.0016769202264717326,
+            "q025": -0.02721497407657596,
+            "q975": 0.02163924982461165,
+            "c2_percentile": 0.035
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.00023657470590799032,
+            "ci95": [
+              -0.000998188566437245,
+              0.0009591038420623404
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.005822238435292992
+          }
+        },
+        "NONE_k20": {
+          "variant": "NONE",
+          "k": 20,
+          "mean_net": -0.11312503178635058,
+          "mean_net_excess": -0.039192729664034386,
+          "net_excess_range": [
+            -0.09815811518171613,
+            0.08428283326865038
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 10,
+          "mean_max_drawdown": -0.15867361743130323,
+          "mean_orders_per_rebalance": 22.857142857142858,
+          "vs_universe": {
+            "mean_daily_diff": -0.003093143750851064,
+            "ci95": [
+              -0.007303564430294648,
+              0.000164611322270549
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.039192729664034386
+          },
+          "no_buffer_gross_excess": -0.03802641417061571,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": -0.0013260317736762336,
+            "q025": -0.01568683513399998,
+            "q975": 0.01696642676250311,
+            "c2_percentile": 0.0
+          }
+        },
+        "LV50_k20": {
+          "variant": "LV50",
+          "k": 20,
+          "mean_net": -0.03592795521220471,
+          "mean_net_excess": 0.03800434691011149,
+          "net_excess_range": [
+            0.001393141563021727,
+            0.08270289243995455
+          ],
+          "start_days_beating_pool": 10,
+          "start_days": 10,
+          "mean_max_drawdown": -0.08834382670768352,
+          "mean_orders_per_rebalance": 25.142857142857142,
+          "vs_universe": {
+            "mean_daily_diff": 0.0015068506836931133,
+            "ci95": [
+              -0.0005219066706837063,
+              0.003460133881222163
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.03800434691011149
+          },
+          "no_buffer_gross_excess": 0.03771024847087693,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.04581811150477692,
+            "q025": 0.03288993494688432,
+            "q975": 0.060391629888085024,
+            "c2_percentile": 0.12
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.004599994434544178,
+            "ci95": [
+              0.002679028646881276,
+              0.007054474340534756
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.07719707657414587
+          }
+        },
+        "LV70_k20": {
+          "variant": "LV70",
+          "k": 20,
+          "mean_net": -0.08619612946882321,
+          "mean_net_excess": -0.012263827346507017,
+          "net_excess_range": [
+            -0.05903077915670252,
+            0.049332530163753496
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 10,
+          "mean_max_drawdown": -0.12884015506282848,
+          "mean_orders_per_rebalance": 24.571428571428573,
+          "vs_universe": {
+            "mean_daily_diff": -0.0013897898463857926,
+            "ci95": [
+              -0.00538698806414875,
+              0.0016050437348403765
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.012263827346507017
+          },
+          "no_buffer_gross_excess": -0.005132363435010212,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": 0.028824661986976106,
+            "q025": 0.013556227935331837,
+            "q975": 0.04414047097800589,
+            "c2_percentile": 0.0
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.001703353904465271,
+            "ci95": [
+              0.0006293760955160534,
+              0.0025423165543242607
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.02692890231752737
+          }
+        },
+        "STRAT_k20": {
+          "variant": "STRAT",
+          "k": 20,
+          "mean_net": -0.09067583278702197,
+          "mean_net_excess": -0.016743530664705776,
+          "net_excess_range": [
+            -0.06226125739439281,
+            0.04540254935904142
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1325068345000798,
+          "mean_orders_per_rebalance": 21.714285714285715,
+          "vs_universe": {
+            "mean_daily_diff": -0.0014896141616080694,
+            "ci95": [
+              -0.004665595959807663,
+              0.0006742479840007589
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.016743530664705776
+          },
+          "no_buffer_gross_excess": -0.019855434363991408,
+          "random_same_rule_gross_excess": {
+            "books": 200,
+            "mean": -0.0004759068208106064,
+            "q025": -0.01508586065459088,
+            "q975": 0.018913628631628522,
+            "c2_percentile": 0.015
+          },
+          "vs_NONE": {
+            "mean_daily_diff": 0.0016035295892429951,
+            "ci95": [
+              0.00020638540418256725,
+              0.002777296228709147
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.022449198999328613
+          }
+        }
+      },
+      "label_regime_top10": {
+        "signal_days": 17,
+        "up_days": 1,
+        "down_days": 16,
+        "NONE": {
+          "all": -0.01865975553785063,
+          "all_ci95": [
+            -0.03657251966223208,
+            -0.004415659285459528
+          ],
+          "up": 0.017640099767439008,
+          "down": -0.020928496494431233,
+          "corr_with_pool_return": 0.3730958179784142,
+          "picks_volatility_percentile": 0.6695350128634269
+        },
+        "LV50": {
+          "all": 0.006868744965352468,
+          "all_ci95": [
+            -0.002049357325749333,
+            0.0193008075934287
+          ],
+          "up": 0.01973266329034542,
+          "down": 0.006064750070040408,
+          "corr_with_pool_return": 0.3222050486307807,
+          "picks_volatility_percentile": 0.33010362140868427,
+          "minus_NONE": {
+            "mean": 0.025528500503203096,
+            "ci95": [
+              0.02062952333488229,
+              0.035332051182470715
+            ]
+          }
+        },
+        "LV70": {
+          "all": -0.021280140807608337,
+          "all_ci95": [
+            -0.042777104798257554,
+            -0.00026798826230389435
+          ],
+          "up": -0.004854927203992545,
+          "down": -0.02230671665783432,
+          "corr_with_pool_return": 0.3964816261808124,
+          "picks_volatility_percentile": 0.4757631249023311,
+          "minus_NONE": {
+            "mean": -0.0026203852697577017,
+            "ci95": [
+              -0.011442493584990655,
+              0.010581586041579834
+            ]
+          }
+        },
+        "STRAT": {
+          "all": -0.01785472805535146,
+          "all_ci95": [
+            -0.02745992763142113,
+            -0.007993969668901271
+          ],
+          "up": -0.050461731526270655,
+          "down": -0.015816790338419012,
+          "corr_with_pool_return": 0.3604181085298876,
+          "picks_volatility_percentile": 0.5114572360412329,
+          "minus_NONE": {
+            "mean": 0.0008050274824991687,
+            "ci95": [
+              -0.004396181376259668,
+              0.01014344096642121
+            ]
+          }
+        }
+      }
+    },
+    "EVAL": {
+      "source": "shards:scratch/c2_roll/eval/c2",
+      "signal_days": 23,
+      "signal_start": "2026-09-15",
+      "signal_end": "2026-10-23",
+      "nav_end": "2026-11-06",
+      "rebalance_every_sessions": 10,
+      "books": {
+        "NONE_k5": {
+          "variant": "NONE",
+          "k": 5,
+          "mean_net": -0.16526038406336213,
+          "mean_net_excess": -0.0621172481789022,
+          "net_excess_range": [
+            -0.18983992044258768,
+            0.04437753111283038
+          ],
+          "start_days_beating_pool": 2,
+          "start_days": 10,
+          "mean_max_drawdown": -0.235529545673777,
+          "mean_orders_per_rebalance": 5.5,
+          "vs_universe": {
+            "mean_daily_diff": -0.0020858421367738727,
+            "ci95": [
+              -0.00478927153513277,
+              -0.0007300952762964007
+            ],
+            "verdict": "worse",
+            "mean_total_diff": -0.0621172481789022
+          },
+          "no_buffer_gross_excess": -0.06174693324120782
+        },
+        "LV50_k5": {
+          "variant": "LV50",
+          "k": 5,
+          "mean_net": -0.005447796754859157,
+          "mean_net_excess": 0.09769533912960077,
+          "net_excess_range": [
+            -0.019743935348085828,
+            0.33721814962684515
+          ],
+          "start_days_beating_pool": 9,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1390093937812862,
+          "mean_orders_per_rebalance": 5.7,
+          "vs_universe": {
+            "mean_daily_diff": 0.003135624403711094,
+            "ci95": [
+              0.00034198553975258464,
+              0.005588069274571728
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.09769533912960077
+          },
+          "no_buffer_gross_excess": 0.05914178405786309,
+          "vs_NONE": {
+            "mean_daily_diff": 0.005221466540484967,
+            "ci95": [
+              0.004194027869579125,
+              0.008278690606050824
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.15981258730850295
+          }
+        },
+        "LV70_k5": {
+          "variant": "LV70",
+          "k": 5,
+          "mean_net": -0.11353931426344485,
+          "mean_net_excess": -0.010396178378984933,
+          "net_excess_range": [
+            -0.12446234592009131,
+            0.0745558367905853
+          ],
+          "start_days_beating_pool": 6,
+          "start_days": 10,
+          "mean_max_drawdown": -0.20290621269915077,
+          "mean_orders_per_rebalance": 5.4,
+          "vs_universe": {
+            "mean_daily_diff": 0.00041265054191143313,
+            "ci95": [
+              -0.0032501701986204076,
+              0.0012224892892962792
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.010396178378984933
+          },
+          "no_buffer_gross_excess": -0.017609406254328285,
+          "vs_NONE": {
+            "mean_daily_diff": 0.002498492678685306,
+            "ci95": [
+              0.0003920217001959256,
+              0.0036480595300628625
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.051721069799917266
+          }
+        },
+        "STRAT_k5": {
+          "variant": "STRAT",
+          "k": 5,
+          "mean_net": -0.09191493328868636,
+          "mean_net_excess": 0.011228202595773572,
+          "net_excess_range": [
+            -0.15892273245915922,
+            0.1501042983702764
+          ],
+          "start_days_beating_pool": 5,
+          "start_days": 10,
+          "mean_max_drawdown": -0.18272825641600107,
+          "mean_orders_per_rebalance": 4.8,
+          "vs_universe": {
+            "mean_daily_diff": -0.0005670078092644376,
+            "ci95": [
+              -0.002486019065041895,
+              0.001744424346121844
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.011228202595773572
+          },
+          "no_buffer_gross_excess": 0.004457405146955107,
+          "vs_NONE": {
+            "mean_daily_diff": 0.001518834327509435,
+            "ci95": [
+              0.0006834893273392211,
+              0.00434188516201908
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.07334545077467577
+          }
+        },
+        "NONE_k10": {
+          "variant": "NONE",
+          "k": 10,
+          "mean_net": -0.16443334821102304,
+          "mean_net_excess": -0.061290212326563134,
+          "net_excess_range": [
+            -0.15313030428680163,
+            0.05748817517392524
+          ],
+          "start_days_beating_pool": 1,
+          "start_days": 10,
+          "mean_max_drawdown": -0.22823477232113604,
+          "mean_orders_per_rebalance": 11.7,
+          "vs_universe": {
+            "mean_daily_diff": -0.0019588085036273753,
+            "ci95": [
+              -0.0049526898044647,
+              -0.0011510442971528958
+            ],
+            "verdict": "worse",
+            "mean_total_diff": -0.061290212326563134
+          },
+          "no_buffer_gross_excess": -0.05784198760580307
+        },
+        "LV50_k10": {
+          "variant": "LV50",
+          "k": 10,
+          "mean_net": -0.034299113570650686,
+          "mean_net_excess": 0.06884402231380923,
+          "net_excess_range": [
+            -0.014289801575739114,
+            0.21456957915464892
+          ],
+          "start_days_beating_pool": 9,
+          "start_days": 10,
+          "mean_max_drawdown": -0.13462225133106975,
+          "mean_orders_per_rebalance": 12.0,
+          "vs_universe": {
+            "mean_daily_diff": 0.0025727046037946925,
+            "ci95": [
+              -0.0002801846923695502,
+              0.00427849689947907
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.06884402231380923
+          },
+          "no_buffer_gross_excess": 0.04636779202608689,
+          "vs_NONE": {
+            "mean_daily_diff": 0.004531513107422068,
+            "ci95": [
+              0.003970462969586072,
+              0.006846705365264202
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.13013423464037235
+          }
+        },
+        "LV70_k10": {
+          "variant": "LV70",
+          "k": 10,
+          "mean_net": -0.10247512970952403,
+          "mean_net_excess": 0.0006680061749358868,
+          "net_excess_range": [
+            -0.0974681919131043,
+            0.06873821141770609
+          ],
+          "start_days_beating_pool": 5,
+          "start_days": 10,
+          "mean_max_drawdown": -0.17731380978539782,
+          "mean_orders_per_rebalance": 10.0,
+          "vs_universe": {
+            "mean_daily_diff": 0.0003507757107027835,
+            "ci95": [
+              -0.002745279451426895,
+              0.001612235649069567
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.0006680061749358868
+          },
+          "no_buffer_gross_excess": -0.02866018845606816,
+          "vs_NONE": {
+            "mean_daily_diff": 0.0023095842143301586,
+            "ci95": [
+              0.001627824124861733,
+              0.004194988924389147
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.06195821850149902
+          }
+        },
+        "STRAT_k10": {
+          "variant": "STRAT",
+          "k": 10,
+          "mean_net": -0.11083366509707207,
+          "mean_net_excess": -0.00769052921261214,
+          "net_excess_range": [
+            -0.15403755695780563,
+            0.0889113082956905
+          ],
+          "start_days_beating_pool": 4,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1814454256113177,
+          "mean_orders_per_rebalance": 8.9,
+          "vs_universe": {
+            "mean_daily_diff": -0.0005695221713426658,
+            "ci95": [
+              -0.0024303244062725527,
+              0.0005755949560580189
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.00769052921261214
+          },
+          "no_buffer_gross_excess": -0.0032360678662369914,
+          "vs_NONE": {
+            "mean_daily_diff": 0.0013892863322847095,
+            "ci95": [
+              0.0010412169300221504,
+              0.0032796946982151247
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.05359968311395099
+          }
+        },
+        "NONE_k20": {
+          "variant": "NONE",
+          "k": 20,
+          "mean_net": -0.15311413374245322,
+          "mean_net_excess": -0.04997099785799329,
+          "net_excess_range": [
+            -0.12135003780540421,
+            0.044606109188616294
+          ],
+          "start_days_beating_pool": 1,
+          "start_days": 10,
+          "mean_max_drawdown": -0.21032647056276105,
+          "mean_orders_per_rebalance": 21.7,
+          "vs_universe": {
+            "mean_daily_diff": -0.0017161491802691641,
+            "ci95": [
+              -0.004495988781670144,
+              -0.0007480748127467616
+            ],
+            "verdict": "worse",
+            "mean_total_diff": -0.04997099785799329
+          },
+          "no_buffer_gross_excess": -0.052369700529646034
+        },
+        "LV50_k20": {
+          "variant": "LV50",
+          "k": 20,
+          "mean_net": -0.052640281873132445,
+          "mean_net_excess": 0.05050285401132748,
+          "net_excess_range": [
+            0.004455925994488408,
+            0.092892774891978
+          ],
+          "start_days_beating_pool": 10,
+          "start_days": 10,
+          "mean_max_drawdown": -0.12539686293874508,
+          "mean_orders_per_rebalance": 24.4,
+          "vs_universe": {
+            "mean_daily_diff": 0.0018924551326311002,
+            "ci95": [
+              -0.000235634337166276,
+              0.0034836344733559033
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": 0.05050285401132748
+          },
+          "no_buffer_gross_excess": 0.04700423302504836,
+          "vs_NONE": {
+            "mean_daily_diff": 0.0036086043129002644,
+            "ci95": [
+              0.003245455709074676,
+              0.005307566839691812
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.10047385186932076
+          }
+        },
+        "LV70_k20": {
+          "variant": "LV70",
+          "k": 20,
+          "mean_net": -0.11633785068608846,
+          "mean_net_excess": -0.013194714801628548,
+          "net_excess_range": [
+            -0.057530941624457044,
+            0.035743185901464525
+          ],
+          "start_days_beating_pool": 3,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1777157976815667,
+          "mean_orders_per_rebalance": 23.0,
+          "vs_universe": {
+            "mean_daily_diff": -0.0001013542230262566,
+            "ci95": [
+              -0.003453911499677453,
+              0.0012796635871893962
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.013194714801628548
+          },
+          "no_buffer_gross_excess": -0.01900293116796046,
+          "vs_NONE": {
+            "mean_daily_diff": 0.0016147949572429075,
+            "ci95": [
+              0.0006502379106841405,
+              0.002630407297075614
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.036776283056364746
+          }
+        },
+        "STRAT_k20": {
+          "variant": "STRAT",
+          "k": 20,
+          "mean_net": -0.11066139429153825,
+          "mean_net_excess": -0.007518258407078348,
+          "net_excess_range": [
+            -0.08330874705965152,
+            0.043046593018992496
+          ],
+          "start_days_beating_pool": 5,
+          "start_days": 10,
+          "mean_max_drawdown": -0.1698860834691464,
+          "mean_orders_per_rebalance": 19.1,
+          "vs_universe": {
+            "mean_daily_diff": -0.00031765873306880733,
+            "ci95": [
+              -0.002661626678205584,
+              0.001010727033502914
+            ],
+            "verdict": "inconclusive",
+            "mean_total_diff": -0.007518258407078348
+          },
+          "no_buffer_gross_excess": -0.018059182645428874,
+          "vs_NONE": {
+            "mean_daily_diff": 0.0013984904472003567,
+            "ci95": [
+              0.0010573491369427182,
+              0.0026904899217395713
+            ],
+            "verdict": "better",
+            "mean_total_diff": 0.04245273945091495
+          }
+        }
+      },
+      "label_regime_top10": {
+        "signal_days": 23,
+        "up_days": 2,
+        "down_days": 21,
+        "NONE": {
+          "all": -0.02467662604405141,
+          "all_ci95": [
+            -0.03807187172111888,
+            -0.02306319659673738
+          ],
+          "up": 0.009016411623484981,
+          "down": -0.02788548677429297,
+          "corr_with_pool_return": 0.26423105413709286,
+          "picks_volatility_percentile": 0.6528676614350502
+        },
+        "LV50": {
+          "all": 0.014511448812637311,
+          "all_ci95": [
+            0.0026076554423815224,
+            0.02348366078943882
+          ],
+          "up": 0.03200485105581287,
+          "down": 0.012845410503763447,
+          "corr_with_pool_return": 0.3160906875970673,
+          "picks_volatility_percentile": 0.32692064671972915,
+          "minus_NONE": {
+            "mean": 0.03918807485668873,
+            "ci95": [
+              0.03390906606809808,
+              0.054163135402581615
+            ]
+          }
+        },
+        "LV70": {
+          "all": -0.011976029585619842,
+          "all_ci95": [
+            -0.02351111398184824,
+            -0.0040911700766598814
+          ],
+          "up": -0.0008109083595459025,
+          "down": -0.01303937446429355,
+          "corr_with_pool_return": 0.18044124116165108,
+          "picks_volatility_percentile": 0.46709603800023575,
+          "minus_NONE": {
+            "mean": 0.012700596458431572,
+            "ci95": [
+              0.007448921518010526,
+              0.024622623839738976
+            ]
+          }
+        },
+        "STRAT": {
+          "all": -0.0029674337356857417,
+          "all_ci95": [
+            -0.01594210989612243,
+            0.006282670955167624
+          ],
+          "up": -0.006208618993175374,
+          "down": -0.0026587494254486344,
+          "corr_with_pool_return": 0.1124876756194277,
+          "picks_volatility_percentile": 0.5093921183666876,
+          "minus_NONE": {
+            "mean": 0.021709192308365672,
+            "ci95": [
+              0.018324245596051402,
+              0.03192936107374251
+            ]
+          }
+        }
+      }
+    }
+  }
+}
