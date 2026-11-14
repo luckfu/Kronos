@@ -29,6 +29,12 @@ PATH_AGG = (os.environ.get("BASE_OOS_PATH_AGG", "").strip().lower() or "median")
 if N_PATHS < 1 or PATH_AGG not in {"median", "mean"}:
     raise RuntimeError(f"Bad path config: paths={N_PATHS} agg={PATH_AGG}")
 BATCH_SIZE = int(os.environ.get("BASE_OOS_BATCH", "24") or "24")
+# Decode sampling.  Defaults are the frozen production/evaluation pair; a decode grid
+# overrides them per arm (finetune/reports/20261114_c2_decode_grid_prereg_cn.md).
+DECODE_T = float(os.environ.get("BASE_OOS_TEMPERATURE", "0.65") or "0.65")
+DECODE_TOP_P = float(os.environ.get("BASE_OOS_TOP_P", "0.8") or "0.8")
+if not 0 < DECODE_T <= 2 or not 0 < DECODE_TOP_P <= 1:
+    raise RuntimeError(f"Bad decode config: T={DECODE_T} top_p={DECODE_TOP_P}")
 # Timing probes only: decode just the first N windows of each date so the kernel
 # ends by itself.  Never set this for a run whose metrics are reported.
 MAX_WINDOWS = int(os.environ.get("BASE_OOS_MAX_WINDOWS", "0") or "0")
@@ -137,7 +143,7 @@ def decode(records, store, model, tokenizer, device):
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
             forecasts = auto_regressive_inference(
                 tokenizer, model, x, stamp[:, :120], stamp[:, 120:130],
-                max_context=512, pred_len=10, clip=5, T=0.65, top_k=0, top_p=0.8,
+                max_context=512, pred_len=10, clip=5, T=DECODE_T, top_k=0, top_p=DECODE_TOP_P,
                 sample_count=N_PATHS, verbose=False, sector_id=sectors, size_percentile=sizes,
                 return_samples=True)
         for i, item in enumerate(items):
@@ -294,7 +300,8 @@ def worker(rank):
     # Two GPUs share the date list: rank 0 takes even dates, rank 1 odd dates.
     dates = dates[rank::2]
     phase("worker_dates", label=label, rank=rank, n_dates=len(dates), seed=DECODE_SEED,
-          paths=N_PATHS, path_agg=PATH_AGG if N_PATHS > 1 else "single", batch=BATCH_SIZE)
+          paths=N_PATHS, path_agg=PATH_AGG if N_PATHS > 1 else "single", batch=BATCH_SIZE,
+          temperature=DECODE_T, top_p=DECODE_TOP_P)
     OUTPUT.joinpath("shards").mkdir(parents=True, exist_ok=True)
     for date in dates:
         selected = samples[samples.asof_date == date].to_dict("records")
@@ -364,7 +371,7 @@ def main():
     first_use = score(frame[frame.asof_date >= "2026-09-18"])
     (OUTPUT / "summary.json").write_text(json.dumps(dict(
         window="2026-08-03..2026-09-30 (sealed, REFERENCE only)",
-        model=OOS_LABEL, decode_seed=DECODE_SEED,
+        model=OOS_LABEL, decode_seed=DECODE_SEED, temperature=DECODE_T, top_p=DECODE_TOP_P,
         paths=N_PATHS, path_agg=PATH_AGG if N_PATHS > 1 else "single",
         max_windows_per_date=MAX_WINDOWS or None,
         full_42d=summary, first_use_9d=first_use,
