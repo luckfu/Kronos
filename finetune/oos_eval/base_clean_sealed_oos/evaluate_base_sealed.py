@@ -170,6 +170,11 @@ def decode(records, store, model, tokenizer, device):
     return pd.DataFrame(rows)
 
 def score(frame):
+    # A date sub-window (BASE_OOS_DATE_FROM/TO) can leave this empty, e.g. the fixed
+    # "first use" slice when a run stops before 2026-09-18.  groupby().apply() on an empty
+    # frame returns a DataFrame, so the float() below would raise instead of returning NaN.
+    if frame.empty:
+        return {"samples": 0, "note": "no rows in this slice"}
     p = frame[[f"predicted_return_d{h}" for h in range(1, 11)]].to_numpy()
     a = frame[[f"actual_return_d{h}" for h in range(1, 11)]].to_numpy()
     e = p - a; d = np.sign(p) == np.sign(a)

@@ -1,0 +1,73 @@
+{
+  "segment": "confirm",
+  "window": [
+    "2026-09-18",
+    "2026-10-23"
+  ],
+  "bootstrap": {
+    "block": 5,
+    "replicates": 2000,
+    "seed": 20261114
+  },
+  "rules": {
+    "flat_band": 0.02,
+    "pick_ic_margin": 0.01
+  },
+  "arms": {
+    "t080_p095": {
+      "rows": 103285,
+      "days": 20,
+      "rank_ic": 0.1051470126888466,
+      "rank_ic_ci95": [
+        0.010707658325732413,
+        0.1928947384547546
+      ],
+      "pearson_ic": 0.08770863512208524,
+      "mae": 0.07550476578179392,
+      "mae_zero": 0.0823880550318742,
+      "mae_skill_vs_zero": 0.08354717498085462,
+      "calibration_ratio": 0.38456437170254415,
+      "mean_pred": -0.024196949296602554,
+      "mean_actual": -0.05127086882920062
+    },
+    "t065_p080": {
+      "rows": 103285,
+      "days": 20,
+      "rank_ic": 0.1528372682820991,
+      "rank_ic_ci95": [
+        0.08305300143460662,
+        0.20538128550124615
+      ],
+      "pearson_ic": 0.1263148423847807,
+      "mae": 0.07320511010622818,
+      "mae_zero": 0.0823880550318742,
+      "mae_skill_vs_zero": 0.11145966392935636,
+      "calibration_ratio": 0.3634211854504341,
+      "mean_pred": -0.02844768532263804,
+      "mean_actual": -0.05127086882920062
+    }
+  },
+  "paired_rows": 103285,
+  "pairwise_rank_ic": {
+    "t080_p095-t065_p080": {
+      "mean": -0.047690255593252476,
+      "ci95": [
+        -0.08732179770214762,
+        -0.01169187232008087
+      ],
+      "verdict": "different"
+    }
+  },
+  "verdict": {
+    "best_arm": "t065_p080",
+    "best_rank_ic": 0.1528372682820991,
+    "ic_spread": 0.04769025559325249,
+    "all_within_band": false,
+    "any_pairwise_different": true,
+    "flat": false,
+    "candidates_within_margin": [
+      "t065_p080"
+    ],
+    "arm_to_confirm": "t065_p080"
+  }
+}
