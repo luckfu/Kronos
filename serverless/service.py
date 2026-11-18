@@ -52,6 +52,7 @@ class InferenceRequest:
     sample_count: int
     sector_id: int
     size_percentile: float
+    include_hidden: bool = False
 
 
 _predictor: KronosPredictor | None = None
@@ -122,6 +123,12 @@ def _integer(value: Any, name: str) -> int:
     if isinstance(value, float) and not value.is_integer():
         raise RequestError(f"{name} must be an integer")
     return result
+
+
+def _boolean(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise RequestError(f"{name} must be a boolean")
+    return value
 
 
 def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
@@ -210,6 +217,7 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
     size_percentile = _number(payload["size_percentile"], "size_percentile")
     if not 0 <= size_percentile <= 1:
         raise RequestError("size_percentile must be between 0 and 1")
+    include_hidden = _boolean(payload.get("include_hidden", False), "include_hidden")
 
     return InferenceRequest(
         frame=frame.reset_index(drop=True),
@@ -224,29 +232,36 @@ def parse_request(payload: Mapping[str, Any] | None) -> InferenceRequest:
         sample_count=sample_count,
         sector_id=sector_id,
         size_percentile=size_percentile,
+        include_hidden=include_hidden,
     )
 
 
 def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     request = parse_request(payload)
     predictor = get_predictor()
+    hidden_vec = None
     with _inference_lock, torch.inference_mode():
         _seed_inference(INFERENCE_SEED)
-        samples = predictor.predict(
-            df=request.frame,
-            x_timestamp=request.timestamps,
-            y_timestamp=request.future_timestamps,
-            pred_len=request.pred_len,
-            T=request.temperature,
-            top_k=request.top_k,
-            top_p=request.top_p,
-            sample_count=request.sample_count,
-            verbose=False,
-            sector_id=request.sector_id,
-            size_bucket=None,
-            size_percentile=request.size_percentile,
-            return_samples=True,
-        )
+        kwargs: dict[str, Any] = {
+            "df": request.frame,
+            "x_timestamp": request.timestamps,
+            "y_timestamp": request.future_timestamps,
+            "pred_len": request.pred_len,
+            "T": request.temperature,
+            "top_k": request.top_k,
+            "top_p": request.top_p,
+            "sample_count": request.sample_count,
+            "verbose": False,
+            "sector_id": request.sector_id,
+            "size_bucket": None,
+            "size_percentile": request.size_percentile,
+            "return_samples": True,
+        }
+        if request.include_hidden:
+            kwargs["return_hidden"] = True
+            samples, hidden_vec = predictor.predict(**kwargs)
+        else:
+            samples = predictor.predict(**kwargs)
 
     mean = samples.mean(axis=0)
     close_index = FEATURE_COLUMNS.index("close")
@@ -275,7 +290,7 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             "close_p90": float(close_quantiles[2, index]),
         })
 
-    return {
+    response = {
         "predictions": predictions,
         "samples": {
             "close": samples[:, :, close_index].astype(float).tolist(),
@@ -292,6 +307,9 @@ def predict(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             "model_checkpoint": MODEL_CHECKPOINT,
         },
     }
+    if hidden_vec is not None:
+        response["hidden_state"] = np.asarray(hidden_vec, dtype=np.float32).astype(float).tolist()
+    return response
 
 
 def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -319,39 +337,47 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
             req.top_p,
             req.top_k,
             req.sample_count,
+            req.include_hidden,
         )
         for req in requests
     }
     if len(signatures) != 1:
         raise RequestError(
             "all batch items must use the same context, pred_len, "
-            "temperature, top_p, top_k, and sample_count"
+            "temperature, top_p, top_k, sample_count, and include_hidden"
         )
 
     predictor = get_predictor()
     sector_ids = [req.sector_id for req in requests]
     size_percentiles = [req.size_percentile for req in requests]
+    include_hidden = requests[0].include_hidden
+    batch_hidden = None
     with _inference_lock, torch.inference_mode():
         _seed_inference(INFERENCE_SEED)
-        batch_samples = predictor.predict_batch(
-            df_list=[req.frame for req in requests],
-            x_timestamp_list=[req.timestamps for req in requests],
-            y_timestamp_list=[req.future_timestamps for req in requests],
-            pred_len=requests[0].pred_len,
-            T=requests[0].temperature,
-            top_k=requests[0].top_k,
-            top_p=requests[0].top_p,
-            sample_count=requests[0].sample_count,
-            verbose=False,
-            sector_id=sector_ids,
-            size_bucket=None,
-            size_percentile=size_percentiles,
-            return_samples=True,
-        )
+        batch_kwargs: dict[str, Any] = {
+            "df_list": [req.frame for req in requests],
+            "x_timestamp_list": [req.timestamps for req in requests],
+            "y_timestamp_list": [req.future_timestamps for req in requests],
+            "pred_len": requests[0].pred_len,
+            "T": requests[0].temperature,
+            "top_k": requests[0].top_k,
+            "top_p": requests[0].top_p,
+            "sample_count": requests[0].sample_count,
+            "verbose": False,
+            "sector_id": sector_ids,
+            "size_bucket": None,
+            "size_percentile": size_percentiles,
+            "return_samples": True,
+        }
+        if include_hidden:
+            batch_kwargs["return_hidden"] = True
+            batch_samples, batch_hidden = predictor.predict_batch(**batch_kwargs)
+        else:
+            batch_samples = predictor.predict_batch(**batch_kwargs)
 
     results = []
     close_index = FEATURE_COLUMNS.index("close")
-    for item, req, samples in zip(items, requests, batch_samples):
+    for idx, (item, req, samples) in enumerate(zip(items, requests, batch_samples)):
         mean = samples.mean(axis=0)
         close_samples = samples[:, :, close_index]
         quantiles = np.quantile(close_samples, [0.1, 0.5, 0.9], axis=0)
@@ -368,10 +394,13 @@ def predict_batch(payload: Mapping[str, Any] | None) -> dict[str, Any]:
                 "close_p50": float(quantiles[1, index]),
                 "close_p90": float(quantiles[2, index]),
             })
-        results.append({
+        entry = {
             "id": item.get("id"), "predictions": predictions,
             "samples": {"close": close_samples.astype(float).tolist()},
-        })
+        }
+        if batch_hidden is not None:
+            entry["hidden_state"] = np.asarray(batch_hidden[idx], dtype=np.float32).astype(float).tolist()
+        results.append(entry)
     return {
         "results": results,
         "meta": {

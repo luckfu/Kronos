@@ -607,7 +607,7 @@ def _xla_mark_step(device):
     xm.mark_step()
 
 
-def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False, sample_logits=True):
+def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_generated_tokens=False, sample_logits=True, return_hidden=False):
     with torch.no_grad():
         x = torch.clip(x, -clip, clip)
 
@@ -655,6 +655,7 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
             ran = trange
         else:
             ran = range
+        hidden_last = None
         for i in ran(pred_len):
             current_seq_len = initial_seq_len + i
             window_len = min(current_seq_len, max_context)
@@ -676,6 +677,8 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
                 sector_id=sector_id, size_bucket=size_bucket,
                 size_percentile=size_percentile,
             )
+            if return_hidden and i == 0:
+                hidden_last = context[::sample_count, -1, :].float().cpu().numpy()
             s1_logits = s1_logits[:, -1, :]
             sample_pre = sample_from_logits(
                 s1_logits, temperature=T, top_k=top_k, top_p=top_p,
@@ -715,12 +718,18 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         z = z.reshape(-1, sample_count, z.size(1), z.size(2))
         samples = z.float().cpu().numpy()
         forecasts = samples if return_samples else np.mean(samples, axis=1)
-        if not return_generated_tokens:
+        if not return_generated_tokens and not return_hidden:
             return forecasts
-        tokens = {
-            "s1": generated_pre.reshape(-1, sample_count, pred_len).cpu().numpy(),
-            "s2": generated_post.reshape(-1, sample_count, pred_len).cpu().numpy(),
-        }
+        tokens = None
+        if return_generated_tokens:
+            tokens = {
+                "s1": generated_pre.reshape(-1, sample_count, pred_len).cpu().numpy(),
+                "s2": generated_post.reshape(-1, sample_count, pred_len).cpu().numpy(),
+            }
+        if return_generated_tokens and return_hidden:
+            return forecasts, tokens, hidden_last
+        if return_hidden:
+            return forecasts, hidden_last
         return forecasts, tokens
 
 
@@ -760,7 +769,7 @@ class KronosPredictor:
         self.tokenizer = self.tokenizer.to(self.device)
         self.model = self.model.to(self.device)
 
-    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_hidden=False):
 
         x_tensor = torch.from_numpy(np.array(x).astype(np.float32)).to(self.device)
         x_stamp_tensor = torch.from_numpy(np.array(x_stamp).astype(np.float32)).to(self.device)
@@ -771,18 +780,25 @@ class KronosPredictor:
         percentile_tensor = None if size_percentile is None else torch.as_tensor(
             size_percentile, device=self.device, dtype=torch.float32
         )
-        preds = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
-                                          self.clip, T, top_k, top_p, sample_count, verbose,
-                                          sector_id=sector_tensor, size_bucket=size_tensor,
-                                          size_percentile=percentile_tensor,
-                                          return_samples=return_samples)
+        out = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
+                                        self.clip, T, top_k, top_p, sample_count, verbose,
+                                        sector_id=sector_tensor, size_bucket=size_tensor,
+                                        size_percentile=percentile_tensor,
+                                        return_samples=return_samples,
+                                        return_hidden=return_hidden)
+        if return_hidden:
+            preds, hidden_last = out
+        else:
+            preds, hidden_last = out, None
         if return_samples:
             preds = preds[:, :, -pred_len:, :]
         else:
             preds = preds[:, -pred_len:, :]
+        if return_hidden:
+            return preds, hidden_last
         return preds
 
-    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+    def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_hidden=False):
 
         if not isinstance(df, pd.DataFrame):
             raise ValueError("Input must be a pandas DataFrame.")
@@ -816,23 +832,29 @@ class KronosPredictor:
         x_stamp = x_stamp[np.newaxis, :]
         y_stamp = y_stamp[np.newaxis, :]
 
-        preds = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose,
-                              sector_id=sector_id, size_bucket=size_bucket,
-                              size_percentile=size_percentile,
-                              return_samples=return_samples)
+        out = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose,
+                            sector_id=sector_id, size_bucket=size_bucket,
+                            size_percentile=size_percentile,
+                            return_samples=return_samples,
+                            return_hidden=return_hidden)
+        if return_hidden:
+            preds, hidden_last = out
+            hidden_vec = hidden_last[0]
+        else:
+            preds, hidden_vec = out, None
 
         preds = preds.squeeze(0)
         if return_samples:
             preds = preds * (x_std[None, None, :] + 1e-5) + x_mean[None, None, :]
-            return preds
+            return (preds, hidden_vec) if return_hidden else preds
 
         preds = preds * (x_std + 1e-5) + x_mean
 
         pred_df = pd.DataFrame(preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp)
-        return pred_df
+        return (pred_df, hidden_vec) if return_hidden else pred_df
 
 
-    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False):
+    def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True, sector_id=None, size_bucket=None, size_percentile=None, return_samples=False, return_hidden=False):
         """
         Perform parallel (batch) prediction on multiple time series. All series must have the same historical length and prediction length (pred_len).
 
@@ -922,19 +944,25 @@ class KronosPredictor:
         x_stamp_batch = np.stack(x_stamp_list, axis=0).astype(np.float32) # (B, seq_len, time_feat)
         y_stamp_batch = np.stack(y_stamp_list, axis=0).astype(np.float32) # (B, pred_len, time_feat)
 
-        preds = self.generate(
+        out = self.generate(
             x_batch, x_stamp_batch, y_stamp_batch, pred_len,
             T, top_k, top_p, sample_count, verbose,
             sector_id=sector_id, size_bucket=size_bucket,
             size_percentile=size_percentile,
             return_samples=return_samples,
+            return_hidden=return_hidden,
         )
+        if return_hidden:
+            preds, hidden_last = out
+        else:
+            preds, hidden_last = out, None
         if return_samples:
             preds = preds[:, :, -pred_len:, :]
-            return [
+            sample_list = [
                 preds[i] * (stds[i][None, None, :] + 1e-5) + means[i][None, None, :]
                 for i in range(num_series)
             ]
+            return (sample_list, hidden_last) if return_hidden else sample_list
 
         preds = preds[:, -pred_len:, :]
 
@@ -944,4 +972,4 @@ class KronosPredictor:
             pred_df = pd.DataFrame(preds_i, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp_list[i])
             pred_dfs.append(pred_df)
 
-        return pred_dfs
+        return (pred_dfs, hidden_last) if return_hidden else pred_dfs

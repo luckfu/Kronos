@@ -648,3 +648,106 @@ def test_deploy_no_longer_wires_hermes_analysis():
     assert "KRONOS_HERMES" not in readme
     assert "hermes-analysis" not in root_readme
     assert "Hermes 分析" not in root_readme
+
+
+def test_daily_rankings_supports_fused_sort_and_regime(monkeypatch, tmp_path):
+    run = published_run(tmp_path)
+    summary = json.loads((run / "summary.json").read_text())
+    summary["fusion"] = {"enabled": True, "method": "FUSE_RIDGE_C2"}
+    summary["regime"] = {
+        "available": True,
+        "breadth_ma20": 0.38,
+        "above_ma20_count": 1900,
+        "breadth_universe_count": 5000,
+        "level": 1,
+        "position_pct": 50,
+        "action": "半仓观察",
+    }
+    (run / "summary.json").write_text(json.dumps(summary))
+    frame = pd.read_csv(run / "ranking.csv")
+    # Flip ranking order under fused score compared to raw C2 rank_d10.
+    frame["score_hidden"] = frame["code"].map({"sh.600000": -0.5, "sz.000001": 0.8, "sz.000063": 0.2})
+    frame["score_fused"] = frame["code"].map({"sh.600000": 0.50, "sz.000001": 0.90, "sz.000063": 0.70})
+    frame["rank_fused"] = frame["code"].map({"sz.000001": 1, "sz.000063": 2, "sh.600000": 3})
+    frame["rank_percentile_fused"] = frame["code"].map({"sz.000001": 1.0, "sz.000063": 0.67, "sh.600000": 0.33})
+    frame.to_csv(run / "ranking.csv", index=False)
+
+    monkeypatch.setattr(web_app, "DAILY_PREDICTION_ROOT", tmp_path)
+    reset_stock_name_cache(monkeypatch, tmp_path)
+    forbid_live_name_lookups(monkeypatch)
+    client = web_app.app.test_client()
+
+    fused = client.get("/api/daily-rankings?asof=2026-09-18")
+    assert fused.status_code == 200
+    fused_json = fused.get_json()
+    assert fused_json["sort"] == "fused"
+    assert fused_json["fusion_available"] is True
+    assert fused_json["regime"]["action"] == "半仓观察"
+    assert [row["code"] for row in fused_json["rows"]] == ["sz.000001", "sz.000063", "sh.600000"]
+
+    c2 = client.get("/api/daily-rankings?asof=2026-09-18&sort=c2")
+    assert c2.status_code == 200
+    assert c2.get_json()["sort"] == "c2"
+    assert [row["code"] for row in c2.get_json()["rows"]] == ["sh.600000", "sz.000063", "sz.000001"]
+
+    page = client.get("/").get_data(as_text=True)
+    assert "regime-banner" in page
+    assert "sort-select" in page
+    assert "detail-buffer" in page
+
+
+def test_custom_pools_persist_per_user_and_sync_across_clients(monkeypatch, tmp_path):
+    pools_file = tmp_path / "custom_pools.json"
+    monkeypatch.setattr(web_app, "CUSTOM_POOLS_PATH", str(pools_file))
+    client_pc = web_app.app.test_client()
+    client_phone = web_app.app.test_client()
+
+    with client_pc.session_transaction() as sess:
+        sess[web_app.SESSION_USER_KEY] = "alice"
+    with client_phone.session_transaction() as sess:
+        sess[web_app.SESSION_USER_KEY] = "alice"
+
+    saved = client_pc.post("/api/custom-pools", json={
+        "name": "核心关注",
+        "symbols": ["600519", "000858", "600519", "bad"],
+    })
+    assert saved.status_code == 200
+    assert saved.get_json()["pools"] == {"核心关注": ["sh.600519", "sz.000858"]}
+
+    # Different client/device for same user sees the persisted pools immediately.
+    fetched = client_phone.get("/api/custom-pools")
+    assert fetched.status_code == 200
+    assert fetched.get_json()["pools"] == {"核心关注": ["sh.600519", "sz.000858"]}
+
+    # Merge only imports missing pool names without overwriting server pools.
+    merged = client_pc.post("/api/custom-pools", json={
+        "merge": True,
+        "pools": {"核心关注": ["000001"], "旧本地池": ["000063"]},
+    })
+    assert merged.status_code == 200
+    assert merged.get_json()["pools"] == {
+        "核心关注": ["sh.600519", "sz.000858"],
+        "旧本地池": ["sz.000063"],
+    }
+
+    deleted = client_phone.delete("/api/custom-pools/旧本地池")
+    assert deleted.status_code == 200
+    assert deleted.get_json()["pools"] == {"核心关注": ["sh.600519", "sz.000858"]}
+
+    # Editing an existing pool (both modifying symbols and renaming) updates atomically.
+    edited = client_pc.post("/api/custom-pools", json={
+        "original_name": "核心关注",
+        "name": "我的新核心",
+        "symbols": ["600036", "000001"],
+    })
+    assert edited.status_code == 200
+    assert edited.get_json()["pools"] == {"我的新核心": ["sh.600036", "sz.000001"]}
+    assert client_phone.get("/api/custom-pools").get_json()["pools"] == {
+        "我的新核心": ["sh.600036", "sz.000001"]
+    }
+
+    # Separate user sees an isolated pool namespace.
+    other = web_app.app.test_client()
+    with other.session_transaction() as sess:
+        sess[web_app.SESSION_USER_KEY] = "bob"
+    assert other.get("/api/custom-pools").get_json()["pools"] == {}

@@ -79,6 +79,15 @@
     .stat strong { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
     .stat small { margin-left: 6px; color: var(--muted); font-size: 11px; }
     .ready { color: var(--down); }
+    .regime-banner { margin-top: 12px; padding: 11px 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; font-size: 12px; }
+    .regime-banner[hidden] { display: none; }
+    .regime-main { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .regime-pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 99px; font-weight: 600; font-size: 11px; }
+    .regime-pill.regime-full { background: var(--accent-soft); color: var(--accent); }
+    .regime-pill.regime-half { background: #fdf3e1; color: var(--warn); }
+    .regime-pill.regime-empty { background: #fbeae9; color: var(--up); }
+    .regime-hint { color: var(--muted); font-size: 11px; }
+    .rank-sub { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 400; }
     .toolbar { margin: 15px 0 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .consensus-panel { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
     .consensus-head { padding: 14px 15px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
@@ -188,8 +197,14 @@
     .pool-dialog-actions .primary { color: white; background: var(--accent); border-color: var(--accent); }
     .pool-list { margin-top: 16px; border-top: 1px solid var(--line-soft); }
     .pool-list-row { padding: 10px 0; display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line-soft); align-items: center; }
+    .pool-list-row.editing { background: var(--accent-soft); padding: 10px 8px; border-radius: 6px; }
     .pool-list-row small { color: var(--muted); }
-    .pool-list-row button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+    .pool-row-actions { display: inline-flex; gap: 10px; align-items: center; }
+    .pool-list-row button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; }
+    .pool-list-row button[data-edit-pool] { color: var(--accent); font-weight: 600; }
+    .pool-form-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .pool-form-head label { margin-bottom: 0; }
+    .pool-reset-link { border: 0; background: transparent; color: var(--accent); font-size: 12px; cursor: pointer; padding: 0; }
     .workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
     .workspace.detail-open { grid-template-columns: minmax(560px, 1fr) 310px; }
     .consensus-layout { display: block; }
@@ -407,9 +422,22 @@
           <div class="stat"><span>发布状态</span><strong class="ready" id="metric-status">读取中</strong><small id="metric-batches">—</small></div>
         </div>
 
+        <div class="regime-banner" id="regime-banner" hidden>
+          <div class="regime-main">
+            <span class="regime-pill" id="regime-pill">—</span>
+            <span>市场宽度（20日均线上方占比）：<strong id="regime-breadth">—</strong></span>
+            <span class="regime-hint" id="regime-counts"></span>
+          </div>
+          <span class="regime-hint">仓位规则：&lt;30% 空仓 · 30–45% 半仓 · ≥45% 满仓｜换仓缓冲：老持仓跌出 Top 30% 再换出</span>
+        </div>
+
         <div class="toolbar">
           <div class="filters">
             <div class="pool-controls"><select id="pool-select" class="filter" aria-label="自定义股池"><option value="">全市场</option></select><button id="pool-manage" class="pool-button" type="button"><i data-lucide="settings-2"></i>管理股池</button></div>
+            <select id="sort-select" class="filter" aria-label="排序模式" hidden>
+              <option value="fused" selected>混合综合排名 (C2+隐藏头)</option>
+              <option value="c2">原版 C2 收益排名</option>
+            </select>
             <form id="search-form" class="search-row" role="search" action="#" method="get">
               <input id="search-input" class="filter" name="query" type="search" placeholder="股票代码，如 000063 / 600519" aria-label="股票代码" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search">
               <button id="search-button" class="search-button" type="submit">查询</button>
@@ -464,6 +492,8 @@
               <div class="fact"><span>信号日收盘</span><strong id="detail-close">—</strong></div>
               <div class="fact"><span>市值百分位</span><strong id="detail-size">—</strong></div>
               <div class="fact"><span>领先市场</span><strong id="detail-leading">—</strong></div>
+              <div class="fact"><span>30% 保留区</span><strong id="detail-buffer">—</strong></div>
+              <div class="fact" id="detail-hidden-row" hidden><span>隐藏头打分</span><strong id="detail-hidden-score">—</strong></div>
               <div class="fact"><span>采样路径</span><strong id="detail-samples">—</strong></div>
             </div>
             <p class="detail-note" id="detail-note">排名是同一信号日的截面比较结果，不代表确定收益。概率区间仅作参考。</p>
@@ -523,7 +553,7 @@
   <dialog id="pool-dialog" aria-labelledby="pool-dialog-title">
     <div class="pool-dialog-head"><strong id="pool-dialog-title">管理自定义股池</strong><button id="pool-dialog-close" class="icon-button" type="button" aria-label="关闭"><i data-lucide="x"></i></button></div>
     <div class="pool-dialog-body">
-      <label for="pool-name">股池名称</label>
+      <div class="pool-form-head"><label for="pool-name" id="pool-form-label">股池名称</label><button id="pool-new-reset" class="pool-reset-link" type="button" hidden>清空转为新建</button></div>
       <input id="pool-name" type="text" maxlength="30" placeholder="例如：我的核心持仓">
       <label for="pool-symbols" style="margin-top:14px">股票代码（逗号、空格或换行分隔，支持 600519 或 sh.600519）</label>
       <textarea id="pool-symbols" placeholder="600519\n000858\nsh.600036"></textarea>
@@ -535,7 +565,7 @@
   <script>
     const base = location.pathname.replace(/\/+$/, '');
     const api = path => `${base}${path}`;
-    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '', consensusDays: 3, consensusTop: 10, consensusRequest: 0, chartResult: null, detailContext: null };
+    const state = { dates: [], date: null, page: 1, pages: 1, selected: null, loading: false, pools: {}, pool: '', sort: 'fused', activeSort: 'c2', fusionAvailable: false, consensusDays: 3, consensusTop: 10, consensusRequest: 0, chartResult: null, detailContext: null };
     const $ = id => document.getElementById(id);
     const rankingPage = $('ranking-page');
     const consensusPage = $('consensus-page');
@@ -582,21 +612,67 @@
       if (/^\d{6}$/.test(raw)) return `${raw[0] === '6' ? 'sh' : raw[0] === '8' || raw[0] === '4' ? 'bj' : 'sz'}.${raw}`;
       return '';
     }
-    function loadPools() {
-      try { state.pools = JSON.parse(localStorage.getItem('kronos.customPools') || '{}') || {}; } catch (_) { state.pools = {}; }
+    function renderPoolSelect() {
       const select = $('pool-select');
       select.innerHTML = '<option value="">全市场</option>' + Object.keys(state.pools).sort().map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)} · ${state.pools[name].length}只</option>`).join('');
+      if (state.pool && !state.pools[state.pool]) state.pool = '';
       select.value = state.pool;
+      try { localStorage.setItem('kronos.customPools', JSON.stringify(state.pools)); } catch (_) {}
     }
-    function savePools() { localStorage.setItem('kronos.customPools', JSON.stringify(state.pools)); loadPools(); }
+    async function loadPools() {
+      let localPools = {};
+      let migrated = false;
+      try {
+        localPools = JSON.parse(localStorage.getItem('kronos.customPools') || '{}') || {};
+        migrated = localStorage.getItem('kronos.customPoolsMigrated') === '1';
+      } catch (_) {}
+      try {
+        const result = await getJson(api('/api/custom-pools'));
+        let serverPools = result.pools || {};
+        if (!migrated && Object.keys(localPools).length) {
+          const merged = await requestJson(api('/api/custom-pools'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({pools: localPools, merge: true}),
+          });
+          serverPools = merged.pools || serverPools;
+        }
+        try { localStorage.setItem('kronos.customPoolsMigrated', '1'); } catch (_) {}
+        state.pools = serverPools;
+      } catch (_) {
+        state.pools = localPools;
+      }
+      renderPoolSelect();
+    }
+    let editingPool = null;
+    function setPoolForm(name = '') {
+      const target = name && state.pools[name] ? name : null;
+      editingPool = target;
+      $('pool-name').value = target || '';
+      $('pool-symbols').value = target ? state.pools[target].join('\n') : '';
+      $('pool-form-label').textContent = target ? `正在编辑：${target}` : '股池名称';
+      $('pool-save').textContent = target ? '保存修改' : '保存股池';
+      $('pool-new-reset').hidden = !target;
+      renderPoolList();
+    }
     function renderPoolList() {
-      $('pool-list').innerHTML = Object.entries(state.pools).sort(([a], [b]) => a.localeCompare(b)).map(([name, symbols]) => `<div class="pool-list-row"><span><strong>${escapeHtml(name)}</strong> <small>${symbols.length}只</small></span><button type="button" data-delete-pool="${escapeHtml(name)}" aria-label="删除 ${escapeHtml(name)}">删除</button></div>`).join('') || '<small>还没有自定义股池</small>';
-      $('pool-list').querySelectorAll('[data-delete-pool]').forEach(button => button.addEventListener('click', () => {
+      $('pool-list').innerHTML = Object.entries(state.pools).sort(([a], [b]) => a.localeCompare(b)).map(([name, symbols]) => `<div class="pool-list-row ${editingPool === name ? 'editing' : ''}"><span><strong>${escapeHtml(name)}</strong> <small>${symbols.length}只</small></span><span class="pool-row-actions"><button type="button" data-edit-pool="${escapeHtml(name)}" aria-label="编辑 ${escapeHtml(name)}">编辑</button><button type="button" data-delete-pool="${escapeHtml(name)}" aria-label="删除 ${escapeHtml(name)}">删除</button></span></div>`).join('') || '<small>还没有自定义股池</small>';
+      $('pool-list').querySelectorAll('[data-edit-pool]').forEach(button => button.addEventListener('click', () => {
+        setPoolForm(button.dataset.editPool);
+        $('pool-symbols').focus();
+      }));
+      $('pool-list').querySelectorAll('[data-delete-pool]').forEach(button => button.addEventListener('click', async () => {
         const name = button.dataset.deletePool;
         if (!window.confirm(`删除股池“${name}”？`)) return;
-        delete state.pools[name];
-        if (state.pool === name) { state.pool = ''; }
-        savePools(); renderPoolList(); loadRankings(true);
+        try {
+          const result = await requestJson(api(`/api/custom-pools/${encodeURIComponent(name)}`), {method: 'DELETE'});
+          state.pools = result.pools || {};
+          if (state.pool === name) { state.pool = ''; }
+          if (editingPool === name) { editingPool = null; setPoolForm(''); }
+          renderPoolSelect();
+          renderPoolList();
+          loadRankings(true);
+        } catch (error) { toast(error.message); }
       }));
     }
     async function requestJson(url, options = {}) {
@@ -627,7 +703,7 @@
     }
 
     function queryString() {
-      const params = new URLSearchParams({asof: state.date, page: state.page, page_size: 50});
+      const params = new URLSearchParams({asof: state.date, page: state.page, page_size: 50, sort: state.sort});
       const query = $('search-input').value.trim();
       const values = {query, sector: $('sector-select').value, size_group: $('size-select').value, top: query ? '' : $('top-select').value, pool: state.pool ? state.pools[state.pool].join(',') : ''};
       Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
@@ -662,14 +738,19 @@
       try {
         const result = await getJson(api(`/api/daily-rankings?${queryString()}`));
         state.pages = result.pages;
+        state.fusionAvailable = Boolean(result.fusion_available);
+        state.activeSort = result.sort || 'c2';
+        $('sort-select').hidden = !state.fusionAvailable;
+        if (state.fusionAvailable) $('sort-select').value = state.activeSort;
+        renderRegime(result.regime);
         $('metric-date').textContent = result.asof;
         $('metric-count').textContent = Number(result.prediction_count).toLocaleString('zh-CN');
-        $('metric-paths').textContent = `${result.model.sample_count || '—'}条路径`;
+        $('metric-paths').textContent = `${result.model.sample_count || '—'}条路径${state.activeSort === 'fused' ? ' · 混合' : ''}`;
         $('metric-status').textContent = '完整可用';
         $('metric-batches').textContent = `${result.batch_count} 个批次`;
         $('side-status').textContent = '数据与预测已就绪';
         $('side-meta').textContent = `${result.asof} · ${Number(result.prediction_count).toLocaleString('zh-CN')}只 · ${result.model.sample_count || '—'}路径`;
-        $('result-count').textContent = `${state.pool ? `${state.pool} · ` : ''}筛选结果 ${Number(result.total).toLocaleString('zh-CN')} 只`;
+        $('result-count').textContent = `${state.pool ? `${state.pool} · ` : ''}${state.activeSort === 'fused' ? '混合综合' : '原版C2'}筛选 ${Number(result.total).toLocaleString('zh-CN')} 只`;
         $('page-label').textContent = `第 ${result.page} / ${result.pages} 页`;
         $('prev-page').disabled = result.page <= 1;
         $('next-page').disabled = result.page >= result.pages;
@@ -680,6 +761,23 @@
         $('metric-status').textContent = '不可用';
         toast(error.message);
       } finally { state.loading = false; }
+    }
+
+    function renderRegime(regime) {
+      const banner = $('regime-banner');
+      if (!regime || !regime.available) {
+        banner.hidden = true;
+        return;
+      }
+      banner.hidden = false;
+      const pill = $('regime-pill');
+      const level = Number(regime.level);
+      pill.textContent = `${regime.action || '—'} (${regime.position_pct ?? '—'}% 仓位)`;
+      pill.className = `regime-pill ${level === 2 ? 'regime-full' : level === 1 ? 'regime-half' : 'regime-empty'}`;
+      $('regime-breadth').textContent = percent(regime.breadth_ma20);
+      $('regime-counts').textContent = regime.above_ma20_count != null && regime.breadth_universe_count != null
+        ? `(${regime.above_ma20_count} / ${regime.breadth_universe_count} 只站上20日线)`
+        : '';
     }
 
     function updateSectors(sectors) {
@@ -701,8 +799,12 @@
         body.innerHTML = '<tr><td colspan="8" class="empty">没有符合条件的股票</td></tr>';
         return;
       }
-      body.innerHTML = rows.map(row => `<tr data-code="${escapeHtml(row.code)}" class="${state.selected === row.code ? 'selected' : ''}">
-        <td class="rank">${row.rank_d10}</td>
+      const useFused = state.activeSort === 'fused';
+      body.innerHTML = rows.map(row => {
+        const displayRank = useFused && row.rank_fused != null ? row.rank_fused : row.rank_d10;
+        const subRank = useFused && row.rank_fused != null ? `<span class="rank-sub">C2 #${row.rank_d10}</span>` : '';
+        return `<tr data-code="${escapeHtml(row.code)}" class="${state.selected === row.code ? 'selected' : ''}">
+        <td class="rank">${displayRank}${subRank}</td>
         <td><span class="row-name">${escapeHtml(row.name || '—')}</span><span class="card-code">${escapeHtml(row.code)}</span><span class="card-meta">${escapeHtml(stripSector(row.sector_label))} · 市值 ${percent(row.size_percentile)} · ${price(row.close_asof)}</span></td>
         <td class="code">${escapeHtml(row.code)}</td>
         <td class="sector" title="${escapeHtml(stripSector(row.sector_label))}">${escapeHtml(stripSector(row.sector_label))}</td>
@@ -710,7 +812,8 @@
         <td>${price(row.close_asof)}</td>
         <td class="${directionClass(row.predicted_return_d1)}">${percent(row.predicted_return_d1, true)}</td>
         <td class="${directionClass(row.predicted_return_d10)}">${percent(row.predicted_return_d10, true)}</td>
-      </tr>`).join('');
+      </tr>`;
+      }).join('');
       body.querySelectorAll('tr[data-code]').forEach(row => row.addEventListener('click', () => openDetail(row.dataset.code)));
     }
 
@@ -805,14 +908,28 @@
         const predictions = result.predictions || [];
         $('detail-code').textContent = result.name ? `${result.name} · ${result.code}` : result.code;
         $('detail-sector').textContent = stripSector(result.sector_label);
-        $('detail-rank').textContent = `${state.pool || '全市场'} #${rank.rank_d10}`;
+        const poolLabel = state.pool || '全市场';
+        $('detail-rank').textContent = rank.rank_fused != null
+          ? `${poolLabel} 混合 #${rank.rank_fused} · C2 #${rank.rank_d10}`
+          : `${poolLabel} #${rank.rank_d10}`;
         $('detail-d10').textContent = percent(rank.predicted_return_d10, true);
         $('detail-d10').className = directionClass(rank.predicted_return_d10);
         $('detail-d1').textContent = percent(rank.predicted_return_d1, true);
         $('detail-d1').className = directionClass(rank.predicted_return_d1);
         $('detail-close').textContent = price(result.close_asof);
         $('detail-size').textContent = percent(result.size_percentile);
-        $('detail-leading').textContent = percent(rank.rank_percentile_d10);
+        const leadPct = rank.rank_percentile_fused != null ? rank.rank_percentile_fused : rank.rank_percentile_d10;
+        $('detail-leading').textContent = percent(leadPct);
+        const inBuffer = Number(leadPct) >= 0.70;
+        $('detail-buffer').textContent = Number.isFinite(Number(leadPct))
+          ? (inBuffer ? '在 Top 30% 内（可继续持有）' : '跌出 Top 30%（若持仓可换出）')
+          : '—';
+        if (rank.score_hidden != null && Number.isFinite(Number(rank.score_hidden))) {
+          $('detail-hidden-row').hidden = false;
+          $('detail-hidden-score').textContent = `${Number(rank.score_hidden) >= 0 ? '+' : ''}${Number(rank.score_hidden).toFixed(4)}`;
+        } else {
+          $('detail-hidden-row').hidden = true;
+        }
         const sampleCount = result.model?.sample_count;
         $('detail-samples').textContent = `${sampleCount || '—'} 条`;
         const history = result.history || [];
@@ -974,15 +1091,36 @@
       loadConsensus();
     }));
     $('pool-select').addEventListener('change', event => { state.pool = event.target.value; closeDetail(); loadRankings(true); });
-    $('pool-manage').addEventListener('click', () => { renderPoolList(); $('pool-dialog').showModal(); });
-    $('pool-dialog-close').addEventListener('click', () => $('pool-dialog').close());
-    $('pool-dialog-cancel').addEventListener('click', () => $('pool-dialog').close());
-    $('pool-save').addEventListener('click', () => {
+    $('sort-select').addEventListener('change', event => { state.sort = event.target.value; closeDetail(); loadRankings(true); });
+    $('pool-manage').addEventListener('click', async () => {
+      await loadPools();
+      setPoolForm(state.pool || '');
+      $('pool-dialog').showModal();
+    });
+    $('pool-new-reset').addEventListener('click', () => { setPoolForm(''); $('pool-name').focus(); });
+    $('pool-dialog-close').addEventListener('click', () => { setPoolForm(''); $('pool-dialog').close(); });
+    $('pool-dialog-cancel').addEventListener('click', () => { setPoolForm(''); $('pool-dialog').close(); });
+    $('pool-dialog').addEventListener('cancel', () => setPoolForm(''));
+    $('pool-save').addEventListener('click', async () => {
       const name = $('pool-name').value.trim();
       const symbols = [...new Set($('pool-symbols').value.split(/[\s,，]+/).map(normalizeSymbol).filter(Boolean))];
       if (!name) return toast('请填写股池名称');
       if (!symbols.length) return toast('请至少填写一个有效的 A 股代码');
-      state.pools[name] = symbols; state.pool = name; savePools(); $('pool-name').value = ''; $('pool-symbols').value = ''; $('pool-dialog').close(); loadRankings(true);
+      try {
+        const body = editingPool ? {name, symbols, original_name: editingPool} : {name, symbols};
+        const result = await requestJson(api('/api/custom-pools'), {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        state.pools = result.pools || {};
+        state.pool = name;
+        try { localStorage.setItem('kronos.customPoolsMigrated', '1'); } catch (_) {}
+        renderPoolSelect();
+        setPoolForm('');
+        $('pool-dialog').close();
+        loadRankings(true);
+      } catch (error) { toast(error.message); }
     });
     $('refresh-button').addEventListener('click', async () => {
       if (document.body.dataset.view === 'consensus') {
@@ -1019,7 +1157,7 @@
     $('close-detail').addEventListener('click', closeDetail);
 
     (async () => {
-      try { loadPools(); await loadDates(); await Promise.all([loadRankings(), loadConsensus()]); }
+      try { await loadPools(); await loadDates(); await Promise.all([loadRankings(), loadConsensus()]); }
       catch (error) { $('ranking-body').innerHTML = `<tr><td colspan="8" class="empty">${escapeHtml(error.message)}</td></tr>`; toast(error.message); }
       if (window.lucide) lucide.createIcons();
     })();

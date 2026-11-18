@@ -26,6 +26,7 @@ import requests
 
 LOOKBACK = 120
 HORIZON = 10
+HIDDEN_DIM = 512
 MAX_BATCH_SIZE = 12
 DEFAULT_INFERENCE_URL = "https://luckfu--kronos-beta-v1-2-inference-web.modal.run"
 FEATURES = ("open", "high", "low", "close", "volume", "amount")
@@ -33,6 +34,7 @@ DEFAULT_TEMPERATURE = 0.60
 DEFAULT_TOP_P = 0.90
 DEFAULT_TOP_K = 0
 DEFAULT_SAMPLE_COUNT = 16
+DEFAULT_HIDDEN_HEAD = Path(__file__).with_name("head_val_alpha1e4.npy")
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,6 +59,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--future-dates",
         help="Comma-separated exchange trading dates. If omitted, use AkShare's calendar.",
+    )
+    parser.add_argument(
+        "--hidden-head",
+        type=Path,
+        default=DEFAULT_HIDDEN_HEAD,
+        help="Path to frozen 512d ridge weights (.npy) for C2+hidden score fusion.",
+    )
+    parser.add_argument(
+        "--no-hidden",
+        action="store_true",
+        help="Disable Modal hidden_state extraction and fused ranking.",
     )
     parser.add_argument(
         "--no-resume", action="store_true",
@@ -108,6 +121,7 @@ def load_audit_rows(connection, asof: date) -> tuple[pd.DataFrame, list[date]]:
             raise RuntimeError(
                 f"expected {LOOKBACK} market dates ending at {asof}, got {len(dates)}"
             )
+        ma20_start = dates[-20]
         cursor.execute(
             """
             WITH raw_window_rows AS (
@@ -145,20 +159,28 @@ def load_audit_rows(connection, asof: date) -> tuple[pd.DataFrame, list[date]]:
                        coalesce(max(abs(ln(adj_factor / previous_factor))) FILTER (
                            WHERE previous_source IS NOT NULL AND source <> previous_source
                              AND adj_factor > 0 AND previous_factor > 0
-                       ), 0) AS max_source_switch_log_jump
+                       ), 0) AS max_source_switch_log_jump,
+                       count(*) FILTER (
+                           WHERE date >= %s AND close > 0 AND adj_factor > 0
+                       ) AS ma20_rows,
+                       avg(close * adj_factor) FILTER (
+                           WHERE date >= %s AND close > 0 AND adj_factor > 0
+                       ) AS ma20_adj_close,
+                       max(CASE WHEN date = %s THEN close * adj_factor END) AS asof_adj_close
                 FROM window_rows
                 GROUP BY code
             )
             SELECT a.code, a.trade_status, a.is_st, a.close, a.amount, a.turnover,
                    h.history_rows, h.invalid_ohlcva_rows, h.factor_rows,
                    h.invalid_factor_rows, h.factor_source_count,
-                   h.factor_source_switches, h.max_source_switch_log_jump
+                   h.factor_source_switches, h.max_source_switch_log_jump,
+                   h.ma20_rows, h.ma20_adj_close, h.asof_adj_close
             FROM public.ashare_daily_k a
             LEFT JOIN history h ON h.code = a.code
             WHERE a.date = %s
             ORDER BY a.code
             """,
-            (dates, asof),
+            (dates, ma20_start, ma20_start, asof, asof),
         )
         columns = [item.name for item in cursor.description]
         return pd.DataFrame(cursor.fetchall(), columns=columns), dates
@@ -167,9 +189,11 @@ def load_audit_rows(connection, asof: date) -> tuple[pd.DataFrame, list[date]]:
 def classify(rows: pd.DataFrame, sectors: dict[str, dict]) -> tuple[pd.DataFrame, Counter]:
     numeric = ["close", "amount", "turnover", "history_rows", "invalid_ohlcva_rows",
                "factor_rows", "invalid_factor_rows", "factor_source_count",
-               "factor_source_switches", "max_source_switch_log_jump"]
+               "factor_source_switches", "max_source_switch_log_jump",
+               "ma20_rows", "ma20_adj_close", "asof_adj_close"]
     for column in numeric:
-        rows[column] = pd.to_numeric(rows[column], errors="coerce")
+        if column in rows.columns:
+            rows[column] = pd.to_numeric(rows[column], errors="coerce")
 
     valid_cap = rows["amount"].gt(0) & rows["turnover"].gt(0)
     rows["market_cap_proxy"] = np.where(
@@ -213,6 +237,48 @@ def classify(rows: pd.DataFrame, sectors: dict[str, dict]) -> tuple[pd.DataFrame
     rows["sector_label"] = sector_labels
     rows["reason"] = reasons
     return rows, Counter(reasons)
+
+
+def compute_market_regime(rows: pd.DataFrame) -> dict[str, Any]:
+    """Compute causal 20-day equal-weight market breadth (G_BREADTH) on asof."""
+    required = {"trade_status", "amount", "ma20_rows", "ma20_adj_close", "asof_adj_close"}
+    if not required.issubset(rows.columns):
+        return {"available": False}
+    valid = (
+        rows["trade_status"].astype(str).eq("1")
+        & pd.to_numeric(rows["amount"], errors="coerce").gt(0)
+        & pd.to_numeric(rows.get("invalid_ohlcva_rows", 0), errors="coerce").fillna(0).eq(0)
+        & pd.to_numeric(rows.get("invalid_factor_rows", 0), errors="coerce").fillna(0).eq(0)
+        & pd.to_numeric(rows.get("max_source_switch_log_jump", 0), errors="coerce").fillna(0).le(1e-6)
+        & pd.to_numeric(rows["ma20_rows"], errors="coerce").eq(20)
+        & pd.to_numeric(rows["ma20_adj_close"], errors="coerce").gt(0)
+        & pd.to_numeric(rows["asof_adj_close"], errors="coerce").gt(0)
+    )
+    universe_count = int(valid.sum())
+    if universe_count == 0:
+        return {"available": False}
+    above = (
+        pd.to_numeric(rows.loc[valid, "asof_adj_close"])
+        > pd.to_numeric(rows.loc[valid, "ma20_adj_close"])
+    )
+    above_count = int(above.sum())
+    breadth = float(above_count / universe_count)
+    if breadth < 0.30:
+        level, position_pct, action = 0, 0, "空仓防御"
+    elif breadth < 0.45:
+        level, position_pct, action = 1, 50, "半仓观察"
+    else:
+        level, position_pct, action = 2, 100, "满仓运行"
+    return {
+        "available": True,
+        "breadth_ma20": round(breadth, 6),
+        "above_ma20_count": above_count,
+        "breadth_universe_count": universe_count,
+        "level": level,
+        "position_pct": position_pct,
+        "action": action,
+        "rule": "G_BREADTH (<30% 空仓 / 30-45% 半仓 / >=45% 满仓)",
+    }
 
 
 def load_histories(connection, codes: list[str], dates: list[date]) -> pd.DataFrame:
@@ -265,6 +331,8 @@ def make_payload(
     eligible: pd.DataFrame,
     future_dates: list[str],
     sample_count: int,
+    *,
+    include_hidden: bool = True,
 ) -> dict:
     metadata = eligible.set_index("code")
     items = []
@@ -285,7 +353,7 @@ def make_payload(
             "sector_id": int(row["sector_id"]),
             "size_percentile": float(row["size_percentile"]),
         })
-    return {
+    payload: dict[str, Any] = {
         "items": items,
         "future_timestamps": future_dates,
         "pred_len": HORIZON,
@@ -294,6 +362,9 @@ def make_payload(
         "top_k": DEFAULT_TOP_K,
         "sample_count": sample_count,
     }
+    if include_hidden:
+        payload["include_hidden"] = True
+    return payload
 
 
 def validate_response(
@@ -310,6 +381,11 @@ def validate_response(
         closes = np.asarray([row["close_p50"] for row in predictions], dtype=float)
         if not np.isfinite(closes).all():
             raise RuntimeError(f"non-finite close_p50 for {code}")
+        hidden = result.get("hidden_state")
+        if hidden is not None:
+            vec = np.asarray(hidden, dtype=np.float32)
+            if vec.ndim != 1 or vec.shape[0] != HIDDEN_DIM or not np.isfinite(vec).all():
+                raise RuntimeError(f"invalid hidden_state shape/values for {code}")
         summaries.append({
             "code": code,
             "close_asof": current_closes[code],
@@ -365,6 +441,7 @@ def run_fingerprint(
         "top_k": DEFAULT_TOP_K,
         "sample_count": args.sample_count,
         "batch_size": args.batch_size,
+        "include_hidden": not bool(getattr(args, "no_hidden", False)),
     }
     encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -419,15 +496,38 @@ def completed_batch(path: Path, fingerprint: str, codes: list[str]) -> dict | No
     return payload
 
 
+def zscore_hidden_matrix(matrix: np.ndarray, clip_val: float = 5.0) -> np.ndarray:
+    """Cross-sectionally z-score hidden vectors within the signal date."""
+    block = np.asarray(matrix, dtype=np.float32)
+    mean = block.mean(axis=0, keepdims=True)
+    std = block.std(axis=0, keepdims=True)
+    z = (block - mean) / np.maximum(std, 1e-6)
+    return np.clip(z, -clip_val, clip_val)
+
+
+def load_hidden_weights(head_path: Path | None) -> np.ndarray | None:
+    if head_path is None or not head_path.is_file():
+        return None
+    weights = np.asarray(np.load(head_path), dtype=np.float32).reshape(-1)
+    if weights.shape != (HIDDEN_DIM,) or not np.isfinite(weights).all():
+        raise RuntimeError(f"invalid hidden head weights in {head_path}")
+    return weights
+
+
 def build_outputs(
     output_dir: Path,
     selected: pd.DataFrame,
     batch_payloads: list[dict],
     fingerprint: str,
+    *,
+    hidden_head_path: Path | None = DEFAULT_HIDDEN_HEAD,
+    regime: dict[str, Any] | None = None,
 ) -> dict:
     metadata = selected.set_index("code")
     prediction_records = []
     ranking_rows = []
+    hidden_vectors = []
+    all_have_hidden = True
     model_meta = None
     for batch in batch_payloads:
         response = batch["response"]
@@ -438,6 +538,11 @@ def build_outputs(
             closes = [float(item["close_p50"]) for item in result["predictions"]]
             close_asof = float(row["close"])
             predicted_return = closes[-1] / close_asof - 1.0
+            hidden = result.get("hidden_state")
+            if isinstance(hidden, (list, tuple, np.ndarray)) and len(hidden) == HIDDEN_DIM:
+                hidden_vectors.append(hidden)
+            else:
+                all_have_hidden = False
             prediction_records.append({
                 "asof": batch["asof"],
                 "code": code,
@@ -463,10 +568,43 @@ def build_outputs(
     ranking = pd.DataFrame(ranking_rows).sort_values(
         ["predicted_return_d10", "code"], ascending=[False, True]
     ).reset_index(drop=True)
+    # Attach C2 ranks before potentially re-sorting by fused score.
     ranking["rank_d10"] = np.arange(1, len(ranking) + 1)
     ranking["rank_percentile_d10"] = ranking["predicted_return_d10"].rank(
         method="first", pct=True
     )
+
+    weights = load_hidden_weights(hidden_head_path) if all_have_hidden else None
+    fusion_meta: dict[str, Any]
+    if all_have_hidden and hidden_vectors and weights is not None:
+        xz = zscore_hidden_matrix(np.asarray(hidden_vectors, dtype=np.float32))
+        scores_hidden = (xz @ weights).astype(float)
+        # Map hidden scores back by original prediction_records order via code.
+        hidden_by_code = {
+            record["code"]: float(score)
+            for record, score in zip(prediction_records, scores_hidden)
+        }
+        ranking["score_hidden"] = ranking["code"].map(hidden_by_code)
+        r_c2 = ranking["predicted_return_d10"].rank(method="average", pct=True)
+        r_hidden = ranking["score_hidden"].rank(method="average", pct=True)
+        ranking["score_fused"] = (0.5 * r_c2 + 0.5 * r_hidden).astype(float)
+        ranking = ranking.sort_values(
+            ["score_fused", "code"], ascending=[False, True]
+        ).reset_index(drop=True)
+        ranking["rank_fused"] = np.arange(1, len(ranking) + 1)
+        ranking["rank_percentile_fused"] = ranking["score_fused"].rank(
+            method="first", pct=True
+        )
+        fusion_meta = {
+            "enabled": True,
+            "method": "FUSE_RIDGE_C2",
+            "head_file": hidden_head_path.name if hidden_head_path else None,
+            "weights": {"c2_rank": 0.5, "hidden_ridge": 0.5},
+        }
+    else:
+        reason = "hidden_state_missing" if not all_have_hidden else "hidden_head_missing"
+        fusion_meta = {"enabled": False, "reason": reason}
+
     atomic_csv(output_dir / "ranking.csv", ranking)
     jsonl_tmp = output_dir / "predictions.jsonl.tmp"
     with jsonl_tmp.open("w") as stream:
@@ -479,6 +617,8 @@ def build_outputs(
         "prediction_count": len(prediction_records),
         "batch_count": len(batch_payloads),
         "model": model_meta,
+        "fusion": fusion_meta,
+        "regime": regime if regime is not None else {"available": False},
         "ranking_file": "ranking.csv",
         "predictions_file": "predictions.jsonl",
     }
@@ -501,6 +641,7 @@ def main() -> None:
     with psycopg2.connect(database_url()) as connection:
         rows, dates = load_audit_rows(connection, args.asof)
         classified, counts = classify(rows, sectors)
+        regime = compute_market_regime(classified)
         eligible = classified[classified["reason"] == "eligible"].sort_values("code")
         selected = eligible if args.limit == 0 else eligible.head(args.limit)
         if selected.empty:
@@ -551,6 +692,7 @@ def main() -> None:
             "reason_counts": dict(sorted(counts.items())),
             "eligible_count": int(len(eligible)),
             "selected_count": int(len(selected)),
+            "regime": regime,
         }
         atomic_json(args.output_dir / "audit.json", audit)
         atomic_csv(args.output_dir / "universe.csv", classified)
@@ -579,7 +721,10 @@ def main() -> None:
             histories = load_histories(connection, batch_codes, dates)
             validate_histories(histories, batch_codes, dates)
             batch_rows = selected[selected["code"].isin(batch_codes)].copy()
-            payload = make_payload(histories, batch_rows, future_dates, args.sample_count)
+            payload = make_payload(
+                histories, batch_rows, future_dates, args.sample_count,
+                include_hidden=not args.no_hidden,
+            )
             response = post_batch(
                 session, endpoint, payload, args.max_retries, args.request_timeout
             )
@@ -611,7 +756,14 @@ def main() -> None:
                 f"({len(batch_codes)} symbols)", flush=True,
             )
 
-    summary = build_outputs(args.output_dir, selected, batch_payloads, fingerprint)
+    summary = build_outputs(
+        args.output_dir,
+        selected,
+        batch_payloads,
+        fingerprint,
+        hidden_head_path=None if args.no_hidden else args.hidden_head,
+        regime=regime,
+    )
     manifest["status"] = "complete"
     atomic_json(manifest_path, manifest)
     atomic_json(args.output_dir / "progress.json", summary)

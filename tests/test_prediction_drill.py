@@ -115,3 +115,72 @@ def test_response_validation_rejects_wrong_model():
 def test_chunks_never_exceed_modal_limit():
     batches = list(prediction_drill.chunks([str(index) for index in range(25)], 12))
     assert [len(batch) for batch in batches] == [12, 12, 1]
+
+
+def test_compute_market_regime_thresholds():
+    def _df(above_count: int, total: int = 10) -> pd.DataFrame:
+        return pd.DataFrame({
+            "trade_status": ["1"] * total,
+            "amount": [1e6] * total,
+            "invalid_ohlcva_rows": [0] * total,
+            "invalid_factor_rows": [0] * total,
+            "max_source_switch_log_jump": [0.0] * total,
+            "ma20_rows": [20] * total,
+            "ma20_adj_close": [10.0] * total,
+            "asof_adj_close": [10.5] * above_count + [9.5] * (total - above_count),
+        })
+
+    assert prediction_drill.compute_market_regime(_df(2, 10))["level"] == 0
+    assert prediction_drill.compute_market_regime(_df(2, 10))["position_pct"] == 0
+    assert prediction_drill.compute_market_regime(_df(4, 10))["level"] == 1
+    assert prediction_drill.compute_market_regime(_df(4, 10))["position_pct"] == 50
+    assert prediction_drill.compute_market_regime(_df(5, 10))["level"] == 2
+    assert prediction_drill.compute_market_regime(_df(5, 10))["position_pct"] == 100
+
+
+def test_build_outputs_fuses_hidden_scores_and_records_regime(tmp_path):
+    selected = pd.DataFrame([
+        {"code": "sh.600000", "sector_id": 1, "sector_label": "银行", "size_percentile": 0.9, "close": 10.0},
+        {"code": "sz.000001", "sector_id": 1, "sector_label": "银行", "size_percentile": 0.8, "close": 10.0},
+        {"code": "sz.000063", "sector_id": 2, "sector_label": "通信", "size_percentile": 0.7, "close": 10.0},
+    ])
+    head_path = tmp_path / "head.npy"
+    w = np.zeros(512, dtype=np.float32)
+    w[0] = 1.0
+    np.save(head_path, w)
+    preds = lambda c: [{"close_p50": c} for _ in range(10)]
+    batch_payloads = [{
+        "asof": "2026-10-23",
+        "response": {
+            "meta": {"model_release": "small-0.1-cosine-c2", "model_checkpoint": "Segment@179", "sample_count": 16},
+            "results": [
+                # C2 ranks sh.600000 highest, but hidden feature puts sz.000063 clearly ahead cleanly.
+                {"id": "sh.600000", "predictions": preds(10.5), "hidden_state": [-2.0] + [0.0] * 511},
+                {"id": "sz.000001", "predictions": preds(10.2), "hidden_state": [0.0] + [0.0] * 511},
+                {"id": "sz.000063", "predictions": preds(10.4), "hidden_state": [2.0] + [0.0] * 511},
+            ],
+        },
+    }]
+    regime = {"available": True, "breadth_ma20": 0.52, "level": 2, "position_pct": 100, "action": "满仓运行"}
+    summary = prediction_drill.build_outputs(
+        tmp_path / "out", selected, batch_payloads, "fp1",
+        hidden_head_path=head_path, regime=regime,
+    )
+    assert summary["fusion"]["enabled"] is True
+    assert summary["regime"]["position_pct"] == 100
+    ranking = pd.read_csv(tmp_path / "out" / "ranking.csv")
+    assert {"score_hidden", "score_fused", "rank_fused", "rank_percentile_fused"}.issubset(ranking.columns)
+    # sz.000063: r_c2=2/3, r_hidden=1.0 -> avg=5/6; sh.600000: r_c2=1.0, r_hidden=1/3 -> avg=2/3
+    assert ranking.iloc[0]["code"] == "sz.000063"
+    assert int(ranking.iloc[0]["rank_fused"]) == 1
+    assert int(ranking.loc[ranking["code"] == "sh.600000", "rank_d10"].iloc[0]) == 1
+
+    # Fallback gracefully when hidden_state is omitted (e.g., before Modal redeploy)
+    for item in batch_payloads[0]["response"]["results"]:
+        item.pop("hidden_state")
+    fallback = prediction_drill.build_outputs(
+        tmp_path / "fallback", selected, batch_payloads, "fp2",
+        hidden_head_path=head_path, regime=regime,
+    )
+    assert fallback["fusion"]["enabled"] is False
+    assert fallback["fusion"]["reason"] == "hidden_state_missing"

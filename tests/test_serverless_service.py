@@ -169,3 +169,95 @@ def test_predict_batch_runs_one_predictor_batch(monkeypatch):
     assert result["meta"]["batch_size"] == 2
     assert [item["id"] for item in result["results"]] == ["a", "b"]
     assert result["results"][1]["predictions"][0]["close"] == pytest.approx(3.0)
+    assert "hidden_state" not in result["results"][0]
+
+
+def test_parse_request_validates_include_hidden():
+    payload = valid_payload()
+    payload["include_hidden"] = True
+    parsed = service.parse_request(payload)
+    assert parsed.include_hidden is True
+
+    bad = valid_payload()
+    bad["include_hidden"] = "yes"
+    with pytest.raises(service.RequestError, match="include_hidden must be a boolean"):
+        service.parse_request(bad)
+
+
+def test_predict_and_batch_return_hidden_when_requested(monkeypatch):
+    class FakePredictor:
+        device = "cpu"
+
+        def predict(self, **kwargs):
+            assert kwargs["return_hidden"] is True
+            return np.ones((2, 10, 6), dtype=np.float32), np.arange(8, dtype=np.float32)
+
+        def predict_batch(self, **kwargs):
+            assert kwargs["return_hidden"] is True
+            return (
+                [np.ones((2, 10, 6), dtype=np.float32), np.ones((2, 10, 6), dtype=np.float32) * 2],
+                np.stack([np.ones(8, dtype=np.float32), np.full(8, 2.0, dtype=np.float32)]),
+            )
+
+    monkeypatch.setattr(service, "get_predictor", lambda: FakePredictor())
+    payload = valid_payload()
+    payload["sample_count"] = 2
+    payload["include_hidden"] = True
+    single = service.predict(payload)
+    assert single["hidden_state"] == pytest.approx(list(range(8)))
+
+    item = {
+        key: payload[key]
+        for key in ("data", "future_timestamps", "sector_id", "size_percentile")
+    }
+    batch = service.predict_batch({
+        "items": [{"id": "a", **item}, {"id": "b", **item}],
+        "pred_len": 10, "sample_count": 2, "include_hidden": True,
+    })
+    assert batch["results"][0]["hidden_state"] == pytest.approx([1.0] * 8)
+    assert batch["results"][1]["hidden_state"] == pytest.approx([2.0] * 8)
+
+
+def test_kronos_predictor_return_hidden_matches_decode_s1():
+    import torch
+    from model import kronos as kronos_mod
+
+    torch.manual_seed(7)
+    tokenizer = kronos_mod.KronosTokenizer(
+        d_in=6, d_model=16, n_heads=2, ff_dim=32,
+        n_enc_layers=1, n_dec_layers=1,
+        ffn_dropout_p=0.0, attn_dropout_p=0.0, resid_dropout_p=0.0,
+        s1_bits=4, s2_bits=4, beta=0.05, gamma0=1.0, gamma=1.1, zeta=0.05,
+        group_size=4,
+    ).eval()
+    model = kronos_mod.Kronos(
+        s1_bits=4, s2_bits=4, n_layers=1, d_model=16, n_heads=2, ff_dim=32,
+        ffn_dropout_p=0.0, attn_dropout_p=0.0, resid_dropout_p=0.0, token_dropout_p=0.0,
+        learn_te=True, num_sectors=8, context_layer=0, use_size_percentile=True,
+    ).eval()
+    predictor = kronos_mod.KronosPredictor(model, tokenizer, device="cpu", max_context=64)
+    p = valid_payload(rows=24, pred_len=4)
+    df = pd.DataFrame(p["data"])[["open", "high", "low", "close", "volume", "amount"]]
+    x_ts = pd.Series(pd.to_datetime([row["timestamp"] for row in p["data"]]))
+    y_ts = pd.Series(pd.to_datetime(p["future_timestamps"]))
+
+    samples, hidden_batch = predictor.predict_batch(
+        [df, df * 1.1], [x_ts, x_ts], [y_ts, y_ts],
+        pred_len=4, T=0.6, top_p=0.9, sample_count=3, verbose=False,
+        sector_id=[1, 2], size_percentile=[0.2, 0.8],
+        return_samples=True, return_hidden=True,
+    )
+    assert len(samples) == 2
+    assert hidden_batch.shape == (2, 16)
+    # Verify exact parity with direct decode_s1[:, -1, :] on the normalized window.
+    x_raw = df.to_numpy(dtype=np.float32)
+    x_norm = np.clip((x_raw - x_raw.mean(0)) / (x_raw.std(0) + 1e-5), -5.0, 5.0)
+    stamp = kronos_mod.calc_time_stamps(x_ts).to_numpy(dtype=np.float32)
+    with torch.no_grad():
+        tokens = tokenizer.encode(torch.from_numpy(x_norm).unsqueeze(0), half=True)
+        _, ctx = model.decode_s1(
+            tokens[0], tokens[1], torch.from_numpy(stamp).unsqueeze(0),
+            sector_id=torch.tensor([1]), size_percentile=torch.tensor([0.2]),
+        )
+        expected = ctx[0, -1, :].numpy()
+    assert np.allclose(hidden_batch[0], expected, atol=1e-5)

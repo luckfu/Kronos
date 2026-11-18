@@ -15,7 +15,7 @@ try:
     import torch
 except ImportError:
     torch = None
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 import sys
 import warnings
@@ -61,9 +61,9 @@ def inject_brand_icon_version():
     return {'kronos_icon_v': BRAND_ICON_VERSION}
 
 try:
-    from webui.auth import configure_auth, init_auth
+    from webui.auth import SESSION_USER_KEY, configure_auth, init_auth
 except ImportError:
-    from auth import configure_auth, init_auth
+    from auth import SESSION_USER_KEY, configure_auth, init_auth
 
 try:
     from webui.pwa import init_pwa
@@ -126,6 +126,10 @@ MARKET_DATA_CACHE_DIR = os.getenv(
 STOCK_NAME_CACHE_PATH = os.getenv(
     'KRONOS_STOCK_NAME_CACHE_PATH',
     os.path.join(os.path.dirname(MARKET_DATA_CACHE_DIR), 'stock_name_cache.json'),
+)
+CUSTOM_POOLS_PATH = os.getenv(
+    'KRONOS_CUSTOM_POOLS_PATH',
+    os.path.join(os.path.dirname(STOCK_NAME_CACHE_PATH), 'custom_pools.json'),
 )
 STOCK_NAME_CACHE_MAX_AGE = datetime.timedelta(hours=24)
 STOCK_NAME_REFRESH_RETRY = datetime.timedelta(minutes=5)
@@ -2195,6 +2199,8 @@ def _available_daily_prediction_dates():
             'prediction_count': int(summary.get('prediction_count', 0)),
             'batch_count': int(summary.get('batch_count', 0)),
             'model': summary.get('model') or {},
+            'fusion': summary.get('fusion'),
+            'regime': summary.get('regime'),
         })
     return sorted(dates, key=lambda item: item['asof'], reverse=True)
 
@@ -2219,6 +2225,14 @@ def daily_rankings():
         sector = request.args.get('sector', '').strip()
         size_group = request.args.get('size_group', '').strip()
         top = request.args.get('top', '').strip()
+        sort_mode = request.args.get('sort', 'fused').strip().lower()
+        if sort_mode not in ('fused', 'c2'):
+            raise ValueError('sort 只支持 fused 或 c2')
+        has_fused = (
+            {'rank_fused', 'score_fused'}.issubset(frame.columns)
+            and pd.to_numeric(frame['score_fused'], errors='coerce').notna().any()
+        )
+        active_sort = 'fused' if (has_fused and sort_mode == 'fused') else 'c2'
         pool_raw = request.args.get('pool', '').strip()
         pool_symbols = []
         if pool_raw:
@@ -2256,9 +2270,24 @@ def daily_rankings():
                 ['predicted_return_d10', 'code'], ascending=[False, True], kind='stable'
             ).copy()
             frame['rank_d10'] = np.arange(1, len(frame) + 1)
+            if has_fused:
+                frame['score_fused'] = pd.to_numeric(frame['score_fused'], errors='coerce')
+                frame = frame.sort_values(
+                    ['score_fused', 'code'], ascending=[False, True], kind='stable'
+                ).copy()
+                frame['rank_fused'] = np.arange(1, len(frame) + 1)
+        if active_sort == 'fused':
+            frame = frame.sort_values(
+                ['score_fused', 'code'], ascending=[False, True], kind='stable'
+            ).copy()
+        else:
+            frame = frame.sort_values(
+                ['predicted_return_d10', 'code'], ascending=[False, True], kind='stable'
+            ).copy()
         # Stock search should still find a match outside the selected Top N.
+        rank_column = 'rank_fused' if active_sort == 'fused' else 'rank_d10'
         if top_n is not None and not query:
-            frame = frame[pd.to_numeric(frame['rank_d10']) <= top_n]
+            frame = frame[pd.to_numeric(frame[rank_column]) <= top_n]
         page = max(1, int(request.args.get('page', 1)))
         page_size = min(100, max(10, int(request.args.get('page_size', 50))))
         total = len(frame)
@@ -2279,6 +2308,10 @@ def daily_rankings():
             'asof': asof,
             'status': summary.get('status'),
             'model': summary.get('model') or {},
+            'fusion': summary.get('fusion'),
+            'regime': summary.get('regime'),
+            'fusion_available': bool(has_fused),
+            'sort': active_sort,
             'prediction_count': int(summary.get('prediction_count', 0)),
             'batch_count': int(summary.get('batch_count', 0)),
             'pool_count': len(pool_symbols) if pool_raw else None,
@@ -2308,6 +2341,9 @@ def daily_ranking_consensus():
         if top_n not in (10, 20, 50, 100):
             raise ValueError('top 只支持 10、20、50、100')
 
+        sort_mode = request.args.get('sort', 'fused').strip().lower()
+        if sort_mode not in ('fused', 'c2'):
+            raise ValueError('sort 只支持 fused 或 c2')
         published = _available_daily_prediction_dates()
         if len(published) < days:
             return jsonify({
@@ -2315,16 +2351,26 @@ def daily_ranking_consensus():
             }), 404
         selected = published[:days]
 
-        day_rows = {}
+        day_frames = {}
+        all_have_fused = True
         for item in selected:
             asof = item['asof']
             path, _ = _daily_prediction_dir(asof)
             frame = pd.read_csv(path / 'ranking.csv')
             if 'code' not in frame.columns or 'rank_d10' not in frame.columns:
                 raise ValueError(f'{asof} 的排名文件缺少 code 或 rank_d10')
-            frame = frame.copy()
+            if 'rank_fused' not in frame.columns:
+                all_have_fused = False
+            day_frames[asof] = frame
+
+        active_sort = 'fused' if (all_have_fused and sort_mode == 'fused') else 'c2'
+        rank_col = 'rank_fused' if active_sort == 'fused' else 'rank_d10'
+        day_rows = {}
+        for item in selected:
+            asof = item['asof']
+            frame = day_frames[asof].copy()
             frame['code'] = frame['code'].astype(str).str.strip().str.lower()
-            frame['rank_value'] = pd.to_numeric(frame['rank_d10'], errors='coerce')
+            frame['rank_value'] = pd.to_numeric(frame[rank_col], errors='coerce')
             frame = frame.dropna(subset=['rank_value'])
             frame = frame.sort_values(
                 ['rank_value', 'code'], ascending=[True, True], kind='stable'
@@ -2365,6 +2411,8 @@ def daily_ranking_consensus():
         return jsonify({
             'days': days,
             'top': top_n,
+            'sort': active_sort,
+            'fusion_available': bool(all_have_fused),
             'dates': [item['asof'] for item in selected],
             'latest': selected[0]['asof'],
             'total': len(rows),
@@ -2396,6 +2444,12 @@ def daily_ranking_detail(asof, symbol):
                 ['predicted_return_d10', 'code'], ascending=[False, True], kind='stable'
             ).copy()
             ranking['rank_d10'] = np.arange(1, len(ranking) + 1)
+            if {'score_fused', 'rank_fused'}.issubset(ranking.columns):
+                ranking['score_fused'] = pd.to_numeric(ranking['score_fused'], errors='coerce')
+                ranking = ranking.sort_values(
+                    ['score_fused', 'code'], ascending=[False, True], kind='stable'
+                ).copy()
+                ranking['rank_fused'] = np.arange(1, len(ranking) + 1)
         matches = ranking[ranking['code'] == normalized]
         if matches.empty:
             return jsonify({'error': f'{normalized} 未进入 {asof} 预测截面'}), 404
@@ -2415,6 +2469,8 @@ def daily_ranking_detail(asof, symbol):
         }
         prediction['name'] = ranking_row_stock_name(rank)
         prediction['model'] = summary.get('model') or {}
+        prediction['fusion'] = summary.get('fusion')
+        prediction['regime'] = summary.get('regime')
         chart_history = ranking_chart_history(normalized, asof)
         prediction['history'] = chart_history['history']
         prediction['history_source'] = chart_history['history_source']
@@ -2424,6 +2480,122 @@ def daily_ranking_detail(asof, symbol):
         return jsonify({'error': str(exc)}), 404
     except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
         return jsonify({'error': str(exc)}), 400
+
+
+def _custom_pools_owner():
+    user = session.get(SESSION_USER_KEY)
+    cleaned = str(user).strip() if user else ''
+    return f'user:{cleaned}' if cleaned else 'default'
+
+
+def _normalize_pool_symbols(values):
+    if isinstance(values, str):
+        raw_items = re.split(r'[\s,，]+', values.strip())
+    elif isinstance(values, list):
+        raw_items = [str(item or '').strip() for item in values]
+    else:
+        raise ValueError('symbols 必须是股票代码数组')
+    normalized = []
+    for item in raw_items:
+        code = normalize_a_share_symbol(item)
+        if re.fullmatch(r'(sh|sz|bj)\.\d{6}', code):
+            normalized.append(code)
+    result = list(dict.fromkeys(normalized))
+    if not result:
+        raise ValueError('请至少填写一个有效的 A 股代码')
+    return result
+
+
+def _mutate_custom_pools(mutator=None):
+    path = Path(CUSTOM_POOLS_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + '.lock')
+    owner = _custom_pools_owner()
+    with lock_path.open('a+', encoding='utf-8') as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            data = {}
+            if path.is_file():
+                try:
+                    loaded = json.loads(path.read_text(encoding='utf-8'))
+                    if isinstance(loaded, dict) and isinstance(loaded.get('owners'), dict):
+                        data = loaded
+                except (OSError, json.JSONDecodeError):
+                    data = {}
+            owners = dict(data.get('owners') or {})
+            pools = dict(owners.get(owner) or {})
+            if mutator is None:
+                return pools, owner
+            updated = mutator(pools)
+            owners[owner] = updated
+            tmp = path.with_name(f'{path.name}.{os.getpid()}.tmp')
+            tmp.write_text(json.dumps({'owners': owners}, ensure_ascii=False, indent=2), encoding='utf-8')
+            os.replace(tmp, path)
+            return updated, owner
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@app.route('/api/custom-pools', methods=['GET', 'POST'])
+def custom_pools():
+    try:
+        if request.method == 'GET':
+            pools, owner = _mutate_custom_pools()
+            return jsonify({'pools': pools, 'owner': owner})
+
+        payload = request.get_json(silent=True) or {}
+        if isinstance(payload.get('pools'), dict) and payload.get('merge'):
+            incoming = payload['pools']
+
+            def _merge(pools):
+                merged = dict(pools)
+                for raw_name, raw_symbols in incoming.items():
+                    name = str(raw_name or '').strip()[:30]
+                    if not name or name in merged:
+                        continue
+                    try:
+                        merged[name] = _normalize_pool_symbols(raw_symbols)
+                    except ValueError:
+                        continue
+                return merged
+
+            pools, owner = _mutate_custom_pools(_merge)
+            return jsonify({'pools': pools, 'owner': owner})
+
+        name = str(payload.get('name') or '').strip()
+        if not name:
+            raise ValueError('请填写股池名称')
+        if len(name) > 30:
+            raise ValueError('股池名称不能超过 30 个字')
+        original_name = str(payload.get('original_name') or '').strip()
+        symbols = _normalize_pool_symbols(payload.get('symbols'))
+
+        def _upsert(pools):
+            next_pools = dict(pools)
+            if original_name and original_name != name:
+                next_pools.pop(original_name, None)
+            next_pools[name] = symbols
+            return next_pools
+
+        pools, owner = _mutate_custom_pools(_upsert)
+        return jsonify({'pools': pools, 'owner': owner})
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+
+@app.route('/api/custom-pools/<path:name>', methods=['DELETE'])
+def delete_custom_pool(name):
+    target = str(name or '').strip()
+    if not target:
+        return jsonify({'error': '股池名称不能为空'}), 400
+
+    def _remove(pools):
+        next_pools = dict(pools)
+        next_pools.pop(target, None)
+        return next_pools
+
+    pools, owner = _mutate_custom_pools(_remove)
+    return jsonify({'pools': pools, 'owner': owner})
 
 
 @app.route('/health')
