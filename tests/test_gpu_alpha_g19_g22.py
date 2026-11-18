@@ -123,3 +123,18 @@ def test_g19_to_g22_dry_bundles_compile():
         assert title.lower().replace(" ", "-") == slug
         meta = push_kernel(owner=owner, slug=slug, title=title, datasets=datasets, entry_filename=entry, work_tag=tag, extra_gpu_files=extra, push=False)
         assert meta["bundle_bytes"] > 5000
+
+
+def test_g19_to_g23_reports_and_results_exist():
+    import json
+
+    reports = ROOT / "finetune" / "reports"
+    for tag in ("g19", "g20", "g21", "g22", "g23"):
+        js = json.loads((reports / f"20261118_gpu_{tag}_results.json").read_text())
+        assert js["cross_section"]["C2"]["dates"] == 65
+        assert len(js["cross_section"]) >= 11
+        md = (reports / f"20261118_gpu_{tag}_result_cn.md").read_text()
+        assert "2026-10-24+" in md
+    ens = json.loads((reports / "20261118_gpu_g19_g23_ensembles.json").read_text())
+    assert ens["cross_section"]["ENS_TRI4_C2_G19C2_G19BASE_G23ML"]["ic"] > 0.206
+    assert ens["books"]["ENS_TRI4_C2_G19C2_G19BASE_G23ML_k10"]["mean_net"] > 0.249
