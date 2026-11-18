@@ -16,10 +16,12 @@ from g19_fulldensity_l45_triarch_entry import TriArchL45Extractor  # noqa: E402
 from g20_base_ultrashort_ml_entry import BaseUltrashortMLExtractor  # noqa: E402
 from g21_ptsmall_fulldensity_entry import PTSmallUltrashortMLExtractor  # noqa: E402
 from g22_ptsmall_microband_entry import WINDOWS as G22_WINDOWS, extract_microband_batch  # noqa: E402
+from g23_ptsmall_l45_ultrareg_entry import PTSmallL45MultiLayerExtractor  # noqa: E402
 from push_g19 import DATASETS as G19_DATASETS, SLUG as G19_SLUG  # noqa: E402
 from push_g20 import DATASETS as G20_DATASETS, SLUG as G20_SLUG  # noqa: E402
 from push_g21 import DATASETS as G21_DATASETS, SLUG as G21_SLUG  # noqa: E402
 from push_g22 import DATASETS as G22_DATASETS, SLUG as G22_SLUG  # noqa: E402
+from push_g23 import DATASETS as G23_DATASETS, SLUG as G23_SLUG  # noqa: E402
 from short_probe_common import chunked_val_accumulate_and_sel, push_kernel, solve_block_penalties  # noqa: E402
 
 
@@ -70,6 +72,12 @@ def test_g19_to_g22_extractors_shapes_and_cleanup():
     assert f22.shape == (3, 24 * len(G22_WINDOWS))
     assert torch.isfinite(f22).all()
 
+    ext23 = PTSmallL45MultiLayerExtractor(pts, tok, torch.device("cpu"))
+    f23 = ext23.extract_batch(raw_b, st_b, sec_b, pct_b)
+    ext23.close()
+    assert f23.shape == (3, 24 * 3)
+    assert torch.isfinite(f23).all()
+
 
 def test_chunked_val_accumulate_matches_exact_and_aniso_penalties(tmp_path: Path):
     rng = np.random.default_rng(7)
@@ -109,6 +117,7 @@ def test_g19_to_g22_dry_bundles_compile():
         ("user281434", G20_SLUG, "Kronos Alpha G20 Base Ultrashort ML", G20_DATASETS, "g20_base_ultrashort_ml_entry.py", "g20", ["g4_base_kaggle_entry.py"]),
         ("user281434", G21_SLUG, "Kronos Alpha G21 PTSmall Fulldensity", G21_DATASETS, "g21_ptsmall_fulldensity_entry.py", "g21", ["g16_pretrained_small_entry.py"]),
         ("wynstonliu", G22_SLUG, "Kronos Alpha G22 PTSmall Microband", G22_DATASETS, "g22_ptsmall_microband_entry.py", "g22", ["g16_pretrained_small_entry.py"]),
+        ("wynstonliu", G23_SLUG, "Kronos Alpha G23 PTSmall L45 Ultrareg", G23_DATASETS, "g23_ptsmall_l45_ultrareg_entry.py", "g23", ["g16_pretrained_small_entry.py"]),
     ]
     for owner, slug, title, datasets, entry, tag, extra in specs:
         assert title.lower().replace(" ", "-") == slug
