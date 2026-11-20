@@ -1,0 +1,5 @@
+{
+  "name": "Kronos A-share workbench",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
