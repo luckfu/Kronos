@@ -31,6 +31,60 @@ def detect_gpu_count() -> int:
     return 1
 
 
+def _failfast_worker_wrapper(fn, arg, idx: int, out_file: str) -> None:
+    import pickle
+    res = fn(arg)
+    with open(out_file, "wb") as fh:
+        pickle.dump(res, fh)
+
+
+def run_gpu_workers_failfast(fn, args_list: list, tag: str = "worker") -> list:
+    """Run forked GPU workers via mp.Process with live exitcode monitoring.
+
+    Unlike mp.Pool.map (which hangs forever if Linux OOM-kills a worker with SIGKILL),
+    this detects any non-zero exitcode within 2s, terminates siblings, and raises immediately.
+    """
+    import multiprocessing as mp
+    import pickle
+    import time
+
+    ctx = mp.get_context("fork")
+    ts = int(time.time() * 1000)
+    out_files = [f"/tmp/_ff_{tag}_{ts}_{i}.pkl" for i in range(len(args_list))]
+    procs = [
+        ctx.Process(target=_failfast_worker_wrapper, args=(fn, arg, i, out_files[i]))
+        for i, arg in enumerate(args_list)
+    ]
+    for p in procs:
+        p.start()
+    try:
+        while True:
+            alive = False
+            for i, p in enumerate(procs):
+                if p.is_alive():
+                    alive = True
+                elif p.exitcode not in (0, None):
+                    raise RuntimeError(f"{tag} worker {i} died with exitcode {p.exitcode} (likely OOM/SIGKILL)")
+            if not alive:
+                break
+            time.sleep(2.0)
+        results = []
+        for i, p in enumerate(procs):
+            p.join()
+            if p.exitcode != 0:
+                raise RuntimeError(f"{tag} worker {i} exited with code {p.exitcode}")
+            with open(out_files[i], "rb") as fh:
+                results.append(pickle.load(fh))
+        return results
+    finally:
+        for p in procs:
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=5)
+        for f in out_files:
+            Path(f).unlink(missing_ok=True)
+
+
 def norm_window(raw_t: torch.Tensor) -> torch.Tensor:
     mean = raw_t.mean(dim=1, keepdim=True)
     std = raw_t.std(dim=1, unbiased=False, keepdim=True)
