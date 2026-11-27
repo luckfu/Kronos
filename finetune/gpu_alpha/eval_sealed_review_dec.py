@@ -222,6 +222,7 @@ def _eval_subset(
     base_c2_ic = fa.daily_ic(df_fa, models["C2"])
     base_val_ic = fa.daily_ic(df_fa, models["FUSE_VAL_1E4"])
     univ_daily = df.groupby("asof", sort=False)["actual_return"].mean()
+    liq_daily = liq.groupby("asof", sort=False)["actual_return"].mean()
 
     res: dict[str, Any] = {}
     for name, col in models.items():
@@ -239,8 +240,8 @@ def _eval_subset(
         t10u = df.groupby("asof", sort=False).apply(_t10_univ, include_groups=False)
         t10 = liq.sort_values(["asof", col], ascending=[True, False]).groupby("asof", sort=False).head(10)
         t20 = liq.sort_values(["asof", col], ascending=[True, False]).groupby("asof", sort=False).head(20)
-        t10_ex = t10.groupby("asof")["actual_return"].mean() - univ_daily
-        t20_ex = t20.groupby("asof")["actual_return"].mean() - univ_daily
+        t10_ex = t10.groupby("asof")["actual_return"].mean() - liq_daily
+        t20_ex = t20.groupby("asof")["actual_return"].mean() - liq_daily
 
         nic_std = float(nic_s.std(ddof=1)) if len(nic_s) > 1 else float("nan")
         nic_ir = float(nic_s.mean() / nic_std) if len(nic_s) > 1 and nic_std > 0 else float("nan")

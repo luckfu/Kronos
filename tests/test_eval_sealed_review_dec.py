@@ -258,3 +258,47 @@ def test_compute_breadth_map_basic() -> None:
     assert len(b_map) == 5  # 24 dates with min_periods=20 -> 5 valid dates
     for val in b_map.values():
         assert val == pytest.approx(0.5)
+
+
+def test_eval_subset_liq_excess_uses_liquid_pool_benchmark() -> None:
+    fa = ev._import_fusion_analysis()
+    rows = []
+    # 25 liquid stocks (med_amt_20d >= 5e4) all have +0.02 actual_return; top-10 by score have +0.05
+    for i in range(25):
+        rows.append({
+            "asof": "2026-11-10",
+            "asof_date": "2026-11-10",
+            "code": f"sh.600{i:03d}",
+            "sector": i % 3,
+            "size_decile": (i % 5) + 1,
+            "rev10": float(i) / 30.0,
+            "med_amt_20d": 1e5,
+            "actual_return": 0.05 if i < 10 else 0.02,
+            "predicted_return_d10": float(30 - i),
+            "FUSE_VAL_1E4": float(30 - i),
+        })
+    # 25 illiquid micro-caps crash -0.20 (outside liquid pool, must NOT inflate liq10/liq20 excess)
+    for i in range(25):
+        rows.append({
+            "asof": "2026-11-10",
+            "asof_date": "2026-11-10",
+            "code": f"sz.300{i:03d}",
+            "sector": i % 3,
+            "size_decile": 1,
+            "rev10": 0.0,
+            "med_amt_20d": 1e3,
+            "actual_return": -0.20,
+            "predicted_return_d10": -float(i),
+            "FUSE_VAL_1E4": -float(i),
+        })
+    sub = pd.DataFrame(rows)
+    res = ev._eval_subset(
+        sub,
+        models={"C2": "predicted_return_d10", "FUSE_VAL_1E4": "FUSE_VAL_1E4"},
+        b_map={"2026-11-10": 0.40},
+        date_filter=None,
+        fa=fa,
+    )
+    liq_mean = (10 * 0.05 + 15 * 0.02) / 25.0  # 0.032
+    expected_liq10 = 0.05 - liq_mean           # +0.018 (NOT 0.05 - (-0.084) = +0.134!)
+    assert res["models"]["C2"]["liq_top10_excess"] == pytest.approx(expected_liq10, abs=1e-9)
